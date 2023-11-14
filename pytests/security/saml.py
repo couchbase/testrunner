@@ -15,14 +15,17 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from multiprocessing.dummy import Pool as ThreadPool
 
 from lib import testconstants
 from basetestcase import BaseTestCase
+from lib.Cb_constants.CBServer import CbServer
 from pytests.security.saml_util import SAMLUtils
 from lib.membase.api.rest_client import RestConnection
 from pytests.security.x509_multiple_CA_util import x509main
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.security.x509main import x509main as x509main_client
+from pytests.security.ntonencryptionBase import ntonencryptionBase
 
 
 class SAMLTest(BaseTestCase):
@@ -3873,3 +3876,96 @@ class SAMLTest(BaseTestCase):
             self.log.info("SSO session creation failed as expected for am invalid SAML response")
         else:
             self.fail("SSO session creation should have failed for an invalid SAML response")
+
+    def test_sso_with_encryption(self):
+        ntonencryptionBase().setup_nton_cluster(servers=self.servers, ntonStatus="enable",
+                                                clusterEncryptionLevel="all")
+        self.test_sso_login()
+        CbServer.use_https = True
+        ntonencryptionBase().setup_nton_cluster(servers=self.servers, ntonStatus="enable",
+                                                clusterEncryptionLevel="strict")
+        self.test_saml_over_https()
+
+    def test_saml_volume(self):
+        """
+        Send SAML requests in parallel
+        """
+
+        self.log.info("Delete current SAML settings")
+        status, content, header = self.rest.delete_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        body = {
+            "enabled": "true",
+            "idpMetadata": self.saml_util.saml_resources["idpMetadata"],
+            "idpMetadataOrigin": "upload",
+            "idpMetadataTLSCAs": self.saml_util.saml_resources["idpMetadataTLSCAs"],
+            "spAssertionDupeCheck": "disabled",
+            "spBaseURLScheme": "http",
+            "spCertificate": self.saml_util.saml_resources["spCertificate"],
+            "spKey": self.saml_util.saml_resources["spKey"]
+        }
+
+        # Enable SAML
+        self.log.info("Enable SAML")
+        status, content, header = self.rest.modify_saml_settings(body)
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        self.log.info("Get current SAML settings")
+        status, content, header = self.rest.get_saml_settings()
+        self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
+                      format(status, content, header))
+
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+        # Step 1: Initiate single sign on
+        self.log.info('Initiate single sign on')
+        action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
+        self.log.info("action: {0}".format(action))
+        self.log.info("SAMLRequest: {0}".format(SAMLRequest))
+
+        # Step 2: Redirect to the IdP
+        self.log.info('Redirect to the IdP')
+        state_token, cookie_string, j_session_id = self.saml_util.idp_redirect(action,
+                                                                               SAMLRequest)
+        self.log.info("state_token: {0}".format(state_token))
+        self.log.info("cookie_string: {0}".format(cookie_string))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Step 3: SSO user authentication via the IdP
+        self.log.info('SSO user authentication via the IdP')
+        next_url, j_session_id = self.saml_util.idp_login(self.saml_user, self.saml_passcode,
+                                                          state_token,
+                                                          cookie_string, j_session_id)
+        self.log.info("next_url: {0}".format(next_url))
+        self.log.info("j_session_id: {0}".format(j_session_id))
+
+        # Step 4: Get the SAML response from the IdP
+        self.log.info('Get the SAML response from the IdP')
+        SAMLResponse = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
+        self.log.info("SAMLResponse: {0}".format(SAMLResponse))
+
+        # Specify the number of parallel requests
+        num_requests = self.input.param("num_requests", 110)
+
+        # Using ThreadPool to send requests concurrently
+        pool = ThreadPool(num_requests)
+
+        # Map the function to the list of usernames
+        pool.map(lambda _: self.saml_util.saml_consume_url(self.master,
+                                                           cookie_string, SAMLResponse),
+                 range(num_requests))
+
+        # Close the pool and wait for the worker threads to finish
+        pool.close()
+        pool.join()
