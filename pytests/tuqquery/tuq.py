@@ -30,7 +30,6 @@ from couchbase_helper.documentgenerator import JSONNonDocGenerator
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
-from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
 import ast
 from deepdiff import DeepDiff
 from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
@@ -1423,6 +1422,7 @@ class QueryTests(BaseTestCase):
             query_params.pop('atrcollection', None)
 
         if self.testrunner_client == 'python_sdk' and not is_prepared:
+            from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(username, password)
             sdk_cluster.authenticate(authenticator)
