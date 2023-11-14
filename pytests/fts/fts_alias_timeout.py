@@ -96,11 +96,11 @@ class FTSIndexAliasTimeout(FTSBaseTest):
                     self.wait_for_indexing_complete()
                 else:
                     idx = control_objects[0]
-                control_alias = self.create_alias(target_indexes=[idx], name=f"fts_component_alias")
+                control_alias = self.create_alias(target_indexes=[idx], name=f"fts_component_alias",bucket=self._cb_cluster.get_bucket_by_name('default'))
                 control_objects.append(control_alias)
                 alias_components.append(control_alias)
 
-        idx_alias = self.create_alias(target_indexes=alias_components, name="fts_idx_alias")
+        idx_alias = self.create_alias(target_indexes=alias_components, name="fts_idx_alias", bucket=self._cb_cluster.get_bucket_by_name('default'))
 
         alias_request_timeout = self.define_timeout(timeout_type=timeout)
 
