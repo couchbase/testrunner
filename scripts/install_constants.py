@@ -102,7 +102,7 @@ CMDS = {
             UNMOUNT_NFS_CMD +
             "apt-get remove -y 'couchbase*' > /dev/null; sleep 10;"
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
-            "rm /var/lib/dpkg/info/couchbase-server.*; sleep 10;"
+            "rm /var/lib/dpkg/info/couchbase-server*; sleep 10;"
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null;"
             "dpkg --configure -a; apt-get update; "
