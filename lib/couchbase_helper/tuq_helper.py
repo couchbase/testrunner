@@ -20,7 +20,6 @@ from deepdiff import DeepDiff
 from decimal import Decimal
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
-from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
 
 from lib.Cb_constants.CBServer import CbServer
 
@@ -274,6 +273,7 @@ class N1QLHelper():
 
         result = ""
         if use_sdk and ("prepare" not in query.lower()) and ("insert" not in query.lower()):
+            from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(rest.username, rest.password)
             sdk_cluster.authenticate(authenticator)
