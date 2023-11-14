@@ -740,9 +740,14 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_more_than_ten_column(self):
         update_stats = "UPDATE STATISTICS FOR `travel-sample`.inventory.hotel(title, name, address, directions, phone, tollfree, email, fax, url, checkin, checkout, price, geo.lat, geo.lon, geo.accuracy)"
-        select_distribution = "SELECT distributionKeys FROM system:dictionary WHERE `bucket` = 'travel-sample' and `keyspace` = 'hotel';"
+        select_distribution = "SELECT distributionKeys FROM system:dictionary WHERE `bucket` = 'travel-sample' and `keyspace` = 'hotel'"
         self.run_cbq_query(update_stats)
-        system_dictionary = self.run_cbq_query(select_distribution)
+        for i in range(10):
+            self.sleep(6)
+            system_dictionary = self.run_cbq_query(select_distribution)
+            if len(system_dictionary['results']) > 0:
+                break
+        self.log.info(f"System dictionary: {system_dictionary['results']}")
         expected_result = [
             '(geo.accuracy)', '(geo.lat)', '(geo.lon)',
             'address', 'checkin', 'checkout', 'directions',
