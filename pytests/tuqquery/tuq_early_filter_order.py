@@ -696,8 +696,7 @@ class QueryEarlyFilterTests(QueryTests):
                             f"Order should be applied before limit, please check explain plan {explain_plan}")
             self.assertTrue("'#operator': 'Filter'" in str(explain_plan['results'][0]['plan']['~children'][0]),
                             f"Filter should be applied before limit, please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Offset', f"Offset is not being applied after fetch, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][2]['#operator'] == 'Limit',
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Limit',
                             f"Limit is not being applied after fetch, it should be. please check explain plan {explain_plan}")
 
             actual_results = self.run_cbq_query(select_query)

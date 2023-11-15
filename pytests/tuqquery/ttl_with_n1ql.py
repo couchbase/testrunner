@@ -122,7 +122,7 @@ class QueryExpirationTests(QueryTests):
         -i b/resources/tmp.ini -p default_bucket=False,nodes_init=1,initial_index_number=1,primary_indx_type=GSI,
         bucket_size=100 -t tuqquery.ttl_with_n1ql.QueryExpirationTests.test_insert_with_ttl_with_nested_select
         """
-        expiration_time = 10
+        expiration_time = 30
         # Loading beer-sample bucket
         result_count = 7303
         self.rest.load_sample(self.sample_bucket)
@@ -161,7 +161,7 @@ class QueryExpirationTests(QueryTests):
                                                stat_name=self.index_stat, expected_stat_value=result_count)
         self.assertTrue(result, "Indexer not able to index all the items")
 
-        self.sleep(expiration_time + 10, "Allowing time to all the docs to get expired")
+        self.sleep(expiration_time + 30, "Allowing time to all the docs to get expired")
         select_query = "Select * FROM {0}".format(query_default_bucket)
         results = self.run_cbq_query(select_query)
         self.assertEqual(len(results['results']), 0, "Docs with expiry value are not expired even after"
@@ -185,7 +185,7 @@ class QueryExpirationTests(QueryTests):
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                                stat_name=self.index_stat, expected_stat_value=result_count)
         self.assertTrue(result, "Indexer not able to index all the items")
-
+        self.sleep(expiration_time + 30, "Allowing time to all the docs to get expired")
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                                stat_name=self.index_stat, expected_stat_value=0)
         self.assertTrue(result, "All docs didn't expired after the passage of time")

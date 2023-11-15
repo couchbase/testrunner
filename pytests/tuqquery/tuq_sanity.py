@@ -1774,9 +1774,10 @@ class QuerySanityTests(QueryTests):
         self.assertEqual(plan['~children'][2]['~child']['~children'],
                         [{'#operator': 'Filter',
                           'condition': '((((`d`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
-                         {'#operator': 'Let', 'bindings': [
-                             {'var': 'name1', 'expr': 'substr0((((`d`.`name`)[0]).`FirstName`), 0, 10)'}]},
-                         {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]}])
+                         {'#operator': 'Let', 'bindings': [{'expr': 'substr0((((`d`.`name`)[0]).`FirstName`), 0, 10)',
+                                                            'var': 'name1'}]}, {'#operator': 'InitialProject',
+                                                                                'discard_original': True,
+                                                                                'result_terms': [{'expr': '`name1`'}]}])
         self.query = 'select name1 from ' + self.query_buckets[0] + \
                      ' let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" ' \
                      'limit 10 '

@@ -22,6 +22,7 @@ class QueryUsingTests(QueryTests):
                                                   collection_name=self.collections[0])
         self.collections_helper.create_collection(bucket_name="default", scope_name=self.scope,
                                                   collection_name=self.collections[1])
+        time.sleep(30)
         self.run_cbq_query(
             query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[
                 0]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))

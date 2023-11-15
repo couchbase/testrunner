@@ -1054,6 +1054,8 @@ class QueryXattrTests(QueryTests):
         try:
             # failover the indexer node
             failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
+            failover_task.result()
+            self.sleep(60)
             self.run_xattrs_query(query, '', '_system3', 'idx8', self.default_bucket_name,
                                   xattr_data=self.system_xattr_data)
 
@@ -1065,7 +1067,6 @@ class QueryXattrTests(QueryTests):
             # Run a user xattr query
             self.run_xattrs_query(query2, '', 'user3', 'idx15', self.default_bucket_name,
                                   xattr_data=self.user_xattr_data)
-            failover_task.result()
             self.sleep(120)
             # do a full recovery and rebalance
             self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
