@@ -303,9 +303,12 @@ class OnPremBaseTestCase(unittest.TestCase):
             # Sets internal password rotation time interval
             self.int_pwd_rotn = self.input.param("int_pwd_rotn", 1800000)
 
-            # Rotate the internal user's password at the specified interval
-            self.rest = RestConnection(self.master)
-            self.rest.set_internal_password_rotation_interval(self.int_pwd_rotn)
+            cluster_version = RestConnection(self.master).get_nodes_version()
+            t_version = float(cluster_version[:3])
+            if t_version >= 7.5:
+                # Rotate the internal user's password at the specified interval
+                self.rest = RestConnection(self.master)
+                self.rest.set_internal_password_rotation_interval(self.int_pwd_rotn)
 
             if self.enable_dp:
                 for node in self.servers:
