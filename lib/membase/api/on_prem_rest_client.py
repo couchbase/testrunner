@@ -1417,7 +1417,7 @@ class RestConnection(object):
             username = self.username
         if not password:
             password = self.password
-        api = self.cbas_base_url + "analytics/service"
+        api = self.cbas_base_url + "/analytics/service"
         headers = self._create_capi_headers_with_auth(username, password)
 
         params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id}
@@ -1453,7 +1453,7 @@ class RestConnection(object):
         if not password:
             password = self.password
 
-        api = self.cbas_base_url + "analytics/admin/active_requests?client_context_id={0}".format(
+        api = self.cbas_base_url + "/analytics/admin/active_requests?client_context_id={0}".format(
             client_context_id)
         headers = self._create_capi_headers_with_auth(username, password)
 
