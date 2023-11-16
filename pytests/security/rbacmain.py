@@ -47,7 +47,7 @@ class rbacmain:
     def _retrive_all_user_role(self, user_list=None):
         server = self.master_ip
         rest = RestConnection(server)
-        url = "/settings/rbac/roles"
+        url = "settings/rbac/roles"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
         # log.info(" Retrieve all User roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
@@ -55,7 +55,7 @@ class rbacmain:
 
     def _retrieve_user_roles(self):
         rest = RestConnection(self.master_ip)
-        url = "/settings/rbac/users"
+        url = "settings/rbac/users"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
         # log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
@@ -89,7 +89,7 @@ class rbacmain:
     def _delete_user(self, user_name):
         rest = RestConnection(self.master_ip)
         if self.auth_type == 'ldap' or self.auth_type == "pam" or self.auth_type == "ExternalGrp":
-            url = "/settings/rbac/users/external/" + user_name
+            url = "settings/rbac/users/external/" + user_name
         else:
             url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url

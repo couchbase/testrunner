@@ -3215,7 +3215,7 @@ class RestConnection(object):
         return status
 
     def set_data_path(self, data_path=None, index_path=None, cbas_path=None):
-        end_point = '/nodes/self/controller/settings'
+        end_point = 'nodes/self/controller/settings'
         api = self.baseUrl + end_point
         paths = HTTPHeaderDict()
         set_path = False
@@ -5078,7 +5078,7 @@ class RestConnection(object):
 
     'Get list of all roles that exist in the system'
     def retrive_all_user_role(self):
-        url = "/settings/rbac/roles"
+        url = "settings/rbac/roles"
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'GET')
         if not status:
@@ -5087,7 +5087,7 @@ class RestConnection(object):
 
     'Get list of current users and rols assigned to them'
     def retrieve_user_roles(self):
-        url = "/settings/rbac/users"
+        url = "settings/rbac/users"
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'GET')
         if not status:
