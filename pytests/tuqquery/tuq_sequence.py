@@ -85,7 +85,7 @@ class QuerySequenceTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 5010)
-            self.assertEqual(error['msg'], f"Error evaluating projection - cause: Sequence 'default:{self.bucket}._default.{sequence_name}' has reached its limit")
+            self.assertEqual(error['reason']['message'], f"Sequence 'default:{self.bucket}._default.{sequence_name}' has reached its limit")
 
     def test_cycle(self):
         sequence_name = f"seq_cycle_{abs(self.start)}"
