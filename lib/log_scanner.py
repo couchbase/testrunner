@@ -77,7 +77,7 @@ class LogScanner(object):
             "n1ql": {
                 "query.log": {
                     "keywords" : ["panic","FATAL","SEVERE","Fatal","Severe"],
-                    "ignore_keywords" : ["not available"]
+                    "ignore_keywords" : ["not available", "EnableNonFatalGets"]
                 }
             }
         }

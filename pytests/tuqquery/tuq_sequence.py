@@ -212,12 +212,14 @@ class QuerySequenceTests(QueryTests):
             {'cache': 50, 'cycle': False, 'increment': 1, 'max': 9223372036854775807, 'min': -9223372036854775808, 'path': f'`default`:`{self.bucket}`.`scope2`.`seq_drop_0`'}
         ]
 
-        result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+        self.sleep(2)
+        result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}' ORDER by `path`")
         self.assertEqual(expected, result['results'])
 
         self.run_cbq_query(f"DROP SEQUENCE {self.bucket}.scope1.{sequence_name}")
         self.run_cbq_query(f"DROP SCOPE {self.bucket}.scope2")
 
+        self.sleep(3)
         expected = []
         result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
         self.assertEqual(expected, result['results'])
@@ -284,13 +286,13 @@ class QuerySequenceTests(QueryTests):
         result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
         self.assertEqual(result['results'], expected_default)
 
-        self.run_cbq_query(f"PREPARE P1 AS SELECT NEXTVAL FOR {self.bucket}.`_default`.{sequence_name} as val", server=node1)
+        self.run_cbq_query(f"PREPARE SEQ1 AS SELECT NEXTVAL FOR {self.bucket}.`_default`.{sequence_name} as val", server=node1)
         
-        nextval = self.run_cbq_query(f"EXECUTE P1", server=node1)
+        nextval = self.run_cbq_query(f"EXECUTE SEQ1", server=node1)
         self.log.info(f"sequence value: {nextval['results'][0]['val']}")
         self.assertEqual(nextval['results'], [{'val': self.start}])
 
-        nextval = self.run_cbq_query(f"EXECUTE P1", server=node2)
+        nextval = self.run_cbq_query(f"EXECUTE SEQ1", server=node2)
         self.log.info(f"sequence value: {nextval['results'][0]['val']}")
         self.assertEqual(nextval['results'], [{'val': self.start + self.cache}])
 
@@ -305,13 +307,13 @@ class QuerySequenceTests(QueryTests):
 
         self.run_cbq_query(f"CREATE or REPLACE FUNCTION F1() {{ (SELECT NEXTVAL FOR {self.bucket}.`_default`.{sequence_name} as val) }}")
         
-        nextval = self.run_cbq_query(f"EXECUTE FUNCTION F1()")
-        self.log.info(f"sequence value: {nextval['results'][0]['val']}")
-        self.assertEqual(nextval['results'], [{'val': self.start}])
+        nextval = self.run_cbq_query(f"EXECUTE FUNCTION default:F1()")
+        self.log.info(f"sequence value: {nextval['results']}")
+        self.assertEqual(nextval['results'], [[{'val': self.start}]])
 
-        nextval = self.run_cbq_query(f"EXECUTE FUNCTION F1()")
-        self.log.info(f"sequence value: {nextval['results'][0]['val']}")
-        self.assertEqual(nextval['results'], [{'val': self.start + self.increment}])
+        nextval = self.run_cbq_query(f"EXECUTE FUNCTION default:F1()")
+        self.log.info(f"sequence value: {nextval['results']}")
+        self.assertEqual(nextval['results'], [[{'val': self.start + self.increment}]])
 
     def test_kill_node(self):
         node1 = self.servers[0]
