@@ -190,6 +190,7 @@ class ElasticSearchBase(object):
 
     def _http_request(self, api, method='GET', params='', headers=None,
                       timeout=600):
+        api = api.replace("//", "/")
         if not headers:
             headers = {'Content-Type': 'application/json',
                        'Accept': '*/*'}
