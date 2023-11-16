@@ -3301,7 +3301,6 @@ class QueryTests(BaseTestCase):
                 'Accept': '*/*'}
 
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
-        api = api.replace("//", "/")
         if not headers:
             headers = self._create_headers()
         end_time = time.time() + timeout
