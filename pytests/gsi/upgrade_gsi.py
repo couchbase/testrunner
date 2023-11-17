@@ -52,6 +52,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
         self.no_mutation_docs = self.input.param("no_mutation_docs", 75000)
         self.continuous_mutations = self.input.param("continuous_mutations", False)
+        self.upgrade_mode = self.input.param("upgrade_mode", 'online')
+        self.toggle_shard_rebalance = self.input.param("toggle_shard_rebalance", False)
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
                 self.skipTest("DGM can be achieved only for plasma")
@@ -1297,7 +1299,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         actual_no_indexed_fields_post_compaction_eviction = len(self.run_cbq_query(query=index_mutation_scan_query,scan_consistency='request_plus')['results'])
         self.assertEqual(actual_no_indexed_fields_post_compaction_eviction, expected_no_indexed_fields_post_mutations, f"name field has not been updated actual count : {actual_no_indexed_fields_post_compaction_eviction} expected : {expected_no_indexed_fields_post_mutations}")
 
-    def test_online_upgrade_file_based_rebalance(self):
+    def test_online_offline_swap_upgrade_file_based_rebalance(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -1317,22 +1319,185 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future = executor_main.submit(self.perform_continuous_kv_mutations, event)
                     scan_results_check = False
-                select_queries = self.create_index_in_batches()
+                select_queries = self.create_index_in_batches(replica_count=1)
                 self.wait_until_indexes_online()
+                if self.upgrade_mode == 'offline':
+                    index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
                 self.upgrade_and_validate(select_queries, scan_results_check)
-                self.create_index_in_batches(1)
+                self.update_master_node()
+                self.create_index_in_batches(num_batches=1, replica_count=1)
                 self.wait_until_indexes_online()
-                self.validate_shard_affinity()
+                if self.upgrade_mode == 'offline':
+                    index_names_after_upgrade = self.get_all_indexes_in_the_cluster()
+                    indexes_created_post_upgrade = []
+                    self.log.info(f'Indexes created before upgrade {index_names_before_upgrade}')
+                    self.log.info(f'Indexes created after upgrade {index_names_after_upgrade}')
+                    for name in index_names_after_upgrade:
+                        if name not in index_names_before_upgrade:
+                            indexes_created_post_upgrade.append(name)
+                    self.log.info(f'new indexes created after upgrade {indexes_created_post_upgrade}')
+                    self.validate_shard_affinity(specific_indexes=indexes_created_post_upgrade)
+                else:
+                    self.validate_shard_affinity()
+                #Will uncomment the below code post MB-59107
+                # if not self.check_gsi_logs_for_shard_transfer():
+                #     raise Exception("Shard based rebalance not triggered")
+
             finally:
                 event.set()
                 if self.continuous_mutations:
                     future.result()
 
-    def create_index_in_batches(self, num_batches=2):
+    def test_upgrade_downgrade_upgrade(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        self.sleep(10)
+        scan_results_check = True
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event = Event()
+                if self.continuous_mutations:
+                    future = executor_main.submit(self.perform_continuous_kv_mutations, event)
+                    scan_results_check = False
+                select_queries = self.create_index_in_batches(replica_count=2)
+                self.wait_until_indexes_online()
+                node_position = random.randint(0, self.nodes_init-1)
+                node_to_upgrade = node_to_downgrade = self.servers[node_position]
+                self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_upgrade, select_queries=select_queries)
+                self.sleep(10)
+                self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_downgrade, select_queries=select_queries, downgrade=True)
+                self.create_index_in_batches(num_batches=1, replica_count=2)
+                self.wait_until_indexes_online()
+                # Will uncomment the below code post MB-59107
+                # if not self.check_gsi_logs_for_shard_transfer():
+                #     raise Exception("Shard based rebalance not triggered")
+
+            finally:
+                event.set()
+                if self.continuous_mutations:
+                    future.result()
+
+    def test_ce_to_ee_upgrade(self):
+        community_nodes = self.servers[0:self.nodes_init]
+        self._install(community_nodes, version=self.upgrade_to, community_to_enterprise=True)
+        self.sleep(120)
+        master_services = ['index,kv,n1ql']
+        self._initialize_nodes(
+            self.cluster,
+            [community_nodes[0]],
+            self.disabled_consistent_view,
+            self.rebalanceIndexWaitingDisabled,
+            self.rebalanceIndexPausingDisabled,
+            self.maxParallelIndexers,
+            self.maxParallelReplicaIndexers,
+            self.port,
+            self.quota_percent,
+            services=master_services)
+        self.sleep(30)
+        self.add_built_in_server_user(node=self.master)
+
+        cluster_rebalance = self.cluster.async_rebalance([community_nodes[0]], community_nodes[1:], [], services=master_services*(len(community_nodes)-1))
+        cluster_rebalance.result()
+        self.sleep(30)
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        self.sleep(10)
+        scan_results_check = True
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event = Event()
+                if self.continuous_mutations:
+                    future = executor_main.submit(self.perform_continuous_kv_mutations, event)
+                    scan_results_check = False
+                l1 = [
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44price` ON default:test_bucket.test_scope_1.test_collection_1(price) USING GSI  WITH {'defer_build': False}",
+                    'CREATE PRIMARY INDEX `#primary_Q65JY7lol` ON default:test_bucket.test_scope_1.test_collection_1 USING GSI',
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44free_breakfast_avg_rating` ON default:test_bucket.test_scope_1.test_collection_1(free_breakfast,avg_rating) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44free_breakfast_array_count` ON default:test_bucket.test_scope_1.test_collection_1(free_breakfast,type,free_parking,array_count(public_likes),price,country) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44flatten_keys` ON default:test_bucket.test_scope_1.test_collection_1(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews when r.ratings.Cleanliness < 4 END,country,email,free_parking) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44missing_keys` ON default:test_bucket.test_scope_1.test_collection_1(city INCLUDE MISSING DESC,avg_rating,country) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_overall` ON default:test_bucket.test_scope_1.test_collection_1(price, All ARRAY v.ratings.Overall FOR v IN reviews END) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_rooms` ON default:test_bucket.test_scope_1.test_collection_1(price, All ARRAY v.ratings.Rooms FOR v IN reviews END) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_checkin` ON default:test_bucket.test_scope_1.test_collection_1(country,DISTINCT ARRAY `r`.`ratings`.`Check in / front desk` FOR r in `reviews` END,array_count(`public_likes`),array_count(`reviews`) DESC,`type`,phone,price,email,address,name,url) USING GSI  WITH {'defer_build': False}"]
+                l2 = [
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44price` ON default:test_bucket._default._default(price) USING GSI  WITH {'defer_build': False}",
+                    'CREATE PRIMARY INDEX `#primary_Q65JY7lol` ON default:test_bucket._default._default USING GSI',
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44free_breakfast_avg_rating` ON default:test_bucket._default._default(free_breakfast,avg_rating) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44free_breakfast_array_count` ON default:test_bucket._default._default(free_breakfast,type,free_parking,array_count(public_likes),price,country) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44flatten_keys` ON default:test_bucket._default._default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews when r.ratings.Cleanliness < 4 END,country,email,free_parking) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44missing_keys` ON default:test_bucket._default._default(city INCLUDE MISSING DESC,avg_rating,country) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_overall` ON default:test_bucket._default._default(price, All ARRAY v.ratings.Overall FOR v IN reviews END) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_rooms` ON default:test_bucket._default._default(price, All ARRAY v.ratings.Rooms FOR v IN reviews END) USING GSI  WITH {'defer_build': False}",
+                    "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_checkin` ON default:test_bucket._default._default(country,DISTINCT ARRAY `r`.`ratings`.`Check in / front desk` FOR r in `reviews` END,array_count(`public_likes`),array_count(`reviews`) DESC,`type`,phone,price,email,address,name,url) USING GSI  WITH {'defer_build': False}"]
+                for query_list in [l1, l2]:
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=query_list, query_node=self.query_node)
+                self.wait_until_indexes_online()
+                select_queries = ['SELECT name FROM default:test_bucket._default._default WHERE name like "%Dil%"', 'SELECT name FROM default:test_bucket.test_scope_1.test_collection_1 WHERE avg_rating > 3 AND free_breakfast = true', 'SELECT name FROM default:test_bucket.test_scope_1.test_collection_1 WHERE avg_rating > 3 AND country like "%F%"', 'SELECT suffix FROM default:test_bucket.test_scope_1.test_collection_1 WHERE suffix is not NULL', 'SELECT name FROM default:test_bucket.test_scope_1.test_collection_1 WHERE name like "%Dil%"', 'SELECT price FROM default:test_bucket.test_scope_1.test_collection_1 WHERE price > 0', "SELECT name FROM default:test_bucket.test_scope_1.test_collection_1 WHERE ANY r IN reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL ", 'SELECT name FROM default:test_bucket._default._default WHERE ANY v IN reviews SATISFIES v.ratings.`Rooms` > 3  END and price > 1000 ', "SELECT name FROM default:test_bucket._default._default WHERE ANY r IN reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL ", 'SELECT price FROM default:test_bucket._default._default WHERE price > 0', "SELECT country, avg(price) as AvgPrice, min(price) as MinPrice, max(price) as MaxPrice FROM default:test_bucket._default._default WHERE free_breakfast=True and free_parking=True and price is not null and array_count(public_likes)>5 and `type`='Hotel' group by country", 'SELECT suffix FROM default:test_bucket._default._default WHERE suffix is not NULL', 'SELECT name FROM default:test_bucket._default._default WHERE avg_rating > 3 AND country like "%F%"', "SELECT country, avg(price) as AvgPrice, min(price) as MinPrice, max(price) as MaxPrice FROM default:test_bucket.test_scope_1.test_collection_1 WHERE free_breakfast=True and free_parking=True and price is not null and array_count(public_likes)>5 and `type`='Hotel' group by country", 'SELECT address FROM default:test_bucket._default._default WHERE country is not null and `type` is not null and (any r in reviews satisfies r.ratings.`Check in / front desk` is not null end) ', 'SELECT address FROM default:test_bucket._default._default WHERE ANY v IN reviews SATISFIES v.ratings.`Overall` > 3  END and price < 1000 ', 'SELECT name FROM default:test_bucket.test_scope_1.test_collection_1 WHERE ANY v IN reviews SATISFIES v.ratings.`Rooms` > 3  END and price > 1000 ', 'SELECT address FROM default:test_bucket.test_scope_1.test_collection_1 WHERE ANY v IN reviews SATISFIES v.ratings.`Overall` > 3  END and price < 1000 ', 'SELECT address FROM default:test_bucket.test_scope_1.test_collection_1 WHERE country is not null and `type` is not null and (any r in reviews satisfies r.ratings.`Check in / front desk` is not null end) ', 'SELECT name FROM default:test_bucket._default._default WHERE avg_rating > 3 AND free_breakfast = true']
+                index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
+                self.upgrade_ce_to_ee(select_queries=select_queries, scan_results_check=scan_results_check)
+                self.update_master_node()
+                self.enable_shard_based_rebalance()
+                self.sleep(30)
+                self.create_index_in_batches(num_batches=1, replica_count=1)
+                self.wait_until_indexes_online()
+                self.upgrade_build_type = "enterprise"
+                self.gsi_type = "plasma"
+                index_names_after_upgrade = self.get_all_indexes_in_the_cluster()
+                indexes_created_post_upgrade = []
+                self.log.info(f'indexes created before upgrade {index_names_before_upgrade}')
+                self.log.info(f'indexes created after upgrade {index_names_after_upgrade}')
+                for name in index_names_after_upgrade:
+                    if name not in index_names_before_upgrade:
+                        indexes_created_post_upgrade.append(name)
+                self.log.info(f'indexes created only after upgrade {indexes_created_post_upgrade}')
+                self.log.info(f'server remianing 1 {self.servers}')
+                self.validate_shard_affinity(specific_indexes=indexes_created_post_upgrade, provisioned=False)
+                node_in, node_out = self.servers[0], self.servers[random.randint(self.nodes_init, len(self.servers)-1)]
+                self._install([node_in], version=self.upgrade_to, community_to_enterprise=True)
+                self.sleep(30)
+                updated_server_list = self.get_nodes_in_cluster_after_upgrade()
+                services_in = ['kv,n1ql,index']
+                swap_rebalance = self.cluster.async_rebalance(updated_server_list, [node_in], [node_out], services=services_in)
+                swap_rebalance.result()
+                self.sleep(30)
+                self.update_master_node()
+                #self.rest = self.master
+                if not self.check_gsi_logs_for_shard_transfer():
+                    raise Exception("Shard based rebalance not triggered")
+
+            finally:
+                event.set()
+                if self.continuous_mutations:
+                    future.result()
+
+
+    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True):
         select_queries = set()
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         for _ in range(num_batches):
-            replica_count = random.randint(1, 2)
+            if replica_count is None:
+                replica_count = random.randint(1, 2)
+            else:
+                replica_count = replica_count
+                randomise_replica_count = False
             query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
             for namespace in self.namespaces:
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -1340,15 +1505,181 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
                                                                   num_replica=replica_count,
-                                                                  randomise_replica_count=True)
+                                                                  randomise_replica_count=randomise_replica_count)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
         return select_queries
+
+    def upgrade_and_downgrade_and_validate_single_node(self, node_to_upgrade, select_queries, scan_results_check=True, downgrade=False):
+        try:
+            service = 'index'
+            nodes = self.get_nodes_from_services_map(service_type=service, get_all_nodes=True)
+            self.log.info("----- Upgrading {} node {} -----".format(service, node_to_upgrade.ip))
+            node_rest = RestConnection(node_to_upgrade)
+            node_info = "{0}:{1}".format(node_to_upgrade.ip, node_to_upgrade.port)
+            node_services_list = node_rest.get_nodes_services()[node_info]
+            node_services = [",".join(node_services_list)]
+            if "n1ql" in node_services_list:
+                if len(nodes) > 1:
+                    for n1ql_node in nodes:
+                        if node_to_upgrade.ip != n1ql_node.ip:
+                            self.n1ql_node = n1ql_node
+                            self.query_node = self.n1ql_node
+                            break
+            self.sleep(60)
+            self.log.info("Fetching stats/metadata before rebalance")
+            shard_list_before = self.fetch_shard_id_list()
+            map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+            self.log.info("Running scans before rebalance")
+            query_result = {}
+            if scan_results_check and select_queries is not None:
+                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                for query in select_queries:
+                    query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                             server=n1ql_server)['results']
+
+            cluster_profile = None
+            if not downgrade:
+                cluster_profile = "provisioned"
+            active_nodes = []
+            for active_node in self.servers[:self.nodes_init]:
+                if active_node.ip != node_to_upgrade.ip:
+                    active_nodes.append(active_node)
+            self.log.info("Rebalancing the node out...")
+            self.run_continous_query = True
+            thread = Thread(target=self._run_queries_continously, args=[select_queries])
+            thread.start()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node_to_upgrade])
+            rebalance.result()
+            self.log.info(f"Upgrading the node...{node_to_upgrade.ip}")
+
+
+            if downgrade:
+                remote_connection = RemoteMachineShellConnection(node_to_upgrade)
+                remote_connection.couchbase_uninstall()
+                self.sleep(10)
+                upgrade_th = self._async_update(upgrade_version=self.initial_version, servers=[node_to_upgrade],
+                                                cluster_profile=cluster_profile)
+            else:
+                upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node_to_upgrade],
+                                                cluster_profile=cluster_profile)
+            for th in upgrade_th:
+                th.join()
+            self.sleep(120)
+            self.log.info("==== Upgrade Complete ====")
+            self.log.info("Adding node back to cluster...")
+            rebalance = self.cluster.async_rebalance(active_nodes,
+                                                     [node_to_upgrade], [],
+                                                     services=node_services)
+            rebalance.result()
+            self.sleep(10)
+            self.run_continous_query = False
+            self.sleep(30)
+
+            if not downgrade:
+                shard_list_after = self.fetch_shard_id_list()
+                self.validate_shard_affinity(node_in=node_to_upgrade)
+                self.validate_alternate_shard_ids_presence(node_in=node_to_upgrade)
+
+            if scan_results_check and select_queries is not None:
+                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                for query in select_queries:
+                    post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                               server=n1ql_server)['results']
+                    diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
+                    if diffs:
+                        self.log.error(
+                            f"Mismatch in query result before and after rebalance. Select query {query}\n\n. "
+                            f"Result before \n\n {query_result[query]}."
+                            f"Result after \n \n {post_rebalance_result}")
+                        raise Exception("Mismatch in query results before and after rebalance")
+            if not downgrade:
+                for shard in shard_list_before:
+                    if shard not in shard_list_after:
+                        raise Exception(f"Shard {shard} seems to be missing after rebalance")
+            if not downgrade:
+                if len(shard_list_after) <= len(shard_list_before):
+                    raise Exception(
+                        "No new alternate shard IDs have been created during this rebalance. Possible bug")
+                # if not self.check_gsi_logs_for_shard_transfer():
+                #     raise Exception("Shard based rebalance not triggered")
+            self.sleep(30)
+
+            map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+            
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                          map_after_rebalance=map_after_rebalance,
+                                                          stats_map_before_rebalance=stats_before_rebalance,
+                                                          stats_map_after_rebalance=stats_after_rebalance, nodes_in=[],
+                                                          nodes_out=[], skip_array_index_item_count=True, per_node=True)
+        finally:
+            self.run_continous_query = False
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.remove_folders(['/etc/couchbase.d'])
+                remote.disconnect()
+                self.upgrade_servers.append(server)
+    def upgrade_ce_to_ee(self, select_queries, scan_results_check=True):
+        self.log.info(f'nodes out list : {self.nodes_out_list}')
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+        self.log.info(f'stats before rebalance : {stats_before_rebalance}')
+        in_nodes = self.servers[self.nodes_init:len(self.servers)]
+        out_nodes = self.servers[0:self.nodes_init]
+        services_in = ['index,kv,n1ql']
+        updated_nodes = self.get_nodes_in_cluster_after_upgrade()
+        active_nodes = in_nodes
+        self.sleep(60)
+        # self.log.info(f'installing {self.upgrade_to} on {in_nodes}')
+        # self._install(in_nodes, version=self.upgrade_to)
+        query_result = {}
+        if scan_results_check and select_queries is not None:
+            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+            for query in select_queries:
+                query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                         server=n1ql_server)['results']
+        self.log.info(f'rebalancing in of entreprise nodes {in_nodes}')
+        self.run_continous_query = True
+        thread = Thread(target=self._run_queries_continously, args=[select_queries])
+        thread.start()
+        rebalance_in = self.cluster.async_rebalance(updated_nodes, in_nodes, [], services=services_in*len(in_nodes))
+        rebalance_in.result()
+        self.sleep(20)
+        self.log.info(f'rebalancing out of community nodes {out_nodes}')
+        rebalance_out = self.cluster.async_rebalance(active_nodes, [], out_nodes)
+        rebalance_out.result()
+        self.run_continous_query = False
+        self.sleep(30)
+        self.update_master_node()
+
+        if scan_results_check and select_queries is not None:
+            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+            for query in select_queries:
+                post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                           server=n1ql_server)['results']
+                diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
+                if diffs:
+                    self.log.error(
+                        f"Mismatch in query result before and after rebalance. Select query {query}\n\n. "
+                        f"Result before \n\n {query_result[query]}."
+                        f"Result after \n \n {post_rebalance_result}")
+                    raise Exception("Mismatch in query results before and after rebalance")
+        self.sleep(30)
+        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+        
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                      map_after_rebalance=map_after_rebalance,
+                                                      stats_map_before_rebalance=stats_before_rebalance,
+                                                      stats_map_after_rebalance=stats_after_rebalance,
+                                                      nodes_in=[],
+                                                      nodes_out=[], skip_array_index_item_count=True, per_node=True)
 
     def upgrade_and_validate(self, select_queries, scan_results_check=True):
         self.run_async_index_operations(operation_type="query")
         try:
             self.nodes_upgrade_path = self.input.param("nodes_upgrade_path", "").split("-")
+            if self.upgrade_mode == 'swap_rebalance':
+                node_to_be_swapped_in = self.servers[self.nodes_init]
+            enable_shard_rebalance = True
             for service in self.nodes_upgrade_path:
                 nodes = self.get_nodes_from_services_map(service_type=service, get_all_nodes=True)
                 node_to_upgrade = None
@@ -1359,7 +1690,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         break
                 if node_to_upgrade is None:
                     raise Exception("Cannot find a node to upgrade")
-                log.info("----- Upgrading {} node {} -----".format(service, node_to_upgrade.ip))
+                self.log.info("----- Upgrading {} node {} -----".format(service, node_to_upgrade.ip))
                 node_rest = RestConnection(node_to_upgrade)
                 node_info = "{0}:{1}".format(node_to_upgrade.ip, node_to_upgrade.port)
                 node_services_list = node_rest.get_nodes_services()[node_info]
@@ -1369,9 +1700,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         for n1ql_node in nodes:
                             if node_to_upgrade.ip != n1ql_node.ip:
                                 self.n1ql_node = n1ql_node
+                                self.query_node = self.n1ql_node
                                 break
-                log.info("Fetching stats/metadata before rebalance")
+                self.sleep(60)
+                self.log.info("Fetching stats/metadata before rebalance")
                 shard_list_before = self.fetch_shard_id_list()
+                map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                 self.log.info("Running scans before rebalance")
                 query_result = {}
                 if scan_results_check and select_queries is not None:
@@ -1379,36 +1713,86 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     for query in select_queries:
                         query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
                                                                  server=n1ql_server)['results']
-                log.info("Rebalancing the node out...")
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
-                rebalance.result()
+
+                cluster_profile = "provisioned"
                 active_nodes = []
-                for active_node in self.servers:
+                for active_node in self.get_nodes_in_cluster_after_upgrade():
                     if active_node.ip != node.ip:
                         active_nodes.append(active_node)
-                log.info(f"Upgrading the node...{node.ip}")
-                if 'index' in service:
-                    cluster_profile = "provisioned"
+
+                self.run_continous_query = True
+                thread = Thread(target=self._run_queries_continously, args=[select_queries])
+                thread.start()
+                if self.upgrade_mode == 'online':
+                    self.log.info("Rebalancing the node out...")
+                    rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
+                    rebalance.result()
+                    self.log.info(f"Upgrading the node...{node.ip}")
+
+                    upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node],
+                                                    cluster_profile=cluster_profile)
+                    for th in upgrade_th:
+                        th.join()
+                    self.sleep(120)
+                    self.log.info("==== Upgrade Complete ====")
+                    self.log.info("Adding node back to cluster...")
+                    rebalance = self.cluster.async_rebalance(active_nodes,
+                                                             [node], [],
+                                                             services=node_services)
+                    rebalance.result()
+                    self.sleep(10)
+                    if self.toggle_shard_rebalance and 'index' in service:
+                        if enable_shard_rebalance:
+                            self.enable_shard_based_rebalance(provisioned=True)
+                        else:
+                            self.disable_shard_based_rebalance(provisioned=True)
+                        enable_shard_rebalance = not enable_shard_rebalance
+
+                elif self.upgrade_mode == 'offline':
+                    self.rest.update_autofailover_settings(True, 300)
+                    remote = RemoteMachineShellConnection(node)
+                    remote.stop_server()
+                    remote.disconnect()
+                    upgrade_th = self._async_update(self.upgrade_to, [node], cluster_profile=cluster_profile)
+                    for th in upgrade_th:
+                        th.join()
+                    self.log.info("==== Offline Upgrade Complete ====")
+                    self.sleep(120)
+                elif self.upgrade_mode == 'swap_rebalance':
+                    upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node_to_be_swapped_in],
+                                                    cluster_profile=cluster_profile)
+                    for th in upgrade_th:
+                        th.join()
+                    self.sleep(120)
+                    self.log.info("Swapping servers...")
+                    rebalance = self.cluster.async_rebalance(active_nodes,
+                                                             [node_to_be_swapped_in],
+                                                             [node_to_upgrade], services=[f'{service}'])
+                    swapped_in_node = node_to_be_swapped_in
+
+                    rebalance.result()
+                    node_to_be_swapped_in = node_to_upgrade
+                    self.update_master_node()
+                self.run_continous_query = False
+                self.sleep(60)
+                if self.upgrade_mode == 'swap_rebalance':
+                    # self.rest = self.master
+                    node_version = RestConnection(self.master).get_nodes_versions()
+                    self.log.info("{0} node {1} Upgraded to: {2}".format(service, swapped_in_node.ip, node_version))
                 else:
-                    cluster_profile = None
-                upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node],
-                                                cluster_profile=cluster_profile)
-                for th in upgrade_th:
-                    th.join()
-                self.sleep(120)
-                log.info("==== Upgrade Complete ====")
-                log.info("Adding node back to cluster...")
-                rebalance = self.cluster.async_rebalance(active_nodes,
-                                                         [node], [],
-                                                         services=node_services)
-                rebalance.result()
-                # self.sleep(100)
-                node_version = RestConnection(node).get_nodes_versions()
-                log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
+                    node_version = RestConnection(node).get_nodes_versions()
+                    self.log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
+
                 if 'index' in service:
+                    if self.upgrade_mode == "online":
+                        self.validate_shard_affinity()
+                        self.validate_alternate_shard_ids_presence()
+                        self.sleep(30)
+                    elif self.upgrade_mode == "swap_rebalance":
+                        self.validate_shard_affinity(node_in=swapped_in_node)
+                        self.validate_alternate_shard_ids_presence(node_in=swapped_in_node)
+                        self.sleep(30)
                     shard_list_after = self.fetch_shard_id_list()
-                    self.validate_shard_affinity()
-                    self.validate_alternate_shard_ids_presence()
                     if scan_results_check and select_queries is not None:
                         n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
                         for query in select_queries:
@@ -1421,12 +1805,26 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                     f"Result before \n\n {query_result[query]}."
                                     f"Result after \n \n {post_rebalance_result}")
                                 raise Exception("Mismatch in query results before and after rebalance")
-                    for shard in shard_list_before:
-                        if shard not in shard_list_after:
-                            raise Exception(f"Shard {shard} seems to be missing after rebalance")
-                    if len(shard_list_after) <= len(shard_list_before):
-                        raise Exception("No new alternate shard IDs have been created during this rebalance. Possible bug")
+                    if self.upgrade_mode != "offline" or self.toggle_shard_rebalance:
+                        for shard in shard_list_before:
+                            if shard not in shard_list_after:
+                                raise Exception(f"Shard {shard} seems to be missing after rebalance")
+                        if len(shard_list_after) <= len(shard_list_before):
+                            self.log.info(f'shard list before rebalance : {shard_list_before}')
+                            self.log.info(f'shard list after rebalance : {shard_list_after}')
+                            raise Exception(
+                                "No new alternate shard IDs have been created during this rebalance. Possible bug")
+                    self.sleep(20)
+                    map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+                    
+                    self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                                  map_after_rebalance=map_after_rebalance,
+                                                                  stats_map_before_rebalance=stats_before_rebalance,
+                                                                  stats_map_after_rebalance=stats_after_rebalance,
+                                                                  nodes_in=[], nodes_out=[], skip_array_index_item_count=True, per_node=True)
+
         finally:
+            self.run_continous_query = False
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.remove_folders(['/etc/couchbase.d'])
@@ -1545,9 +1943,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         while self.run_continous_query:
             tasks_list = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
                                                                     query_node=self.query_node)
-            for tasks in tasks_list:
-                for task in tasks:
-                    task.result()
+            for task in tasks_list:
+                task.result()
 
     def _verify_create_index_api(self, keyspace='default'):
         """
@@ -1911,9 +2308,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         msg = "Some scans did not yield the same results for partitioned index and non-partitioned indexes"
         self.assertEqual(len(failed_queries), 0, msg)
 
-    def _return_maps(self):
-        index_map = self.get_index_map()
-        stats_map = self.get_index_stats(perNode=False)
+    def _return_maps(self, perNode=False, map_from_index_nodes=False):
+        if map_from_index_nodes:
+            index_map = self.get_index_map_from_index_endpoint()
+        else:
+            index_map = self.get_index_map()
+        stats_map = self.get_index_stats(perNode=perNode)
         return index_map, stats_map
 
     def disable_upgrade_to_plasma(self, indexer_node):

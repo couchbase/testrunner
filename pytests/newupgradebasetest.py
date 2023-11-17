@@ -155,9 +155,19 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
             try:
                 # cleanup only nodes that are in cluster
                 # not all servers have been installed
+                rest_obj, nodes = None, []
                 if self.rest is None:
                     self._new_master(self.master)
-                nodes = self.rest.get_nodes()
+                for server in self.get_nodes_in_cluster_after_upgrade():
+                    try:
+                        rest_obj = RestConnection(server)
+                        break
+                    except:
+                        pass
+                if rest_obj:
+                    nodes = rest_obj.get_nodes()
+                    self.log.info(f'rest node : {self.rest.ip}')
+                    self.log.info(f'Node in cluster : {nodes} ')
                 temp = []
                 for server in self.servers:
                     if server.ip in [node.ip for node in nodes]:

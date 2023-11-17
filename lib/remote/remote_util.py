@@ -2049,7 +2049,7 @@ class RemoteMachineShellConnection(KeepRefs):
         elif self.info.deliverable_type == 'deb':
             cmd_list = []
             if cluster_profile:
-                cmd_list.append(f"rm -f /etc/couchbase.d/config_profile && mkdir -p /etc/couchbase.d && echo '{cluster_profile}' > /etc/couchbase.d/config_profile")
+                cmd_list.append(f"rm -f /etc/couchbase.d/config_profile && mkdir -p /etc/couchbase.d && echo '{cluster_profile}' > /etc/couchbase.d/config_profile && sleep 3")
             if save_upgrade_config:
                 self.couchbase_uninstall()
                 install_command = 'dpkg -i /tmp/{0}'.format(build.name)
@@ -2064,6 +2064,13 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.type.lower() != 'windows':
             for command in cmd_list:
                 output, error = self.execute_command(command, use_channel=True)
+        if cluster_profile:
+            command = 'cat /etc/couchbase.d/config_profile'
+            output, error = self.execute_command(command, use_channel=True)
+            if output[0] != cluster_profile:
+                raise Exception(f"cluster profile {cluster_profile} not applied")
+
+
         if debug_logs:
             self.log_command_output(output, error)
         else:
@@ -2304,6 +2311,7 @@ class RemoteMachineShellConnection(KeepRefs):
                         output, error = self.execute_command('{0}dpkg -i /tmp/{1}'\
                                                  .format(environment, build.name),
                                                          debug=debug_logs)
+
 
             if "SUSE" in self.info.distribution_type:
                 msgs_check = ["insserv: Service network is missed in the runlevels 2 4",
@@ -3176,7 +3184,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     .format(self.ip, output, error, track_words))
         elif debug and output:
             for line in output:
-                log.info(line)
+                log.debug(line)
         return success
 
     def execute_commands_inside(self, main_command,query, queries,bucket1,password,bucket2,source,subcommands=[], min_output_size=0,

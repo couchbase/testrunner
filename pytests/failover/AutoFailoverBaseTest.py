@@ -602,6 +602,8 @@ class AutoFailoverBaseTest(BaseTestCase):
         failover_not_expected = failover_not_expected or (1 < self.max_count < self.num_node_failures and
                                                           self.pause_between_failover_action < self.timeout or
                                                           self.num_replicas < self.max_count)
+        self.log.info(f'num_node_faliures : {self.num_node_failures}')
+        self.log.info(f'servers existing : {self.servers}')
         self.failover_expected = not failover_not_expected
         if self.deny_autofailover is False:
             self.failover_expected = True

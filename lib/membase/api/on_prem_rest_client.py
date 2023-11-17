@@ -2163,6 +2163,17 @@ class RestConnection(object):
                 raise Exception(content)
         log.info("{0} set".format(setting_json))
 
+    def set_shard_affinity_provisoned_mode(self, setting_json, timeout=120):
+        '''
+        Works only in mixed mode
+        '''
+        api = self.index_baseUrl + 'settings/shardAffinity'
+        status, content, header = self._http_request(api, 'POST', json.dumps(setting_json))
+        if not status:
+            raise Exception(content)
+        log.info("{0} set".format(setting_json))
+
+
     def get_index_settings(self, timeout=120):
         node = None
         api = self.index_baseUrl + 'settings'
@@ -6483,6 +6494,20 @@ class RestConnection(object):
                 log.error("Failed to set 'disableUnusedExternalListeners' on this node {0}"
                           .format(self.baseUrl))
         self.update_autofailover_settings(True, 60)
+
+    def get_cluster_config_profile(self):
+        api = self.baseUrl + "pools"
+        header = self._create_capi_headers()
+        status, content, _ = self._http_request(api, 'GET', headers=header)
+        if not status:
+            raise Exception(content)
+        content_json = json.loads(content)
+        log.info(content_json)
+        if 'configProfile' in content_json:
+            cluster_config_profile = content_json['configProfile']
+        else:
+            cluster_config_profile = 'default'
+        return cluster_config_profile
 
     # These methods are added for Auto-Rebalance On Failure tests
     def set_retry_rebalance_settings(self, body):

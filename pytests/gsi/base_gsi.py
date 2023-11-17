@@ -2102,7 +2102,34 @@ class BaseSecondaryIndexingTests(QueryTests):
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
-    def validate_shard_affinity(self):
+    def get_all_indexes_in_the_cluster(self):
+        index_name_list = []
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        index_status = rest.get_indexer_metadata()
+        for index_info in index_status['status']:
+            index_name_list.append(index_info['name'])
+        return index_name_list
+
+    def get_nodes_in_cluster_after_upgrade(self, master_node=None):
+        rest = None
+        if master_node == None:
+            rest = RestConnection(self.master)
+        else:
+            rest = RestConnection(master_node)
+        nodes = rest.node_statuses()
+        server_set = []
+        for node in nodes:
+            for server in self.input.servers:
+                if server.ip == node.ip:
+                    server_set.append(server)
+        return server_set
+
+
+    def validate_shard_affinity(self, specific_indexes=None, node_in=None, provisioned=True):
+        if not self.is_shard_based_rebalance_enabled(provisioned=provisioned, node_in=node_in):
+            self.log.info("Skipping validating shard affinity since shard based rebalance is disabled")
+            return
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = None
         for node in indexer_nodes:
@@ -2112,7 +2139,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_resp = rest.get_indexer_metadata(return_system_query_scope=False)
         mixed_mode = False
         node_versions_set = set()
-        for node in self.servers:
+        for node in self.get_nodes_in_cluster_after_upgrade():
             rest = RestConnection(node)
             node_versions_set.add(rest.get_major_version())
         if len(list(node_versions_set)) > 1:
@@ -2128,47 +2155,98 @@ class BaseSecondaryIndexingTests(QueryTests):
                 raise Exception(f"Alternate shard ID seen for MOI type indexes. Shard ID list {shard_id_list}")
         else:
             for index_metadata in indexer_metadata:
-                # alternate shard ID not null validation
-                if not index_metadata['alternateShardIds'] and not mixed_mode:
-                    self.log.error(f"Indexer metadata {indexer_metadata}")
-                    raise Exception(f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
-                # 2nd field of alternate shard ID should be the replica ID validation
-                for host in index_metadata['alternateShardIds']:
-                    for partition in index_metadata['alternateShardIds'][host]:
-                        shard_list = index_metadata['alternateShardIds'][host][partition]
-                        for shard in shard_list:
-                            shard_replica_id = int(shard.split("-")[1])
-                            replica_id = int(index_metadata['replicaId'])
-                            if shard_replica_id != replica_id:
-                                self.log.error(f"Indexer metadata {indexer_metadata}")
-                                raise Exception(f"Alternate shard ID and replica ID mismatch for index "
-                                                f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
-                # only one alternate shard ID for primary index validation
-                if 'isPrimary' in index_metadata:
-                    for host in index_metadata['alternateShardIds']:
-                        for partition in index_metadata['alternateShardIds'][host]:
-                            if len(index_metadata['alternateShardIds'][host][partition]) != 1:
-                                self.log.error(f"Indexer metadata {indexer_metadata}")
-                                raise Exception(f"There are more than 1 instances of alternate shard ID for primary index "
-                                                f"{index_metadata['name']} with definition {index_metadata['definition']}")
-                # only 2 alternate shard IDs for secondary index validation
+                if not specific_indexes:
+                    if not index_metadata['alternateShardIds'] and not mixed_mode:
+                        raise Exception(
+                            f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
                 else:
+                    if not index_metadata['alternateShardIds'] and not mixed_mode and index_metadata['name'] in specific_indexes:
+                        raise Exception(
+                            f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
+                if not specific_indexes:
+                    if not index_metadata['alternateShardIds'] and not mixed_mode:
+                        self.log.error(f"Indexer metadata {indexer_metadata}")
+                        raise Exception(
+                            f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
+                else:
+                    if not index_metadata['alternateShardIds'] and not mixed_mode and index_metadata['name'] in specific_indexes:
+                        self.log.error(f"Indexer metadata {indexer_metadata}")
+                        raise Exception(
+                            f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
+                # 2nd field of alternate shard ID should be the replica ID validation
+                if not specific_indexes:
                     for host in index_metadata['alternateShardIds']:
                         for partition in index_metadata['alternateShardIds'][host]:
-                            if len(index_metadata['alternateShardIds'][host][partition]) != 2:
-                                self.log.error(f"Indexer metadata {indexer_metadata}")
-                                raise Exception(f"There are more than 1 instances of alternate shard ID for primary index "
-                                                f"{index_metadata['name']} with definition {index_metadata['definition']}")
+                            shard_list = index_metadata['alternateShardIds'][host][partition]
+                            for shard in shard_list:
+                                shard_replica_id = int(shard.split("-")[1])
+                                replica_id = int(index_metadata['replicaId'])
+                                if shard_replica_id != replica_id:
+                                    self.log.error(f"Indexer metadata {indexer_metadata}")
+                                    raise Exception(f"Alternate shard ID and replica ID mismatch for index "
+                                                    f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
+                else:
+                    if index_metadata['name'] in specific_indexes:
+                        for host in index_metadata['alternateShardIds']:
+                            for partition in index_metadata['alternateShardIds'][host]:
+                                shard_list = index_metadata['alternateShardIds'][host][partition]
+                                for shard in shard_list:
+                                    shard_replica_id = int(shard.split("-")[1])
+                                    replica_id = int(index_metadata['replicaId'])
+                                    if shard_replica_id != replica_id:
+                                        self.log.error(f"Indexer metadata {indexer_metadata}")
+                                        raise Exception(f"Alternate shard ID and replica ID mismatch for index "
+                                                        f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
+                if not specific_indexes:
+                    # only one alternate shard ID for primary index validation
+                    if 'isPrimary' in index_metadata:
+                        for host in index_metadata['alternateShardIds']:
+                            for partition in index_metadata['alternateShardIds'][host]:
+                                if len(index_metadata['alternateShardIds'][host][partition]) != 1:
+                                    self.log.error(f"Indexer metadata {indexer_metadata}")
+                                    raise Exception(
+                                        f"There are more than 1 instances of alternate shard ID for primary index "
+                                        f"{index_metadata['name']} with definition {index_metadata['definition']}")
+                    # only 2 alternate shard IDs for secondary index validation
+                    else:
+                        for host in index_metadata['alternateShardIds']:
+                            for partition in index_metadata['alternateShardIds'][host]:
+                                if len(index_metadata['alternateShardIds'][host][partition]) != 2:
+                                    self.log.error(f"Indexer metadata {indexer_metadata}")
+                                    raise Exception(
+                                        f"There are more than 1 instances of alternate shard ID for primary index "
+                                        f"{index_metadata['name']} with definition {index_metadata['definition']}")
+
+                else:
+                    # only one alternate shard ID for primary index validation
+                    if 'isPrimary' in index_metadata and index_metadata['name'] in specific_indexes:
+                        for host in index_metadata['alternateShardIds']:
+                            for partition in index_metadata['alternateShardIds'][host]:
+                                if len(index_metadata['alternateShardIds'][host][partition]) != 1:
+                                    self.log.error(f"Indexer metadata {indexer_metadata}")
+                                    raise Exception(
+                                        f"There are more than 1 instances of alternate shard ID for primary index "
+                                        f"{index_metadata['name']} with definition {index_metadata['definition']}")
+                    # only 2 alternate shard IDs for secondary index validation
+                    else:
+                        if index_metadata['name'] in specific_indexes:
+                            for host in index_metadata['alternateShardIds']:
+                                for partition in index_metadata['alternateShardIds'][host]:
+                                    if len(index_metadata['alternateShardIds'][host][partition]) != 2:
+                                        self.log.error(f"Indexer metadata {indexer_metadata}")
+                                        raise Exception(
+                                            f"There are more than 1 instances of alternate shard ID for primary index "
+                                            f"{index_metadata['name']} with definition {index_metadata['definition']}")
             self.log.info("All indexes have 2 alternate shard IDs and all primary indexes have 1 alt shard ID.")
             # replicas sharing slot IDs and instance IDs validation
             if not mixed_mode:
                 self.validate_replica_indexes(index_map=indexer_metadata)
                 self.log.info("All replicas share slot IDs")
             # shard IDs unique to host validation
-            self.validate_shard_unique_to_host(index_map=indexer_metadata)
+            self.validate_shard_unique_to_host(index_map=indexer_metadata, specific_index=specific_indexes)
             self.log.info("Shards unique to host validation successful")
 
-    def fetch_shard_id_list(self):
+    def fetch_shard_id_list(self, return_system_query_scope=False):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = None
         for node in indexer_nodes:
@@ -2177,7 +2255,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 break
         if not rest:
             raise Exception("No 7.6 index nodes in the cluster")
-        index_resp = rest.get_indexer_metadata(return_system_query_scope=False)
+        index_resp = rest.get_indexer_metadata(return_system_query_scope=return_system_query_scope)
         if 'status' not in index_resp:
             self.log.error(f"No metadata seen in response. {index_resp}")
             return []
@@ -2193,7 +2271,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 shards_list_all.append(shard)
         return sorted(shards_list_all)
 
-    def validate_alternate_shard_ids_presence(self):
+    def validate_alternate_shard_ids_presence(self, node_in=None):
+        if not self.is_shard_based_rebalance_enabled(provisioned=True, node_in=node_in):
+            self.log.info("Skipping validating alternate shard id presence since shard based rebalance is disabled")
+            return
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for node in indexer_nodes:
             rest = RestConnection(node)
@@ -2230,19 +2311,32 @@ class BaseSecondaryIndexingTests(QueryTests):
                         task.result()
                 time.sleep(10)
 
-    def validate_shard_unique_to_host(self, index_map):
+    def validate_shard_unique_to_host(self, index_map, specific_index=None):
         shard_host_map = {}
         for index_metadata in index_map:
-            for host in index_metadata['alternateShardIds']:
-                for partition in index_metadata['alternateShardIds'][host]:
-                    shard_list = index_metadata['alternateShardIds'][host][partition]
-                    host_ip = host
-                    for shard in shard_list:
-                        shard_entry = shard + "-partition-" + partition
-                        if shard in shard_host_map and shard_host_map[shard] != host_ip:
-                            raise Exception(f"Shard {shard} is shared between {shard_host_map[shard]} and {host_ip}")
-                        else:
-                            shard_host_map[shard_entry] = host_ip
+            if not specific_index:
+                for host in index_metadata['alternateShardIds']:
+                    for partition in index_metadata['alternateShardIds'][host]:
+                        shard_list = index_metadata['alternateShardIds'][host][partition]
+                        host_ip = host
+                        for shard in shard_list:
+                            shard_entry = shard + "-partition-" + partition
+                            if shard in shard_host_map and shard_host_map[shard] != host_ip:
+                                raise Exception(f"Shard {shard} is shared between {shard_host_map[shard]} and {host_ip}")
+                            else:
+                                shard_host_map[shard_entry] = host_ip
+            else:
+                if index_metadata['name'] in specific_index:
+                    for host in index_metadata['alternateShardIds']:
+                        for partition in index_metadata['alternateShardIds'][host]:
+                            shard_list = index_metadata['alternateShardIds'][host][partition]
+                            host_ip = host
+                            for shard in shard_list:
+                                shard_entry = shard + "-partition-" + partition
+                                if shard in shard_host_map and shard_host_map[shard] != host_ip:
+                                    raise Exception(f"Shard {shard} is shared between {shard_host_map[shard]} and {host_ip}")
+                                else:
+                                    shard_host_map[shard_entry] = host_ip
 
     def validate_replica_indexes(self, index_map):
         replicas_dict = {}
@@ -2293,8 +2387,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
-
-
     def check_gsi_logs_for_shard_transfer(self):
         """ Checks if file transfer based rebalance is triggered.
         """
@@ -2326,15 +2418,22 @@ class BaseSecondaryIndexingTests(QueryTests):
                           f"No log lines matching string {log_string} seen on any of the indexer nodes.")
         return log_validated
 
-    def enable_shard_based_rebalance(self):
+    def enable_shard_based_rebalance(self, provisioned=False):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
-        rest.set_index_settings({"indexer.settings.enable_shard_affinity": True})
+        cluster_profile = rest.get_cluster_config_profile()
+        if provisioned:
+            rest.set_shard_affinity_provisoned_mode({"indexer.default.enable_shard_affinity": True})
+        else:
+            rest.set_index_settings({"indexer.settings.enable_shard_affinity": True})
 
-    def disable_shard_based_rebalance(self):
+    def disable_shard_based_rebalance(self, provisioned=False):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
-        rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
+        if provisioned:
+            rest.set_shard_affinity_provisoned_mode({"indexer.default.enable_shard_affinity": False})
+        else:
+            rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
 
     def enable_planner(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -2366,12 +2465,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": False})
 
-    def is_shard_based_rebalance_enabled(self):
+    def is_shard_based_rebalance_enabled(self, provisioned=False, node_in=None):
         shard_affinity = False
         if self.gsi_type == 'plasma':
-            indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
-            rest = RestConnection(indexer_node)
-            shard_affinity = rest.get_index_settings()["indexer.settings.enable_shard_affinity"]
+            if node_in:
+                rest = RestConnection(node_in)
+            else:
+                indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+                rest = RestConnection(indexer_node)
+            if provisioned:
+                shard_affinity = rest.get_indexer_internal_stats()["indexer.default.enable_shard_affinity"]
+            else:
+                shard_affinity = rest.get_index_settings()["indexer.settings.enable_shard_affinity"]
         return shard_affinity
 
     def set_max_instances_per_shard(self, instance_count):
