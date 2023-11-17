@@ -47,6 +47,7 @@ CAPELLA_LOCAL = "CAPELLA_LOCAL"
 SERVERLESS_ONCLOUD = "SERVERLESS_ONCLOUD"
 PROVISIONED_ONCLOUD = "PROVISIONED_ONCLOUD"
 ELIXIR_ONPREM = "ELIXIR_ONPREM"
+ON_PREM_PROVISIONED = "ON_PREM_PROVISIONED"
 
 CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]
 
@@ -244,7 +245,7 @@ def main():
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', type="choice",
                       default=DEFAULT_SERVER_TYPE,
-                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD])  # or could be Docker
+                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD, ON_PREM_PROVISIONED])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
