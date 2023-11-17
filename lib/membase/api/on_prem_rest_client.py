@@ -4866,47 +4866,12 @@ class RestConnection(object):
 
     '''LDAP Rest API '''
     '''
-    clearLDAPSettings - Function to clear LDAP settings
+    disableSaslauthdAuth - Function to clear saslauthdAuth settings
     Parameter - None
     Returns -
-    status of LDAPAuth clear command
+    status of saslauthdAuth clear command
     '''
-    def clearLDAPSettings(self):
-        api = self.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.parse.urlencode({'enabled':'false'})
-        status, content, header = self._http_request(api, 'POST', params)
-        return status, content, header
-
-    '''
-    ldapUserRestOperation - Execute LDAP REST API
-    Input Parameter -
-        authOperation - this is for auth need to be enabled or disabled - True or 0
-        currAdmmins - a list of username to add to full admin matching with ldap
-        currROAdmins - a list of username to add to RO Admin
-    Returns - status, content and header for the command executed
-    '''
-    def ldapUserRestOperation(self, authOperation, adminUser='', ROadminUser=''):
-        authOperation = authOperation
-        currAdmins = ''
-        currROAdmins = ''
-
-        if (adminUser != ''):
-            for user in adminUser:
-                currAdmins = user[0] + "\n\r" + currAdmins
-
-        if (ROadminUser != ''):
-            for user in ROadminUser:
-                currROAdmins = user[0] + "\n\r" + currROAdmins
-        content = self.executeLDAPCommand(authOperation, currAdmins, currROAdmins)
-
-    '''LDAP Rest API '''
-    '''
-    clearLDAPSettings - Function to clear LDAP settings
-    Parameter - None
-    Returns -
-    status of LDAPAuth clear command
-    '''
-    def clearLDAPSettings (self):
+    def disableSaslauthdAuth (self):
         api = self.baseUrl + 'settings/saslauthdAuth'
         params = urllib.parse.urlencode({'enabled':'false'})
         status, content, header = self._http_request(api, 'POST', params)
@@ -5094,7 +5059,7 @@ class RestConnection(object):
     def ldap_validate_conn(self):
         api = self.baseUrl + "settings/ldap/validate/connectivity"
         status, content, header = self._http_request(api, 'POST')
-        log.info("Status of Adding role to group command is {0}".format(status))
+        log.info("Status of validate LDAP connectivity  command is {0}".format(status))
         return status, json.loads(content)
 
     def ldap_validate_authen(self, user_name, password='password'):
@@ -5104,7 +5069,7 @@ class RestConnection(object):
             'auth_pass': '{0}'.format(password)
         })
         status, content, header = self._http_request(api, 'POST', params)
-        log.info("Status of Adding role to group command is {0}".format(status))
+        log.info("Status of validate LDAP authetication command is {0}".format(status))
         return status, json.loads(content)
 
     def ldap_validate_grp_query(self, user):
@@ -5113,7 +5078,7 @@ class RestConnection(object):
                                     'groups_query_user':'{0}'.format(user)
                                 })
         status, content, header = self._http_request(api, 'POST',params)
-        log.info ("Status of Adding role to group command is {0}".format(status))
+        log.info ("Status of validate group query command is {0}".format(status))
         return status, json.loads(content)
 
     def setup_ldap(self, data, extraparam):
@@ -5123,6 +5088,18 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST',params)
         log.info ("Status of Setting up LDAP command is {0}".format(status))
         return status, json.loads(content)
+    
+    def get_ldap_settings(self):
+        api = self.baseUrl + 'settings/ldap/'
+        status, content, header = self._http_request(api, 'GET')
+        log.info ("Status of getting LDAP settings command is {0}".format(status))
+        return status, json.loads(content)
+    
+    def disable_ldap(self):
+        api = self.baseUrl + 'settings/ldap'
+        params = urllib.parse.urlencode({'authenticationEnabled':'false'})
+        status, content, header = self._http_request(api, 'POST', params)
+        return status, content, header
 
     '''
     Audit Commands

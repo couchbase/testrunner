@@ -67,7 +67,7 @@ class CommunityTests(CommunityBaseTest):
         ldap_available = False
         self.rest = RestConnection(self.master)
         try:
-            s, c, h = self.rest.clearLDAPSettings()
+            s, c, h = self.rest.disableSaslauthdAuth()
             if s:
                 ldap_available = True
         except Exception as e :

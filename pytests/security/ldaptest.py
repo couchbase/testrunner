@@ -63,7 +63,7 @@ class ldaptest(BaseTestCase):
         self._createLDAPUser(self.ROAdmin)
 
         rest = RestConnection(self.master)
-        rest.clearLDAPSettings()
+        rest.disableSaslauthdAuth()
 
         self.ldap_server = ServerInfo(self.ldapHost, self.ldapPort, 'root', 'couchbase')
 
