@@ -136,6 +136,7 @@ class REPL_PARAM:
     OPTIMISTIC_THRESHOLD = "optimisticReplicationThreshold"
     FILTER_EXP = "filterExpression"
     FILTER_SKIP_RESTREAM = "filterSkipRestream"
+    FILTER_BINARY = "filterBinary"
     SOURCE_NOZZLES = "sourceNozzlePerNode"
     TARGET_NOZZLES = "targetNozzlePerNode"
     BATCH_COUNT = "workerBatchSize"
@@ -159,6 +160,7 @@ class TEST_XDCR_PARAM:
     OPTIMISTIC_THRESHOLD = "optimistic_threshold"
     FILTER_EXP = "filter_expression"
     FILTER_SKIP_RESTREAM = "filter_skip_restream"
+    FILTER_BINARY = "filter_binary"
     SOURCE_NOZZLES = "source_nozzles"
     TARGET_NOZZLES = "target_nozzles"
     BATCH_COUNT = "batch_count"
@@ -182,6 +184,7 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.OPTIMISTIC_THRESHOLD: REPL_PARAM.OPTIMISTIC_THRESHOLD,
             TEST_XDCR_PARAM.FILTER_EXP: REPL_PARAM.FILTER_EXP,
             TEST_XDCR_PARAM.FILTER_SKIP_RESTREAM: REPL_PARAM.FILTER_SKIP_RESTREAM,
+            TEST_XDCR_PARAM.FILTER_BINARY: REPL_PARAM.FILTER_BINARY,
             TEST_XDCR_PARAM.SOURCE_NOZZLES: REPL_PARAM.SOURCE_NOZZLES,
             TEST_XDCR_PARAM.TARGET_NOZZLES: REPL_PARAM.TARGET_NOZZLES,
             TEST_XDCR_PARAM.BATCH_COUNT: REPL_PARAM.BATCH_COUNT,
