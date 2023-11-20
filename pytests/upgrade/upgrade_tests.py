@@ -888,7 +888,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.cbas_node = cbas_node
             items_travel_sample = 63182
             # Toy build or Greater than CC build
-            if cb_version[:3] == "0.0" or cb_version[:3] >= 7.0:
+            if float(cb_version[:3]) == 0.0 or float(cb_version[:3]) >= 7.0:
                 items_travel_sample = 63288
             self.load_sample_buckets(servers=kv_nodes, bucketName="travel-sample",
                                                   total_items=items_travel_sample,

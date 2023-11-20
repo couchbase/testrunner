@@ -2511,7 +2511,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 items_travel_sample = 63182
                 cb_version = RestConnection(self.master).get_nodes_version()
                 # Toy build or Greater than CC build
-                if cb_version[:3] == "0.0" or cb_version[:3] >= 7.0:
+                if float(cb_version[:3]) == 0.0 or float(cb_version[:3]) >= 7.0:
                     items_travel_sample = 63288
                 self.load_sample_buckets(servers=self.servers[:nodes_init],
                                          bucketName="travel-sample",
