@@ -366,3 +366,34 @@ class QueryBackupUDFTests(QueryTests):
         expected_udf = [{'name': 'func_global'}, {'name': 'scope2a_func'}, {'name': 'scope2b_func'}]
         self.assertEqual(result['results'], expected_udf)
 
+    def test_restore_sequence(self):
+        sequence_name = f"seq_backup"
+        self.run_cbq_query(f"DROP SEQUENCE bucket1.`_default`.{sequence_name} IF EXISTS")
+        self.run_cbq_query(f"CREATE SEQUENCE bucket1.`_default`.{sequence_name}")
+
+        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR bucket1.`_default`.{sequence_name} as val")
+        self.log.info(f"sequence value: {nextval['results'][0]['val']}")
+        self.assertEqual(nextval['results'], [{'val': 0}])
+
+        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR bucket1.`_default`.{sequence_name} as val")
+        self.log.info(f"sequence value: {nextval['results'][0]['val']}")
+        self.assertEqual(nextval['results'], [{'val': 1}])
+
+        self.backup_config()
+        self.backup()
+        self.run_cbq_query(f"DROP SEQUENCE bucket1.`_default`.{sequence_name} IF EXISTS")
+
+        result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+        self.log.info(result['results'])
+        self.assertEqual(result['results'], [])
+
+        self.restore(disable=self.disable)
+        
+        result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+        expected_sequence = [{'cache': 50, 'cycle': False, 'increment': 1, 'max': 9223372036854775807, 'min': -9223372036854775808, 'path': f'`default`:`bucket1`.`_default`.`{sequence_name}`'}]
+        self.assertEqual(result['results'], expected_sequence)
+
+        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR bucket1.`_default`.{sequence_name} as val")
+        self.log.info(f"sequence value: {nextval['results'][0]['val']}")
+        self.assertEqual(nextval['results'], [{'val': 50}])
+
