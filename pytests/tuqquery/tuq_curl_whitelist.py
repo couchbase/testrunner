@@ -73,9 +73,9 @@ class QueryWhitelistTests(QueryTests):
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], self.query_error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], self.query_error_msg))
 
     '''Test running a curl command with an empty whitelist'''
     def test_empty_whitelist(self):
@@ -90,22 +90,22 @@ class QueryWhitelistTests(QueryTests):
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], self.query_error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], self.query_error_msg))
 
         self.rest.create_whitelist(self.master, {"all_access": None, "allowed_urls": None, "disallowed_urls": None})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], self.query_error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], self.query_error_msg))
 
     '''Test running a curl command with whitelists that are invalid'''
     def test_invalid_whitelist(self):
         response, content = self.rest.create_whitelist(self.master, "thisisnotvalid")
         result = json.loads(content)
-        self.assertEqual(result['errors']['_'], 'Unexpected Json')
+        self.assertEqual(result['errors'], {'all_access': 'The value must be supplied'})
         n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -113,17 +113,17 @@ class QueryWhitelistTests(QueryTests):
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], self.query_error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], self.query_error_msg))
 
         self.rest.create_whitelist(self.master, {"all_access": "hello", "allowed_urls": ["goodbye"],
                                                  "disallowed_urls": ["invalid"]})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], self.query_error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], self.query_error_msg))
 
     '''Test running a curl command with a whitelist that contains the field all_access: True and also
        inavlid/fake fields'''
@@ -236,9 +236,9 @@ class QueryWhitelistTests(QueryTests):
         query="select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.jira_error_msg))
 
         self.rest.create_whitelist(self.master, {"all_access": False, "all_access": True})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
@@ -264,9 +264,9 @@ class QueryWhitelistTests(QueryTests):
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(self.query_error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], self.query_error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], self.query_error_msg))
 
     '''Test the allowed_urls field, try to run curl against an endpoint not in allowed_urls and then
        try to run curl against an endpoint in allowed_urls'''
@@ -277,9 +277,9 @@ class QueryWhitelistTests(QueryTests):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.jira_error_msg))
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -301,18 +301,18 @@ class QueryWhitelistTests(QueryTests):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.jira_error_msg))
 
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.google_error_msg))
 
     '''Test that disallowed_urls field has precedence over allowed_urls'''
     def test_disallowed_precedence(self):
@@ -325,9 +325,9 @@ class QueryWhitelistTests(QueryTests):
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.google_error_msg))
 
         self.rest.create_whitelist(self.master, {"all_access": False,
                                                            "allowed_urls":
@@ -336,9 +336,9 @@ class QueryWhitelistTests(QueryTests):
                                                                ["https://maps.googleapis.com/maps/api/geocode/json"]})
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.google_error_msg))
 
     '''Test valid allowed with an invalid disallowed'''
     def test_allowed_invalid_disallowed(self):
@@ -353,9 +353,9 @@ class QueryWhitelistTests(QueryTests):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.jira_error_msg))
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -379,9 +379,9 @@ class QueryWhitelistTests(QueryTests):
         query="select curl(" + url + ", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.google_error_msg))
 
         response, content = self.rest.create_whitelist(self.master, {"all_access": False,
                                                            "allowed_urls": "blahblahblah",
@@ -390,9 +390,9 @@ class QueryWhitelistTests(QueryTests):
         self.assertEqual(result['errors']['allowed_urls'], "Must be an array of non-empty strings")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.google_error_msg))
 
     def test_invalid_disallowed_url_validation(self):
         response, content = self.rest.create_whitelist(self.master, {"all_access": False,
@@ -410,7 +410,7 @@ class QueryWhitelistTests(QueryTests):
                 "'user':'%s:%s'})" % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(error_msg in json_curl['errors'][0]['msg'],
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'], error_msg))
+                        % (json_curl['errors'][0]['reason']['cause']['error'], error_msg))
 
