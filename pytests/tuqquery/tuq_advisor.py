@@ -227,7 +227,7 @@ class QueryAdvisorTests(QueryTests):
             results = self.run_cbq_query(query="SELECT ADVISOR({'action':'list'}) as List", server=self.master)
             task = results['results'][0]['List'][0]['tasks_cache']
             self.log.info("Task cache is {0}".format(task))
-            self.assertEqual(list(task.keys()), ['class', 'delay', 'id', 'name', 'node', 'results', 'state', 'subClass', 'submitTime'])
+            self.assertEqual(list(task.keys()), ['class', 'delay', 'id', 'name', 'node', 'queryContext','results', 'state', 'subClass', 'submitTime'])
             self.assertEqual(task['state'], "cancelled")
             self.assertEqual(task['delay'], "20m34.567s")
         except Exception as e:
@@ -550,11 +550,13 @@ class QueryAdvisorTests(QueryTests):
             self.fail()
 
     def test_session_cbo(self):
-        advise_index = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower(`city`),`country`) WHERE `type` = 'airport'"
+        advise_index1 = "CREATE INDEX adv_lower_city_country_type ON `travel-sample`(lower(`city`),`country`) WHERE `type` = 'airport'"
+        advise_index2 = "CREATE INDEX adv_country_lower_city_type ON `travel-sample`(`country`,lower(`city`)) WHERE `type` = 'airport'"
         advise_stats = "UPDATE STATISTICS FOR `travel-sample`(lower(`city`), `country`, `type`)"
         query1=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
         # update stats to ensure CBO is used
         stats = self.run_cbq_query(query=f"update statistics for `{self.bucket_name}`(type)", server=self.master)
+        self.sleep(3)
         try:
             start = self.run_cbq_query(query="SELECT ADVISOR({'action':'start', 'duration':'40m'})", server=self.master)
             session = start['results'][0]['$1']['session']
@@ -562,8 +564,9 @@ class QueryAdvisorTests(QueryTests):
             stop = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'stop', 'session':'{session}'}}) as Stop", server=self.master)
             get = self.run_cbq_query(query=f"SELECT ADVISOR({{'action':'get', 'session':'{session}'}}) as Get", server=self.master)
             # Check advise
+            self.log.info(f"Advise: {get['results']}")
             for index in get['results'][0]['Get'][0][0]['recommended_indexes']:
-                self.assertEqual(index['index'], advise_index)
+                self.assertTrue(index['index'] == advise_index1 or index['index'] == advise_index2)
                 self.assertEqual(index['update_statistics'], advise_stats)
         except Exception as e:
             self.log.error(f"Advisor session failed: {e}")
@@ -731,7 +734,7 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_query_syntax_error(self):
         query_syntax = f'SELECT airportname FROM `{self.bucket_name}` WERE type = \\"airport\\"'
-        error = "syntax error - line 1, column 53, near '`travel-sample` WERE', at: type"
+        error = "syntax error - line 1, column 53, near '...travel-sample` WERE ', at: type"
         try:
             advise = self.run_cbq_query(query=f"SELECT ADVISOR(\"{query_syntax}\") as Advisor", server=self.master)
             self.assertEqual(advise["results"][0]["Advisor"]["errors"][0]["error"], error)
@@ -768,12 +771,14 @@ class QueryAdvisorTests(QueryTests):
 
     def test_negative_array(self):
         query=f'SELECT airportname FROM `{self.bucket_name}` WHERE type = "airport" AND lower(city) = "lyon" AND country = "France"'
-        error = "Number of arguments to function ADVISOR (near line 1, column 14) must be 1."
+        expected_error = "Number of arguments to function ADVISOR must be 1 (near line 1, column 16)."
         try:
             results = self.run_cbq_query(query=f"SELECT ADVISOR('{query}','{query}')", server=self.master)
             self.fail("Start session did not fail. Error expected: {0}".format(error))
         except CBQError as ex:
-            self.assertTrue(str(ex).find(error) > 0)
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], expected_error)
         else:
             self.fail("There were no errors. Error expected: {0}".format(error))
 
@@ -967,13 +972,15 @@ class QueryAdvisorTests(QueryTests):
         user_pwd = self.users[0]['password']
         grant = self.run_cbq_query(query=f"GRANT {role} on `{self.bucket_name}` to {user_id}",server=self.master)
         sessions_queries = ["SELECT ADVISOR({'action': 'start', 'duration': '1h', 'query_count': 2 })", "SELECT ADVISOR({'action': 'list', 'status': 'all'})"]
-        error = "User does not have credentials to run queries accessing the system tables. Add role query_system_catalog to allow the query to run."
+        expected_error = "User does not have credentials to run queries accessing the system tables. Add role query_system_catalog to allow the statement to run."
         for query in sessions_queries:
             try:
                 results = self.run_cbq_query(query=query, username=user_id, password=user_pwd, server=self.master)
                 self.fail("Start session did not fail. Error expected: {0}".format(error))
             except CBQError as ex:
-                self.assertTrue(str(ex).find(error) > 0)
+                error = self.process_CBQE(ex)
+                self.assertEqual(error['code'], 13014)
+                self.assertEqual(error['msg'], expected_error)
             else:
                 self.fail("There were no errors. Error expected: {0}".format(error))
 
