@@ -232,8 +232,12 @@ class QueryTimeSeriesTests(QueryTests):
         result_not_keep = self.run_cbq_query(ts_query_not_keep)
         result_default = self.run_cbq_query(ts_query_default)
         self.assertEqual(result_not_keep['results'][0], result_default['results'][0])
-        self.assertEqual(list(result_not_keep['results'][0].keys()), ['t', 'ticker', 'ts_end', 'ts_interval', 'ts_start'])
-        self.assertEqual(list(result_keep['results'][0].keys()), ['t', 'ticker', 'ts_data', 'ts_end', 'ts_interval', 'ts_start'])
+        keys_not_keep = list(result_not_keep['results'][0].keys())
+        keys_keep = list(result_keep['results'][0].keys())
+        keys_not_keep.sort()
+        keys_keep.sort()
+        self.assertEqual(keys_not_keep, ['t', 'ticker', 'ts_end', 'ts_interval', 'ts_start'])
+        self.assertEqual(keys_keep, ['t', 'ticker', 'ts_data', 'ts_end', 'ts_interval', 'ts_start'])
 
     def test_transaction(self):
         ts_query = f'SELECT MILLIS_TO_TZ(t._t,"UTC") AS ts, sum(t._v1) as volume FROM default.stocks.price as d UNNEST _timeseries(d, {{"ts_ranges": [1672876800000,1672876800000+3600000*2]}}) AS t GROUP by t._t'
