@@ -780,8 +780,8 @@ class BackupRestore(FTSBaseTest):
         if 'kvStoreName' in restored['params']['store'].keys():
             del restored['params']['store']['kvStoreName']
         if restored != initial:
-            self.log(f"Initial index JSON: {initial}")
-            self.log(f"Restored index JSON: {restored}")
+            self.log.info(f"Initial index JSON: {initial}")
+            self.log.info(f"Restored index JSON: {restored}")
             return False
         return True
 
