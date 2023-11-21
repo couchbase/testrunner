@@ -1,6 +1,8 @@
 import json
 import re
 
+from Cb_constants import CbServer
+from collection.collections_stats import CollectionsStats
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 import random
@@ -2542,8 +2544,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         # self.sleep(120)
 
         # Get count after rollback
-        bucket_count_after_rollback = self.get_item_count(self.servers[0],
-                                                          "default")
+        self.collection_stats = CollectionsStats(self.servers[0])
+        cbo_doc_items = self.collection_stats.get_collection_item_count_cumulative("default",
+                                                                                   CbServer.system_scope,
+                                                                                   CbServer.query_collection)
+        bucket_count_after_rollback = self.get_item_count(self.servers[0],"default") - cbo_doc_items
 
         self.log.info("# Items in bucket after rollback = %s",
                       bucket_count_after_rollback)
@@ -2987,7 +2992,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance,
                 [],
-                [index_server])
+                [index_server],
+                indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
