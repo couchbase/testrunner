@@ -109,7 +109,7 @@ class QueryFilterTests(QueryTests):
 
     def test_neg_invalid(self):
         error_code = 3000
-        error_message = "Invalid function maxx (near line 1, column 11)"
+        error_message = "Invalid function maxx (near line 1, column 8)"
         filter_query = "select maxx(geo.lat) FILTER(WHERE country = 'France') from `travel-sample` where type = 'landmark'"
         try:
             self.run_cbq_query(filter_query)
@@ -131,7 +131,7 @@ class QueryFilterTests(QueryTests):
         
     def test_neg_subquery(self):
         error_code = 4000
-        error_message = "Subqueries are not allowed in aggregate filter (near line 1, column 77)."
+        error_message = "Subqueries are not allowed in aggregate filter (near line 1, column 34)."
         filter_query = "SELECT max(geo.lat) FILTER(WHERE country = (select 'France' from system:dual)) FROM `travel-sample` WHERE type = 'landmark'"
         try:
             self.run_cbq_query(filter_query)
@@ -142,7 +142,7 @@ class QueryFilterTests(QueryTests):
 
     def test_neg_window(self):
         error_code = 4000
-        error_message = "Window aggregates are not allowed inside Aggregates (near line 1, column 107)."
+        error_message = "Window aggregates are not allowed inside Aggregates (near line 1, column 8)."
         filter_query = "SELECT max(geo.alt) FILTER(WHERE DENSE_RANK() OVER (PARTITION BY country ORDER BY geo.alt NULLS LAST) < 5) FROM `travel-sample` WHERE type = 'airport'"
         try:
             self.run_cbq_query(filter_query)
