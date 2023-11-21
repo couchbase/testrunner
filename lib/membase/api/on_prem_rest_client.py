@@ -6876,7 +6876,8 @@ class RestParser(object):
             index_map[bucket_name][index_name]['status'] = map['status']
             index_map[bucket_name][index_name]['progress'] = str(map['progress'])
             index_map[bucket_name][index_name]['definition'] = map['definition']
-            index_map[bucket_name][index_name]['partitioned'] = map['partitioned']
+            if 'partitioned' in map:
+                index_map[bucket_name][index_name]['partitioned'] = map['partitioned']
             if len(map['hosts']) == 1:
                 index_map[bucket_name][index_name]['hosts'] = map['hosts'][0]
             else:

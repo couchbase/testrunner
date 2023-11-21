@@ -4,7 +4,7 @@ __author__ = "Hemant Rajput"
 __maintainer = "Hemant Rajput"
 __email__ = "Hemant.Rajput@couchbase.com"
 __git_user__ = "hrajput89"
-__created_on__ = "26/05/20 2:13 pm" 
+__created_on__ = "26/05/20 2:13 pm"
 
 """
 import random
@@ -36,7 +36,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        if not self.capella_run:
+        if not self.capella_run and 'community' not in self.cb_version:
             self._create_server_groups()
             self.cb_version = float(self.cb_version.split('-')[0][0:3])
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
