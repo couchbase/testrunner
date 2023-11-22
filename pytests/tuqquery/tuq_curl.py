@@ -548,7 +548,7 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ",{'location':True})"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], unsupported_error)
+        self.assertTrue("CURLoptionlocationisnotsupported" in actual_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {actual_curl['errors'][0]['reason']['cause']['error']}")
 
     '''Test curl being used inside a prepared statement
         -prepare a statement that uses curl
@@ -605,50 +605,49 @@ class QueryCurlTests(QueryTests):
             self.run_cbq_query("INSERT INTO " + self.query_bucket + " (key UUID(), VALUE results)"
                                "SELECT * FROM " + self.query_bucket + " results")
         # Test default value (20 MB)
-        error_msg = "Errorevaluatingprojection-cause:ResponseSizehasbeenexceeded." \
-                    "Themaxresponsecapacityis20971520"
+        error_msg = "Responsesizelimitof20971520hasbeenreached"
         n1ql_query = 'select * from ' + self.query_bucket
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         # Test less than 20 MB (should default back to 20 MB)
+        error_msg = "Responsesizelimitof524288hasbeenreached"
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s','result-cap':10040})" \
                 % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         # Test a negative number (should default back to 20 MB)
+        error_msg = "Responsesizelimitof524288hasbeenreached"
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s','result-cap':-10040})" \
                 % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         # Test a valid change between 20 MB and 64 MB
-        error_msg = "Errorevaluatingprojection-cause:ResponseSizehasbeenexceeded." \
-                    "Themaxresponsecapacityis31457280"
+        error_msg = "Responsesizelimitof31457280hasbeenreached"
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s','result-cap':31457280})" \
                 % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         # Test a number higher than the max of 64 MB (should become 64 MB)
-        error_msg = "Errorevaluatingprojection-cause:ResponseSizehasbeenexceeded." \
-                    "Themaxresponsecapacityis67108864"
+        error_msg = "Responsesizelimitof68108864hasbeenreached"
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s','result-cap':68108864})" \
                 % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
     ##############################################################################################
     #
@@ -692,7 +691,7 @@ class QueryCurlTests(QueryTests):
                        % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], 'Errorevaluatingprojection-cause:curl:Timeoutwasreached')
+        self.assertTrue("curl:Timeoutwasreached" in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         n1ql_query = 'select * from ' + self.query_bucket
         select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':5})" \
@@ -780,7 +779,7 @@ class QueryCurlTests(QueryTests):
     def test_conflicting_method_options(self):
         limit = 5
         n1ql_query = 'select * from ' + self.query_bucket + ' limit %s' % limit
-        invalid_json_error = 'URLusingbad/illegalformatormissingURL'
+        invalid_json_error = 'InvalidJSONendpoint'
 
         options = "{'data' : 'statement=%s', 'user':'%s:%s'}" \
                   % (n1ql_query, self.username, self.password)
@@ -801,14 +800,14 @@ class QueryCurlTests(QueryTests):
         select_query = "select curl(" + self.query_service_url + ", " + options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(invalid_json_error in json_curl['errors'][0]['msg'], "Message is different than we expect: {0}".format(json_curl['errors'][0]['msg']))
+        self.assertTrue(invalid_json_error in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         options = "{'data' : 'statement=%s', 'user':'%s:%s','get':True,'request':'POST'}" \
                   % (n1ql_query, self.username, self.password)
         select_query = "select curl(" + self.query_service_url + ", " + options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(invalid_json_error in json_curl['errors'][0]['msg'], "Message is different than we expect: {0}".format(json_curl['errors'][0]['msg']))
+        self.assertTrue(invalid_json_error in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
     def test_conflicting_get_options(self):
         curl_output = self.shell.execute_command(
@@ -824,7 +823,7 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl, f"Actual result: {actual_curl['results'][0]['$1']}")
 
         options = "{'request':'GET','get':False,'data': " \
                   "'address=santa+cruz&components=country:ES&key" \
@@ -832,7 +831,7 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl, f"Actual result: {actual_curl['results'][0]['$1']}")
 
     '''MB-23132 - make sure max-redirs isnt recognized as a valid option, and that another option that isn't supported
        throws an error.'''
@@ -843,15 +842,15 @@ class QueryCurlTests(QueryTests):
             n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'],
-                         'Errorevaluatingprojection-cause:CURLoptionmax-redirsisnotsupported.')
+        self.assertTrue("CURLoptionmax-redirsisnotsupported" in json_curl['errors'][0]['reason']['cause']['error'],
+                        f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
         select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','fake_option': 200})" % (
             n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, select_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'],
-                         'Errorevaluatingprojection-cause:CURLoptionfake_optionisnotsupported.')
+        self.assertTrue("CURLoptionfake_optionisnotsupported" in json_curl['errors'][0]['reason']['cause']['error'],
+                        f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
     ##############################################################################################
     #
@@ -869,14 +868,14 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], 'Errorevaluatingprojection-cause:curl:Unsupportedprotocol')
+        self.assertTrue("unsupportedprotocolscheme" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         # Test unsupported protocol file
         protocol = "'file:///Users/isha/workspace/query/src/github.com/couchbase/query/data/sampledb/default/tutorial/dave.json'"
         query = "select curl(" + protocol + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], 'Errorevaluatingprojection-cause:curl:Unsupportedprotocol')
+        self.assertTrue("unsupportedprotocolscheme" in actual_curl['errors'][0]['reason']['cause']['error'])
 
     '''Tests what happens when n1ql curl receives invalid urls
         -urls that don't exist
@@ -888,16 +887,15 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'],
-                         "Errorevaluatingprojection-cause:curl:Couldn'tresolvehostname")
+        self.assertTrue("nosuchhost" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         # Test a valid url that does not return json
-        url = "'google.com'"
+        url = "'http://google.com'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'],
-                         "Errorevaluatingprojection-cause:InvalidJSONendpointgoogle.com")
+        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'],
+                         "InvalidJSONendpointhttp://google.com")
 
     '''Test if a protected bucket can be accessed without giving its password'''
 
@@ -905,25 +903,26 @@ class QueryCurlTests(QueryTests):
         error_msg = "UserdoesnothavecredentialstorunSELECTqueriesondefault:" + self.bucket0 + \
                     ".Addrolequery_selectondefault:" + self.bucket0 + "toallowthequerytorun."
         error_msg2 = "Unabletoauthorizeuser-cause:Authenticationfailure"
+        error_msg3 = "Errorauthorizingagainstclustercause:Failuretoauthenticateuser"
         # The query that curl will send to couchbase
         n1ql_query = 'select * from ' + self.bucket0 + '  limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s'})" % n1ql_query
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s','user':'%s:'})" \
                 % (n1ql_query, self.username)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s','user':':%s'})" \
                 % (n1ql_query, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
     '''Test an unsupported method in n1ql curl
         -DELETE.'''
@@ -933,8 +932,9 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ",{'request':'DELETE'})"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'],
-                         "Errorevaluatingprojection-cause:CURLonlysupportsGETandPOSTrequests.")
+        self.assertTrue("CURLonlysupportsGETandPOSTrequests" in actual_curl['errors'][0]['reason']['cause']['error'],
+                        f"Actual cause error is {actual_curl['errors'][0]['reason']['cause']['error']}")
+        
 
     '''Tests what happens when you don't give an api key to a url that requires an api key
         - do not provide an api key
@@ -967,45 +967,52 @@ class QueryCurlTests(QueryTests):
             error_msg = "Errorevaluatingprojection-cause:curl:SSLpeercertificateorSSHremotekeywasnotOK"
             wrong_host_msg = "Errorevaluatingprojection-cause:curl:SSLpeercertificateorSSHremotekey" \
                              "wasnotOK"
+        top_error = "Errorevaluatingprojection"
         url = "'https://expired.badssl.com/'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], error_msg)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("certificatehasexpiredorisnotyetvalid" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'https://self-signed.badssl.com/'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], error_msg)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("certificatesignedbyunknownauthority" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'https://wrong.host.badssl.com/'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], wrong_host_msg)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("certificateisvalidfor*.badssl.com,badssl.com,notwrong.host.badssl.com" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'https://superfish.badssl.com/'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], error_msg)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("certificatehasexpiredorisnotyetvalid" in actual_curl['errors'][0]['reason']['cause']['error'])
 
     '''Secret endpoints should not be accsible without the localtoken'''
 
     def test_secret_endpoints(self):
-        error_msg = "Errorevaluatingprojection-cause:curl:Couldn'tconnecttoserver"
+        top_error = "Errorevaluatingprojection"
         url = "'http://127.0.0.1:9000/diag/password'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], error_msg)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("connect:connectionrefused" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'http://127.0.0.1:9000/controller/resetAdminPassword'"
         query = "select curl(" + url + ",{'data':'password=asdasdadss','request':'POST'})"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], error_msg)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("connect:connectionrefused" in actual_curl['errors'][0]['reason']['cause']['error'])
 
     '''MB-22110: Tokenizer should throw a syntax error if invalid tokens are passed in'''
 
@@ -1054,7 +1061,7 @@ class QueryCurlTests(QueryTests):
     '''Test if curl can be used to grant roles without the correct permissions'''
 
     def test_curl_grant_role(self):
-        error_msg = "Errorevaluatingprojection-cause:InvalidJSONendpointhttp://%s:%s/" \
+        error_msg = "InvalidJSONendpointhttp://%s:%s/" \
                     "settings/rbac/users/local/intuser" % (self.master.ip, self.master.port)
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl' -p 'password' -q " % (self.master.ip,
                                                                                    self.n1ql_port)
@@ -1064,16 +1071,16 @@ class QueryCurlTests(QueryTests):
                 ",'user':'curl:password','request':'POST'})"
         curl = self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
-        error_msg = "Errorevaluatingprojection-cause:CURLonlysupportsGETandPOSTrequests."
+        error_msg = "CURLonlysupportsGETandPOSTrequests."
         query = "select curl('http://%s:%s/settings/rbac/users/local/intuser' " \
                 % (self.master.ip, self.master.port) + \
                 ", {'data' : 'name=Test Internal User&roles=data_reader[default]&password=pwintuser'" \
                 ",'user':'curl:password','request':'PUT'})"
         curl = self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
+        self.assertTrue(error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"Actual cause is {json_curl['errors'][0]['reason']['cause']['error']}")
 
     '''Test if you can insert curl with a role that does not have curl, with a role that has curl but
        no insert privileges, and a combination of the two roles.'''
@@ -1131,8 +1138,7 @@ class QueryCurlTests(QueryTests):
     '''Test if curl privileges can be used to circumvent other privileges, (insert,update,delete)'''
 
     def test_circumvent_roles(self):
-        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesondefault:default." \
-                    "Addrolequery_insertondefault:defaulttoallowthequerytorun."
+        error_msg = f"UserdoesnothavecredentialstorunINSERTqueriesondefault:default.Addrolequery_insertondefault:{self.query_bucket}toallowthequerytorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl_no_insert' -p 'password' -q " % \
                   (self.master.ip, self.n1ql_port)
         curl_query = "select curl(" + self.query_service_url + ", "
@@ -1142,10 +1148,9 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.log.info(json_curl)
-        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg, f"Actual cause is {json_curl['results'][0]['$1']['errors'][0]['msg']}")
 
-        error_msg = "UserdoesnothavecredentialstorunUPDATEqueriesondefault:default." \
-                    "Addrolequery_updateondefault:defaulttoallowthequerytorun."
+        error_msg = f"UserdoesnothavecredentialstorunUPDATEqueriesondefault:default.Addrolequery_updateondefault:{self.query_bucket}toallowthequerytorun."
         query = 'select meta().id from ' + self.query_bucket + ' limit 1'
         result = self.run_cbq_query(query)
         docid = result['results'][0]['id']
@@ -1154,12 +1159,11 @@ class QueryCurlTests(QueryTests):
                                                                                                 "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg, f"Actual cause is {json_curl['results'][0]['$1']['errors'][0]['msg']}")
 
-        error_msg = "UserdoesnothavecredentialstorunDELETEqueriesondefault:default." \
-                    "Addrolequery_deleteondefault:defaulttoallowthequerytorun."
+        error_msg = f"UserdoesnothavecredentialstorunDELETEqueriesondefault:default.Addrolequery_deleteondefault:{self.query_bucket}toallowthequerytorun."
         options = "{'data':'statement=delete from " + self.query_bucket + " use keys \\\"" + docid + "\\\"" \
                                                                                                      "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg, f"Actual cause is {json_curl['results'][0]['$1']['errors'][0]['msg']}")
