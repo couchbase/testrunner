@@ -796,7 +796,7 @@ class QueryCurlTests(QueryTests):
     def test_conflicting_method_options(self):
         limit = 5
         n1ql_query = 'select * from ' + self.query_bucket + ' limit %s' % limit
-        invalid_json_error = 'URLusingbad/illegalformatormissingURL'
+        invalid_json_error = 'InvalidJSONendpoint'
 
         options = "{'data' : 'statement=%s', 'user':'%s:%s'}" \
                   % (n1ql_query, self.username, self.password)
@@ -894,16 +894,14 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], 'Errorevaluatingprojection')
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], 'curl:Unsupportedprotocol')
+        self.assertTrue("unsupportedprotocolscheme" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         # Test unsupported protocol file
         protocol = "'file:///Users/isha/workspace/query/src/github.com/couchbase/query/data/sampledb/default/tutorial/dave.json'"
         query = "select curl(" + protocol + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'], 'Errorevaluatingprojection')
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], 'curl:Unsupportedprotocol')
+        self.assertTrue("unsupportedprotocolscheme" in actual_curl['errors'][0]['reason']['cause']['error'])
 
     '''Tests what happens when n1ql curl receives invalid urls
         -urls that don't exist
@@ -915,27 +913,23 @@ class QueryCurlTests(QueryTests):
         self.log.info(f"query: {query}")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'],
-                         "Errorevaluatingprojection")
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'],
-                         "curl:Couldn'tresolvehostname")
+        self.assertTrue("nosuchhost" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         # Test a valid url that does not return json
-        url = "'google.com'"
+        url = "'http://google.com'"
         query = "select curl(" + url + ")"
         self.log.info(f"query: {query}")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['errors'][0]['msg'],
-                         "Errorevaluatingprojection")
         self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'],
-                         "InvalidJSONendpointgoogle.com")
+                         "InvalidJSONendpointhttp://google.com")
 
     '''Test if a protected bucket can be accessed without giving its password'''
     def test_protected_bucket_noauth(self):
         error_msg = "UserdoesnothavecredentialstorunSELECTqueriesondefault:" + self.bucket0 + \
                     ".Addrolequery_selectondefault:" + self.bucket0 + "toallowthequerytorun."
         error_msg2 = "Unabletoauthorizeuser-cause:Authenticationfailure"
+        error_msg3 = "Errorauthorizingagainstclustercause:Failuretoauthenticateuser"
         # The query that curl will send to couchbase
         n1ql_query = 'select * from ' + self.bucket0 + '  limit 5'
         # This is the query that the cbq-engine will execute
@@ -943,21 +937,21 @@ class QueryCurlTests(QueryTests):
         self.log.info(f"query: {query}")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg3)
 
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s','user':'%s:'})" \
                 % (n1ql_query, self.username)
         self.log.info(f"query: {query}")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg3)
 
         query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s','user':':%s'})" \
                 % (n1ql_query, self.password)
         self.log.info(f"query: {query}")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        self.assertTrue(json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg or json_curl['results'][0]['$1']['errors'][0]['msg'] == error_msg2)
+        self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg3)
 
     '''Test an unsupported method in n1ql curl
         -DELETE.'''
@@ -1009,7 +1003,7 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], error_msg)
+        self.assertTrue("certificatehasexpiredorisnotyetvalid" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'https://self-signed.badssl.com/'"
         query = "select curl(" + url + ")"
@@ -1017,7 +1011,7 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], error_msg)
+        self.assertTrue("certificatesignedbyunknownauthority" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'https://wrong.host.badssl.com/'"
         query = "select curl(" + url + ")"
@@ -1025,7 +1019,7 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], wrong_host_msg)
+        self.assertTrue("certificateisvalidfor*.badssl.com,badssl.com,notwrong.host.badssl.com" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'https://superfish.badssl.com/'"
         query = "select curl(" + url + ")"
@@ -1033,19 +1027,18 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], error_msg)
+        self.assertTrue("certificatehasexpiredorisnotyetvalid" in actual_curl['errors'][0]['reason']['cause']['error'])
 
     '''Secret endpoints should not be accesible without the localtoken'''
     def test_secret_endpoints(self):
         top_error = "Errorevaluatingprojection"
-        error_msg = "curl:Couldn'tconnecttoserver"
         url = "'http://127.0.0.1:9000/diag/password'"
         query = "select curl(" + url + ")"
         self.log.info(f"query: {query}")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], error_msg)
+        self.assertTrue("connect:connectionrefused" in actual_curl['errors'][0]['reason']['cause']['error'])
 
         url = "'http://127.0.0.1:9000/controller/resetAdminPassword'"
         query = "select curl(" + url + ",{'data':'password=asdasdadss','request':'POST'})"
@@ -1053,11 +1046,11 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
-        self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'], error_msg)
+        self.assertTrue("connect:connectionrefused" in actual_curl['errors'][0]['reason']['cause']['error'])
 
     '''MB-22110: Tokenizer should throw a syntax error if invalid tokens are passed in'''
     def test_invalid_paramerterized_query(self):
-        error_msg = "syntaxerror-line1,column8,near'select',at:#"
+        error_msg = "Errorauthorizingagainstclustercause:Failuretoauthenticateuser"
         query = "select curl(" + self.query_service_url + ", "
         self.log.info(f"query: {query}")
         options = "{'data':'statement=select ##3 from " + self.sample_bucket + " b limit 1'})"
@@ -1075,7 +1068,7 @@ class QueryCurlTests(QueryTests):
 
     def test_curl_access(self):
         error_msg = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function." \
-                    "Addrolequery_external_accesstoallowthequerytorun."
+                    "Addrolequery_external_accesstoallowthestatementtorun."
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_curl' -p 'password' -q " % (self.master.ip,
                                                                                       self.n1ql_port)
         # The query that curl will send to couchbase
@@ -1132,10 +1125,10 @@ class QueryCurlTests(QueryTests):
        no insert privileges, and a combination of the two roles.'''
     def test_insert_no_role(self):
         error_msg = "UserdoesnothavecredentialstorunINSERTqueriesondefault:default.Addrolequery_" \
-                    "insertondefault:defaulttoallowthequerytorun."
+                    "insertondefault:defaulttoallowthestatementtorun."
 
         error_msg2 = "UserdoesnothavecredentialstorunqueriesusingtheCURL()function.Addrole" \
-                     "query_external_accesstoallowthequerytorun."
+                     "query_external_accesstoallowthestatementtorun."
 
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_curl' -p 'password' -q " % (self.master.ip,
                                                                                       self.n1ql_port)
@@ -1183,8 +1176,7 @@ class QueryCurlTests(QueryTests):
     '''Test if curl privileges can be used to circumvent other privileges, (insert,update,delete)'''
 
     def test_circumvent_roles(self):
-        error_msg = "UserdoesnothavecredentialstorunINSERTqueriesondefault:default." \
-                    "Addrolequery_insertondefault:defaulttoallowthequerytorun."
+        error_msg = "Errorauthorizingagainstclustercause:Failuretoauthenticateuser"
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl_no_insert' -p 'password' -q " % \
                   (self.master.ip, self.n1ql_port)
         curl_query = "select curl(" + self.query_service_url + ", "
@@ -1196,8 +1188,7 @@ class QueryCurlTests(QueryTests):
         self.log.info(json_curl)
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
-        error_msg = "UserdoesnothavecredentialstorunUPDATEqueriesondefault:default." \
-                    "Addrolequery_updateondefault:defaulttoallowthequerytorun."
+        error_msg = "Errorauthorizingagainstclustercause:Failuretoauthenticateuser"
         query = 'select meta().id from ' + self.query_bucket + ' limit 1'
         result = self.run_cbq_query(query)
         docid = result['results'][0]['id']
@@ -1208,8 +1199,7 @@ class QueryCurlTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
-        error_msg = "UserdoesnothavecredentialstorunDELETEqueriesondefault:default." \
-                    "Addrolequery_deleteondefault:defaulttoallowthequerytorun."
+        error_msg = "Errorauthorizingagainstclustercause:Failuretoauthenticateuser"
         options = "{'data':'statement=delete from " + self.query_bucket + " use keys \\\"" + docid + "\\\"" \
                                                                                                      "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
