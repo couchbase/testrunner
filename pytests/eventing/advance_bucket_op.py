@@ -135,3 +135,12 @@ class AdvanceBucketOp(EventingBaseTest):
         self.deploy_function(body)
         self.verify_doc_count_collections("default.scope0.collection0", 0)
         self.undeploy_and_delete_function(body)
+
+    def test_array_and_field_level_subdoc_operations(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
+        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        self.undeploy_and_delete_function(body)
