@@ -98,7 +98,8 @@ class AutoCompactionTests(BaseTestCase):
             print("ITEMS =============%s" % items)
 
             rest.create_bucket(bucket=bucket_name, ramQuotaMB=int(available_ram),
-                               replicaNumber=1, proxyPort=11211)
+                               replicaNumber=1, proxyPort=11211,
+                               storageBackend=self.bucket_storage)
             BucketOperationHelper.wait_for_memcached(serverInfo, bucket_name)
             BucketOperationHelper.wait_for_vbuckets_ready_state(serverInfo, bucket_name)
 
