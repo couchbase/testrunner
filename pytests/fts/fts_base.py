@@ -64,6 +64,9 @@ from lib import global_vars
 from lib.capella.utils import CapellaAPI, CapellaCredentials
 import lib.capella.utils as capella_utils
 
+from .vector_dataset_generator.vector_dataset_generator import VectorDataset
+from .vector_dataset_generator.vector_dataset_loader import VectorLoader
+
 class RenameNodeException(FTSException):
     """Exception thrown when converting ip to hostname failed
     """
@@ -1074,7 +1077,7 @@ class FTSIndex:
                 ['properties'][fields.pop()] = field_maps.pop()
 
     def add_child_field_to_default_collection_mapping(self, field_name, field_type,
-                                           field_alias=None, analyzer=None, scope=None, collection=None):
+                                           field_alias=None, analyzer=None, scope=None, collection=None, vector_fields=None):
         """
         This method will add a field mapping to a default mapping
         """
@@ -1102,6 +1105,9 @@ class FTSIndex:
                 "type": field_type
             }
         ]
+        if vector_fields:
+            for key, item in vector_fields.items():
+                child_field['fields'][0][key] = item
 
         field_maps = []
         field_maps.append(child_field)
@@ -1413,7 +1419,8 @@ class FTSIndex:
                                   highlight_fields=None,
                                   consistency_level='',
                                   consistency_vectors={},
-                                  score=''):
+                                  score='',
+                                  knn=None):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         max_limit_matches = TestInputSingleton.input.param("query_limit_matches", None)
         query_json = copy.deepcopy(QUERY.JSON)
@@ -1453,6 +1460,8 @@ class FTSIndex:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
         if score != '':
             query_json['score'] = "none"
+        if knn is not None:
+            query_json['knn'] = knn
         return query_json
 
     def construct_facets_definition(self):
@@ -1514,7 +1523,8 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None):
+                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None,
+                      knn=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1528,7 +1538,8 @@ class FTSIndex:
                                                     consistency_level=consistency_level,
                                                     consistency_vectors=consistency_vectors,
                                                     timeout=timeout,
-                                                    score=score)
+                                                    score=score,
+                                                    knn=knn)
 
         hits = -1
         matches = []
@@ -2460,6 +2471,61 @@ class CouchbaseCluster:
 
         for task in bucket_tasks:
             task.result()
+
+    def _setup_bucket_structure(self, cli_client, containers=None):
+        if not containers:
+            containers = eval(TestInputSingleton.input.param("kv", "{}"))
+        decoded_containers = self._decode_containers(containers)
+        self.create_bucket_scope_collection_multi_structure(existing_buckets=None,
+                                                            data_structure=decoded_containers,
+                                                            cli_client=cli_client)
+        time.sleep(10)
+        return decoded_containers
+
+    def _decode_containers(self, encoded_containers=[]):
+        decoded_containers = {}
+        if len(encoded_containers) > 0:
+            decoded_containers["buckets"] = []
+            for container in encoded_containers:
+                container_path = container.split(".")
+                if len(container_path) > 0:
+                    bucket = container_path[0]
+                    bucket_already_decoded = False
+                    for b in decoded_containers["buckets"]:
+                        if b["name"] == bucket:
+                            bucket_already_decoded = True
+                            break
+                    if not bucket_already_decoded:
+                        decoded_containers["buckets"].append({"name": bucket, "scopes": []})
+                if len(container_path) > 1:
+                    bucket = container_path[0]
+                    scope = container_path[1]
+                    scope_already_decoded = False
+                    for b in decoded_containers["buckets"]:
+                        if b["name"] == bucket:
+                            for s in b["scopes"]:
+                                if s["name"] == scope:
+                                    scope_already_decoded = True
+                                    break
+                            if not scope_already_decoded:
+                                b["scopes"].append({"name": scope, "collections": []})
+                if len(container_path) > 2:
+                    bucket = container_path[0]
+                    scope = container_path[1]
+                    collection = container_path[2]
+                    collection_already_decoded = False
+                    for b in decoded_containers["buckets"]:
+                        if b["name"] == bucket:
+                            for s in b["scopes"]:
+                                if s["name"] == scope:
+                                    for c in s["collections"]:
+                                        if c["name"] == collection:
+                                            collection_already_decoded = True
+                                            break
+                                    if not collection_already_decoded:
+                                        s["collections"].append({"name": collection})
+        return decoded_containers
+
 
     def create_bucket_scope_collection_multi_structure(self, existing_buckets=None, bucket_params=None,
                                                        data_structure=None, cli_client=None):
@@ -5364,6 +5430,92 @@ class FTSBaseTest(unittest.TestCase):
                     plan_params=plan_params, _type=tp, collection_index=collection_index,
                     scope=index_scope, collections=index_collections, analyzer=analyzer)
 
+    def _decode_index(self, encoded_index):
+        decoded_index = {}
+
+        name = encoded_index[0]
+        decoded_index["name"] = name
+        paths = encoded_index[1].split(",")
+        path = paths[0]
+        splitted_path = path.split(".")
+        if len(splitted_path) > 0:
+            decoded_index["bucket"] = splitted_path[0]
+        if len(splitted_path) > 1:
+            decoded_index["scope"] = splitted_path[1]
+            if len(paths) == 1:
+                decoded_index["collection"] = splitted_path[2]
+            else:
+                decoded_index["collection"] = []
+                for p in paths:
+                    collection = p.split(".")[2]
+                    decoded_index["collection"].append(collection)
+        return decoded_index
+
+    def define_index_params(self, idx_dict):
+        collection_index = ("scope" in idx_dict.keys() and "collection" in idx_dict.keys())
+
+        if not collection_index:
+            _type = None
+            index_scope = None
+            index_collections = None
+        else:
+            index_scope = idx_dict["scope"]
+            index_collections = []
+            if type(idx_dict["collection"]) is list:
+                _type = []
+                for c in idx_dict["collection"]:
+                    _type.append(f"{index_scope}.{c}")
+                    index_collections.append(c)
+            else:
+                _type = f"{index_scope}.{idx_dict['collection']}"
+                index_collections.append(idx_dict["collection"])
+        return collection_index, _type, index_scope, index_collections
+
+    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False, vector_fields=None, field_type=None, field_name=None):
+        if test_indexes is None:
+            test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
+        indexes = []
+        for idx in test_indexes:
+            decoded_index = self._decode_index(idx)
+            collection_index, _type, index_scope, index_collections = self.define_index_params(decoded_index)
+            fts_index = None
+            if collection_index:
+                fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
+                                        decoded_index["name"], collection_index=True, _type=_type,
+                                        scope=index_scope, collections=index_collections)
+                if field_name and field_type:
+                    for collection in index_collections:
+                        if create_vector_index:
+                            if vector_fields is None:
+                                vector_fields = {"dims": 128, "similarity": "l2_norm"}
+                            fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
+                                                                              field_type=field_type,
+                                                                              field_alias=field_name,
+                                                                              scope=index_scope,
+                                                                              collection=collection,
+                                                                              vector_fields=vector_fields)
+                        else:
+                            fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
+                                                                              field_type=field_type,
+                                                                              field_alias=field_name,
+                                                                              scope=index_scope,
+                                                                              collection=collection)
+                    if index_replica > 1:
+                        fts_index.update_num_replicas(index_replica)
+            else:
+                fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
+                                        decoded_index["name"], collection_index=False)
+                if index_replica > 1:
+                    fts_index.update_num_replicas(index_replica)
+
+            fts_index.index_definition['uuid'] = fts_index.get_uuid()
+            fts_index.update()
+            decoded_index['index_obj'] = fts_index
+            indexes.append(decoded_index)
+            self.sleep(5, "Waiting 5 seconds for index to update..")
+            self.wait_for_indexing_complete()
+        return indexes
+
     def define_index_parameters_collection_related(self):
         collection_index = self.container_type == 'collection'
         if self.container_type == 'bucket':
@@ -5382,7 +5534,6 @@ class FTSBaseTest(unittest.TestCase):
                 _type = f"{self.scope}.{self.collection}"
                 index_collections.append(self.collection)
         return collection_index, _type, index_scope, index_collections
-
 
     def create_alias(self, target_indexes, bucket=None, name=None, alias_def=None):
         """
@@ -6031,14 +6182,12 @@ class FTSBaseTest(unittest.TestCase):
             keyname is the name of fixed key
             template_values is a list containing values of key
         """
-        self.log.info("Loading Phase Started")
         for counter, value in enumerate(template_values):
             id = f'{keyname}_{counter}'
             n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":\"{value}\"}});"
             if isinstance(value,list):
                 n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":{value}}});"
             self._cb_cluster.run_n1ql_query(n1ql_query, verbose=False)
-        self.log.info("Loading Phase Complete!")
 
     def create_S3_config(self):
         COUCHBASE_AWS_HOME = '/home/couchbase/.aws'
@@ -6072,3 +6221,24 @@ class FTSBaseTest(unittest.TestCase):
                 self.s3_utils_obj.delete_s3_folder(folder=self.storage_prefix)
         # create a folder in S3 bucket
         self.s3_utils_obj.create_s3_folder(folder=self.storage_prefix)
+
+    def load_vector_data(self, containers, dataset):
+        bucketvsdataset = {}
+        print(f"containers - {containers}")
+        for count, bucket in enumerate(containers['buckets']):
+            bucket_name = bucket['name']
+            bucketvsdataset['bucket_name'] = dataset[count % len(dataset)]
+            for scope in bucket['scopes']:
+                scope_name = scope['name']
+                for collection in scope['collections']:
+                    collection_name = collection['name']
+                    vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
+                                      self._input.membase_settings.rest_password, bucket_name, scope_name, collection_name, dataset)
+                    vl.load_data()
+        return bucketvsdataset
+
+    def get_query_vectors(self, dataset_name, use_hdf5_datasets):
+        ds = VectorDataset(dataset_name)
+        ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="query")
+        print(f"First Query vector:{str(ds.query_vecs[0])}")
+        return ds.query_vecs
