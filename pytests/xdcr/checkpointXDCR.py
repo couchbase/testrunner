@@ -189,11 +189,11 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def get_pre_replicate_call_history(self, node):
         prerep_calls, count = NodeHelper.check_goxdcr_log(node,
                                                         "POST /_goxdcr/_pre_replicate",
-                                                        log_name="http_access.log",
+                                                        log_name="http_access_internal.log",
                                                         timeout=10,
                                                         print_matches=False)
+        total_successful_prereps = 0
         if count > 0:
-            total_successful_prereps = 0
             for call in prerep_calls:
                 call_datetime = self._extract_timestamp(call)
                 # Ignore calls that happened before the test started
