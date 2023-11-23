@@ -856,8 +856,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         task = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node_b])
         tasks.append(task)
         self.sleep(5)
-        err_msg = ' Create index or Alter replica cannot proceed due to rebalance in progress..' \
-                  ' The index will be created in the background after the ongoing rebalance.'
+        err_msg = ' Create index or Alter replica cannot proceed due to rebalance in progres'
         indexes_during_rebalance = 0
         with ThreadPoolExecutor() as executor:
             for query in new_index_query_list:
@@ -1288,7 +1287,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             index_fields_list[index_name] = index_fields
 
         tasks = []
-        err_msg = f'Create index cannot proceed due to presence of duplicate index name'
+        err_msg = f'The index idx already exists.'
         with ThreadPoolExecutor() as executor:
             for query in index_gen_query_list:
                 task = executor.submit(self.run_cbq_query, query=query)
