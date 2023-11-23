@@ -1243,7 +1243,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance,
                 [],
-                [node_out])
+                [node_out], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
@@ -1296,7 +1296,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance1,
                 [],
-                [node_out])
+                [node_out], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
@@ -1390,7 +1390,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance1,
                 [],
-                [node_out])
+                [node_out], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
@@ -1719,7 +1719,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_failover,
                 stats_map_after_failover,
                 [],
-                [node_out])
+                [node_out], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
@@ -1826,7 +1826,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance,
                 [],
-                [index_server])
+                [index_server], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
@@ -1947,7 +1947,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance,
                 [],
-                [index_server])
+                [index_server], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
