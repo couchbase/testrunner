@@ -2330,10 +2330,9 @@ class RestConnection(object):
                     index_map[field] = val
         if not return_system_query_scope:
             index_map_new = {'code': index_map['code'], 'status': []}
-            if index_map_new['status']:
-                for item in index_map['status']:
-                    if item['scope'] != '_system' and item['collection'] != '_query':
-                        index_map_new['status'].append(item)
+            for item in index_map['status']:
+                if item['scope'] != '_system' and item['collection'] != '_query':
+                    index_map_new['status'].append(item)
             return index_map_new
         else:
             return index_map

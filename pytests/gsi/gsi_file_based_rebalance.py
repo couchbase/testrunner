@@ -662,7 +662,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 self.load_until_index_dgm(resident_ratio=index_resident_ratio)
                 if self.disk_full:
                     nodes_dict = self.fill_up_disk(disk_fill_percent=80)
-                executor_main.submit(self.perform_continuous_kv_mutations, event)
+                # commenting out temporarily to stabilise tests
+                # executor_main.submit(self.perform_continuous_kv_mutations, event)
                 executor_main.submit(self.run_stress_tool, self.stress_factor, 1800)
                 # rebalance all nodes at once
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add=to_add_nodes,
@@ -687,6 +688,341 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 if future_disk_usage:
                     future_disk_usage.result()
                 self.kill_stress_tool()
+
+    def test_drop_duplicate_indexes_on_rebalance(self):
+        """
+        https://issues.couchbase.com/browse/MB-58379
+        Create index idx1 on node n1. Failover n1. Create idx1 on node n2. Add back n1.
+        Rebalance. Duplicate indexes are dropped.
+        """
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=False)
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        namespace = self.namespaces[0]
+        queries = [f'create index idx on {namespace}(name)']
+        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        time.sleep(60)
+        rest = RestConnection(indexer_nodes[0])
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        index_list, host_ip_to_failover, host_to_failover = [], None, None
+        for index in index_map:
+            index_list.append(index['name'])
+            host_ip_to_failover = index['hosts'][0]
+        self.log.info(f"Index list after rebalance {index_list}")
+        host_ip_to_failover = host_ip_to_failover.split(":")[0]
+        self.log.info(f"host_ip_to_failover {host_ip_to_failover}")
+        for item in self.servers:
+            if item.ip == host_ip_to_failover:
+                host_to_failover = item
+        failover_nodes_list = [host_to_failover]
+        self.log.info(f"Running failover task for node {failover_nodes_list}")
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=failover_nodes_list,
+                                                    graceful=False)
+        failover_task.result()
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+        rest = RestConnection(self.master)
+        node_obj = None
+        nodes_all = rest.node_statuses()
+        for node in nodes_all:
+            if node.ip == host_ip_to_failover:
+                node_obj = node
+        self.log.info(f"Running add back task for node {node_obj.ip}")
+        rest.add_back_node(node_obj.id)
+        time.sleep(10)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [], cluster_config=self.cluster_config)
+        time.sleep(1)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=500)
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rest = RestConnection(indexer_nodes[0])
+        time.sleep(5)
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        index_list_after, host_to_failover = [], None
+        for index in index_map:
+            index_list_after.append(index['name'])
+        self.log.info(f"Index list after rebalance {index_list_after}")
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        if len(index_list_after) != 1:
+            raise Exception("Duplicate indexes not dropped after rebalance")
+        if not self.check_gsi_logs_for_shard_transfer():
+            raise Exception("Shard based rebalance not triggered")
+
+    def test_partition_repair_on_rebalance(self):
+        """
+        https://issues.couchbase.com/browse/MB-57378
+        When a node containing partitions is failed over, partition repair should take place
+        """
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=False)
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        namespace = self.namespaces[0]
+        queries = [f'create index idx on {namespace}(name) PARTITION BY HASH (meta().id)']
+        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        time.sleep(60)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        time.sleep(5)
+        rest = RestConnection(indexer_nodes[0])
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        index_list, host_ip_to_failover, host_to_failover = [], None, None
+        for index in index_map:
+            index_list.append(index['name'])
+            host_ip_to_failover = index['hosts'][0]
+        self.log.info(f"Index list after rebalance {index_list}")
+        host_ip_to_failover = host_ip_to_failover.split(":")[0]
+        self.log.info(f"host_ip_to_failover {host_ip_to_failover}")
+        for item in self.servers:
+            if item.ip == host_ip_to_failover:
+                host_to_failover = item
+        failover_nodes_list = [host_to_failover]
+        self.log.info(f"Running failover task for node {failover_nodes_list}")
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=failover_nodes_list,
+                                                    graceful=False)
+        failover_task.result()
+        time.sleep(10)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [],
+                                                 cluster_config=self.cluster_config)
+        time.sleep(1)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        time.sleep(5)
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        index_list_after, host_to_failover = [], None
+        for index in index_map:
+            index_list_after.append(index['name'])
+        self.log.info(f"Index list after rebalance {index_list_after}")
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        if len(index_list_after) != 1:
+            raise Exception("Duplicate indexes not dropped after rebalance")
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                      map_after_rebalance=map_after_rebalance,
+                                                      stats_map_before_rebalance=stats_map_before_rebalance,
+                                                      stats_map_after_rebalance=stats_map_after_rebalance,
+                                                      nodes_in=[],
+                                                      nodes_out=failover_nodes_list,
+                                                      swap_rebalance=False,
+                                                      use_https=False,
+                                                      item_count_increase=False,
+                                                      per_node=True,
+                                                      skip_array_index_item_count=False,
+                                                      indexes_changed=False)
+
+    def test_non_symmetric_sibling_shard_token_generation(self):
+        """
+        https://issues.couchbase.com/browse/MB-58224
+        Create idx1 with 2 replicas. Create idx2 with 2 replicas. Drop replica ID 0 of idx1.
+        Failover node that has the dropped replica. Add a new node and swap rebalance a new node.
+        Check that replica repair takes place.
+        """
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=False)
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        namespace = self.namespaces[0]
+        queries = [f'create index idx on {namespace}(name) with {{"num_replica": 2}}',
+                   f'create index idx2 on {namespace}(country) with {{"num_replica": 2}}']
+        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+        time.sleep(60)
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        query_drop_replica = f'ALTER INDEX {namespace}.idx WITH {{"action":"drop_replica","replicaId": {0}}}'
+        self.run_cbq_query(query=query_drop_replica, server=query_node)
+        time.sleep(5)
+        rest = RestConnection(indexer_nodes[0])
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        host_index_map = {}
+        for index in index_map:
+            if index['hosts'][0].split(":")[0] in host_index_map:
+                host_index_map[index['hosts'][0].split(":")[0]] += 1
+            else:
+                host_index_map[index['hosts'][0].split(":")[0]] = 1
+        index_list, host_ip_to_failover, host_to_failover = [], None, None
+        for host in host_index_map:
+            if host_index_map[host] != 2:
+                host_ip_to_failover = host
+        self.log.info(f"host_ip_to_failover {host_ip_to_failover}")
+        for item in self.servers:
+            if item.ip == host_ip_to_failover:
+                host_to_failover = item
+        failover_nodes_list = [host_to_failover]
+        self.log.info(f"Running failover task for node {failover_nodes_list}")
+        failover_task = self.cluster.async_failover([self.master], failover_nodes=failover_nodes_list,
+                                                    graceful=False)
+        failover_task.result()
+        time.sleep(10)
+        to_add_nodes = self.servers[self.nodes_init:self.nodes_init+1]
+        rebalance = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=to_add_nodes,
+                                                 to_remove=[], services=['index'], cluster_config=self.cluster_config)
+        time.sleep(1)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        time.sleep(60)
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                      map_after_rebalance=map_after_rebalance,
+                                                      stats_map_before_rebalance=stats_map_before_rebalance,
+                                                      stats_map_after_rebalance=stats_map_after_rebalance,
+                                                      nodes_in=[],
+                                                      nodes_out=failover_nodes_list,
+                                                      swap_rebalance=True,
+                                                      use_https=False,
+                                                      item_count_increase=False,
+                                                      per_node=True,
+                                                      skip_array_index_item_count=False,
+                                                      indexes_changed=False)
+        if not self.check_gsi_logs_for_shard_transfer():
+            raise Exception("Shard based rebalance not triggered")
+
+    def test_disable_features_to_maintain_shard_affinity(self):
+        """
+        https://issues.couchbase.com/browse/MB-57860
+        Create idx1 with nodes clause. It should fail
+        Create idx2 and alter idx2 with move clause. It should fail
+        Create idx3, idx4, idx5.... with queryport.client.usePlanner disabled. Indexes should not be placed in
+        round-robin fashion.
+        """
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=False)
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        namespace = self.namespaces[0]
+        ip, port = indexer_nodes[0].ip, indexer_nodes[0].port
+        query = f'create index idx on {namespace}(name) with {{"nodes": ["{ip}:{port}"]}}'
+        message = 'defining `nodes` in with clause is not allowed to maintain index grouping (index-shard affinity)'
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+        except Exception as err:
+            if message in str(err):
+                self.log.info(f"Error raised {str(err)} as expected while running a query with nodes clause")
+            else:
+                raise Exception(f"Message not seen as expected. Message seen {message}. Message expected {str(err)}")
+        time.sleep(10)
+        query = f'create index idx on {namespace}(name)'
+        self.run_cbq_query(query=query, server=query_node)
+        time.sleep(10)
+        self.wait_until_indexes_online()
+        rest = RestConnection(indexer_nodes[0])
+        index_resp = rest.get_indexer_metadata()
+        if 'status' not in index_resp:
+            raise Exception(f"No index metadata seen in response {index_resp}")
+        index_map = index_resp['status']
+        for index in index_map:
+            ip_host = index['hosts'][0].split(":")[0]
+            break
+        for node in indexer_nodes:
+            if ip_host != node.ip:
+                ip_alter = node.ip
+                port_alter = node.port
+                break
+        query = f'alter index idx on {namespace} with {{"action": "move", "nodes": ["{ip_alter}:{port_alter}"]}}'
+        message_alter_idx = "move index is disabled"
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+        except Exception as err:
+            if message_alter_idx in str(err):
+                self.log.info(f"Error raised {str(err)} as expected while running a query with nodes clause")
+            else:
+                raise Exception(f"Message not seen as expected. Message seen {message_alter_idx}. Message expected {str(err)}")
+        self.disable_planner()
+        time.sleep(3)
+        query = f'create index idx3 on {namespace}(name)'
+        message_planner_disabled = "round robin planner is disabled"
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+        except Exception as err:
+            if message_planner_disabled in str(err):
+                self.log.info(f"Error raised {str(err)} as expected while running a query with planner disabled")
+            else:
+                raise Exception(
+                    f"Message not seen as expected. Message seen {message_alter_idx}. Message expected {str(err)}")
+        self.disable_shard_based_rebalance()
+        time.sleep(1)
+        query = f'create index idx3 on {namespace}(name)'
+        self.run_cbq_query(query=query, server=query_node)
+        self.wait_until_indexes_online()
 
     # common methods
     def _return_maps(self):

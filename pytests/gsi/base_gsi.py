@@ -2328,6 +2328,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
 
+    def enable_planner(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"queryport.client.usePlanner": True})
+
+    def disable_planner(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"queryport.client.usePlanner": False})
+
     def enable_honour_nodes_in_definition(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
