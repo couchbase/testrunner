@@ -779,9 +779,13 @@ class BackupRestore(FTSBaseTest):
         del restored['uuid']
         if 'kvStoreName' in restored['params']['store'].keys():
             del restored['params']['store']['kvStoreName']
+        if 'sourceUUID' in restored:
+            del restored['sourceUUID']
+        if 'sourceUUID' in initial:
+            del initial['sourceUUID']
         if restored != initial:
-            self.log.info(f"Initial index JSON: {initial}")
-            self.log.info(f"Restored index JSON: {restored}")
+            self.log.info(f"Initial index JSON: {json.dumps(initial)}")
+            self.log.info(f"Restored index JSON: {json.dumps(restored)}")
             return False
         return True
 
