@@ -2662,7 +2662,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_before_rebalance,
                 stats_map_after_rebalance,
                 [],
-                [node_out])
+                [node_out], indexes_changed=True)
         except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):

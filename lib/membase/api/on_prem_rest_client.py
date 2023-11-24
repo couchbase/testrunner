@@ -2330,9 +2330,10 @@ class RestConnection(object):
                     index_map[field] = val
         if not return_system_query_scope:
             index_map_new = {'code': index_map['code'], 'status': []}
-            for item in index_map['status']:
-                if item['scope'] != '_system' and item['collection'] != '_query':
-                    index_map_new['status'].append(item)
+            if index_map_new['status']:
+                for item in index_map['status']:
+                    if item['scope'] != '_system' and item['collection'] != '_query':
+                        index_map_new['status'].append(item)
             return index_map_new
         else:
             return index_map
@@ -2423,12 +2424,20 @@ class RestConnection(object):
                 index_map[bucket_name][index_name]['id'] = map['id']
         return index_map
 
-    def get_index_statements(self, timeout=120):
+    def get_index_statements(self, timeout=120, return_system_query_scope=False):
         api = self.index_baseUrl + 'getIndexStatement'
-        index_map = {}
         status, content, header = self.urllib_request(api, timeout=timeout)
+        json_parsed = []
         if status:
             json_parsed = json.loads(content)
+            if not return_system_query_scope:
+                json_parsed_final = []
+                if json_parsed:
+                    for statement in json_parsed:
+                        if "`_system`.`_query`" in statement:
+                            continue
+                        json_parsed_final.append(statement)
+                return json_parsed_final
         return json_parsed
 
     # returns node data for this host
@@ -5102,13 +5111,13 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST',params)
         log.info ("Status of Setting up LDAP command is {0}".format(status))
         return status, json.loads(content)
-    
+
     def get_ldap_settings(self):
         api = self.baseUrl + 'settings/ldap/'
         status, content, header = self._http_request(api, 'GET')
         log.info ("Status of getting LDAP settings command is {0}".format(status))
         return status, json.loads(content)
-    
+
     def disable_ldap(self):
         api = self.baseUrl + 'settings/ldap'
         params = urllib.parse.urlencode({'authenticationEnabled':'false'})

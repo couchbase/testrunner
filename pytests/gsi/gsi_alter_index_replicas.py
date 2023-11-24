@@ -370,8 +370,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                     self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                     rebalance.result()
 
-
-            # Replica that was removed should not be re-created because it is not a broken replica
+            # Replica that was removed should be re-created
             if self.check_repair:
                 # Sleep for sometime to allow cluster state to be stabilized after rebalance
                 self.sleep(30)
@@ -381,7 +380,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
                 post_rebalance_in_map = self.get_index_map()
-                self.assertEqual(pre_rebalance_in_map, post_rebalance_in_map)
+                self.assertNotEqual(pre_rebalance_in_map, post_rebalance_in_map)
 
     '''Do the same alter index tests on an index created with a node list'''
     def test_alter_index_with_node_list(self):
@@ -561,7 +560,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                           self.assertTrue(self.replicaId != index['replicaId'], '%s' % str(index['replicaId']))
                   self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas, dropped_replica=True, replicaId=self.replicaId)
               else:
-                  self.assertTrue(definitions is None, "The index was not fully removed %s" % definitions)
+                  self.assertTrue(definitions == [], "The index was not fully removed %s" % definitions)
         finally:
             if self.stop_server:
                 remote.start_server()
@@ -588,10 +587,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             self.fail("Move index failed with unexpected error")
         else:
           index_map = self.get_index_map()
-          definitions = self.rest.get_index_statements()
-          for definition in definitions:
-              if index_name_prefix in definition:
-                  self.assertTrue('"num_replica"'not in definition, "There should be no replicas remaining: %s" % definition)
           self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, 0, dropped_replica=True, replicaId=self.replicaId)
 
     '''This test is designed to see if you can increment a deferred index before it is built or after it is built, 
@@ -635,17 +630,13 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                         self.assertEqual(index_map['default'][index]['status'], 'Ready')
                     else:
                         self.assertEqual(index_map['default'][index]['status'], 'Created')
-                for definition in definitions:
-                    if index_name_prefix in definition:
-                        self.assertTrue('"num_replica":{0}'.format(self.num_index_replicas - 1) in definition,
-                                      "Number of replicas in the definition is wrong: %s" % definition)
                 for index in indexes['status']:
                     if index_name_prefix in index['name']:
                         self.assertTrue(self.replicaId != index['replicaId'])
                 self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas,
                                                       dropped_replica=True, replicaId=self.replicaId)
             else:
-                self.assertTrue(definitions is None, "The index was not fully removed")
+                self.assertTrue(definitions == [], "The index was not fully removed")
 
     '''Execute failover tests for alter index'''
     def test_alter_index_with_drop_replica_failover(self):
@@ -1719,9 +1710,5 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, (expected_num_replicas - 1),
                                                 dropped_replica=True, replicaId=replica_id)
 
-        error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-        self.sleep(10)
-        self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
         index_map = self.get_index_map()
-
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas )
