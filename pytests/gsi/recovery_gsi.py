@@ -5,7 +5,6 @@ from threading import Thread
 import time
 
 from .base_gsi import BaseSecondaryIndexingTests, ConCurIndexOps
-from couchbase.n1ql import CONSISTENCY_REQUEST
 from couchbase_helper.query_definitions import QueryDefinition
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
@@ -398,7 +397,7 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.sleep(1)
 
         if not self.wait_for_mutation_processing(self.index_nodes):
-            self.log.info("some indexes did     not process mutations on time")
+            self.log.info("some indexes did not process mutations on time")
 
         self.verify_query_results_from_new_index()
 
@@ -1903,7 +1902,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         use_index_query = "select Count(*) from {0} USE INDEX (`{1}`)".format(bucket_name, index_name)
         result = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node,
-                                                scan_consistency=CONSISTENCY_REQUEST)["results"][0]["$1"]
+                                                scan_consistency="request_plus")["results"][0]["$1"]
         expected_result = self.docs_per_day * 2 * 2016
         if self.dgm_run:
             self.assertTrue(result > expected_result, "Indexer hasn't recovered properly from in-memory as"

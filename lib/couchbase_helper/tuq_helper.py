@@ -1,27 +1,15 @@
-import paramiko
-import logger
 import json
-import uuid
-import math
-import re
-import time
 import ast
 import testconstants
-import datetime
 import time
-from datetime import date
 from couchbase_helper.tuq_generators import TuqGenerators
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.exception import CBQError, ReadDocumentException
+from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
-import copy
 import traceback
 from deepdiff import DeepDiff
-from decimal import Decimal
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
-from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
-
 
 from lib.Cb_constants.CBServer import CbServer
 

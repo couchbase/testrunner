@@ -1395,23 +1395,28 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def block_incoming_network_from_node(self, node1, node2):
         shell = RemoteMachineShellConnection(node1)
+        shell.execute_command("nft add table ip filter")
+        shell.execute_command("nft add chain ip filter INPUT '{ type filter hook input priority 0; }'")
         self.log.info("Adding {0} into iptables rules on {1}".format(
             node1.ip, node2.ip))
-        command = "iptables -A INPUT -s {0} -j REJECT".format(node2.ip)
+        command = f"nft 'add rule ip filter INPUT ip saddr {node2.ip} counter reject'"
         shell.execute_command(command)
 
     def resume_blocked_incoming_network_from_node(self, node1, node2):
         shell = RemoteMachineShellConnection(node1)
-        self.log.info("Removing {0} from iptables rules on {1}".format(
-            node1.ip, node2.ip))
-        command = "iptables -D INPUT -s {0} -j REJECT".format(node2.ip)
+        shell.execute_command("nft add table ip filter")
+        shell.execute_command("nft add chain ip filter INPUT '{ type filter hook input priority 0; }'")
+        self.log.info(f"Removing iptables rules on {node1.ip} for {node2.ip}")
+        command = "nft flush ruleset"
         shell.execute_command(command)
 
     def block_outgoing_network_from_node(self, node1, node2):
         shell = RemoteMachineShellConnection(node1)
+        shell.execute_command("nft add table ip filter")
+        shell.execute_command("nft add chain ip filter INPUT '{ type filter hook input priority 0; }'")
         self.log.info("Adding {0} into iptables rules on {1}".format(
             node1.ip, node2.ip))
-        command = "iptables -A OUTPUT -s {0} -j REJECT".format(node2.ip)
+        command = f"nft 'add rule ip filter OUTPUT ip saddr {node2.ip} counter reject'"
         shell.execute_command(command)
 
     def unblock_indexer_port(self, node, port=9104):
@@ -2652,4 +2657,3 @@ class ConCurIndexOps():
                         index_created = True
 
         return index_created, status
-
