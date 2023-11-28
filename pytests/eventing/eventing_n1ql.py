@@ -94,7 +94,7 @@ class EventingN1QL(EventingBaseTest):
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
         #verify deployment should fail
         self.verify_eventing_results(self.function_name, 2, skip_stats_validation=True)
-        self.verify_user_noroles("cbadminbucket")
+        rbacmain(self.master)._check_user_permission(self.master.rest_username, self.master.rest_password, "admin")
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_curl(self):
