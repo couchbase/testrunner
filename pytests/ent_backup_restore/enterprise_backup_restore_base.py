@@ -271,7 +271,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
         self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
-        self.backupset.disable_users = self.input.param("disable-users", False)
+        self.backupset.enable_users = self.input.param("enable-users", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", False)
         self.backupset.force_updates = self.input.param("force-updates", False)
         self.backupset.auto_create_buckets = self.input.param("auto-create-buckets", False)
@@ -552,8 +552,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-analytics"
         if self.backupset.disable_data:
             args += " --disable-data"
-        if self.backupset.disable_users:
-            args += " --disable-users"
+        if self.backupset.enable_users:
+            args += " --enable-users"
         if self.backupset.current_bkrs_client_version[:3] >= "7.0":
             if self.vbucket_filter is not None:
                 args += " --vbucket-filter {0}".format(self.vbucket_filter)
@@ -3197,7 +3197,7 @@ class Backupset:
         self.disable_analytics = False
         self.auto_create_buckets = False
         self.sqlite = False
-        self.disable_users = False
+        self.enable_users = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""

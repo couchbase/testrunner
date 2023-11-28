@@ -1225,12 +1225,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             Backup and restore of user info
             1.  Create a bucket
             2.  Add two users, add one to a new group and give one an extra role
-            3.  Backup
+            3.  Backup with -enable-users flag
             4.  Verify number of users/groups in backup
             5.  Delete one user
             6.  Restore and check for conflict message
             7.  Verify deleted user restored and extra role still present
-            8.  Backup with --disable-users flag
+            8.  Backup without --enable-users flag
             9.  Verify no users/groups in backup
             10. Delete one user again
             11. Restore and check there is no conflict message
@@ -1256,8 +1256,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.add_role_to_user(role_list)
         users = self.get_all_users()
 
-        # Run default backup
-        self.backupset.disable_users = False
+        # Run backup with -enable-users flag
+        self.backupset.enable_users = True
         self.backup_create()
         output, error = self.backup_cluster()
         if not self._check_output("Backup completed successfully", output):
@@ -1301,10 +1301,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             err += "\nAfter Restore:\n{0}\nBefore Restore:\n{1}".format(users_post_restore, users)
             self.fail(err)
 
-        # Run backup with --disable-users flag
+        # Run backup without --enable-users flag
         self.backupset.start = 2
         self.backupset.end = 2
-        self.backupset.disable_users = True
+        self.backupset.enable_users = False
         self.backup_create()
         output, error = self.backup_cluster()
         if not self._check_output("Backup completed successfully", output):

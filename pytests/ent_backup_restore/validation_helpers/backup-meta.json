@@ -21,11 +21,7 @@
   "disable_bucket_query": false,
   "disable_collection_ttl_modification": false,
   "disable_cluster_query": false,
-  "disable_users": false,
+  "enable_users": false,
   "disable_cluster_analytics": false,
   "disable_analytics_queries": true
-
-
-
-
 }
