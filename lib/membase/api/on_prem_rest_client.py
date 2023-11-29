@@ -2328,7 +2328,7 @@ class RestConnection(object):
                 if len(tokens) == 1:
                     field = tokens[0]
                     index_map[field] = val
-        if not return_system_query_scope:
+        if not return_system_query_scope and 'status' in index_map:
             index_map_new = {'code': index_map['code'], 'status': []}
             for item in index_map['status']:
                 if item['scope'] != '_system' and item['collection'] != '_query':
