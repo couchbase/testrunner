@@ -3835,6 +3835,18 @@ class XDCRNewBaseTest(unittest.TestCase):
         if repl_restart_fail and restarted:
             self.fail("Replication restarted on one of the nodes, scroll above"
                       "for reason")
+            
+    def get_collection_names(self, bucket, master):
+        shell = RemoteMachineShellConnection(master)
+        output, error = shell.execute_cbstats(bucket, "collections",
+                                                   cbadmin_user="Administrator",
+                                                   options=" | grep ':name'")
+        shell.disconnect()
+        collection_names = []
+        if output:
+            for x in output:                
+                collection_names.append(x.split(":name:")[1].strip())
+        return collection_names, error
 
     def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute"):
 
@@ -3868,6 +3880,11 @@ class XDCRNewBaseTest(unittest.TestCase):
                             _count2 = 0
                             for node in nodes:
                                 _count2 += node["interestingStats"]["curr_items"]
+                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated
+                        if self._rdirection == "unidirection" and _count1 - _count2 == self._num_items and _count1 % self._num_items == 0:
+                            collections = self.get_collection_names(bucket, cb_cluster.get_master_node())
+                            if "_query" in collections[0]:
+                                _count1 -= self._num_items
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
