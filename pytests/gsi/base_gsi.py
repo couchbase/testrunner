@@ -1140,7 +1140,10 @@ class BaseSecondaryIndexingTests(QueryTests):
             raise Exception("All Items didn't get Indexed...")
         bucket_map = self.get_buckets_itemCount()
         for bucket in buckets:
-            bucket_count = bucket_map[bucket.name]
+            bucket_count = bucket_map[bucket.name] - self.stat.get_collection_item_count_cumulative(bucket,
+                                                                                                    CbServer.system_scope,
+                                                                                                    CbServer.query_collection,
+                                                                                                    self.get_kv_nodes())
             for query in query_definitions:
                 index_count = self.n1ql_helper.get_index_count_using_index(bucket,
                                                                            query.index_name, self.n1ql_node)

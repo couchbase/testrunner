@@ -1154,8 +1154,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.sleep(10)
             self.wait_until_indexes_online()
         except Exception as err:
-            err_msg = "Build index fails. Some index will be retried building in the background"
-            if err_msg in str(err):
+            err_msg1 = "Build index fails. Some index will be retried building in the background"
+            err_msg2 = "will retry building in the background for reason: Build Already In Progress"
+            if err_msg1 in str(err) or err_msg2 in str(err):
                 self.sleep(10)
                 result = self.wait_until_indexes_online()
                 if not result:
