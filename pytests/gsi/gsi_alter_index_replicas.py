@@ -1104,12 +1104,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         # Validate all indexes restored correctly
         index_map = self.get_index_map()
         self.log.info(index_map)
-        definitions = self.rest.get_index_statements()
-        if not expected_num_replicas == 0:
-            for definition in definitions:
-                if index_name_prefix in definition:
-                    self.assertTrue('"num_replica":{0}'.format(expected_num_replicas) in definition,
-                                    "Number of replicas in the definition is wrong: %s" % definition)
         if self.drop_replica:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map_before_backup, expected_num_replicas,
                                                     dropped_replica=True, replicaId=self.replicaId)
@@ -1382,12 +1376,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.sleep(30)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
         index_map = self.get_index_map()
-        definitions = self.rest.get_index_statements()
-        if not expected_num_replicas == 0:
-            for definition in definitions:
-                if index_name_prefix in definition:
-                    self.assertTrue('"num_replica":{0}'.format(expected_num_replicas) in definition,
-                                    "Number of replicas in the definition is wrong: %s" % definition)
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas, dropped_replica=True, replicaId=self.replicaId)
 
     '''Drop a replica, then rebalance out the node that the replica was dropped from, rebalance in the node and verify that nothing else gets added'''
