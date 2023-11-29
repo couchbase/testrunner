@@ -2728,10 +2728,10 @@ class QueryTests(BaseTestCase):
 
     def retrieve_rbac(self, type):
         if type == 'users':
-            url = "/settings/rbac/users"
+            url = "settings/rbac/users"
             prepend = " Retrieve User Roles"
         if type == 'roles':
-            url = "/settings/rbac/roles"
+            url = "settings/rbac/roles"
             prepend = " Retrieve all User roles"
         rest = RestConnection(self.master)
         api = rest.baseUrl + url
