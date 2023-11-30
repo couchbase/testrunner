@@ -414,3 +414,40 @@ class QueryWhitelistTests(QueryTests):
                         "Error message is %s this is incorrect it should be %s"
                         % (json_curl['errors'][0]['reason']['cause']['error'], error_msg))
 
+    def test_hosts_restriction(self):
+        allowed_urls = [
+            "http://localhost:8093/query/service",
+            "http://localhost:8092/foo/bar",
+            "http://9.9.9.9",
+            "http:127.0.0.1:8091/settings/querySettings"]
+        disallowed_urls = ["http:127.0.0.1:8091"]
+        self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": allowed_urls, "disallowed_urls": disallowed_urls})
+
+        url = "'http://9.9.9.9@localhost:8092'"
+        error_msg = f'Theendpointhttp://9.9.9.9@localhost:8092/isnotpermitted'
+        query = f'SELECT CURL({url})'
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue( error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"We expected {error_msg} but got {json_curl['errors'][0]['reason']['cause']['error']}")
+
+        url = "'http://localhost:8092/foo/bar/../..'"
+        error_msg = f"Theendpointhttp://localhost:8092/isnotpermitted"
+        query = f'SELECT CURL({url})'
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue( error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"We expected {error_msg} but got {json_curl['errors'][0]['reason']['cause']['error']}")
+
+        url = "'http://127.0.0.1:8091/settings/querySettings'"
+        error_msg = f'Theendpointhttp://127.0.0.1:8091/settings/querySettingsisnotpermitted'
+        options = f"{{'user':'{self.username}:{self.password}'}}"
+        query = f'SELECT CURL({url}, {options}) a'
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertTrue( error_msg in json_curl['errors'][0]['reason']['cause']['error'], f"We expected {error_msg} but got {json_curl['errors'][0]['reason']['cause']['error']}")
+
+        url = "'http://localhost:8093/query/service'"
+        options = f"{{'data':'statement=select 100 as one_hundred', 'user':'{self.username}:{self.password}'}}"
+        query = f'select curl({url}, {options}) curl_output'
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        json_curl = self.convert_to_json(curl)
+        self.assertEqual(json_curl['results'][0]['curl_output']['results'][0]['one_hundred'], 100)
