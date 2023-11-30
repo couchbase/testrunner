@@ -5677,7 +5677,7 @@ class RestConnection(object):
     '''
     def start_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url="/pools/default"
+        url = "pools/default"
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
