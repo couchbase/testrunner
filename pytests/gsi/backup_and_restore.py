@@ -706,9 +706,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         if remap_bucket != bucket:
             self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
             backup_client.set_restore_bucket(remap_bucket)
-        self.rest.create_scope(remap_bucket, scope)
-        self.rest.create_collection(remap_bucket, scope, collection)
-        self.sleep(5, "Allow scope-collection to be online")
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
         restore_result = backup_client.restore(use_https=self.use_https)
@@ -758,9 +755,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         if remap_bucket != bucket:
             self.rest.create_bucket(remap_bucket, ramQuotaMB=self.bucket_size)
             backup_client.set_restore_bucket(remap_bucket)
-        self.rest.create_scope(remap_bucket, scope)
-        self.rest.create_collection(remap_bucket, scope, collection)
-        self.sleep(5, "Allow scope-collection to be online")
         if self.bucket_remap:
             self.rest.delete_bucket(backup_client.backup_bucket)
         restore_result = backup_client.restore(use_https=self.use_https)
