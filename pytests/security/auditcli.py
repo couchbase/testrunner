@@ -13,6 +13,9 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from security.auditmain import audit
+from security.ldaptest import ldaptest
+from security.rbac_base import RbacBase
+from security.rbacmain import rbacmain
 import socket
 import random
 import zlib
@@ -20,7 +23,7 @@ import subprocess
 import urllib.request, urllib.parse, urllib.error
 
 
-class auditcli(BaseTestCase):
+class auditcli(ldaptest):
     def setUp(self):
         self.times_teardown_called = 1
         super(auditcli, self).setUp()
@@ -57,15 +60,33 @@ class auditcli(BaseTestCase):
         self.ldapUser = self.input.param('ldapUser', 'Administrator')
         self.ldapPass = self.input.param('ldapPass', 'password')
         self.source = self.input.param('source', 'ns_server')
+        self.user_id = "{}:{}".format(self.ldapUser, self.ldapPass)
+        self.ldap_users = rbacmain().returnUserList(self.user_id)
         if type == 'windows' and self.source == 'saslauthd':
             raise Exception(" Ldap Tests cannot run on windows");
         else:
             if self.source == 'saslauthd':
                 self.auth_type = 'sasl'
+                # rest = RestConnection(self.master)
+                # self.setupLDAPSettings(rest)
+                # #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
+                # self.set_user_role(rest, self.ldapUser)
+
                 rest = RestConnection(self.master)
-                self.setupLDAPSettings(rest)
-                #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
-                self.set_user_role(rest, self.ldapUser)
+                param = {
+                    'hosts': '{0}'.format("172.23.120.205"),
+                    'port': '{0}'.format("389"),
+                    'encryption': '{0}'.format("None"),
+                    'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+                    'bindPass': '{0}'.format("p@ssword"),
+                    'authenticationEnabled': '{0}'.format("true"),
+                    'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
+                }
+                rest.setup_ldap(param, '')
+                # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
+                RbacBase().enable_ldap(rest)
+                self._removeLdapUserRemote(self.ldap_users)
+                self._createLDAPUser(self.ldap_users)
 
     def tearDown(self):
         super(auditcli, self).tearDown()
