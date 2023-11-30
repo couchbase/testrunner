@@ -205,9 +205,9 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query="PREPARE P1 FROM select * fro {0}".format(self.query_bucket),
                                server=self.servers[0])
         except CBQError as ex:
-            self.log.error(ex)
-            self.assertTrue(str(ex).find("syntax error - line 1, column 26, near 'ARE P1 FROM select *', at: fro") != -1,
-                            "Error is incorrect.")
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 3000, f"Expected code is 3000 but got {error['code']}")
+            self.assertEqual(error['msg'], "syntax error - line 1, column 26, near '...RE P1 FROM select * ', at: fro", f"Got {error['msg']} instead of expected")
 
     ''' Change query settings so that normal queries are automatically cached'''
 
