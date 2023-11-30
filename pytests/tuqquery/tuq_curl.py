@@ -1167,3 +1167,45 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg, f"Actual cause is {json_curl['results'][0]['$1']['errors'][0]['msg']}")
+
+    def test_restrict_endpoint(self):
+        top_error = "Errorevaluatingprojection"
+        url = "'http://localhost:8091/diag/eval/'"
+        options = f"{{'data':'cluster_compat_mode:mb_master_advertised_version()', 'user':'{self.username}:{self.password}'}}"
+        query = f'select curl({url}, {options} )'
+        self.log.info(f"query: {query}")
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("Accessrestricted" in actual_curl['errors'][0]['reason']['cause']['error'])
+
+        top_error = "Errorevaluatingprojection"
+        url = "'http://127.0.0.1:8091//diag//eval///'"
+        options = f"{{'data':'cluster_compat_mode:mb_master_advertised_version()', 'user':'{self.username}:{self.password}'}}"
+        query = f'select curl({url}, {options} )'
+        self.log.info(f"query: {query}")
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("Accessrestricted" in actual_curl['errors'][0]['reason']['cause']['error'])
+
+        top_error = "Errorevaluatingprojection"
+        url = "'http://127.0.0.1:8091/diag/eval/hello/city'"
+        options = f"{{'data':'cluster_compat_mode:mb_master_advertised_version()', 'user':'{self.username}:{self.password}'}}"
+        query = f'select curl({url}, {options} )'
+        self.log.info(f"query: {query}")
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("Accessrestricted" in actual_curl['errors'][0]['reason']['cause']['error'])
+
+        top_error = "Errorevaluatingprojection"
+        url = "'http://127.0.0.1:8091/hello/diag/eval'"
+        options = f"{{'data':'cluster_compat_mode:mb_master_advertised_version()', 'user':'{self.username}:{self.password}'}}"
+        query = f'select curl({url}, {options} )'
+        self.log.info(f"query: {query}")
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
+        actual_curl = self.convert_to_json(curl)
+        self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
+        self.assertTrue("InvalidJSONendpoint" in actual_curl['errors'][0]['reason']['cause']['error'])
+>>>>>>> CHANGE (8c15b6 New test case for restricted url)
