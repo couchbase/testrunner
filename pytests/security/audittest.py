@@ -22,6 +22,7 @@ import logger
 import urllib.request, urllib.parse, urllib.error
 from security.auditmain import audit
 from security.ldaptest import ldaptest
+from security.rbac_base import RbacBase
 import socket
 
 from pytests.security.x509_multiple_CA_util import x509main
@@ -44,7 +45,7 @@ class auditTest(BaseTestCase):
         except Exception as ex:
             log.info ('Exception while generating ip address {0}'.format(ex))
             self.ipAddress = '127.0.0.1'
-        self.eventID = self.input.param('id', None)       
+        self.eventID = self.input.param('id', None)
         currentState = auditTemp.getAuditStatus()
         self.log.info("Current status of audit on ip - {0} is {1}".format(self.master.ip, currentState))
         if not currentState:
@@ -52,12 +53,24 @@ class auditTest(BaseTestCase):
             auditTemp.setAuditEnable('true')
             self.sleep(30)
         rest = RestConnection(self.master)
-        self.setupLDAPSettings(rest)
+        #self.setupLDAPSettings(rest)
+        param = {
+            'hosts': '{0}'.format("172.23.120.205"),
+            'port': '{0}'.format("389"),
+            'encryption': '{0}'.format("None"),
+            'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+            'bindPass': '{0}'.format("p@ssword"),
+            'authenticationEnabled': '{0}'.format("true"),
+            'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
+        }
+        rest.setup_ldap(param, '')
+        # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
+        RbacBase().enable_ldap(rest)
 
     def tearDown(self):
         super(auditTest, self).tearDown()
 
-    
+
 
     def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
