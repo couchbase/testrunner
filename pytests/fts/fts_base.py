@@ -1368,7 +1368,7 @@ class FTSIndex:
     def get_index_defn(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
-        return rest.get_fts_index_definition(self.name)
+        return rest.get_fts_index_definition(self.name, bucket=self._source_name, scope=self.scope)
 
     def get_max_partitions_pindex(self):
         _, defn = self.get_index_defn()
@@ -2693,13 +2693,13 @@ class CouchbaseCluster:
 
     def delete_fts_index(self, name):
         """ Delete an FTSIndex object with the given name from a given node """
-        for index in self.__indexes:
+        for index in self.__indexes.copy():
             if index.name == name:
                 index.delete()
 
     def delete_all_fts_indexes(self):
         """ Delete all FTSIndexes from a given node """
-        for index in self.__indexes:
+        for index in self.__indexes.copy():
             index.delete()
 
     def clean_fts_indexes_array(self):
