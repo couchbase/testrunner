@@ -577,130 +577,94 @@ class ScalarFunctionsTests(QueryTests):
         self.query_runner(test_dict)
 
     def test_coalesce_negative_zero_params(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function coalesce must be between 2 and 32767."
         try:
             self.run_cbq_query('select coalesce() from system:dual')
+            self.fail("coalesce should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function coalesce (near line 1, column 15) must be between 2 and 32767.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_coalesce_negative_one_param(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function coalesce must be between 2 and 32767 (near line 1, column 17)."
         try:
             self.run_cbq_query("select coalesce('param1') from system:dual")
+            self.fail("coalesce should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function coalesce (near line 1, column 15) must be between 2 and 32767.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl2_negative_zero_params(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl2 must be 3."
         try:
             self.run_cbq_query("select nvl2() from system:dual")
+            self.fail("nvl2 should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl_negative_zero_params(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl must be 2."
         try:
             self.run_cbq_query("select nvl() from system:dual")
+            self.fail("nvl should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl (near line 1, column 10) must be 2.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl2_negative_one_param(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl2 must be 3 (near line 1, column 13)."
         try:
             self.run_cbq_query("select nvl2('param1') from system:dual")
+            self.fail("nvl2 should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl_negative_one_param(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl must be 2 (near line 1, column 12)."
         try:
             self.run_cbq_query("select nvl('param1') from system:dual")
+            self.fail("nvl should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl (near line 1, column 10) must be 2.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl2_negative_two_params(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl2 must be 3 (near line 1, column 13)."
         try:
             self.run_cbq_query("select nvl2('param1', 'param2') from system:dual")
+            self.fail("nvl2 should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl_negative_three_params(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl must be 2 (near line 1, column 12)."
         try:
             self.run_cbq_query("select nvl('param1','param2','param3') from system:dual")
+            self.fail("nvl should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl (near line 1, column 10) must be 2.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     def test_nvl2_negative_four_params(self):
-        is_err_detected = False
-        is_err_message_correct = False
-
+        error_message = "Number of arguments to function nvl2 must be 3 (near line 1, column 13)."
         try:
             self.run_cbq_query("select nvl2('param1','param2','param3','param4') from system:dual")
+            self.fail("nvl2 should have failed")
         except CBQError as e:
-            is_err_detected = True
-            is_err_message_correct = str(e).lower().find(
-                'Number of arguments to function nvl2 (near line 1, column 11) must be 3.'.lower()) > -1
-
-        self.assertTrue(is_err_detected)
-        self.assertTrue(is_err_message_correct)
+            error = self.process_CBQE(e)
+            self.assertEqual(error['code'], 3000)
+            self.assertEqual(error['msg'], error_message, f"We expected {error_message} but got {error['msg']}")
 
     scalars_test_data = {'not_null_1': {'key': 'key1', 'value': 'val1'},
                          'not_null_2': {'key': 'key2', 'value': 'val2'},
