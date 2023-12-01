@@ -184,7 +184,7 @@ class AdvancedQueryTests(QueryTests):
                     self.run_cbq_query()
                     self.query = 'select * from default'
                     self.run_cbq_query()
-                self.assertTrue("timeout" in o)
+                self.assertTrue("timeout" in o or "Timeout" in o)
             finally:
                 shell.disconnect()
 
