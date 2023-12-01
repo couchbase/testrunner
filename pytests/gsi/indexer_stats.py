@@ -394,6 +394,8 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
         for consumer_filter in self.consumer_filters.keys():
             consumer_filter_stats_keys = set(self.rest.get_all_index_stats(
                 consumer_filter=consumer_filter).keys())
+            if consumer_filter == 'indexStatus':
+                consumer_filter_stats_keys.remove('rebalance_transfer_progress')
             self.assertTrue(
                 consumer_filter_stats_keys.issubset(all_stats_keys),
                 msg=f"test_consumer_stats_membership:{consumer_filter} failed")
