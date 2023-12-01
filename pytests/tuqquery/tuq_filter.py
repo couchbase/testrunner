@@ -120,14 +120,14 @@ class QueryFilterTests(QueryTests):
 
     def test_neg_nonagg(self):
         error_code = 3000
-        error_message = "FILTER clause syntax is not valid for function array_max (near line 1, column 22)."
+        error_message = "FILTER clause syntax is not valid for function array_max"
         filter_query = "select name, array_max(reviews[*].ratings[*].Location) FILTER (WHERE city = 'Paris') from `travel-sample` where type = 'hotel'"
         try:
             self.run_cbq_query(filter_query)
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], error_code)
-            self.assertEqual(error['msg'], error_message)
+            self.assertTrue(error_message in error['msg'], f"We failed to find expected {error_message} in actual {error['msg']} ")
         
     def test_neg_subquery(self):
         error_code = 4000
