@@ -3110,6 +3110,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._client_cert = self._input.param("client_cert", None)
         self._client_key = self._input.param("client_key", None)
         self._use_https = self._input.param("use_https", False)
+        self._version_pruning_window_hrs = self._input.param("version_pruning_window_hrs", None)
+        self._enable_cross_cluster_versioning = self._input.param("enable_cross_cluster_versioning", None)
 
     def __initialize_error_count_dict(self):
         """
@@ -3618,6 +3620,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                             src_bucket.name))
 
     def setup_xdcr(self):
+        if self._enable_cross_cluster_versioning != None or self._version_pruning_window_hrs != None:
+            for cb_cluster in self.__cb_clusters:
+                rest1 = RestConnection(cb_cluster.get_master_node())
+                for bucket in cb_cluster.get_buckets():
+                    self.log.info("Mobile settings: Enable cross cluster versioning: {0}, Version pruning window hours: {1}".format(self._enable_cross_cluster_versioning, self._version_pruning_window_hrs))               
+                    if self._enable_cross_cluster_versioning != None:
+                        test = rest1.change_bucket_props(bucket, enableCrossClusterVersioning=str(self._enable_cross_cluster_versioning).lower())
+                        self.log.info("{0}".format(test))
+                    if self._version_pruning_window_hrs != None and self._version_pruning_window_hrs >= 24:
+                        test = rest1.change_bucket_props(bucket, versionPruningWindowHrs=self._version_pruning_window_hrs)
+                        self.log.info("{0}".format(test))
         self.set_xdcr_topology()
         # Adding for MB-41318
         time.sleep(10)

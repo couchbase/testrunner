@@ -3300,7 +3300,9 @@ class RestConnection(object):
                       flushEnabled=None,
                       timeSynchronization=None,
                       maxTTL=None,
-                      compressionMode=None):
+                      compressionMode=None,
+                      enableCrossClusterVersioning=None,
+                      versionPruningWindowHrs=None):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -3323,6 +3325,10 @@ class RestConnection(object):
             params_dict["maxTTL"] = maxTTL
         if compressionMode and self.is_enterprise_edition():
             params_dict["compressionMode"] = compressionMode
+        if enableCrossClusterVersioning:
+            params_dict["enableCrossClusterVersioning"] = enableCrossClusterVersioning
+        if versionPruningWindowHrs:
+            params_dict["versionPruningWindowHrs"] = versionPruningWindowHrs
 
         params = urllib.parse.urlencode(params_dict)
 
