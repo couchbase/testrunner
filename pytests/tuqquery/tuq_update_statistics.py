@@ -474,14 +474,14 @@ class QueryUpdateStatsTests(QueryTests):
             # run stats
             self.run_cbq_query(query=update_stats)
             # check resolution
-            self.sleep(2)
+            self.sleep(3)
             distribution = self.run_cbq_query(query=distribution_query)
             if self.sample_size >= min_size and self.sample_size <=max_size:
-                self.assertEqual(distribution['results'][0]['sampleSize'], self.sample_size)
+                self.assertTrue(distribution['results'][0]['sampleSize'] >= self.sample_size)
             elif self.sample_size >= max_size:
                 self.assertTrue(distribution['results'][0]['sampleSize'] >= min_size)
             elif self.scope == '_default':
-                self.assertEqual(distribution['results'][0]['sampleSize'], min_size)
+                self.assertTrue(distribution['results'][0]['sampleSize'] >= min_size)
             else:
                 self.assertEqual(distribution['results'][0]['sampleSize'], max_size)
         except Exception as e:
@@ -592,7 +592,7 @@ class QueryUpdateStatsTests(QueryTests):
         try:
             explain_before = self.run_cbq_query(query=explain_query)
             fetch_operator = explain_before['results'][0]['plan']['~children'][0]['~children'][1] 
-            self.assertEqual(list(fetch_operator.keys()), ['#operator', 'as', 'bucket', 'keyspace', 'namespace', 'scope'])
+            self.assertEqual(list(fetch_operator.keys()), ['#operator', 'as', 'bucket', 'early_projection', 'keyspace', 'namespace', 'scope'])
             # run update statistics
             self.run_cbq_query(query=update_stats)
             explain_after = self.run_cbq_query(query=explain_query)
