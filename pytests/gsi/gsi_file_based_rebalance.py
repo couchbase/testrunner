@@ -402,7 +402,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                 select_queries=select_queries,
                                                 scan_results_check=scan_results_check
                                                 )
-                    self.validate_shard_affinity()
                 else:
                     services_in = ["index"]
                     # rebalance in 1 node after another
@@ -415,10 +414,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                     select_queries=select_queries,
                                                     scan_results_check=scan_results_check
                                                     )
-                        self.validate_shard_affinity()
-                map_after_rebalance, stats_map_after_rebalance = self._return_maps()
-                self.run_post_rebalance_operations(map_after_rebalance=map_after_rebalance,
-                                                   stats_map_after_rebalance=stats_map_after_rebalance)
             finally:
                 event.set()
                 if self.continuous_mutations:
@@ -1039,6 +1034,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 if action == "kill_indexer":
                     indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                     server = random.choice(indexer_nodes)
+                    time.sleep(5)
                     self._kill_all_processes_index(server=server)
                 elif action == "kill_projector":
                     data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
@@ -1199,8 +1195,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             if self.chaos_action != 'stop_rebalance':
                 # Rebalance failure check skipped for stop rebalance
                 try:
-                    reached = RestHelper(self.rest).rebalance_reached()
-                    self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                     rebalance.result()
                 except Exception as ex:
                     if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):

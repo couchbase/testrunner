@@ -2587,7 +2587,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def perform_rebalance_during_ddl(self, nodes_in_list, nodes_out_list, services_in):
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         tasks = []
-        for _ in range(3):
+        for _ in range(5):
             replica_count = random.randint(0, 2)
             query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
             for namespace in self.namespaces:
@@ -2598,11 +2598,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                 with ThreadPoolExecutor() as executor:
                     for query in create_queries:
                         tasks.append(executor.submit(self.run_cbq_query, query=query, server=query_node))
-        try:
-            for task in tasks:
-                task.result()
-        except Exception as err:
-            print(err)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                  services=services_in, cluster_config=self.cluster_config)
         self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
