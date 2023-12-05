@@ -380,7 +380,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
                 post_rebalance_in_map = self.get_index_map()
-                self.assertNotEqual(pre_rebalance_in_map, post_rebalance_in_map)
+                self.assertEqual(pre_rebalance_in_map, post_rebalance_in_map)
 
     '''Do the same alter index tests on an index created with a node list'''
     def test_alter_index_with_node_list(self):
