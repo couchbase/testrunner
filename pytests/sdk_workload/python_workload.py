@@ -148,8 +148,8 @@ class PythonSdkWorkload(unittest.TestCase):
         self.bucket_list = self.input.capella.get("bucket_list",
                                                   '{"bucket-1":{"saurabh": ["col-1", "col-2", "col-3", "col-4", "col-5"]},'
                                                   '"bucket-2": {"saurabh": ["col-1", "col-2", "col-3", "col-4", "col-5"]}}')
-        self.user_name = self.input.param("username", "RunWorkloadUser-1")
-        self.user_pass = self.input.param("password", "RunWorkloadUser@123")
+        self.user_name = self.input.capella.get("username", "RunWorkloadUser-1")
+        self.user_pass = self.input.capella.get("password", "RunWorkloadUser@123")
         self.duration = self.input.capella.get("duration", 3600)
         self.bucket_list = json.loads(self.bucket_list)
         self.number_of_threads = self.input.param("number_of_threads", 10)
