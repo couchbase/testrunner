@@ -2339,10 +2339,10 @@ class OnPremBaseTestCase(unittest.TestCase):
         output = ""
         for bucket in list(vbucketseq.keys()):
             for vbucket in list(vbucketseq[bucket].keys()):
-                seq = vbucketseq[bucket][vbucket]['abs_high_seqno']
-                uuid = vbucketseq[bucket][vbucket]['uuid']
-                fseq = failoverlog[bucket][vbucket]['seq']
-                fuuid = failoverlog[bucket][vbucket]['id']
+                seq = int(vbucketseq[bucket][vbucket]['abs_high_seqno'])
+                uuid = int(vbucketseq[bucket][vbucket]['uuid'])
+                fseq = int(failoverlog[bucket][vbucket]['seq'])
+                fuuid = int(failoverlog[bucket][vbucket]['id'])
                 if seq < fseq:
                     output += "\n Error Condition in bucket {0} vbucket {1}:: seq : vbucket-seq {2} != failoverlog-seq {3}".format(
                         bucket, vbucket, seq, fseq)
