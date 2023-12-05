@@ -895,7 +895,7 @@ class QueryCurlTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['reason']['cause']['error'],
-                         "InvalidJSONendpointhttp://google.com")
+                         "InvalidJSONendpointhttp://google.com/")
 
     '''Test if a protected bucket can be accessed without giving its password'''
 
