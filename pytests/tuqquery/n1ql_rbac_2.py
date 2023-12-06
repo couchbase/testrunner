@@ -1115,6 +1115,8 @@ class RbacN1QL(QueryTests):
         # #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
+        if ",query_system_catalog" in role:
+            role = role.split(",")[0]
         self.system_catalog_helper_select("test_query_select_role", role)
         self.select_my_user_info()
 

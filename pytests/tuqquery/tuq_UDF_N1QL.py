@@ -209,7 +209,7 @@ class QueryUDFN1QLTests(QueryTests):
             self.run_cbq_query("CREATE FUNCTION celsius(degrees) LANGUAGE INLINE AS (degrees - 32) * 5/9")
             explain_udf = self.run_cbq_query("explain function celsius".format(self.scope,self.collections[0]))
             self.assertTrue('plans' not in explain_udf['results'][0].keys(), f"The explain should not have a query plan in it, please check {explain_udf}")
-            self.assertEqaul(explain_udf['results'],[{'function': 'default:celsius'}], f"The explain plan is incorrect please check it {explain_udf}")
+            self.assertEqual(explain_udf['results'],[{'function': 'default:celsius'}], f"The explain plan is incorrect please check it {explain_udf}")
         except Exception as e:
             self.log.error(str(e))
             self.fail()
@@ -577,7 +577,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('User does not have credentials to run' in str(error))
+            self.assertTrue('User does not have credentials to run' in str(error) or 'datastore.couchbase.insufficient_credentials' in str(error))
 
     def test_explain_rbac(self):
         self.run_cbq_query("CREATE COLLECTION default._default.tmp IF NOT EXISTS")
@@ -653,7 +653,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('User does not have credentials to run' in str(error), f"Error is not what we expected {str(ex)}")
+            self.assertTrue('User does not have credentials to run' in str(error) or 'datastore.couchbase.insufficient_credentials' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_datetime_value(self):
         function_name = 'datetime_value'

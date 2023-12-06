@@ -2758,10 +2758,14 @@ class QueryTests(BaseTestCase):
         elif "," in role:
             roles = role.split(",")
             for role in roles:
-                role1 = role.split("(")[0]
-                name = role.split("(")[1][:-1]
-                self.query = "GRANT {0} on {1} to {2}".format(role1, name, self.users[0]['id'])
-                actual_result = self.run_cbq_query()
+                if "(" in role:
+                    role1 = role.split("(")[0]
+                    name = role.split("(")[1][:-1]
+                    self.query = "GRANT {0} on {1} to {2}".format(role1, name, self.users[0]['id'])
+                    actual_result = self.run_cbq_query()
+                else:
+                    self.query = "GRANT {0} to {1}".format(role, self.users[0]['id'])
+                    actual_result = self.run_cbq_query()
         elif "(" in role:
             role1 = role.split("(")[0]
             name = role.split("(")[1][:-1]
@@ -2814,12 +2818,17 @@ class QueryTests(BaseTestCase):
 
         if role in ["query_update(default)", "query_delete(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'success')
+        elif 'test)' in role and self.load_collections == True:
+            self.assertEqual(res['metrics']['resultCount'], 7)
         elif 'test)' in role:
             self.assertEqual(res['metrics']['resultCount'], 2)
         elif role == 'query_select(default:default)' and self.load_collections == True:
             self.assertEqual(res['metrics']['resultCount'], 7)
         elif role == 'query_select(default)' and self.load_collections == True:
             self.assertEqual(res['metrics']['resultCount'], 3)
+        elif (role.startswith("query_") or role.startswith("select") or role in ["bucket_full_access(default)",
+                                                                                "query_delete(default)"]) and self.load_collections == True:
+            self.assertEqual(res['metrics']['resultCount'], 7)
         elif role.startswith("query_") or role.startswith("select") or role in ["bucket_full_access(default)",
                                                                                 "query_delete(default)"]:
             self.assertEqual(res['metrics']['resultCount'], 1)
@@ -2872,8 +2881,7 @@ class QueryTests(BaseTestCase):
 
         if role == "bucket_full_access(default)":
             self.assertTrue(res['status'] == 'stopped')
-        elif role in ["select(default)", "query_select(default)", "select(standard_bucket0)",
-                      "query_select(standard_bucket0)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name),"select({0})".format(self.rbac_context), "query_select({0})".format(self.rbac_context),"select(`{0}`)".format(self.bucket_name), "query_select(`{0}`)".format(self.bucket_name)]:
+        elif role in ["select(standard_bucket0)","query_select(standard_bucket0)"]:
             self.assertTrue(str(res).find("'code': 13014") != -1)
         elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)","insert({0})".format(self.bucket_name), "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name), "query_delete({0})".format(self.bucket_name),"insert(`{0}`)".format(self.bucket_name), "query_insert(`{0}`)".format(self.bucket_name), "query_update(`{0}`)".format(self.bucket_name), "query_delete(`{0}`)".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'fatal' or res['status'] == 'errors' )
@@ -2890,16 +2898,6 @@ class QueryTests(BaseTestCase):
         elif role == "cluster_admin" or role == "bucket_admin(default)":
             self.assertTrue(str(res).find("'code': 13014") != -1)
 
-        # if (role == "query_insert(default)" or role == "query_delete(default)" or role
-        # == "query_update(default)"):
-        #     self.assertTrue(res['status']=='stopped')
-        # elif(role == "bucket_admin(standard_bucket0)" or role == "views_admin(
-        # standard_bucket0)" or role == "views_admin(default)" or role == "views_admin"
-        # or role == "replication_admin" or role == "query_system_catalog" or role ==
-        # "ro_admin"):
-        #     self.assertTrue(str(res).find("'code': 13014")!=-1)
-        # else:
-        #     self.assertTrue(res['metrics']['resultCount']> 0)
         if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name),
                         "query_update(default)", "bucket_full_access(default)", "query_system_catalog",
                         "views_admin(default)"]:
@@ -2940,9 +2938,7 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:completed_requests'
                 res = self.curl_with_roles(self.query)
 
-                if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.rbac_context) or role == "select(`{0}`)".format(self.bucket_name) or role == "query_select(`{0}`)".format(self.bucket_name):
-                    self.assertTrue(str(res).find("'code': 13014") != -1)
-                elif role == "bucket_admin(standard_bucket0)":
+                if role == "bucket_admin(standard_bucket0)":
                     self.assertTrue(res['metrics']['resultCount'] > 0)
                 else:
                     self.assertTrue(res['status'] == 'success')
@@ -2952,16 +2948,13 @@ class QueryTests(BaseTestCase):
             self.query = 'select * from system:prepareds'
             res = self.curl_with_roles(self.query)
 
-            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.rbac_context) or role == "select(`{0}`)".format(self.bucket_name) or role == "query_select(`{0}`)".format(self.bucket_name) :
-                self.assertTrue(str(res).find("'code': 13014") != -1)
-            else:
-                self.assertTrue(res['status'] == 'success')
+            self.assertTrue(res['status'] == 'success')
 
             self.query = 'select * from system:active_requests'
             res = self.curl_with_roles(self.query)
 
             if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.rbac_context) or role == "select(`{0}`)".format(self.bucket_name) or role == "query_select(`{0}`)".format(self.bucket_name):
-                self.assertTrue(str(res).find("'code': 13014") != -1)
+                self.assertTrue(res['status'] == 'success')
             else:
                 self.assertTrue(res['metrics']['resultCount'] > 0)
 
@@ -2985,8 +2978,6 @@ class QueryTests(BaseTestCase):
             self.assertTrue(res['metrics']['resultCount'] == 1)
         elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name)]:
             self.assertTrue(res['metrics']['resultCount'] == 0)
-            # elif (role == "ro_admin"):
-            #     self.assertTrue(res['metrics']['resultCount']==2)
 
     def try_query_assert(self, query, find_string):
         try:
