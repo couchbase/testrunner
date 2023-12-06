@@ -1008,11 +1008,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.assertNotEqual(len(result), 0, "Drop Index didn't work as expected")
             self.sleep(10)
             status = self.rest.get_index_status()
-            if not self.capella_run:
-                if self.cb_version >= 7.5:
-                    self.assertEqual(len(status[self.test_bucket]), 3, f"Fail to drop replica of idx index: {status}")
-            else:
-                self.assertEqual(len(status[self.test_bucket]), 1, f"Fail to drop replica of idx index: {status}")
+            self.assertEqual(len(status[self.test_bucket]), 1, f"Fail to drop replica of idx index: {status}")
         except Exception as err:
             self.fail(f'Failed to Drop Index on empty collection: {str(err)}')
 

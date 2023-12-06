@@ -74,6 +74,7 @@ class ReplicaRepair(BaseSecondaryIndexingTests):
             rest.set_index_planner_settings(index_setting)
             value = rest.get_exclude_node_value()
             self.log.info(f"Setting planner value on {node} to {value}")
+        self.sleep(30, "Adding sleep so that indexer reads the setting changed")
 
         try:
             node_out = index_nodes[-1]

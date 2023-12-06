@@ -1419,14 +1419,14 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                     self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                     rebalance.result()
 
-        # Replica that was removed should not be re-created because it is not a broken replica
+        # Replica that was removed should be re-created because it is not a broken replica
         pre_rebalance_in_map = self.get_index_map()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[rebalance_in_server]], [],services=["index"])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         post_rebalance_in_map = self.get_index_map()
-        self.assertEqual(pre_rebalance_in_map, post_rebalance_in_map)
+        self.assertNotEqual(pre_rebalance_in_map, post_rebalance_in_map)
 
     '''Attempt to drop an unhealthy replica'''
     def test_alter_index_drop_unhealthy_replica(self):

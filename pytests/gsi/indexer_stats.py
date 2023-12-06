@@ -413,7 +413,7 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
                 (len(stats['index_level_stats']) * self.index_count)
 
             metadata = self.rest.get_indexer_metadata(return_system_query_scope=True)['status']
-            system_scope_instance_ids = set([index['instId'] for index in metadata if index['scope'] == '_system'])
+            system_scope_instance_ids = set([f"{index['instId']}:completion_progress" for index in metadata if index['scope'] == '_system'])
             if consumer_filter == 'indexStatus':
                 consumer_filter_stats_keys -= system_scope_instance_ids
 
