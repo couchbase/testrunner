@@ -850,9 +850,14 @@ class SanityTrigger:
         for plat in self.plats.keys():
             if self.plats[plat]:
                 # QQQ Assumes format of filename unique to couchbase-server
-                files = glob.glob("{}/couchbase-server-enterprise?{}*{}*".format(
-                    bld_dir, self.version, plat
-                ))
+                if plat == "windows" or plat == "macos":
+                    files = glob.glob("{}/couchbase-server-enterprise?{}*{}*".format(
+                        bld_dir, self.version, plat
+                    ))
+                else:
+                    files = glob.glob("{}/couchbase-server-enterprise?{}*linux*".format(
+                        bld_dir, self.version
+                    ))
                 files = [x for x in files if not (x.endswith(".md5") or x.endswith(".sha256"))]
                 if len(files) == 0:
                     print ("Platform {} is missing".format(plat))
