@@ -262,3 +262,13 @@ class EventingCurl(EventingBaseTest):
             self.verify_doc_count_collections("dst_bucket._default._default",
                                               self.docs_per_day * self.num_docs * 3)
             self.undeploy_and_delete_function(body)
+
+        # MB-59742
+        def test_curl_access_to_diag_eval_via_multiple_slashes_in_the_path(self):
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            self.deploy_function(body)
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+            self.undeploy_and_delete_function(body)
