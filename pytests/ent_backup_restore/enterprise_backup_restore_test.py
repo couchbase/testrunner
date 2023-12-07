@@ -5309,7 +5309,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
             """
             expected_keys = [u'archive_uuid', u'name', u'repos']
-            self.assertTrue(set(expected_keys).issubset(arch.keys()))
+            self.assertTrue(set(expected_keys).issubset(list(arch.keys())), "Expected {} to be a subset of {}, in a unicode format".format(str(expected_keys), str(list(arch.keys()))))
 
             archive_uuid, name, repos = [arch[key] for key in expected_keys]
 
@@ -5453,14 +5453,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         # Perform tests
         for use_json, all_flag in itertools.product(json_options, all_flag_options):
-            output_logs(0, use_json, all_flag)
+            # Gilad: In case that we are testing without the --json flag, don't validate the output,
+            # just verify there is no error. The output needs some parsing as it's just a print to the console,
+            # and the values are the same as with the --json flag (unless something goes incredibly wrong),
+            # so there is little value in adding additional complexity.
 
+            output_logs(0, use_json, all_flag)
             # cbbackupmgr info --archive
             arch = parse_output(use_json, self.get_backup_info(json=use_json, all_flag=all_flag))
-            print_tree(arch)
-            repos = check_arch(arch)
 
-            if all_flag:
+            print_tree(arch)
+            if use_json:
+                repos = check_arch(arch)
+
+            if all_flag and use_json:
                 [check_buck(buck) for repo in repos for back in check_repo(repo) for buck in check_back(back)]
 
             if flag_depth < 1:
@@ -5472,9 +5478,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             for repo_name in expected_repos:
                 repo = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, all_flag=all_flag))
                 print_tree(repo)
-                backs = check_repo(repo)
+                if use_json:
+                    backs = check_repo(repo)
 
-                if all_flag:
+                if all_flag and use_json:
                     [check_buck(buck) for back in backs for buck in check_back(back)]
 
             if flag_depth < 2:
@@ -5487,9 +5494,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 for back_name in expected_backs[repo_name]:
                     back = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, backup=back_name, all_flag=all_flag))
                     print_tree(back)
-                    bucks = check_back(back)
+                    if use_json:
+                        bucks = check_back(back)
 
-                    if all_flag:
+                    if all_flag and use_json:
                         [check_buck(buck) for buck in bucks]
 
             if flag_depth < 3:
@@ -5504,4 +5512,5 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         buck = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name,
                                             backup=back_name, collection_string=buck_name, all_flag=all_flag))
                         print_tree(buck)
-                        check_buck(buck)
+                        if use_json:
+                            check_buck(buck)
