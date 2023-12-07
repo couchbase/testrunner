@@ -30,7 +30,7 @@ class CreateBucketTests(BaseTestCase):
         self.node_version = self.rest.get_nodes_version()
         self.total_items_travel_sample = 31569
         # Toy build or Greater than CC build
-        if self.node_version[:3] == "0.0" or self.node_version[:3] >= "7.0":
+        if float(self.node_version[:3]) == 0.0 or float(self.node_version[:3]) >= 7.0:
             self.total_items_travel_sample = 63288
         else:
             self.total_items_travel_sample = 63182
