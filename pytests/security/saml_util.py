@@ -10,6 +10,8 @@ class SAMLUtils:
     def __init__(self, logger):
         self.log = logger
         self.saml_resources = None
+        self.idp_metadata = None
+        self.idp_id = None
         self.initialize_file_paths()
 
     def initialize_file_paths(self):
@@ -20,6 +22,18 @@ class SAMLUtils:
         url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
         bucket = Bucket(url, username=username, password=password)
         self.saml_resources = bucket.get("saml_resources").value
+        self.idp_metadata = bucket.get("idpMetadata").value
+        self.idp_id = bucket.get("idp_id").value
+
+    def upload_idp_metadata(self, idp_id, idp_metadata):
+        bucket_name = "saml_tests_resources"
+        ip = "172.23.124.12"
+        username = "saml_test_user"
+        password = "password"
+        url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
+        bucket = Bucket(url, username=username, password=password)
+        bucket.upsert('idpMetadata', {'idpMetadata': idp_metadata})
+        bucket.upsert('idp_id', {'idp_id': idp_id})
 
     def saml_auth_url(self, cluster):
         """
@@ -281,3 +295,420 @@ class SAMLUtils:
                                params={'id': error_id})
         error_msg = response.json()['error']
         return error_msg
+
+    def delete_okta_applications(self, okta_account="https://dev-82235514.okta.com/"):
+        header = {
+            'Content-Type': 'application/json',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Authorization': 'SSWS 00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux'
+        }
+        resp = requests.get(okta_account + "api/v1/apps",
+                            headers=header,
+                            timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+        app_list = json.loads(resp.content.decode())
+        for app in app_list:
+            app_label = app["label"]
+            if app_label == "shaazin":
+                resp = requests.post(
+                    okta_account + "api/v1/apps/" + app["id"] + "/lifecycle/deactivate",
+                    headers=header,
+                    timeout=300, verify=False, allow_redirects=False)
+                assert resp.status_code == 200
+                resp = requests.delete(
+                    okta_account + "api/v1/apps/" + app["id"],
+                    headers=header,
+                    timeout=300, verify=False, allow_redirects=False)
+                assert resp.status_code == 204
+
+    def create_okta_application(self, cluster, okta_account="https://dev-82235514.okta.com/"):
+        header = {
+            'Content-Type': 'application/json',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Authorization': 'SSWS 00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux'
+        }
+        body = {
+            "label": "shaazin",
+            "accessibility": {
+                "selfService": False,
+                "errorRedirectUrl": None,
+                "loginRedirectUrl": None
+            },
+            "visibility": {
+                "autoSubmitToolbar": False,
+                "hide": {
+                    "iOS": False,
+                    "web": False
+                }
+            },
+            "features": [],
+            "signOnMode": "SAML_2_0",
+            "credentials": {
+                "userNameTemplate": {
+                    "template": "${source.login}",
+                    "type": "BUILT_IN"
+                },
+                "signing": {}
+            },
+            "settings": {
+                "app": {},
+                "notifications": {
+                    "vpn": {
+                        "network": {
+                            "connection": "DISABLED"
+                        },
+                        "message": None,
+                        "helpUrl": None
+                    }
+                },
+                "manualProvisioning": False,
+                "implicitAssignment": False,
+                "signOn": {
+                    "defaultRelayState": "",
+                    "ssoAcsUrl": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "idpIssuer": "http://www.okta.com/${org.externalKey}",
+                    "audience": "http://" + cluster.ip + ":8091" + "/saml/metadata",
+                    "recipient": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "destination": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "subjectNameIdTemplate": "${user.userName}",
+                    "subjectNameIdFormat": "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+                    "responseSigned": True,
+                    "assertionSigned": True,
+                    "signatureAlgorithm": "RSA_SHA256",
+                    "digestAlgorithm": "SHA256",
+                    "honorForceAuthn": True,
+                    "authnContextClassRef": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
+                    "spIssuer": None,
+                    "requestCompressed": False,
+                    "attributeStatements": [
+                        {
+                            "type": "EXPRESSION",
+                            "name": "email",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.email"]
+                        },
+                        {
+                            "type": "EXPRESSION",
+                            "name": "given_name",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.firstName"]
+                        },
+                        {
+                            "type": "EXPRESSION",
+                            "name": "family_name",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.lastName"]
+                        },
+                        {
+                            "type": "GROUP",
+                            "name": "groups",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "filterType": "REGEX",
+                            "filterValue": ".*"
+                        },
+                        {
+                            "type": "GROUP",
+                            "name": "roles",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "filterType": "REGEX",
+                            "filterValue": ".*"
+                        }
+                    ],
+                    "inlineHooks": [],
+                    "allowMultipleAcsEndpoints": False,
+                    "acsEndpoints": [],
+                    "samlSignedRequestEnabled": False,
+                    "slo": {
+                        "enabled": False
+                    }
+                }
+            }
+        }
+        resp = requests.post(okta_account + "api/v1/apps",
+                             data=json.dumps(body),
+                             headers=header,
+                             timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+
+        resp_content = json.loads(resp.content.decode())
+        okta_app_id = resp_content["id"]
+        idp_metadata_url = resp_content["_links"]["metadata"]["href"]
+
+        resp = requests.get(idp_metadata_url,
+                            headers=header,
+                            timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+
+        idp_metadata = resp.content.decode()
+
+        return okta_app_id, idp_metadata
+
+    def assign_user(self, okta_app_id, okta_account="https://dev-82235514.okta.com/"):
+        header = {
+            'Content-Type': 'application/json',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Authorization': 'SSWS 00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux'
+        }
+        body = {"id": "00ucptbpbpCBQfhiS5d7",
+                "scope": "USER",
+                "credentials":
+                    {"userName": "qe.security.testing@couchbase.com"}}
+        resp = requests.post(
+            okta_account + "api/v1/apps/" + okta_app_id + "/users",
+            data=json.dumps(body),
+            headers=header,
+            timeout=300, verify=False, allow_redirects=False)
+
+    def update_okta_application(self, cluster, okta_account="https://dev-82235514.okta.com/"):
+        header = {
+            'Content-Type': 'application/json',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Authorization': 'SSWS 00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux'
+        }
+        body = {
+            "label": "shaazin",
+            "accessibility": {
+                "selfService": False,
+                "errorRedirectUrl": None,
+                "loginRedirectUrl": None
+            },
+            "visibility": {
+                "autoSubmitToolbar": False,
+                "hide": {
+                    "iOS": False,
+                    "web": False
+                }
+            },
+            "features": [],
+            "signOnMode": "SAML_2_0",
+            "credentials": {
+                "userNameTemplate": {
+                    "template": "${source.login}",
+                    "type": "BUILT_IN"
+                },
+                "signing": {}
+            },
+            "settings": {
+                "app": {},
+                "notifications": {
+                    "vpn": {
+                        "network": {
+                            "connection": "DISABLED"
+                        },
+                        "message": None,
+                        "helpUrl": None
+                    }
+                },
+                "manualProvisioning": False,
+                "implicitAssignment": False,
+                "signOn": {
+                    "defaultRelayState": "",
+                    "ssoAcsUrl": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "idpIssuer": "http://www.okta.com/${org.externalKey}",
+                    "audience": "http://" + cluster.ip + ":8091" + "/saml/metadata",
+                    "recipient": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "destination": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "subjectNameIdTemplate": "${user.userName}",
+                    "subjectNameIdFormat": "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+                    "responseSigned": True,
+                    "assertionSigned": False,
+                    "signatureAlgorithm": "RSA_SHA256",
+                    "digestAlgorithm": "SHA256",
+                    "honorForceAuthn": True,
+                    "authnContextClassRef": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
+                    "spIssuer": None,
+                    "requestCompressed": False,
+                    "attributeStatements": [
+                        {
+                            "type": "EXPRESSION",
+                            "name": "email",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.email"]
+                        },
+                        {
+                            "type": "EXPRESSION",
+                            "name": "given_name",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.firstName"]
+                        },
+                        {
+                            "type": "EXPRESSION",
+                            "name": "family_name",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.lastName"]
+                        },
+                        {
+                            "type": "GROUP",
+                            "name": "groups",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "filterType": "REGEX",
+                            "filterValue": ".*"
+                        },
+                        {
+                            "type": "GROUP",
+                            "name": "roles",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "filterType": "REGEX",
+                            "filterValue": ".*"
+                        }
+                    ],
+                    "inlineHooks": [],
+                    "allowMultipleAcsEndpoints": False,
+                    "acsEndpoints": [],
+                    "samlSignedRequestEnabled": False,
+                    "slo": {
+                        "enabled": False
+                    }
+                }
+            }
+        }
+        resp = requests.put(okta_account + "api/v1/apps/" + self.idp_id["idp_id"],
+                            data=json.dumps(body),
+                            headers=header,
+                            timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+
+        resp_content = json.loads(resp.content.decode())
+        okta_app_id = resp_content["id"]
+        idp_metadata_url = resp_content["_links"]["metadata"]["href"]
+
+        resp = requests.get(idp_metadata_url,
+                            headers=header,
+                            timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+
+        idp_metadata = resp.content.decode()
+
+        return okta_app_id, idp_metadata
+
+    def reset_okta_application(self, cluster, okta_account="https://dev-82235514.okta.com/"):
+        header = {
+            'Content-Type': 'application/json',
+            'Accept': '*/*',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Authorization': 'SSWS 00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux'
+        }
+        body = {
+            "label": "shaazin",
+            "accessibility": {
+                "selfService": False,
+                "errorRedirectUrl": None,
+                "loginRedirectUrl": None
+            },
+            "visibility": {
+                "autoSubmitToolbar": False,
+                "hide": {
+                    "iOS": False,
+                    "web": False
+                }
+            },
+            "features": [],
+            "signOnMode": "SAML_2_0",
+            "credentials": {
+                "userNameTemplate": {
+                    "template": "${source.login}",
+                    "type": "BUILT_IN"
+                },
+                "signing": {}
+            },
+            "settings": {
+                "app": {},
+                "notifications": {
+                    "vpn": {
+                        "network": {
+                            "connection": "DISABLED"
+                        },
+                        "message": None,
+                        "helpUrl": None
+                    }
+                },
+                "manualProvisioning": False,
+                "implicitAssignment": False,
+                "signOn": {
+                    "defaultRelayState": "",
+                    "ssoAcsUrl": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "idpIssuer": "http://www.okta.com/${org.externalKey}",
+                    "audience": "http://" + cluster.ip + ":8091" + "/saml/metadata",
+                    "recipient": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "destination": "http://" + cluster.ip + ":8091" + "/saml/consume",
+                    "subjectNameIdTemplate": "${user.userName}",
+                    "subjectNameIdFormat": "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent",
+                    "responseSigned": True,
+                    "assertionSigned": True,
+                    "signatureAlgorithm": "RSA_SHA256",
+                    "digestAlgorithm": "SHA256",
+                    "honorForceAuthn": True,
+                    "authnContextClassRef": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
+                    "spIssuer": None,
+                    "requestCompressed": False,
+                    "attributeStatements": [
+                        {
+                            "type": "EXPRESSION",
+                            "name": "email",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.email"]
+                        },
+                        {
+                            "type": "EXPRESSION",
+                            "name": "given_name",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.firstName"]
+                        },
+                        {
+                            "type": "EXPRESSION",
+                            "name": "family_name",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "values": ["user.lastName"]
+                        },
+                        {
+                            "type": "GROUP",
+                            "name": "groups",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "filterType": "REGEX",
+                            "filterValue": ".*"
+                        },
+                        {
+                            "type": "GROUP",
+                            "name": "roles",
+                            "namespace": "urn:oasis:names:tc:SAML:2.0:attrname-format:unspecified",
+                            "filterType": "REGEX",
+                            "filterValue": ".*"
+                        }
+                    ],
+                    "inlineHooks": [],
+                    "allowMultipleAcsEndpoints": False,
+                    "acsEndpoints": [],
+                    "samlSignedRequestEnabled": False,
+                    "slo": {
+                        "enabled": False
+                    }
+                }
+            }
+        }
+        resp = requests.put(okta_account + "api/v1/apps/" + self.idp_id["idp_id"],
+                            data=json.dumps(body),
+                            headers=header,
+                            timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+
+        resp_content = json.loads(resp.content.decode())
+        okta_app_id = resp_content["id"]
+        idp_metadata_url = resp_content["_links"]["metadata"]["href"]
+
+        resp = requests.get(idp_metadata_url,
+                            headers=header,
+                            timeout=300, verify=False, allow_redirects=False)
+        assert resp.status_code == 200
+
+        idp_metadata = resp.content.decode()
+
+        return okta_app_id, idp_metadata
