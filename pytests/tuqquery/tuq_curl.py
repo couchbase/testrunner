@@ -1208,4 +1208,3 @@ class QueryCurlTests(QueryTests):
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['errors'][0]['msg'], top_error)
         self.assertTrue("InvalidJSONendpoint" in actual_curl['errors'][0]['reason']['cause']['error'])
->>>>>>> CHANGE (8c15b6 New test case for restricted url)
