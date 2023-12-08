@@ -235,7 +235,8 @@ class QueryMagmaTests(QueryTests):
             docs = self.run_cbq_query(query="select * from default")
             num_docs = docs['metrics']['resultCount']
             expected_results = [{'firstnames': num_docs}, {'lastnames': num_docs}]
-            self.assertEqual(expected_results,actual_list['results'])
+            expected_results2 = [{'lastnames': num_docs}, {'firstnames': num_docs}]
+            self.assertTrue(expected_results == actual_list['results'] or expected_results2 == actual_list['results'])
         self.conn.delete_all_buckets()
 
     def test_basic_cte(self):
