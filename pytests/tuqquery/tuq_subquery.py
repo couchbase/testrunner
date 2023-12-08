@@ -452,3 +452,17 @@ class QuerySubqueryTests(QueryTests):
 
         result = self.run_cbq_query('select a, (SELECT RAW (SELECT RAW a) ) AS b  from [1,2,3] a')
         self.assertEqual(result['results'], [{"a": 1, "b": [[1]]}, {"a": 2, "b": [[2]]}, {"a": 3,"b": [[3]]}])
+
+    def test_MB60011(self):
+        self.run_cbq_query(f'CREATE PRIMARY INDEX if not exists ON {self.query_bucket}')
+        self.run_cbq_query(f'INSERT INTO {self.query_bucket} VALUES("k01", {{"c1": 1, "c2": 1}})')
+
+        # when used as covering index scan
+        result = self.run_cbq_query(f'SELECT RAW (SELECT 1 FROM {self.query_bucket} AS d WHERE META(d).id = META(t).id ) FROM {self.query_bucket} t')
+        self.log.info(f"result is {result['results']}")
+        self.assertEqual(result['results'], [[{'$1': 1}]])
+
+        # when used as non-covering index scan but with index spans
+        result = self.run_cbq_query(f'SELECT RAW (SELECT d.c1 FROM {self.query_bucket} AS d WHERE META(d).id = META(t).id ) FROM {self.query_bucket} t')
+        self.log.info(f"result is {result['results']}")
+        self.assertEqual(result['results'], [[{'c1': 1}]])
