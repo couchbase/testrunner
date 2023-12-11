@@ -244,6 +244,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.build_index_after_create:
             if self.defer_build:
                 build_index_task = self.async_build_index(bucket, [f'`{query_definition.index_name}`'])
+                self.wait_until_indexes_online(defer_build=self.defer_build)
                 build_index_task.result()
             check = self.n1ql_helper.is_index_ready_and_in_list(bucket, query_definition.index_name,
                                                                 server=self.n1ql_node)

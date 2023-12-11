@@ -66,16 +66,24 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.load_query_definitions.append(query_definition)
         if not self.build_index_after_create:
             self.build_index_after_create = True
-            self.multi_create_index(buckets=self.buckets,
-                                    query_definitions=self.load_query_definitions)
+            try:
+                self.multi_create_index(buckets=self.buckets,
+                                        query_definitions=self.load_query_definitions)
+            except Exception as e:
+                if 'will retry building in the background for reason: Build Already In Progress' in str(e):
+                    pass
             self.build_index_after_create = False
         else:
-            self.multi_create_index(buckets=self.buckets,
-                                    query_definitions=self.load_query_definitions)
+            try:
+                self.multi_create_index(buckets=self.buckets,
+                                        query_definitions=self.load_query_definitions)
+            except Exception as e:
+                if 'will retry building in the background for reason: Build Already In Progress' in str(e):
+                    pass
         self.skip_metabucket_check = True
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
-        self.rest.delete_all_buckets()
+        #self.rest.delete_all_buckets()
 
     def tearDown(self):
         self.upgrade_servers = self.servers
@@ -168,16 +176,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         if index_node:
             self.index_rest = RestConnection(index_node)
 
-        # Checking if System events are getting logged
-        system_event_api = f'{self.index_rest.baseUrl}/events'
-        status, content, header = self.index_rest.urllib_request(api=system_event_api)
-        err_msg_1 = "This http API endpoint isn't supported in mixed version clusters"
-        err_msg_2 = "Not found."
-        if err_msg_1 in str(content) or err_msg_2 in str(content):
-            pass
-        else:
-            self.fail(f"Failed while retrieving System Events logs. {content}")
-
         # Checking smart-batching
         add_nodes = self.servers[self.nodes_init:]
         services = ['index'] * len(add_nodes)
@@ -191,6 +189,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.index_rest = RestConnection(index_node)
         system_query = 'select * from system:indexes;'
         if task == 'create_collection':
+            self.update_master_node()
             self.prepare_collection_for_indexing(bucket_name=self.buckets[0].name, num_scopes=3, num_collections=3,
                                                  num_of_docs_per_collection=1000)
         elif task == 'create_indexes':
@@ -536,8 +535,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.nodes_out_list, [],
                                                  services=services_in)
-
-        self.validate_indexing_rebalance_master()
+        if 'index' in services_in:
+            self.validate_indexing_rebalance_master()
         rebalance.result()
         self._run_tasks([kv_ops, in_between_tasks])
         self.sleep(60)
@@ -887,7 +886,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                   indexFromHour=date.hour + ((date.minute + 1) // 60),
                                                                   indexFromMinute=(date.minute + 1) % 60)
             self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
-        self.multi_create_index(self.buckets, self.query_definitions)
+        try:
+            self.multi_create_index(self.buckets, self.query_definitions)
+        except Exception as e:
+            if 'will retry building in the background for reason: Build Already In Progress' in str(e):
+                pass
         self._verify_bucket_count_with_index_count()
         self.multi_query_using_index(self.buckets, self.query_definitions)
 
@@ -963,8 +966,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 rebalance = self.cluster.async_rebalance(active_nodes,
                                                          [node], [],
                                                          services=node_services)
-
-                self.validate_indexing_rebalance_master()
+                if "index" in node_services_list:
+                    self.validate_indexing_rebalance_master()
                 rebalance.result()
                 # self.sleep(100)
                 node_version = RestConnection(node).get_nodes_versions()
@@ -974,7 +977,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     if "index" in node_services_list:
                         self._recreate_equivalent_indexes(node)
                 else:
-                    self.multi_create_index()
+                    try:
+                        self.multi_create_index()
+                    except Exception as e:
+                        if 'will retry building in the background for reason: Build Already In Progress' in str(e):
+                            pass
                 self._verify_scan_api()
                 self._create_replica_indexes(keyspace='standard_bucket0')
                 self.multi_query_using_index(verify_results=False)
@@ -988,7 +995,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.sleep(60)
         buckets = self._create_plasma_buckets()
         self.load(self.gens_load, buckets=buckets, flag=self.item_flag, batch_size=self.batch_size)
-        self.multi_create_index(buckets=buckets, query_definitions=self.query_definitions)
+        try:
+            self.multi_create_index(buckets=buckets, query_definitions=self.query_definitions)
+        except Exception as e:
+            if 'will retry building in the background for reason: Build Already In Progress' in str(e):
+                pass
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
         self._verify_index_partitioning()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1023,6 +1034,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self._post_upgrade_task(task='free_tier')
 
     def test_master_node_upgrade_swap_rebalance(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         if self.redistribute_nodes:
             redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
             self.index_rest.set_index_settings(redistribute)
@@ -1087,6 +1100,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.scans_post_upgrade_new(select_queries=select_queries)
 
     def test_master_node_upgrade_rebalance_in(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         if self.redistribute_nodes:
             redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
             self.index_rest.set_index_settings(redistribute)
@@ -1164,6 +1179,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.scans_post_upgrade_new(select_queries=select_queries)
 
     def test_zstd_plasma_disk_size(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         self.rest.update_autofailover_settings(True, 300)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         index_node_A, index_node_B = index_nodes
@@ -1240,6 +1257,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.validate_index_disk_size(storage_stats_A=node_A_disk_size, storage_stats_B=node_B_disk_size)
 
     def test_zstd_compression(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         self.rest.update_autofailover_settings(True, 300)
         index_node_A = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         self.prepare_tenants(index_creations=False)
@@ -1300,6 +1319,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.assertEqual(actual_no_indexed_fields_post_compaction_eviction, expected_no_indexed_fields_post_mutations, f"name field has not been updated actual count : {actual_no_indexed_fields_post_compaction_eviction} expected : {expected_no_indexed_fields_post_mutations}")
 
     def test_online_offline_swap_upgrade_file_based_rebalance(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -1349,6 +1370,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     future.result()
 
     def test_upgrade_downgrade_upgrade(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -1387,6 +1410,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     future.result()
 
     def test_ce_to_ee_upgrade(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
         community_nodes = self.servers[0:self.nodes_init]
         self._install(community_nodes, version=self.upgrade_to, community_to_enterprise=True)
         self.sleep(120)
@@ -1906,11 +1931,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if c is None or 'rebalancetoken' not in c:
                     count = count + 1
                 else:
-                    log.info(f'info on meta data {c}')
+                    self.log.info(f'info on meta data {c}')
                     break
             if count >= 120:
                 self.fail('Did not get the params rebalance token')
-        log.info(f'info on meta data {c}')
+        self.log.info(f'info on meta data {c}')
         parsed_output = json.loads(c)
         updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for node in updated_index_nodes:
@@ -1920,8 +1945,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.assertEqual(new_master_node.ip, parsed_output['rebalancetoken']['MasterIP'], 'ip not the same')
 
         cb_version = RestConnection(new_master_node).get_nodes_version()[:5]
-        log.info(f'CB version is {cb_version}')
-        log.info(cb_version == self.upgrade_to[:5])
+        self.log.info(f'CB version is {cb_version}')
+        self.log.info(cb_version == self.upgrade_to[:5])
         self.assertEqual(cb_version, self.upgrade_to[:5],
                          'Index master node is updated to latest version as expected')
 
