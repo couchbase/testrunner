@@ -216,3 +216,78 @@ class QuerySeqScanTests(QueryTests):
     def get_index_scan(self, bucket, name, scope='_default', collection='_default'):
         total_scans = self.run_cbq_query(f'SELECT raw metadata.total_scans FROM system:all_indexes WHERE name = "{name}" AND bucket_id = "{bucket}" AND scope_id = "{scope}" AND keyspace_id = "{collection}"')
         return total_scans['results'][0]
+    
+    def test_rbac_no_seq(self):
+        # create user with select permission only on travel-sample only
+        self.users = [{"id": "jacknoseq", "name": "Jack Noseq", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        try:
+            self.run_cbq_query(query=f"SELECT * FROM {self.bucket}", username=user_id, password=user_pwd)
+            self.fail("Query did not fail as expected")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+
+    def test_rbac_collection(self):
+        result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
+        self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
+        self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+
+        self.users = [{"id": "jackCollection", "name": "Jack Collection", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        # Grant select on all collections
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        # grant sequential scans only on collection1
+        self.run_cbq_query(query=f"GRANT query_use_sequential_scans on `{self.bucket}`.scope1.collection1 to {user_id}")
+
+        # select on collection1 should work
+        scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
+        result = self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection1', username=user_id, password=user_pwd)
+        scan_after = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
+        self.assertEqual(result['metrics']['resultCount'], self.doc_count)
+        self.assertEqual(scan_after, scan_before + 1)
+
+        # select on collection2 should fail with missing sequential scans access
+        try:
+            self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection2', username=user_id, password=user_pwd)
+            self.fail("Query did not fail as expected")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket}.scope1.collection2 to allow the statement to run.')
+
+    def test_rbac_bucket(self):
+        result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
+        self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
+        self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+        self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection2 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+
+        self.users = [{"id": "jackBucket", "name": "Jack Bucket", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        # Grant select on all collections
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        # grant sequential scans only on collection1
+        self.run_cbq_query(query=f"GRANT query_use_sequential_scans on `{self.bucket}` to {user_id}")
+
+        # select on collection1 should work
+        scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
+        result = self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection1', username=user_id, password=user_pwd)
+        scan_after = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
+        self.assertEqual(result['metrics']['resultCount'], self.doc_count)
+        self.assertEqual(scan_after, scan_before + 1)
+
+        # select on collection2 should work
+        scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection2")
+        result = self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection2', username=user_id, password=user_pwd)
+        scan_after = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection2")
+        self.assertEqual(result['metrics']['resultCount'], self.doc_count)
+        self.assertEqual(scan_after, scan_before + 1)
