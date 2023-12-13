@@ -11,6 +11,7 @@ class QuerySeqScanTests(QueryTests):
         self.thread_count = self.input.param("thread_count", 5)
         self.thread_max = self.input.param("thread_max", 10)
         self.rebalance = self.input.param("rebalance", False)
+        self.role = self.input.param("role", "select")
         self.sem = threading.Semaphore(self.thread_max)
         self.thread_errors = 0
         self.run_cbq_query(f'DELETE FROM {self.bucket}')
@@ -218,13 +219,21 @@ class QuerySeqScanTests(QueryTests):
         return total_scans['results'][0]
     
     def test_rbac_no_seq(self):
-        # create user with select permission only on travel-sample only
+        queries = {
+            "select" : f"SELECT * FROM {self.bucket}",
+            "update" : f"UPDATE {self.bucket} SET name = 'Paris'",
+            "delete" : f"DELETE FROM {self.bucket} WHERE name = 'Paris'"
+        }
+        self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
         self.users = [{"id": "jacknoseq", "name": "Jack Noseq", "password": "password1"}]
         self.create_users()
         user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
         self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        self.run_cbq_query(query=f"GRANT query_update on `{self.bucket}` to {user_id}")
+        self.run_cbq_query(query=f"GRANT query_delete on `{self.bucket}` to {user_id}")
+
         try:
-            self.run_cbq_query(query=f"SELECT * FROM {self.bucket}", username=user_id, password=user_pwd)
+            self.run_cbq_query(query=queries[self.role], username=user_id, password=user_pwd)
             self.fail("Query did not fail as expected")
         except CBQError as ex:
             error = self.process_CBQE(ex)
@@ -277,6 +286,36 @@ class QuerySeqScanTests(QueryTests):
         self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
         # grant sequential scans only on collection1
         self.run_cbq_query(query=f"GRANT query_use_sequential_scans on `{self.bucket}` to {user_id}")
+
+        # select on collection1 should work
+        scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
+        result = self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection1', username=user_id, password=user_pwd)
+        scan_after = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
+        self.assertEqual(result['metrics']['resultCount'], self.doc_count)
+        self.assertEqual(scan_after, scan_before + 1)
+
+        # select on collection2 should work
+        scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection2")
+        result = self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection2', username=user_id, password=user_pwd)
+        scan_after = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection2")
+        self.assertEqual(result['metrics']['resultCount'], self.doc_count)
+        self.assertEqual(scan_after, scan_before + 1)
+
+    def test_rbac_scope(self):
+        result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
+        self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
+        self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+        self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection2 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+
+        self.users = [{"id": "jackScope", "name": "Jack Scope", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        # Grant select on all collections
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        # grant sequential scans only on collection1
+        self.run_cbq_query(query=f"GRANT query_use_sequential_scans on default:`{self.bucket}`.scope1 to {user_id}")
 
         # select on collection1 should work
         scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
