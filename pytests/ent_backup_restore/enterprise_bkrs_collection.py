@@ -437,6 +437,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                     rest = RestConnection(self.backupset.restore_cluster_host)
                     rest.force_eject_node()
                     rest.init_node()
+                    rest.set_internalSetting("magmaMinMemoryQuota", 256)
                 self.log.info("Done reset cluster")
             self.sleep(10)
 
