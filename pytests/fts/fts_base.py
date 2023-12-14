@@ -1344,6 +1344,36 @@ class FTSIndex:
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
 
+    def update_vector_index_dim(self, new, type, field_name, verify_concurrent_err=False):
+        status, index_def = self.get_index_defn()
+        self.index_definition = index_def["indexDef"]
+        self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
+            'fields'][0]['dims'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        try:
+            self.update()
+        except Exception as e:
+            if verify_concurrent_err:
+                expected_err = "err: manager_api: perhaps there was concurrent index definition update"
+                if expected_err in str(e):
+                    return
+                self.fail("Did not get error message for concurrent index definition updated")
+
+    def update_vector_index_similariy(self, new, type, field_name, verify_concurrent_err=False):
+        status, index_def = self.get_index_defn()
+        self.index_definition = index_def["indexDef"]
+        self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
+            'fields'][0]['similarity'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        try:
+            self.update()
+        except Exception as e:
+            if verify_concurrent_err:
+                expected_err = "err: manager_api: perhaps there was concurrent index definition update"
+                if expected_err in str(e):
+                    return
+                self.fail("Did not get error message for concurrent index definition updated")
+
     def get_num_replicas(self):
         return self.index_definition['planParams']['numReplicas']
 
@@ -5251,6 +5281,44 @@ class FTSBaseTest(unittest.TestCase):
                            nodes_partitions[node]['pindex_count'],
                            num_node_partitions))
         return True
+
+    def get_partition_replica_map(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        status, stats = rest.get_cfg_stats()
+        partitions = stats['planPIndexes']['planPIndexes']
+        partition_replica_nodes = {}
+
+        for partition_key, partition_data in partitions.items():
+            nodes_info = partition_data['nodes']
+
+            # Storing nodes for each replica
+            replica_nodes = {}
+            for replica, node_data in nodes_info.items():
+                priority = node_data['priority']
+                if priority not in replica_nodes:
+                    replica_nodes[priority] = []
+                replica_nodes[priority].append(replica)
+
+            partition_replica_nodes[partition_key] = replica_nodes
+
+        return partition_replica_nodes
+
+    def validate_replica_distribution(self):
+        partition_replica_map = self.get_partition_replica_map()
+
+        for partition_key, replica_nodes in partition_replica_map.items():
+            unique_nodes = set()
+            for nodes in replica_nodes.values():
+                for node in nodes:
+                    if node in unique_nodes:
+                        self.fail(f"Partition {partition_key} has replicas on the same node.")
+                        break
+                    unique_nodes.add(node)
+                else:
+                    continue
+                break
+            else:
+                print(f"All replicas of partition {partition_key} are on different nodes.")
 
     def validate_file_copy_rebalance_stats(self):
         file_copy_transfer_found = False
