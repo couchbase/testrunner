@@ -11,9 +11,12 @@ import tarfile
 from pathlib import Path
 from urllib.request import urlretrieve
 
-import h5py
-import numpy as np
-import wget
+try:
+    import h5py
+    import numpy as np
+    import wget
+except ImportError:
+    print("Install h5py, numpy and wget modules if running FTS vector tests")
 
 ########################################################################################
 # Global Variables
