@@ -4262,6 +4262,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
+        cluster_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+        cluster_client.install_psmisc()
+
         backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
                                                           objstore_provider=self.objstore_provider,
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
@@ -4281,20 +4284,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             200,
             interval_time=0.1,
             exponential_backoff=False)
-
         # If the backup finished and we never saw a DCP connection something's not right.
         if backup_result.done():
             self.fail("Never found evidence of open DCP stream in backup logs.")
-
         # Pause memcached to trigger the log message.
-        cluster_client = RemoteMachineShellConnection(self.backupset.cluster_host)
         cluster_client.pause_memcached(self.os_name, timesleep=200)
         cluster_client.unpause_memcached(self.os_name)
         cluster_client.disconnect()
         backup_result.result(timeout=200)
 
         expected_message = "(timed out after 3m0s|Stream has been inactive for 1m0s)"
-        command = "cat {}/logs/backup-*.log | grep -E '{}' "\
+        command = "cat {}/logs/backup-*.log | grep -E '{}' " \
                          .format(self.backupset.directory, expected_message)
         output, _ = backup_client.execute_command(command)
         if not output:

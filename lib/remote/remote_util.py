@@ -4000,8 +4000,17 @@ class RemoteMachineShellConnection(KeepRefs):
         if not running and retry >= 3:
             sys.exit("Server not started even after 3 retries on "+self.info.ip)
 
+    # To be used when a calling a method with killall is used, because it's 
+    # not necessarily installed on the VM.
+    def install_psmisc(self):
+        if "centos" in self.info.distribution_version.lower():
+            self.execute_command("yum -y install psmisc")
+        if "debian" in self.info.distribution_version.lower():
+            self.execute_command("apt-get -y install psmisc")
 
-
+    # When editing this function please make sure that it's not slowing it down 
+    # significantly. Some tests rely on this function to complete relatively fast a 
+    # they are trying to generate a complicated scenarios. Slowing this function could cause flakiness
     def pause_memcached(self, os="linux", timesleep=30, delay=0):
         log.info("*** pause memcached process ***")
         if delay:
@@ -4031,7 +4040,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 o, r = self.execute_command("killall -SIGCONT memcached.bin")
             else:
                 o, r = self.execute_command("killall -SIGCONT memcached")
-            self.log_command_output(o, r)
+        self.log_command_output(o, r)
 
     def pause_beam(self):
         o, r = self.execute_command("killall -SIGSTOP beam.smp")
