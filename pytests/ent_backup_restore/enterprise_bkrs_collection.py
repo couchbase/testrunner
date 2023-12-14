@@ -69,6 +69,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self._create_backup_cluster(self.backupset.backup_services_init)
             self.sleep(10)
             rest_conn = RestConnection(self.backupset.cluster_host)
+            rest_conn.set_internalSetting("magmaMinMemoryQuota", 256)
             rest_conn.create_bucket(bucket="default", ramQuotaMB="256")
             self.buckets = RestConnection(self.master).get_buckets()
         self.log.info("*** create collection in all buckets")
@@ -177,6 +178,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                     rest.set_indexer_storage_mode(username='Administrator',
                                       password='password',
                                       storageMode=bk_storage_mode)
+                    rest.set_internalSetting("magmaMinMemoryQuota", 256)
                 self.log.info("Done reset cluster")
             self.sleep(10)
 
