@@ -658,9 +658,17 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         if self._update or self._delete:
             self.async_perform_update_delete(self.upd_del_fields)
+            if self.vector_search:
+                if self._update:
+                    index.faiss_index = self.create_faiss_index(self.update_gen)
+                elif self._delete:
+                    index.faiss_index = self.create_faiss_index(self.delete_gen)
             if self._update:
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
+        else:
+            if self.vector_search:
+                index.faiss_index = self.create_faiss_index(self.create_gen)
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.sleep(30, "additional wait time to be sure, fts index is ready")
 

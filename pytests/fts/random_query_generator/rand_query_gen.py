@@ -28,7 +28,8 @@ class DATASET:
                       'num': ["mutated", "manages_team_size", "salary"],
                       'bool': ["is_manager"],
                       'date': ["join_date"],
-                      'array': ["languages_known", "manages_reports"]
+                      'array': ["languages_known", "manages_reports"],
+                      'vector': ["l_vector"]
                       },
 
               'wiki': {'str': ["title", "revision_text_text", "type", "revision_contributor_username"],
@@ -40,7 +41,7 @@ class DATASET:
               }
     CONSOLIDATED_FIELDS = ["name", "dept", "manages_reports", "languages_known", "email", "mutated",
                            "manages_team_size", "salary", "is_manager", "join_date", "title", "revision_text_text",
-                           "revision_contributor_username", "mutated", "revision_timestamp"]
+                           "revision_contributor_username", "mutated", "revision_timestamp", "l_vector"]
 
 
 class QUERY_TYPE:
@@ -48,7 +49,7 @@ class QUERY_TYPE:
               "prefix", "fuzzy", "conjunction", "disjunction"
                                                 "wildcard", "regexp", "query_string",
               "numeric_range", "date_range", "term_range",
-              "match_all", "match_none"]
+              "match_all", "match_none", "vector"]
 
     # to know what type of queries to generate for fields
     # returned by custom map_generator (only for custom map indexes)
@@ -61,7 +62,8 @@ class QUERY_TYPE:
                 "conjunction", "disjunction", "term_range"],
         'bool': [],
         'num': ["numeric_range"],
-        'date': ["date_range"]
+        'date': ["date_range"],
+        "vector": ["vector_type"]
     }
 
     N1QL_QUERY_TYPES = {
@@ -89,6 +91,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         self.queries_to_generate = num_queries
         self.iterator = 0
         self.fts_queries = []
+        self.vector_queries = []
         self.es_queries = []
         self.query_types = query_type
         self.dataset = dataset
@@ -162,6 +165,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 self.fields["date"] = field_list
             if field_type == "boolean":
                 self.fields["bool"] = field_list
+            if field_type == "vector":
+                self.fields["vector"] = field_list
         print("Smart queries will be generated on fields: %s" % self.fields)
 
     def get_custom_query_types(self):
@@ -182,7 +187,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         query_str = json.dumps(query, ensure_ascii=False)
         for key, val in replace_dict.items():
             query_str = query_str.replace(key, val)
-        return json.loads(query_str, encoding='utf-8')
+        return json.loads(query_str)
 
     def construct_queries(self):
         while self.iterator < self.queries_to_generate:
@@ -196,7 +201,21 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             es_query = self.replace_underscores(es_query)
             self.fts_queries.append(fts_query)
             self.es_queries.append(es_query)
+            if fieldname == "vector_type":
+                self.vector_queries.append(fts_query)
             self.iterator += 1
+
+    def construct_vector_type_query(self):
+        vector_query = {}
+        fieldname = self.get_random_value(self.fields['vector'])
+        vector_to_query = eval("self.get_queryable_%s()" % fieldname)
+
+        vector_query["field"] = fieldname
+        vector_query["vector"] = vector_to_query
+        vector_query["k"] = random.randint(2, 50)
+        return vector_query, None
+
+
 
     def construct_match_query(self, ret_list=False):
         """

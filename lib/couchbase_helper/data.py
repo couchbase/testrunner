@@ -34,6 +34,10 @@ LANGUAGES = ['English', 'Spanish', 'German', 'Italian', 'French',
              'Quechua', 'Japanese', 'Chinese', 'Nepalese', 'Thai', 'Malay',
              'Sinhalese', 'Portuguese', 'Romanian']
 
+LEARNINGS_QUERY = ['Sports should be healthy activity', 'biking is hard in sunny day', 'food delivery should be more easier than today',
+             'How to save energy', 'Customer statisfaction is important for business',
+             'when do kids start competing in math competitions', 'why football is called as soccer in US']
+
 DEPT = ['Engineering', 'Sales', 'Support', 'Marketing', 'Info-tech', 'Finance',
         'HR', 'Pre-sales', 'Accounts', 'Dev-ops', 'Training']
 

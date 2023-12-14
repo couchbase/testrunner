@@ -183,6 +183,10 @@ class CustomMapGenerator:
         # build_custom_analyzer method
         self.custom_analyzers=[]
         self.multiple_filters = multiple_filters
+        self.vector_search = TestInputSingleton.input.param("vector_search", False)
+        self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
+        if self.vector_search:
+            EMP_FIELDS['vector'] = ["l_vector"]
 
         for n in range(0, self.num_custom_analyzers, 1):
             self.custom_analyzers.append("customAnalyzer"+str(n+1))
@@ -191,6 +195,8 @@ class CustomMapGenerator:
             self.fields = EMP_FIELDS
             self.nested_fields = EMP_NESTED_FIELDS
             self.max_fields = TOTAL_EMP_FIELDS
+            if self.vector_search:
+                self.max_fields = self.max_fields + 1
             type_mapping_val = type_mapping + "." + dataset if collection_index else dataset
             self.fts_map['types'][type_mapping_val] = {
                                         "dynamic": False,
@@ -386,8 +392,9 @@ class CustomMapGenerator:
         """
         is_indexed = bool(random.getrandbits(1))
         fts_field_map = {}
-        fts_field_map['include_in_all'] = True
-        fts_field_map['include_term_vectors'] = True
+        if field_type != "vector":
+            fts_field_map['include_in_all'] = True
+            fts_field_map['include_term_vectors'] = True
         fts_field_map['index'] = True
         fts_field_map['name'] = field
         fts_field_map['store'] = False
@@ -402,6 +409,12 @@ class CustomMapGenerator:
             fts_field_map['analyzer'] = analyzer
         else:
             fts_field_map['analyzer'] = ""
+
+        if field_type == "vector":
+            from sentence_transformers import SentenceTransformer
+            encoder = SentenceTransformer(self.llm_model)
+            fts_field_map['dims'] = encoder.get_sentence_embedding_dimension()
+            fts_field_map['similarity'] = self.get_random_value(["l2_norm", "dot_product"])
 
         es_field_map = {}
         es_field_map['type'] = field_type

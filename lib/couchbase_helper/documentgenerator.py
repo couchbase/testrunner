@@ -6,10 +6,13 @@ from string import ascii_uppercase
 from string import ascii_lowercase
 from string import digits
 import gzip
+
+from TestInput import TestInputSingleton
 from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI, NAPADATASET, GEOJSONDATASET
 
 from lib.Cb_constants.CBServer import CbServer
 from .data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
+
 
 class KVGenerator(object):
     def __init__(self, name, start, end):
@@ -62,9 +65,9 @@ class KVGenerator(object):
     def isGenerator(self):
         return True
 
+
 class DocumentGenerator(KVGenerator):
     """ An idempotent document generator."""
-
 
     def __init__(self, name, template, *args, **kwargs):
         """Initializes the document generator
@@ -106,6 +109,7 @@ class DocumentGenerator(KVGenerator):
 
     Returns:
         The document generated"""
+
     def __next__(self):
         if self.itr >= self.end:
             raise StopIteration
@@ -116,19 +120,21 @@ class DocumentGenerator(KVGenerator):
             doc_args.append(value)
             seed //= len(arg)
         doc = self.template.format(*doc_args).replace('\'', '"').replace('True',
-                             'true').replace('False', 'false').replace('\\', '\\\\')
+                                                                         'true').replace('False', 'false').replace('\\',
+                                                                                                                   '\\\\')
 
         json_doc = json.loads(doc)
 
         if self.name == "random_keys":
             """ This will generate a random ascii key with 12 characters """
-            json_doc['_id'] = ''.join(choice(ascii_uppercase+ascii_lowercase+digits) \
-                                                                   for i in range(12))
+            json_doc['_id'] = ''.join(choice(ascii_uppercase + ascii_lowercase + digits) \
+                                      for i in range(12))
         else:
             json_doc['_id'] = self.name + '-' + str(self.itr)
         self.itr += 1
-        #print("-->json dumps#{}:{}:{}".format(self.itr, json_doc['_id'],jsondumps))
+        # print("-->json dumps#{}:{}:{}".format(self.itr, json_doc['_id'],jsondumps))
         return json_doc['_id'], json.dumps(json_doc)
+
 
 class SubdocDocumentGenerator(KVGenerator):
     """ An idempotent document generator."""
@@ -174,12 +180,14 @@ class SubdocDocumentGenerator(KVGenerator):
 
     Returns:
         The document generated"""
+
     def __next__(self):
         if self.itr >= self.end:
             raise StopIteration
 
         self.itr += 1
         return self.name + '-' + str(self.itr), json.dumps(self.template).encode("ascii", "ignore")
+
 
 class BlobGenerator(KVGenerator):
     def __init__(self, name, seed, value_size, start=0, end=10000):
@@ -193,7 +201,7 @@ class BlobGenerator(KVGenerator):
             raise StopIteration
 
         if self.name == "random_keys":
-            key = ''.join(choice(ascii_uppercase+ascii_lowercase+digits) for i in range(12))
+            key = ''.join(choice(ascii_uppercase + ascii_lowercase + digits) for i in range(12))
         else:
             key = self.name + str(self.itr)
         if self.value_size == 1:
@@ -205,6 +213,7 @@ class BlobGenerator(KVGenerator):
                 value += 'a' * extra
         self.itr += 1
         return key, value
+
 
 class BatchedDocumentGenerator(object):
 
@@ -247,7 +256,7 @@ class JSONNonDocGenerator(KVGenerator):
         index = self.itr
         while index > len(self.values):
             index = index - len(self.values)
-        value = json.dumps(self.values[index-1])
+        value = json.dumps(self.values[index - 1])
         self.itr += 1
         return key, value
 
@@ -265,13 +274,14 @@ class Base64Generator(KVGenerator):
         index = self.itr
         while index > len(self.values):
             index = index - len(self.values)
-        value = self.values[index-1]
+        value = self.values[index - 1]
         self.itr += 1
         return key, value
 
+
 class JsonDocGenerator(KVGenerator):
 
-    def __init__(self, name, op_type="create", encoding="utf-8", *args, **kwargs ):
+    def __init__(self, name, op_type="create", encoding="utf-8", *args, **kwargs):
         """Initializes the JSON document generator
         gen =  JsonDocGenerator(prefix, encoding="utf-8",start=0,end=num_items)
 
@@ -313,6 +323,12 @@ class JsonDocGenerator(KVGenerator):
         self.name = name
         self.gen_docs = {}
         self.encoding = encoding
+        self.vector_search = TestInputSingleton.input.param("vector_search", False)
+        self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
+        if self.vector_search:
+            fileobj = open("lib/couchbase_helper/vector/vector_data")
+            self.learnings = fileobj.readlines()
+            self.learnings = [line.strip() for line in self.learnings]
 
         size = 0
         if not len(self.args) == 0:
@@ -321,7 +337,7 @@ class JsonDocGenerator(KVGenerator):
                 size *= len(arg)
 
         KVGenerator.__init__(self, name, 0, size)
-        random.seed(0,1)
+        random.seed(0, 1)
 
         if 'start' in kwargs:
             self.start = int(kwargs['start'])
@@ -330,27 +346,32 @@ class JsonDocGenerator(KVGenerator):
             self.end = int(kwargs['end'])
 
         if op_type == "create":
-            for count in range(self.start+1, self.end+1, 1):
+            for count in range(self.start + 1, self.end + 1, 1):
                 emp_name = self.generate_name()
                 doc_dict = {
-                            'emp_id': str(10000000+int(count)),
-                            'name': emp_name,
-                            'dept': self.generate_dept(),
-                            'email': "%s@mcdiabetes.com" %
-                                     (emp_name.split(' ')[0].lower()),
-                            'salary': self.generate_salary(),
-                            'join_date': self.generate_join_date(),
-                            'languages_known': self.generate_lang_known(),
-                            'is_manager': bool(random.getrandbits(1)),
-                            'mutated': 0,
-                            'type': 'emp'
-                           }
+                    'emp_id': str(10000000 + int(count)),
+                    'name': emp_name,
+                    'dept': self.generate_dept(),
+                    'email': "%s@mcdiabetes.com" %
+                             (emp_name.split(' ')[0].lower()),
+                    'salary': self.generate_salary(),
+                    'join_date': self.generate_join_date(),
+                    'languages_known': self.generate_lang_known(),
+                    'is_manager': bool(random.getrandbits(1)),
+                    'mutated': 0,
+                    'type': 'emp'
+                }
+                if self.vector_search:
+                    lg, l_vector = self.generate_random_learnings()
+                    doc_dict['learnings'] = lg
+                    doc_dict['l_vector'] = l_vector
                 if doc_dict["is_manager"]:
                     doc_dict['manages'] = {'team_size': random.randint(5, 10)}
                     doc_dict['manages']['reports'] = []
                     for _ in range(0, doc_dict['manages']['team_size']):
                         doc_dict['manages']['reports'].append(self.generate_name())
-                self.gen_docs[count-1] = doc_dict
+
+                self.gen_docs[count - 1] = doc_dict
         elif op_type == "delete":
             # for deletes, just keep/return empty docs with just type field
             for count in range(self.start, self.end):
@@ -363,7 +384,7 @@ class JsonDocGenerator(KVGenerator):
                    regenerate in a doc during update. If this is 'None', by
                    default for this dataset, 'salary' field is regenerated.
         """
-        random.seed(1,1)
+        random.seed(1, 1)
         for count in range(self.start, self.end):
             doc_dict = self.gen_docs[count]
             if fields_to_update is None:
@@ -371,22 +392,26 @@ class JsonDocGenerator(KVGenerator):
             else:
                 if 'salary' in fields_to_update:
                     doc_dict['salary'] = self.generate_salary()
+                if 'l_vector' in fields_to_update:
+                    lg, l_vector = self.generate_random_learnings()
+                    doc_dict['learnings'] = lg
+                    doc_dict['l_vector'] = l_vector
                 if 'dept' in fields_to_update:
                     doc_dict['dept'] = self.generate_dept()
                 if 'is_manager' in fields_to_update:
                     doc_dict['is_manager'] = bool(random.getrandbits(1))
                     if doc_dict["is_manager"]:
-                        doc_dict['manages'] = {'team_size': random.randint(5,10)}
+                        doc_dict['manages'] = {'team_size': random.randint(5, 10)}
                         doc_dict['manages']['reports'] = []
                         for _ in range(0, doc_dict['manages']['team_size']):
                             doc_dict['manages']['reports'].append(self.generate_name())
                 if 'languages_known' in fields_to_update:
                     doc_dict['languages_known'] = self.generate_lang_known()
                 if 'email' in fields_to_update:
-                    doc_dict['email'] = "%s_%s@mcdiabetes.com" %\
+                    doc_dict['email'] = "%s_%s@mcdiabetes.com" % \
                                         (doc_dict['name'].split(' ')[0].lower(),
-                                         str(random.randint(0,99)))
-                if 'manages.team_size' in fields_to_update or\
+                                         str(random.randint(0, 99)))
+                if 'manages.team_size' in fields_to_update or \
                         'manages.reports' in fields_to_update:
                     doc_dict['manages'] = {}
                     doc_dict['manages']['team_size'] = random.randint(5, 10)
@@ -400,7 +425,7 @@ class JsonDocGenerator(KVGenerator):
             raise StopIteration
         doc = self.gen_docs[self.itr]
         self.itr += 1
-        return self.name+str(10000000+self.itr),\
+        return self.name + str(10000000 + self.itr), \
                json.dumps(doc).encode(self.encoding, "ignore")
 
     def generate_join_date(self):
@@ -408,27 +433,35 @@ class JsonDocGenerator(KVGenerator):
         year = random.randint(1950, 2016)
         month = random.randint(1, 12)
         day = random.randint(1, 28)
-        hour = random.randint(0,23)
-        min = random.randint(0,59)
+        hour = random.randint(0, 23)
+        min = random.randint(0, 59)
         return datetime.datetime(year, month, day, hour, min).isoformat()
 
+    def generate_random_learnings(self):
+        from sentence_transformers import SentenceTransformer
+        l = self.learnings[random.randint(0, len(self.learnings) - 1)]
+        encoder = SentenceTransformer(self.llm_model)
+        l_vector = encoder.encode(l)
+        return l, l_vector.tolist()
+
     def generate_dept(self):
-        return DEPT[random.randint(0, len(DEPT)-1)]
+        return DEPT[random.randint(0, len(DEPT) - 1)]
 
     def generate_salary(self):
-        return round(random.random()*100000 + 50000, 2)
+        return round(random.random() * 100000 + 50000, 2)
 
     def generate_name(self):
-        return "%s %s" %(FIRST_NAMES[random.randint(1, len(FIRST_NAMES)-1)],
-                         LAST_NAMES[random.randint(1, len(LAST_NAMES)-1)])
+        return "%s %s" % (FIRST_NAMES[random.randint(1, len(FIRST_NAMES) - 1)],
+                          LAST_NAMES[random.randint(1, len(LAST_NAMES) - 1)])
 
     def generate_lang_known(self):
         count = 0
         lang = []
         while count < 3:
-            lang.append(LANGUAGES[random.randint(0, len(LANGUAGES)-1)])
+            lang.append(LANGUAGES[random.randint(0, len(LANGUAGES) - 1)])
             count += 1
         return lang
+
 
 class WikiJSONGenerator(KVGenerator):
 
@@ -492,7 +525,7 @@ class WikiJSONGenerator(KVGenerator):
                 size *= len(arg)
 
         KVGenerator.__init__(self, name, 0, size)
-        random.seed(0,1)
+        random.seed(0, 1)
 
         if 'start' in kwargs:
             self.start = int(kwargs['start'])
@@ -513,7 +546,7 @@ class WikiJSONGenerator(KVGenerator):
         while not done:
             try:
                 with gzip.open("lib/couchbase_helper/wiki/{0}wiki.txt.gz".
-                                format(self.lang.lower()), "r") as f:
+                                       format(self.lang.lower()), "r") as f:
                     for doc in f:
                         self.gen_docs[count] = doc
                         if count >= self.end:
@@ -546,7 +579,7 @@ class WikiJSONGenerator(KVGenerator):
         doc['mutated'] = 0
         doc['type'] = 'wiki'
         self.itr += 1
-        return self.name+str(10000000+self.itr),\
+        return self.name + str(10000000 + self.itr), \
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
 
 
@@ -599,7 +632,7 @@ class GeoSpatialDataLoader(KVGenerator):
                 size *= len(arg)
 
         KVGenerator.__init__(self, name, 0, size)
-        random.seed(0,1)
+        random.seed(0, 1)
 
         if 'start' in kwargs:
             self.start = int(kwargs['start'])
@@ -622,11 +655,11 @@ class GeoSpatialDataLoader(KVGenerator):
         done = False
         try:
             with open("lib/couchbase_helper/geospatial/"
-                           "earthquakes.json") as f:
+                      "earthquakes.json") as f:
                 while not done:
                     for doc in json.load(f):
                         if bool(random.getrandbits(1)):
-                           doc['geo'] = [doc['geo']['lon'], doc['geo']['lat']]
+                            doc['geo'] = [doc['geo']['lon'], doc['geo']['lat']]
                         doc['Eqid'] = str(doc['Eqid'])
                         doc['Version'] = str(doc['Version'])
                         doc['mutated'] = 0
@@ -639,34 +672,34 @@ class GeoSpatialDataLoader(KVGenerator):
                         count += 1
             f.close()
         except IOError:
-            print ("Unable to find file lib/couchbase_helper/"
-                       "geospatial/earthquakes.json, data not loaded!")
+            print("Unable to find file lib/couchbase_helper/"
+                  "geospatial/earthquakes.json, data not loaded!")
 
-    def custom_read_from_dump(self,filename="geoshape.json"):
+    def custom_read_from_dump(self, filename="geoshape.json"):
         count = 0
         done = False
         while not done:
             try:
                 import os
-                filepath = os.path.join("lib","couchbase_helper","geospatial",filename) 
-                f = open(filepath,'r')
+                filepath = os.path.join("lib", "couchbase_helper", "geospatial", filename)
+                f = open(filepath, 'r')
                 for doc in json.load(f):
                     doc['id'] = str(doc['id'])
-                    doc['type'] = 'earthquake' 
+                    doc['type'] = 'earthquake'
                     self.gen_docs[count] = doc
-                    if count>=self.end:
+                    if count >= self.end:
                         done = True
                         f.close()
                         break
-                    count+=1
+                    count += 1
 
             except IOError:
-                print ("Unable to find file " + filepath + ", data not loaded!")
-                geoshape_s3_path = GEOJSONDATASET 
+                print("Unable to find file " + filepath + ", data not loaded!")
+                geoshape_s3_path = GEOJSONDATASET
                 print(("Unable to find file " + filepath + "Downloading ..."))
                 import urllib.request, urllib.parse, urllib.error
                 urllib.request.URLopener().retrieve(
-                geoshape_s3_path, filepath)
+                    geoshape_s3_path, filepath)
                 print("Download complete!")
 
     def __next__(self):
@@ -679,7 +712,7 @@ class GeoSpatialDataLoader(KVGenerator):
             # happens with 'delete' gen
             pass
         self.itr += 1
-        return self.name+str(self.itr),\
+        return self.name + str(self.itr), \
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
 
 
@@ -690,7 +723,7 @@ class SDKDataLoader(object):
                  scope="_default", collection="_default", json_template="Person", doc_expiry=0, fields_to_update=None,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
-                 es_login=None, es_password=None, output=False, upd_del_shift=0 , shuffle_docs=False, capella=False):
+                 es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
@@ -766,6 +799,7 @@ class SDKDataLoader(object):
 
     def set_sdk_results(self, results):
         self.results = results
+
 
 class NapaDataLoader(KVGenerator):
 
@@ -865,7 +899,7 @@ class NapaDataLoader(KVGenerator):
                 size *= len(arg)
 
         KVGenerator.__init__(self, name, 0, size)
-        random.seed(0,1)
+        random.seed(0, 1)
 
         if 'start' in kwargs:
             self.start = int(kwargs['start'])
@@ -896,7 +930,7 @@ class NapaDataLoader(KVGenerator):
                     f.close()
             except IOError:
                 print("Unable to find file lib/couchbase_helper/napa/"
-                       "napa_dataset.txt.gz. Downloading from {0}...".format(NAPADATASET))
+                      "napa_dataset.txt.gz. Downloading from {0}...".format(NAPADATASET))
                 import urllib.request, urllib.parse, urllib.error
                 urllib.request.URLopener().retrieve(
                     NAPADATASET,
@@ -914,5 +948,5 @@ class NapaDataLoader(KVGenerator):
             pass
         doc['type'] = 'napa'
         self.itr += 1
-        return self.name+str(10000000+self.itr), \
+        return self.name + str(10000000 + self.itr), \
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")

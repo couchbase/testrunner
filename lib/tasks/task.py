@@ -1752,6 +1752,7 @@ class ESRunQueryCompare(Task):
         self.es_index_name = es_index_name or "es_index"
         self.n1ql_executor = n1ql_executor
         self.score = TestInputSingleton.input.param("score",'')
+        self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
         self.use_collections = use_collections
         self.dataset = dataset
         self.reduce_query_logging = reduce_query_logging
@@ -1797,9 +1798,19 @@ class ESRunQueryCompare(Task):
                               "-------------- Query # %s -------------"
                               "---------------------------------------"
                               % str(self.query_index + 1))
+            if "vector" in str(self.fts_query):
+                from sentence_transformers import SentenceTransformer
+                encoder = SentenceTransformer(self.llm_model)
+                vector_query = self.fts_query["vector"]
+                self.log.info(f"Searching for --> {vector_query}")
+                k = self.fts_query["k"]
+                search_vector = encoder.encode(vector_query)
+                self.fts_query["vector"] = search_vector.tolist()
             try:
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
                     self.run_fts_query(self.fts_query, self.score)
+                if "vector" in str(self.fts_query):
+                    self.log.info(fts_doc_ids)
                 if not self.reduce_query_logging:
                     self.log.info("Status: %s" % fts_status)
                 elif fts_status == 'fail':
@@ -1851,7 +1862,7 @@ class ESRunQueryCompare(Task):
                 self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
             es_hits = 0
-            if self.es and self.es_query:
+            if self.es and self.es_query and "vector" not in self.fts_query:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
                               (json.dumps(self.es_query, ensure_ascii=False),
@@ -1912,13 +1923,19 @@ class ESRunQueryCompare(Task):
                 else:
                     kv_container = "default"
 
+                search_query = self.fts_query
+                if "vector" in self.fts_query:
+                    search_query = {}
+                    search_query["query"] = {"match_none": {}}
+                    search_query["explain"] = True
+                    search_query["knn"] = [self.fts_query]
                 n1ql_queries = [f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(self.fts_query, ensure_ascii=False)) + ")", f"select meta().id from {kv_container} where type='" + str(
+                    json.dumps(search_query, ensure_ascii=False)) + ")", f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(self.fts_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})", f"select meta().id,* from {kv_container} where type='" + str(
+                    json.dumps(search_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})", f"select meta().id,* from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
-                    json.dumps(self.fts_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})"]
+                    json.dumps(search_query, ensure_ascii=False)) + ",{\"index\": \"" + self.fts_index.name + "\"})"]
                 for n1ql_query in n1ql_queries:
                     if ("disjuncts" not in n1ql_query and "-" not in n1ql_query) or "\"index\"" in n1ql_query:
                         self.log.info("Running N1QL query: " + str(n1ql_query))
@@ -1959,6 +1976,37 @@ class ESRunQueryCompare(Task):
                             self.passed = False
                             self.log.info("N1QL query execution is failed.")
                             self.log.error(n1ql_result["errors"][0]['msg'])
+            if "vector" in str(self.fts_query):
+                import faiss
+                import numpy as np
+                _vector = np.array([search_vector])
+                faiss.normalize_L2(_vector)
+                distances, ann = self.fts_index.faiss_index.search(_vector, k=k)
+                print("Results from faiss index --> ", distances, ann)
+                faiss_doc_ids = [f"emp{10000000+res+1}" for res in ann[0]]
+                print("Docids from faiss index --> ", faiss_doc_ids)
+                if len(faiss_doc_ids) != int(fts_hits):
+                    msg = "FAIL: FTS hits: %s, while FAISS hits: %s" \
+                          % (fts_hits, faiss_doc_ids)
+                    self.log.error(msg)
+                faiss_but_not_fts = list(set(faiss_doc_ids) - set(fts_doc_ids))
+                fts_but_not_faiss = list(set(fts_doc_ids) - set(faiss_doc_ids))
+                if not (faiss_but_not_fts or fts_but_not_faiss):
+                    self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                  " returned by FAISS, doc_ids verified")
+                else:
+                    if fts_but_not_faiss:
+                        msg = "FAIL: Following %s doc(s) were not returned" \
+                              " by FAISS,but FTS, printing 50: %s" \
+                              % (len(fts_but_not_faiss), fts_but_not_faiss[:50])
+                    else:
+                        msg = "FAIL: Following %s docs were not returned" \
+                              " by FTS, but FAISS, printing 50: %s" \
+                              % (len(faiss_but_not_fts), faiss_but_not_fts[:50])
+                    self.log.error(msg)
+                    self.passed = False
+
+
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -1970,7 +2018,6 @@ class ESRunQueryCompare(Task):
             self.log.error(e)
             self.set_exception(e)
             self.state = FINISHED
-
     def run_fts_query(self, query, score=''):
         return self.fts_index.execute_query(query, score=score)
 

@@ -814,6 +814,7 @@ class FTSIndex:
         self.index_type = index_type
         self.collection_index = collection_index
         self.scope = scope
+        self.faiss_index = None
         self.collections = collections
         self.multiple_ca=multiple_ca
         self.is_elixir = is_elixir
@@ -865,6 +866,7 @@ class FTSIndex:
             self.generate_new_custom_map(seed=self.cm_id, type_mapping=type_mapping, collection_index=collection_index)
 
         self.fts_queries = []
+        self.vector_queries = []
         self.uuid = None
 
         if index_params:
@@ -1420,12 +1422,18 @@ class FTSIndex:
                                   consistency_level='',
                                   consistency_vectors={},
                                   score='',
-                                  knn=None):
+                                  knn=None, vector_search=False):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         max_limit_matches = TestInputSingleton.input.param("query_limit_matches", None)
         query_json = copy.deepcopy(QUERY.JSON)
         # query is a unicode dict
-        query_json['query'] = query
+        if vector_search:
+            query_type_list = ["match_none", "match_all"]
+            query_type = query_type_list[random.randint(0, 1)]
+            query_json['query'][query_type] = {}
+            query_json['knn'] = [query]
+        else:
+            query_json['query'] = query
         query_json['indexName'] = self.name
         query_json['explain'] = explain
         if max_matches is not None and max_matches != 'None':
@@ -1519,12 +1527,22 @@ class FTSIndex:
 
         return facet_definition
 
+    def is_vector_query(self, query):
+        res = False
+        try:
+            res = 'vector' in str(query)
+        except Exception as e:
+            self.__log.info(str(e))
+        return res
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None,
-                      knn=None,fields=None):
+                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None, knn=None,fields=None):
+
+        vector_search = False
+        if self.is_vector_query(query):
+            vector_search = True
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1540,7 +1558,7 @@ class FTSIndex:
                                                     consistency_vectors=consistency_vectors,
                                                     timeout=timeout,
                                                     score=score,
-                                                    knn=knn)
+                                                    knn=knn, vector_search=vector_search)
 
         hits = -1
         matches = []
@@ -3881,6 +3899,8 @@ class FTSBaseTest(unittest.TestCase):
         self.container_type = TestInputSingleton.input.param("container_type", "bucket")
         self.scope = TestInputSingleton.input.param("scope", "scope1")
         self.skip_log_scan = self._input.param("skip_log_scan", False)
+        self.vector_search = TestInputSingleton.input.param("vector_search", False)
+        self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
         self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
         self.restart_couchbase = self._input.param("restart_couchbase", False)
         self.expiry = self._input.param("expiry", 0)
@@ -5271,6 +5291,9 @@ class FTSBaseTest(unittest.TestCase):
             index.fts_queries.append(
                 json.loads(json.dumps(fts_query, ensure_ascii=False)))
 
+        for v_query in query_gen.vector_queries:
+            index.vector_queries.append(json.loads(json.dumps(v_query, ensure_ascii=False)))
+
         if self.compare_es:
             for es_query in query_gen.es_queries:
                 # unlike fts, es queries are not nested before sending to fts
@@ -5623,6 +5646,19 @@ class FTSBaseTest(unittest.TestCase):
     def teardown_es(self):
         self.es.delete_indices()
 
+    def create_faiss_index(self, gen):
+        import faiss
+        import numpy as np
+        from sentence_transformers import SentenceTransformer
+        encoder = SentenceTransformer(self.llm_model)
+        faiss_index = faiss.IndexFlatL2(encoder.get_sentence_embedding_dimension())
+        for k, v in gen.gen_docs.items():
+            l_vector = encoder.encode(v["learnings"])
+            _v = np.array([l_vector])
+            faiss.normalize_L2(_v)
+            faiss_index.add(_v)
+
+        return faiss_index
     def create_es_index_mapping(self, es_mapping, fts_mapping=None):
         if not (self.num_custom_analyzers > 0):
             self.es.create_index_mapping(index_name="es_index",

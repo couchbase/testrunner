@@ -1,5 +1,5 @@
 import random
-from lib.couchbase_helper.data import FIRST_NAMES, LAST_NAMES, LANGUAGES, DEPT
+from lib.couchbase_helper.data import FIRST_NAMES, LAST_NAMES, LANGUAGES, DEPT, LEARNINGS_QUERY
 
 class EmployeeQuerables:
 
@@ -74,6 +74,13 @@ class EmployeeQuerables:
         Returns one or two languages
         """
         return self.get_random_value(LANGUAGES)
+
+    def get_queryable_l_vector(self):
+        """
+        Returns one or two languages
+        """
+        vector_text = self.get_random_value(LEARNINGS_QUERY)
+        return vector_text
 
     def get_queryable_email(self):
         return "%s@mcdiabetes.com" % self.get_random_value(FIRST_NAMES).lower()
