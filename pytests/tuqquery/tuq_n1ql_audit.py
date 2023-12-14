@@ -324,45 +324,45 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         if query_type == 'no_select':
             query = 'select * from ' + self.query_buckets[0] + ' limit 100'
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
                                 'description': 'A N1QL SELECT statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'SELECT statement'}
         elif query_type == "no_insert":
             query = "INSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3,'lineitems':[ '11', '12', '13' ] })"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run INSERT queries on default:{0}. Add role query_insert on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run INSERT queries on default:{0}. Add role query_insert on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "INSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3,'lineitems':[ '11', '12', '13' ] });",
                                 'description': 'A N1QL INSERT statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'INSERT statement'}
 
         elif query_type == 'no_upsert':
             query = "UPSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3, 'lineitems': [ '11', '12', '13' ] })"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run INSERT queries on default:default. Add role query_insert on default:default to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run INSERT queries on default:default. Add role query_insert on default:default to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "UPSERT INTO " + self.query_buckets[0] + " ( KEY, VALUE ) VALUES ('1',{ 'order_id': '1', 'type': 'order', 'customer_id':'24601', 'total_price': 30.3, 'lineitems': [ '11', '12', '13' ] });",
                                 'description': 'A N1QL UPSERT statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'UPSERT statement'}
         elif query_type == "no_delete":
             bucket_name = self.query_buckets[1].replace('`','\`')
             stripped_name = self.query_buckets[1].replace('`','')
             query = "DELETE FROM " + bucket_name + " WHERE type = 'hotel'"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run DELETE queries on default:{0}. Add role query_delete on default:{0} to allow the query to run.".format(stripped_name)}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run DELETE queries on default:{0}. Add role query_delete on default:{0} to allow the statement to run.".format(stripped_name)}],
                                 'isAdHoc': True,
                                 'statement': "DELETE FROM " + self.query_buckets[1] + " WHERE type = 'hotel';",
                                 'description': 'A N1QL DELETE statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'DELETE statement'}
 
         elif query_type == "no_update":
@@ -370,12 +370,12 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             stripped_name = self.query_buckets[1].replace('`','')
             query = "UPDATE " + bucket_name + " SET foo = 5"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run UPDATE queries on default:{0}. Add role query_update on default:{0} to allow the query to run.".format(stripped_name)}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run UPDATE queries on default:{0}. Add role query_update on default:{0} to allow the statement to run.".format(stripped_name)}],
                                 'isAdHoc': True,
                                 'statement': "UPDATE " + self.query_buckets[1] + " SET foo = 5;",
                                 'description': 'A N1QL UPDATE statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'UPDATE statement'}
 
         elif query_type == "no_merge":
@@ -383,43 +383,43 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             stripped_name = self.query_buckets[1].replace('`','')
             query = "MERGE INTO " + bucket_name + " t USING [{'id':'21728'},{'id':'21730'}] source ON KEY 'hotel_'|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy , t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(stripped_name)}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the statement to run.".format(stripped_name)}],
                                 'isAdHoc': True,
                                 'statement': "MERGE INTO " + self.query_buckets[1] + " t USING [{'id':'21728'},{'id':'21730'}] source ON KEY 'hotel_'|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy , t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy;",
                                 'description': 'A N1QL MERGE statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'MERGE statement'}
         elif query_type == "no_grant":
             query = "GRANT query_external_access TO query"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the query to run."}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the statement to run."}],
                                 'isAdHoc': True,
                                 'statement': "GRANT query_external_access TO query;",
                                 'description': 'A N1QL GRANT ROLE statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'GRANT ROLE statement'}
 
         elif query_type == "no_revoke":
             query="REVOKE query_system_catalog FROM query"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the query to run."}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run queries updating user information. Add role admin to allow the statement to run."}],
                                 'isAdHoc': True,
                                 'statement': "REVOKE query_system_catalog FROM query;",
                                 'description': 'A N1QL REVOKE ROLE statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'REVOKE ROLE statement'}
         elif query_type == "no_explain":
             query="EXPLAIN SELECT * FROM " + self.query_buckets[0]
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "EXPLAIN SELECT * FROM " + self.query_buckets[0] + ";",
                                 'description': 'A N1QL EXPLAIN statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'EXPLAIN statement'}
 
         elif query_type == "no_prepare":
@@ -427,23 +427,23 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
 
             query="prepare {0} from select * from {1}".format(prepared_name, self.query_buckets[0])
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run SELECT queries on default:{0}. Add role query_select on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "prepare {0} from select * from {1};".format(prepared_name, self.query_buckets[0]),
                                 'description': 'A N1QL PREPARE statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'PREPARE statement'}
 
         elif query_type == "no_create_index":
             query="CREATE INDEX idx on " + self.query_buckets[0] + "(join_day)"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "CREATE INDEX idx on " + self.query_buckets[0] + "(join_day);",
                                 'description': 'A N1QL CREATE INDEX statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'CREATE INDEX statement'}
 
         elif query_type == "no_alter_index":
@@ -454,13 +454,13 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                 self.servers[1].ip, self.servers[1].port)
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
 
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "ALTER INDEX idx4 ON " + self.query_buckets[0] + " WITH {'action':'move','nodes':['%s:%s']};" % (
                 self.servers[1].ip, self.servers[1].port),
                                 'description': 'A N1QL ALTER INDEX statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'ALTER INDEX statement'}
 
         elif query_type == "no_build_index":
@@ -468,34 +468,34 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                 query="CREATE INDEX idx3 on " + self.query_buckets[0] + "(join_yr) WITH {'defer_build':true}")
             query = "BUILD INDEX on " + self.query_buckets[0] + "(idx3)"
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': 'BUILD INDEX on ' + self.query_buckets[0] + '(idx3);',
                                 'description': 'A N1QL BUILD INDEX statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'BUILD INDEX statement'}
 
         elif query_type == "no_drop_index":
             self.run_cbq_query(query='CREATE INDEX idx2 on ' + self.query_buckets[0] + '(fake1)')
             query='DROP INDEX idx2 ON ' + self.query_buckets[0]
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': 'DROP INDEX idx2 ON ' + self.query_buckets[0] + ";",
                                 'description': 'A N1QL DROP INDEX statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'DROP INDEX statement'}
         elif query_type == "no_primary_index":
             query="CREATE PRIMARY INDEX on " + self.query_buckets[0]
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the query to run.".format(self.query_buckets[0])}],
+            expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'errors': [{"code":13014,"msg":"User does not have credentials to run index operations. Add role query_manage_index on default:{0} to allow the statement to run.".format(self.query_buckets[0])}],
                                 'isAdHoc': True,
                                 'statement': "CREATE PRIMARY INDEX on " + self.query_buckets[0] + ";",
                                 'description': 'A N1QL CREATE PRIMARY INDEX statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_query'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'CREATE PRIMARY INDEX statement'}
 
         elif query_type == "incorrect_auth":
@@ -508,7 +508,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                 'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
                                 'description': 'A N1QL SELECT statement was executed',
                                 'real_userid': {'source': 'local', 'user': 'no_select'},
-                                'userAgent': 'Go-http-client/1.1 (CBQ/2.0)',
+                                'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'SELECT statement'}
         self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
 
