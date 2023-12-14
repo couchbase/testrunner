@@ -1524,11 +1524,12 @@ class FTSIndex:
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
                       consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None,
-                      knn=None):
+                      knn=None,fields=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
         query_dict = self.construct_cbft_query_json(query,
+                                                    fields=fields,
                                                     sort_fields=sort_fields,
                                                     explain=explain,
                                                     show_results_from_item=show_results_from_item,
@@ -5471,7 +5472,7 @@ class FTSBaseTest(unittest.TestCase):
                 index_collections.append(idx_dict["collection"])
         return collection_index, _type, index_scope, index_collections
 
-    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False, vector_fields=None, field_type=None, field_name=None):
+    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False, vector_fields=None, field_type=None, field_name=None, extra_fields=None):
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
         indexes = []
@@ -5500,6 +5501,16 @@ class FTSBaseTest(unittest.TestCase):
                                                                               field_alias=field_name,
                                                                               scope=index_scope,
                                                                               collection=collection)
+
+                if extra_fields:
+                    for collection in index_collections:
+                        for field in extra_fields:
+                            for key, value in field.items():
+                                fts_index.add_child_field_to_default_collection_mapping(field_name=key,
+                                                                                        field_type=value,
+                                                                                        field_alias=key,
+                                                                                        scope=index_scope,
+                                                                                        collection=collection)
                     if index_replica > 1:
                         fts_index.update_num_replicas(index_replica)
             else:
@@ -6237,8 +6248,20 @@ class FTSBaseTest(unittest.TestCase):
                     vl.load_data()
         return bucketvsdataset
 
-    def get_query_vectors(self, dataset_name, use_hdf5_datasets):
+    def get_query_vectors(self, dataset_name):
         ds = VectorDataset(dataset_name)
+        use_hdf5_datasets = True
+        if ds.dataset_name in ds.supported_sift_datasets:
+            use_hdf5_datasets = False
         ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="query")
         print(f"First Query vector:{str(ds.query_vecs[0])}")
         return ds.query_vecs
+
+    def get_groundtruth_file(self, dataset_name):
+        ds = VectorDataset(dataset_name)
+        use_hdf5_datasets = True
+        if ds.dataset_name in ds.supported_sift_datasets:
+            use_hdf5_datasets = False
+        ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="groundtruth")
+        print(f"First groundtruth vector:{str(ds.neighbors_vecs[0])}")
+        return ds.neighbors_vecs
