@@ -15,7 +15,7 @@ def seed_email(email):
         prefix = name
     return "{}+{}@{}".format(prefix, uuid, domain)
 
-def invite_user(token, api_url, user, password, tenant):
+def invite_user(api_url, user, password, tenant):
     user_email = seed_email(user)
     user_name = user_email.split("@")
     # 1+ lowercase 1+ uppercase 1+ symbols 1+ numbers
