@@ -922,6 +922,16 @@ class DMLQueryTests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['results'][0]['actual'], current_docs - 1, 'Item was not deleted')
 
+    def test_delete_limit_where_offset(self):
+        self.fail_if_no_buckets()
+        for query_bucket in self.query_buckets:
+            self.run_cbq_query(f'CREATE INDEX ix1 IF NOT EXISTS ON {query_bucket}(id ASC)')
+            self.run_cbq_query(f'INSERT INTO {query_bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco", "id": d}} as v FROM array_range(1,11) d')
+            self.run_cbq_query(f'DELETE FROM {query_bucket} WHERE id is not null LIMIT 3 OFFSET 5')
+            result = self.run_cbq_query(f'SELECT id FROM {query_bucket} ORDER BY id')
+            expected = [{'id': 1}, {'id': 2}, {'id': 3}, {'id': 4}, {'id': 5}, {'id': 9}, {'id': 10}]
+            self.assertEqual(result['results'], expected, f"We expected: {expected} but got: {result['results']}")
+
     def delete_where_clause_json_hints(self, idx_name):
         keys, values = self._insert_gen_keys(self.num_items, prefix='delete_where_hints')
         keys_to_delete = [keys[i] for i in range(len(keys)) if values[i]["job_title"] == 'Engineer']
