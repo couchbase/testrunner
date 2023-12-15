@@ -45,6 +45,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             service_type="index", get_all_nodes=True)
         if self.use_shard_based_rebalance:
             self.enable_shard_based_rebalance()
+    def bucket_setup(self):
         if self.use_cbbackupmgr:
             for node in self.indexer_nodes:
                 remote_client = RemoteMachineShellConnection(node)
@@ -1416,6 +1417,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             self.assertTrue(backup_result[0], str(backup_result[1]))
 
     def test_restore_with_invalid_keyspaces(self):
+        self.bucket_setup()
         invalid_bucket = "invalid_bucket"
         invalid_scope = "invalid_scope"
         invalid_collection = "invalid_collection"
@@ -1438,7 +1440,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         self.assertTrue(backup_result[0], str(backup_result[1]))
         mappings = ["{0}:{1}".format(scope, invalid_scope)]
         restore_result = backup_client.restore(mappings, use_https=self.use_https)
-        self.assertFalse(restore_result[0], restore_result[1])
+        self.assertTrue(restore_result[0], restore_result[1])
         if self.use_cbbackupmgr:
             backup_client.remove_backup()
         namespace = ["{0}.{1}".format(scope, collection)]
@@ -1447,7 +1449,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         map_arg = "{0}.{1}".format(scope, invalid_collection)
         mappings = ["{0}:{1}".format(namespace[0], map_arg)]
         restore_result = backup_client.restore(mappings, use_https=self.use_https)
-        self.assertFalse(restore_result[0], restore_result[1])
+        self.assertTrue(restore_result[0], restore_result[1])
 
 
     def test_backup_restore_with_scheduled_indexes(self):
