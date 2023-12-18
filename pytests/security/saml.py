@@ -32,7 +32,8 @@ class SAMLTest(BaseTestCase):
     def suite_setUp(self):
         super(SAMLTest, self).suite_setUp()
         self.okta_account = self.input.param("okta_account", "https://dev-82235514.okta.com/")
-        self.okta_token = self.input.param("okta_token", "00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux")
+        self.okta_token = self.input.param("okta_token",
+                                           "00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux")
         self.okta_app_id, self.idp_metadata = self.saml_util.create_okta_application(
             self.okta_token, self.master, self.okta_account)
         self.saml_util.upload_idp_metadata(self.okta_app_id, self.idp_metadata)
@@ -45,6 +46,8 @@ class SAMLTest(BaseTestCase):
         self.remote_connection = RemoteMachineShellConnection(self.master)
         self.saml_user = self.input.param("saml_user", "qe.security.testing@couchbase.com")
         self.saml_passcode = self.input.param("saml_passcode", "Password@123")
+        self.okta_token = self.input.param("okta_token",
+                                           "00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux")
 
     def teardown(self):
         self.log.info("Teardown Start")
@@ -55,7 +58,7 @@ class SAMLTest(BaseTestCase):
     def suite_tearDown(self):
         self.log.info("Suite Teardown Start")
         self.log.info("Delete all applications")
-        self.saml_util.delete_okta_applications()
+        self.saml_util.delete_okta_applications(self.okta_token)
         self.log.info("Suite Teardown End")
 
     def login_sso(self, https=False):
@@ -516,7 +519,7 @@ class SAMLTest(BaseTestCase):
 
         # STEP 2: Authenticate an LDAP user
         self.log.info("STEP 3: Authenticate an LDAP user")
-        cmd = "curl -u dave:password 10.123.233.103:8091/pools/default"
+        cmd = "curl -u dave:password " + self.master.ip + ":8091/pools/default"
         self.remote_connection.execute_command(cmd, debug=True)
 
         # STEP 3: Enable SAML and Login via SSO
@@ -1351,7 +1354,7 @@ class SAMLTest(BaseTestCase):
         # 7500 = 1777.38 kiloBytes: PASS
         # 9000 =  2131.376 kiloBytes: PASS
         # 10000 = 2367.38 kiloBytes: FAIL
-        additional_attributes = self.input.param("additional_attributes", 10000)
+        additional_attributes = self.input.param("additional_attributes", 10000000)
         for i in range(additional_attributes):
             attribute = ET.Element("saml2:Attribute",
                                    {"Name": "role_" + str(i),
@@ -1375,7 +1378,8 @@ class SAMLTest(BaseTestCase):
         self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
         try:
             self.saml_util.saml_consume_url(self.master, cookie_string, new_SAMLResponse)
-        except KeyError:
+        except Exception as e:
+            print(e)
             self.log.info("SSO session creation failed as expected for oversize SAML response")
         else:
             self.fail("SSO session creation should have failed for oversize SAML response")
@@ -2292,10 +2296,11 @@ class SAMLTest(BaseTestCase):
         Step 4: Redirect to the IdP
         Step 5: SSO user authentication via the IdP
         Step 6: Get the SAML response from the IdP
-        Step 7: Initiate another SSO
-        Step 8: Get the second SAML response
-        Step 9: Replace second SAML response's assertion with the first one's
-        Step 10: Verify the SSO fails
+        Step 7: Send this SAML response to CB server
+        Step 8: Initiate another SSO
+        Step 9: Get the second SAML response
+        Step 10: Replace second SAML response's assertion with the first one's
+        Step 11: Verify the SSO fails
         """
 
         self.log.info("Delete current SAML settings")
@@ -2364,6 +2369,13 @@ class SAMLTest(BaseTestCase):
         self.log.info('Get the SAML response from the IdP')
         SAMLResponse1 = self.saml_util.get_saml_response(next_url, cookie_string, j_session_id)
         self.log.info("SAMLResponse: {0}".format(SAMLResponse1))
+
+        # Send the SAML response to Couchbase and set a session for the SSO user
+        self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
+        session_cookie_name, session_cookie_value = self.saml_util \
+            .saml_consume_url(self.master, cookie_string, SAMLResponse1)
+        self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+        self.log.info("session_cookie_value: {0}".format(session_cookie_value))
 
         # convert to xml
         saml_response_xml1 = base64.b64decode(SAMLResponse1)
@@ -2445,10 +2457,13 @@ class SAMLTest(BaseTestCase):
         new_SAMLResponse = invalid_saml_response_xml.encode("utf-8")
         new_SAMLResponse = base64.b64encode(new_SAMLResponse)
 
-        # Send the oversize SAML response to Couchbase and set a session for the SSO user
+        # Send the modified SAML response to Couchbase and set a session for the SSO user
         self.log.info('Send the SAML response to Couchbase and set a session for the SSO user')
         try:
-            self.saml_util.saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+            session_cookie_name, session_cookie_value = self.saml_util \
+                .saml_consume_url(self.master, cookie_string, new_SAMLResponse)
+            self.log.info("session_cookie_name: {0}".format(session_cookie_name))
+            self.log.info("session_cookie_value: {0}".format(session_cookie_value))
         except KeyError:
             self.log.info("SSO session creation failed as expected for a duplicate SAML response")
         else:
