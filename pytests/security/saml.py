@@ -32,10 +32,11 @@ class SAMLTest(BaseTestCase):
     def suite_setUp(self):
         super(SAMLTest, self).suite_setUp()
         self.okta_account = self.input.param("okta_account", "https://dev-82235514.okta.com/")
-        self.okta_app_id, self.idp_metadata = self.saml_util.create_okta_application(self.master,
-                                                                                     self.okta_account)
+        self.okta_token = self.input.param("okta_token", "00a6iymLSK2XvPTf9zCntdy2dEBBwdU3jh5jd6TQux")
+        self.okta_app_id, self.idp_metadata = self.saml_util.create_okta_application(
+            self.okta_token, self.master, self.okta_account)
         self.saml_util.upload_idp_metadata(self.okta_app_id, self.idp_metadata)
-        self.saml_util.assign_user(self.okta_app_id, self.okta_account)
+        self.saml_util.assign_user(self.okta_token, self.okta_app_id, self.okta_account)
 
     def setUp(self):
         super(SAMLTest, self).setUp()
@@ -48,7 +49,7 @@ class SAMLTest(BaseTestCase):
     def teardown(self):
         self.log.info("Teardown Start")
         self.log.info("Delete all applications")
-        self.saml_util.delete_okta_applications(self.okta_account)
+        self.saml_util.delete_okta_applications(self.okta_token, self.okta_account)
         self.log.info("Teardown End")
 
     def suite_tearDown(self):
@@ -3304,7 +3305,7 @@ class SAMLTest(BaseTestCase):
             SAML assertion validation failed
             {envelope, error, no signature}
         """
-        self.saml_util.update_okta_application(self.master)
+        self.saml_util.update_okta_application(self.okta_token, self.master)
 
         self.log.info("Delete current SAML settings")
         status, content, header = self.rest.delete_saml_settings()
@@ -3372,7 +3373,7 @@ class SAMLTest(BaseTestCase):
         else:
             self.fail("SSO session creation should have failed for incomplete SAML response")
 
-        self.saml_util.reset_okta_application(self.master)
+        self.saml_util.reset_okta_application(self.okta_token, self.master)
 
     def test_unsigned_response_uncheck(self):
         """
@@ -3386,7 +3387,7 @@ class SAMLTest(BaseTestCase):
         STEP 3: Authenticates, no error
         """
 
-        self.saml_util.update_okta_application(self.master)
+        self.saml_util.update_okta_application(self.okta_token, self.master)
 
         self.log.info("Delete current SAML settings")
         status, content, header = self.rest.delete_saml_settings()
@@ -3462,7 +3463,7 @@ class SAMLTest(BaseTestCase):
         else:
             self.fail("SSO Log in Failed")
 
-        self.saml_util.reset_okta_application(self.master)
+        self.saml_util.reset_okta_application(self.okta_token, self.master)
 
     def test_custom_url_node_address(self):
         """
