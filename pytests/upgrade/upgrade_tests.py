@@ -574,10 +574,13 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.sasl_buckets = 1
                 self.sasl_bucket_name = self.sasl_bucket_name + "_" \
                                             + str(self.total_buckets)
+                sasl_bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                           replicas=self.num_replicas, bucket_type=self.bucket_type)
+                self.cluster.create_sasl_bucket(name=self.sasl_bucket_name, password=self.sasl_password, bucket_params=sasl_bucket_params)
             else:
                 self.bucket_size = 512
-            self.rest = RestConnection(self.master)
-            self._bucket_creation()
+                self.rest = RestConnection(self.master)
+                self._bucket_creation()
             self.sleep(5, "sleep after create bucket")
             self.total_buckets +=1
             bucket_created = True
