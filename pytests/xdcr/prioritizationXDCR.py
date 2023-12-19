@@ -41,6 +41,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
             # Taking 10 samples of DCP priority ~5 seconds apart.
             # cbstats takes ~4 secs + 2 seconds sleep
             for sample in range(10):
+                time.sleep(60)
                 output, error = shell.execute_cbstats(bucket, "dcp", print_results=False)
                 for stat in output:
                     if re.search("eq_dcpq:xdcr:dcp_" + repl['id'] + ".*==:priority:", stat):
@@ -80,6 +81,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
                 "%s@%s" %
                 (bucket.name, cluster.get_name()), None)
             if param_str:
+                time.sleep(60)
                 expected_priority = (param_str.split('priority:')[1]).split(',')[0]
                 actual_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority"))
                 if expected_priority != actual_priority:

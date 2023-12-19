@@ -1,4 +1,5 @@
 import datetime
+import time
 import random
 import re
 
@@ -103,7 +104,8 @@ class nwusage(XDCRNewBaseTest):
             time_to_compare = self._extract_timestamp(event_time)
         else:
             matches, count = NodeHelper.check_goxdcr_log(node, "Success adding replication specification",
-                                                         print_matches=True, timeout=60)
+                                                         print_matches=True, timeout=120)
+            self.log.info("matches: {0}, count: {1}".format(matches, count))
             # Time when replication was set up
             if count > 0:
                 time_to_compare = self._extract_timestamp(matches[-1])

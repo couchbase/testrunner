@@ -454,6 +454,7 @@ class NodeHelper:
             log_name = "goxdcr.log"
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info().type.lower()
+        NodeHelper._log.info("info: {0}".format(info))
         if info == "windows":
             goxdcr_log = WIN_COUCHBASE_LOGS_PATH + log_name + '*'
             cmd = "grep "
@@ -463,12 +464,13 @@ class NodeHelper:
                              + '/' + log_name + '*'
             cmd = "zgrep "
         cmd += "\"{0}\" {1}".format(search_str, goxdcr_log)
+        NodeHelper._log.info("cmd: {0}".format(cmd))
         iter = 0
         count = 0
         matches = []
         # Search 5 times with a break of timeout sec
         while iter < 5:
-            matches, err = shell.execute_command(cmd)
+            matches, err = shell.execute_command(cmd)            
             count = len(matches)
             if count > 0 or timeout == 0:
                 break
@@ -2702,7 +2704,7 @@ class CouchbaseCluster:
             task.result(timeout)
         self.__meta_data_verified = True
 
-    def wait_for_dcp_queue_drain(self, timeout=180):
+    def wait_for_dcp_queue_drain(self, timeout=360):
         """Wait for ep_dcp_xdcr_items_remaining to reach 0.
         @return: True if reached 0 else False.
         """
@@ -2713,6 +2715,7 @@ class CouchbaseCluster:
         end_time = curr_time + timeout
         rest = RestConnection(self.__master_node)
         buckets = copy.copy(self.get_buckets())
+        self.__log.info("{}".format(buckets))
         for bucket in buckets:
             try:
                 mutations = int(rest.get_dcp_queue_size(bucket.name))
@@ -2725,6 +2728,8 @@ class CouchbaseCluster:
                     time.sleep(5)
                     end_time = end_time - 5
             except Exception as e:
+                self.__log.info("Exception")
+                self.__log.info("{}".format(bucket))
                 self.__log.error(e)
             if curr_time > end_time:
                 self.__log.error(

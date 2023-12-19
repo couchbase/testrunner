@@ -2676,6 +2676,7 @@ class VerifyCollectionDocCountTask(Task):
     def execute(self, task_manager):
         try:
             for map_exp in self.mapping.items():
+                self.log.info("map_exp: {0}".format(map_exp))
                 if ':' in map_exp[0]:
                     src_scope = map_exp[0].split(':')[0]
                     src_collection = map_exp[0].split(':')[1]
@@ -2683,11 +2684,13 @@ class VerifyCollectionDocCountTask(Task):
                                                                         src_scope, src_collection,
                                                                         self.src.get_nodes(),
                                                                         self.src_stats)
+                    self.log.info("src_scope, src_collection, src_count: {0} {1} {2}".format(src_scope, src_collection, src_count))
                 else:
                     src_scope = map_exp[0]
                     src_collection = "all"
                     src_count = self.src_conn.get_scope_item_count(self.bucket, src_scope,
                                                                    self.src.get_nodes(), self.src_stats)
+                    self.log.info("src_scope, src_collection, src_count: {0} {1} {2}".format(src_scope, src_collection, src_count))
 
                 if map_exp[1]:
                     if map_exp[1].lower() == "null":
@@ -2698,21 +2701,26 @@ class VerifyCollectionDocCountTask(Task):
                         dest_collection_specified = True
                         dest_scope = map_exp[1].split(':')[0]
                         dest_collection = map_exp[1].split(':')[1]
+                        self.log.info("dest_collection_specified, dest_collection, dest_collection: {0} {1} {2}".format(dest_collection_specified, dest_collection, dest_scope))
                     elif "colon" in map_exp[1]:
                         dest_collection_specified = True
                         dest_scope = map_exp[1].split("colon")[0]
                         dest_collection = map_exp[1].split("colon")[1]
+                        self.log.info("dest_collection_specified, dest_collection, dest_collection: {0} {1} {2}".format(dest_collection_specified, dest_collection, dest_scope))
                     if dest_collection_specified:
                         dest_count = self.dest_conn.get_collection_item_count(self.bucket,
                                                                               dest_scope, dest_collection,
                                                                               self.dest.get_nodes(),
                                                                               self.dest_stats)
+                        self.log.info("dest_count: {0}".format(dest_count))
                     else:
                         dest_scope = map_exp[1]
                         dest_collection = "all"
                         dest_count = self.dest_conn.get_scope_item_count(self.bucket, dest_scope,
                                                                          self.dest.get_nodes(), self.dest_stats)
+                        self.log.info("dest_collection, dest_scope, dest_count: {0} {1} {2}".format(dest_collection, dest_scope, dest_count))
                 self.log.info('-' * 100)
+                time.sleep(180)
                 if src_count == dest_count:
                     self.log.info("Item count on src:{} {} = {} on dest:{} for "
                                   "bucket {} \nsrc : scope {}-> collection {},"

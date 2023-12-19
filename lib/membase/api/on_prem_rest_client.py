@@ -3645,16 +3645,21 @@ class RestConnection(object):
     def get_xdcr_param(self, src_bucket_name,
                                     dest_bucket_name, param):
         replication = self.get_replication_for_buckets(src_bucket_name, dest_bucket_name)
+        log.info(replication)
         api = self.baseUrl[:-1] + replication['settingsURI']
+        log.info(api)
         status, content, _ = self._http_request(api)
+        log.info(status, content)
         if not status:
             raise XDCRException("Unable to get replication setting {0} on bucket {1} on node {2}".
                       format(param, src_bucket_name, self.ip))
         json_parsed = json.loads(content)
+        log.info(json_parsed)
         # when per-replication settings match global(internal) settings,
         # the param is not returned by rest API
         # in such cases, return internalSetting value for the param
         try:
+            log.info(json_parsed[param])
             return json_parsed[param]
         except KeyError:
             if param == 'pauseRequested':

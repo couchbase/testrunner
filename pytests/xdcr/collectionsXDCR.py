@@ -169,8 +169,8 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
             skip_verify = True
 
         if oso_mode:
-            for cluster in self.get_cluster_objects_for_input(mirroring_mode):
-                if True in cluster.get_xdcr_param("collectionsOSOMode"):
+            for cluster in self.get_cluster_objects_for_input(oso_mode):
+                if True in cluster.get_xdcr_param("collectionsOSOMode"):                    
                     self.log.info("collectionsOSOMode is true as expected")
                 self.fail("collectionsOSOMode is false, expected to be true by default")
             skip_verify = True
