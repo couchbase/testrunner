@@ -32,7 +32,7 @@ CB_RELEASE_BUILDS = {"0.0.0": "0000",
 
 MACOS_NAME = {"10.10": "Yosemite", "10.11": "El Capitan", "10.12": "Sierra",
               "10.13": "High Sierra", "10.14": "Mojave", "10.15": "Catalina",
-              "12.3": "Monterey"}
+              "12.3": "Monterey", "14.2": "Sonoma"}
 
 SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "suse 12", "suse 15",
