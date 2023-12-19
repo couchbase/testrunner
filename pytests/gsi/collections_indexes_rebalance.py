@@ -52,15 +52,15 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.err_msg4 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
         self.system_query = "select * from system:indexes"
         self.log.info("==============  ConcurrentIndexes setup has completed ==============")
-    
+
     def tearDown(self):
         self.log.info("==============  ConcurrentIndexes tearDown has started ==============")
         super(CollectionIndexesRebalance, self).tearDown()
         self.log.info("==============  ConcurrentIndexes tearDown has completed ==============")
-    
+
     def suite_tearDown(self):
         pass
-    
+
     def suite_setUp(self):
         pass
 
@@ -219,6 +219,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
 
 
     def test_schedule_index_create_during_rebalance(self):
+        self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": False})
         schedule_index_disable = {"indexer.debug.enableBackgroundIndexCreation": False}
         self.rest.set_index_settings(schedule_index_disable)
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
@@ -780,6 +781,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             self.assertEqual(count, num_of_docs, "No. indexed docs are not matching after rebalance")
 
     def test_rebalance_out_node_with_schedule_indexes(self):
+        self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": False})
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.rest.set_index_settings(redistribute)
         schedule_index_disable = {"indexer.debug.enableBackgroundIndexCreation": False}
