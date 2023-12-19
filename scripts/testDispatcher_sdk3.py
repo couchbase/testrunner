@@ -852,7 +852,7 @@ def main():
                 # For capella, invite new user for each test job to launch
                 if options.serverType in [SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]:
                     print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
-                    invited_user, invited_password = capella.invite_user( options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
+                    invited_user, invited_password = capella.invite_user(options.capella_token, options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
                     if invited_user is None or invited_password is None:
                         print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
                         job_index += 1
