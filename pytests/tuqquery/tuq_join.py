@@ -894,6 +894,21 @@ class JoinTests(QuerySanityTests):
         actual_result = self.run_cbq_query(join_query)
         self._verify_results(actual_result['results'], expected_result)
 
+    def test_lateral_join(self):
+        self.run_cbq_query("CREATE INDEX adv_job_title IF NOT EXISTS ON `default`(`job_title`)")
+        join_query = 'SELECT a.name FROM default as a, LATERAL (SELECT name FROM default b WHERE a.job_title = b.job_title and b.join_yr = 2011 and b.join_mo = 1 and b.job_title = "Engineer" ORDER BY a.`_id`) as c LIMIT 3'
+        expected_result = [{"name": "employee-1"}, {"name": "employee-1"}, {"name": "employee-1"}]
+        actual_result = self.run_cbq_query(join_query)
+        self._verify_results(actual_result['results'], expected_result)
+
+        join_query = 'SELECT a.name FROM default as a JOIN LATERAL default b ON b.job_title WHERE a.join_yr = 2011 and a.join_mo = 1 and a.job_title = "Engineer" ORDER BY a.`_id` LIMIT 3'
+        actual_result = self.run_cbq_query(join_query)
+        self._verify_results(actual_result['results'], expected_result)
+
+        join_query = 'SELECT a.name FROM default as a, LATERAL default b WHERE a.job_title = b.job_title and a.join_yr = 2011 and a.join_mo = 1 and a.job_title = "Engineer" ORDER BY a.`_id` LIMIT 3'
+        actual_result = self.run_cbq_query(join_query)
+        self._verify_results(actual_result['results'], expected_result)
+
     def test_MB59084(self):
         upsert = 'UPSERT INTO default (KEY k, VALUE v) SELECT "k00"||TO_STR(d) AS k, {"c1":d, "c2":d, "c3":d} AS v FROM ARRAY_RANGE(1,10) AS d'
         index = 'CREATE INDEX ix1 ON default(c1,c2, c3)'
