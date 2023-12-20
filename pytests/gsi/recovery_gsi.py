@@ -326,17 +326,16 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
-
+        self.sleep(60)
         self._kill_all_processes_index(self.index_nodes[0])
+        for index_node in self.index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
 
         self.load_docs(self.start_doc)
 
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
-
-        for index_node in self.index_nodes:
-            rest = RestConnection(index_node)
-            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
 
         self._kill_all_processes_index(self.index_nodes[0])
 
