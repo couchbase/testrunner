@@ -418,7 +418,7 @@ class CustomMapGenerator:
 
         es_field_map = {}
         es_field_map['type'] = field_type
-        if field_type == "number":
+        if field_type == "number" or field_type == "vector":
             es_field_map['type'] = "float"
         if field_type == "datetime":
             es_field_map['type'] = "date"
