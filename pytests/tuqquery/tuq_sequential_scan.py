@@ -237,8 +237,8 @@ class QuerySeqScanTests(QueryTests):
             self.fail("Query did not fail as expected")
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 13014)
-            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+            self.assertEqual(error['code'], 4000)
+            self.assertEqual(error['msg'], f'No index available on keyspace `default`:`{self.bucket}` that matches your query. Use CREATE PRIMARY INDEX ON `default`:`{self.bucket}` to create a primary index, or check that your expected index is online.')
 
     def test_rbac_collection(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
@@ -268,8 +268,8 @@ class QuerySeqScanTests(QueryTests):
             self.fail("Query did not fail as expected")
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 13014)
-            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket}.scope1.collection2 to allow the statement to run.')
+            self.assertEqual(error['code'], 4000)
+            self.assertEqual(error['msg'], f'No index available on keyspace `default`:`{self.bucket}`.`scope1`.`collection2` that matches your query. Use CREATE PRIMARY INDEX ON `default`:`{self.bucket}`.`scope1`.`collection2` to create a primary index, or check that your expected index is online.')
 
     def test_rbac_bucket(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
@@ -330,3 +330,49 @@ class QuerySeqScanTests(QueryTests):
         scan_after = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection2")
         self.assertEqual(result['metrics']['resultCount'], self.doc_count)
         self.assertEqual(scan_after, scan_before + 1)
+
+    def test_rbac_udf(self):
+        self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+        self.users = [{"id": "jackudf", "name": "Jack UDF", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        self.run_cbq_query(query=f"GRANT query_execute_global_functions to {user_id}")
+        self.run_cbq_query(query=f"CREATE OR REPLACE FUNCTION f1() {{( SELECT * FROM {self.bucket} )}} ")
+        self.run_cbq_query(query="EXECUTE FUNCTION f1()")
+        try:
+            self.run_cbq_query(query="EXECUTE FUNCTION f1()", username=user_id, password=user_pwd)
+            self.fail("Query did not fail as expected")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['reason']['code'], 13014)
+            self.assertEqual(error['reason']['message'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on `default`:`{self.bucket}` to allow the statement to run.')
+
+    def test_rbac_prepare(self):
+        self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+        self.users = [{"id": "jackprep", "name": "Jack Prepare", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        self.run_cbq_query(query=f"PREPARE P11 AS SELECT * FROM {self.bucket}")
+        try:
+            self.run_cbq_query(query="EXECUTE P11", username=user_id, password=user_pwd)
+            self.fail("Query did not fail as expected")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+
+    def test_rbac_subquery(self):
+        self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
+        self.users = [{"id": "jackprep", "name": "Jack Prepare", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        try:
+            self.run_cbq_query(query=f"SELECT 1 FROM (SELECT * FROM {self.bucket}) d", username=user_id, password=user_pwd)
+            self.fail("Query did not fail as expected")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 4000)
+            self.assertEqual(error['msg'], f'No index available on keyspace `default`:`{self.bucket}` that matches your query. Use CREATE PRIMARY INDEX ON `default`:`{self.bucket}` to create a primary index, or check that your expected index is online.')
