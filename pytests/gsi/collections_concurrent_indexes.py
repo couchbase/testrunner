@@ -1435,9 +1435,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
 
     # Negative test
     def test_errored_schedule_index_with_delete_bsc(self):
-        """
-        https://issues.couchbase.com/browse/MB-42017 - collection/scope
-        """
+        self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": False})
         num_of_docs = 10 ** 4
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
         collection_namespace = self.namespaces[0]

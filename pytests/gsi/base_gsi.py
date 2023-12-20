@@ -2086,7 +2086,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             moving_indexes_count = 0
             # self.log.info(indexer_metadata)
             for index in indexer_metadata:
-                if index['status'] == 'Moving':
+                if index['status'] == 'Moving' and index['progress'] > 0:
                     moving_indexes_count += 1
             self.log.info(f"No. of Indexes in Moving State: {moving_indexes_count}")
             if moving_indexes_count > self.transfer_batch_size:
