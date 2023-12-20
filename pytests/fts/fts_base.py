@@ -5648,9 +5648,12 @@ class FTSBaseTest(unittest.TestCase):
             alias_def = {"targets": {}}
             for index in target_indexes:
                 alias_def['targets'][index.name] = {}
-
+        if bucket:
+            return self._cb_cluster.create_fts_index(name=name,
+                                                     source_name=bucket.name,
+                                                     index_type='fulltext-alias',
+                                                     index_params=alias_def)
         return self._cb_cluster.create_fts_index(name=name,
-                                                 source_name=bucket.name,
                                                  index_type='fulltext-alias',
                                                  index_params=alias_def)
 
