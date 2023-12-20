@@ -45,7 +45,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             service_type="index", get_all_nodes=True)
         if self.use_shard_based_rebalance:
             self.enable_shard_based_rebalance()
-    def bucket_setup(self):
         if self.use_cbbackupmgr:
             for node in self.indexer_nodes:
                 remote_client = RemoteMachineShellConnection(node)
@@ -1417,7 +1416,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
             self.assertTrue(backup_result[0], str(backup_result[1]))
 
     def test_restore_with_invalid_keyspaces(self):
-        self.bucket_setup()
         invalid_bucket = "invalid_bucket"
         invalid_scope = "invalid_scope"
         invalid_collection = "invalid_collection"

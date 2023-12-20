@@ -299,6 +299,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
 
     def test_drop_indexes_schedule_for_background_creation(self):
+        self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": False})
         num_of_docs = 10 ** 5
         self.rest.set_index_settings(self.schedule_index_disable)
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
