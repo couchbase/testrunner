@@ -6372,3 +6372,29 @@ class FTSBaseTest(unittest.TestCase):
         ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="groundtruth")
         print(f"First groundtruth vector:{str(ds.neighbors_vecs[0])}")
         return ds.neighbors_vecs
+
+    def create_faiss_index_from_train_data(self, dataset_name):
+        import faiss
+        import numpy as np
+
+        INDEX_FILE_DIR = "b/resources/fts/vector_search/"
+        file_name = f"{dataset_name}_index.index"
+        file_path = INDEX_FILE_DIR + file_name
+
+        if os.path.exists(file_path):
+            faiss_index = faiss.read_index(file_path)
+            print(f"Items in faiss index: {faiss_index.ntotal}")
+        else:
+            ds = VectorDataset(dataset_name)
+            use_hdf5_datasets = True
+            if ds.dataset_name in ds.supported_sift_datasets:
+                use_hdf5_datasets = False
+            ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="train")
+            print(f"First train vector:{str(ds.train_vecs[0])}")
+            faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
+            index_vectors = np.array(ds.train_vecs).astype('float32')
+            faiss.normalize_L2(index_vectors)
+            faiss_index.add(index_vectors)
+            faiss.write_index(faiss_index, file_path)
+
+        return faiss_index

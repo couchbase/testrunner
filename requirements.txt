@@ -19,3 +19,4 @@ google-cloud-compute==0.6.0
 numpy==1.21.6
 h5py==3.8.0
 wget==3.2
+faiss-cpu==1.7.4
