@@ -5522,6 +5522,22 @@ class FTSBaseTest(unittest.TestCase):
                     plan_params=plan_params, _type=tp, collection_index=collection_index,
                     scope=index_scope, collections=index_collections, analyzer=analyzer)
 
+    def create_fts_indexes_some_buckets(self, plan_params=None, analyzer='standard', exempt_bucket=[]):
+        """
+        Creates 'n' default indexes for all buckets.
+        'n' is defined by 'index_per_bucket' test param.
+        """
+        for bucket in self._cb_cluster.get_buckets():
+            if bucket.name in exempt_bucket:
+                continue
+            collection_index, tp, index_scope, index_collections = self.define_index_parameters_collection_related()
+            for count in range(self.index_per_bucket):
+                self.create_index(
+                    bucket,
+                    f"{bucket.name}_index_{count + 1}",
+                    plan_params=plan_params, _type=tp, collection_index=collection_index,
+                    scope=index_scope, collections=index_collections, analyzer=analyzer)
+
     def _decode_index(self, encoded_index):
         decoded_index = {}
 
@@ -5563,7 +5579,8 @@ class FTSBaseTest(unittest.TestCase):
                 index_collections.append(idx_dict["collection"])
         return collection_index, _type, index_scope, index_collections
 
-    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False, vector_fields=None, field_type=None, field_name=None, extra_fields=None):
+    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False, vector_fields=None, field_type=None, field_name=None, extra_fields=None,
+                                        wait_for_index_complete=True):
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
         indexes = []
@@ -5619,7 +5636,8 @@ class FTSBaseTest(unittest.TestCase):
             decoded_index['index_obj'] = fts_index
             indexes.append(decoded_index)
             self.sleep(5, "Waiting 5 seconds for index to update..")
-            self.wait_for_indexing_complete()
+            if wait_for_index_complete:
+                self.wait_for_indexing_complete()
         return indexes
 
     def define_index_parameters_collection_related(self):
