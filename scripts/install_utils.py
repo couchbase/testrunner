@@ -915,9 +915,11 @@ def download_build():
             elif "wget" in cmd_master:
 
                 cmd = cmd_master.format(__get_download_dir(node),
+                                        node.build.name,
                                         build_url)
                 if node.build.debug_build_present:
                     cmd_debug = cmd_master.format(__get_download_dir(node),
+                                                  node.build.debug_name,
                                                   debug_url)
                 else:
                     cmd_debug = None
@@ -939,17 +941,18 @@ def download_cb_non_package_installer():
         cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
         download_dir =  __get_download_dir(node, disregard_skip_local_download=True)
         url = params["cb_non_package_installer_url"] if params["cb_non_package_installer_url"] else install_constants.CB_NON_PACKAGE_INSTALLER_URL
+        cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
+            if params["cb_non_package_installer_url"] \
+                else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
         if "curl" in cmd_master:
             cmd = cmd_master.format(url,
                                     download_dir)
         elif "wget" in cmd_master:
             cmd = cmd_master.format(download_dir,
+                                    cb_non_package_installer_name,
                                     url)
         if cmd:
             node.shell.execute_command(cmd, debug=True)
-        cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
-                    if params["cb_non_package_installer_url"] \
-                        else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
         node.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
                                                              cb_non_package_installer_name))
 
@@ -961,7 +964,7 @@ def install_tools():
         if "curl" in cmd_master:
             cmd = cmd_master.format(node.tools_url, download_dir)
         elif "wget" in cmd_master:
-            cmd = cmd_master.format(download_dir, node.tools_url)
+            cmd = cmd_master.format(download_dir, node.tools_name, node.tools_url)
         if cmd:
             node.shell.execute_command(cmd, debug=True)
 
@@ -987,11 +990,14 @@ def check_and_retry_download_binary_local(node):
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
     cmd = install_constants.WGET_CMD.format(__get_download_dir(node),
+                                            node.build.name,
                                             node.build.url)
     cmd_debug = None
     if node.build.debug_build_present:
         cmd_debug = install_constants.WGET_CMD.format(
-            __get_download_dir(node), node.build.debug_url)
+            __get_download_dir(node),
+            node.build.debug_name,
+            node.build.debug_url)
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
