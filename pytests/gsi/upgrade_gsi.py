@@ -1199,6 +1199,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_list_before_upgrade, query_node=self.query_node)
         self.wait_until_indexes_online()
         self.log.info("indexes created on node A")
+        rest = RestConnection(index_node_A)
+        index_settings_node_A = rest.get_indexer_internal_stats()
+        self.log.info(f'internal settings node A : {index_settings_node_A}')
+
         del select_queries_before_upgrade[3]
         query_rows_before_upgrade = []
         for query in select_queries_before_upgrade:
@@ -1214,6 +1218,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             upgrade_thread.join()
         self.sleep(60)
         self.log.info("node B upgraded")
+        rest = RestConnection(index_node_B)
+        redistribute = {"indexer.plasma.compression": "zstd10"}
+        rest.set_index_settings(redistribute)
         #building indexes on node B only
         nodes = [f'{index_node_B.ip}:{index_node_B.port}']
         for namespace in self.namespaces:
@@ -1226,6 +1233,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_list_after_upgrade, query_node=self.query_node)
         self.wait_until_indexes_online()
         self.log.info("indexes created on node B")
+        index_settings_node_B = rest.get_indexer_internal_stats()
+        self.log.info(f'internal settings node B : {index_settings_node_B}')
         # for batches in range(self.index_scans_batch):
         #     self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries_before_upgrade,
         #                                                query_node=self.query_node)
@@ -1888,10 +1897,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             sorted_stats_A[stat] = storage_stats_A[stat]
         for stat in sorted(list(storage_stats_B.keys())):
             sorted_stats_B[stat] = storage_stats_B[stat]
+        self.log.info(f'sorted stats node A {sorted_stats_A}')
+        self.log.info(f'sorted stats node B {sorted_stats_B}')
         for stat_A, stat_B in zip(sorted_stats_A, sorted_stats_B):
             self.log.info(f'A : {sorted_stats_A[stat_A]}')
             self.log.info(f'B : {sorted_stats_B[stat_B]}')
-            self.assertLess(sorted_stats_A[stat_A], sorted_stats_B[stat_B], 'Compression not working as expected')
+            self.assertLess(sorted_stats_A[stat_A], sorted_stats_B[stat_B], 'Compression(compression ratio) not working as expected')
 
     def validate_index_disk_size(self, storage_stats_A, storage_stats_B):
         sorted_stats_A, sorted_stats_B = {}, {}
@@ -1902,7 +1913,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         for stat_A, stat_B in zip(sorted_stats_A, sorted_stats_B):
             self.log.info(f'A : {sorted_stats_A[stat_A]}')
             self.log.info(f'B : {sorted_stats_B[stat_B]}')
-            self.assertLess(sorted_stats_B[stat_B], sorted_stats_A[stat_A], 'Compression not working as expected')
+            self.assertLess(sorted_stats_B[stat_B], sorted_stats_A[stat_A], 'Compression(lss data size) not working as expected')
 
     def _is_dgm_reached(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
@@ -1961,6 +1972,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         indexes_disk_size = {}
         for bucket, indexes in index_map.items():
             for index, stats in indexes.items():
+                self.log.info(f'storage stats {stats}')
                 indexes_disk_size[index] = stats["MainStore"][f"{stat}"]
         return indexes_disk_size
 
