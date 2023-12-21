@@ -247,7 +247,11 @@ class QueryHelperTests(BaseTestCase):
             self._create_primary_index()
             for bucket in self.buckets:
                 for query_definition in self.query_definitions:
-                    self.create_index(bucket=bucket, query_definition=query_definition)
+                    try:
+                        self.create_index(bucket=bucket, query_definition=query_definition)
+                    except Exception as err:
+                        if 'Build Already In Progress.' not in str(err):
+                            self.fail(err)
         if operation_type == "query":
             for bucket in self.buckets:
                 for query_definition in self.query_definitions:
