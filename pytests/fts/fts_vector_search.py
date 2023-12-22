@@ -182,6 +182,8 @@ class VectorSearch(FTSBaseTest):
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
 
+        cluster_buckets = self._cb_cluster.get_buckets()
+        print("\n\nBuckets in the cluster: {}, {}\n\n".format(cluster_buckets[0].name, cluster_buckets[1].name))
         # create index i1 with l2_norm similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}

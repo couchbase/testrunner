@@ -304,12 +304,12 @@ class VectorLoader:
                 ]
                 print("docker pull command: {}".format(docker_pull_command))
                 # Run the Docker pull command
-                try:
-                    subprocess.run(docker_pull_command, check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"Error running Docker pull command: {e}")
-                    exit(1)  # Exit the script if the pull command fails
-                print("Successfully ran docker pull command!")
+                # try:
+                #     subprocess.run(docker_pull_command, check=True)
+                # except subprocess.CalledProcessError as e:
+                #     print(f"Error running Docker pull command: {e}")
+                #     exit(1)  # Exit the script if the pull command fails
+                # print("Successfully ran docker pull command!")
                 # Run the Docker run command
                 print("docker run command: {}".format(docker_run_command))
                 try:
