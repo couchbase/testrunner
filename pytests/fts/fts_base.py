@@ -6476,7 +6476,7 @@ class FTSBaseTest(unittest.TestCase):
         print(f"First groundtruth vector:{str(ds.neighbors_vecs[0])}")
         return ds.neighbors_vecs
 
-    def create_faiss_index_from_train_data(self, dataset_name):
+    def create_faiss_index_from_train_data(self, dataset_name, index_type="IndexFlatL2"):
         import faiss
         import numpy as np
 
@@ -6493,7 +6493,10 @@ class FTSBaseTest(unittest.TestCase):
             if ds.dataset_name in ds.supported_sift_datasets:
                 use_hdf5_datasets = False
             ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="train")
-            print(f"First train vector:{str(ds.train_vecs[0])}")
+            if index_type == "IndexFlatL2":
+                faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
+            else:
+                faiss_index = faiss.IndexFlatIP(len(ds.train_vecs[0]))
             faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
             index_vectors = np.array(ds.train_vecs).astype('float32')
             faiss.normalize_L2(index_vectors)

@@ -32,17 +32,19 @@ class VectorSearch(FTSBaseTest):
     def suite_tearDown(self):
         super(VectorSearch, self).suite_tearDown()
 
-    def perform_validation_of_results(self, matches, neighbours):
-        match = []
-        try:
-            for i in range(self.k):
-                match.append(matches[i]['fields']['sno'])
-            print(f"neighbours {neighbours}")
-            print(f"fts matches {match}")
-        except Exception as e:
-            print("Error", str(e))
+    def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
+        common_elements = set(listA) & set(listB)
 
-    def perform_validations_from_faiss(self, matches, index, query_vector):
+        not_common_elements = set(listA) ^ set(listB)
+        print("Elements not common in both lists:", not_common_elements)
+
+        percentage_exist = (len(common_elements) / len(listB)) * 100
+        print(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
+
+        percentage_exist = (len(common_elements) / len(listA)) * 100
+        print(f"Percentage of elements in {nameA} that exist in {nameB}: {percentage_exist:.2f}%")
+
+    def perform_validations_from_faiss(self, matches, index, query_vector, neighbours):
         import faiss
         import numpy as np
         try:
@@ -50,12 +52,12 @@ class VectorSearch(FTSBaseTest):
             faiss_query_vector = np.array([query_vector]).astype('float32')
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
-            print("Results from faiss index --> ", distances, ann)
             faiss_doc_ids = [i for i in ann[0]]
-            fts_doc_ids = [matches[i]['fields']['sno'] for i in range(self.k)]
+            fts_doc_ids = [matches[i]['fields']['sno'] -1 for i in range(self.k)]
 
             print(f"Faiss docs sno -----> {faiss_doc_ids}")
             print(f"FTS docs sno -------> {fts_doc_ids}")
+
             fts_hits = len(matches)
             if len(faiss_doc_ids) != int(fts_hits):
                 msg = "FAIL: FTS hits: %s, while FAISS hits: %s" \
@@ -77,6 +79,7 @@ class VectorSearch(FTSBaseTest):
                               % (len(faiss_but_not_fts), faiss_but_not_fts[:50])
                     self.log.error(msg)
                     self.fail("Validation failed with FAISS index")
+            return faiss_doc_ids
         except Exception as e:
             print(f"Error {str(e)}")
 
@@ -166,8 +169,22 @@ class VectorSearch(FTSBaseTest):
 
         if neighbours is not None:
             query_vector = query['knn'][0]['vector']
-            self.perform_validations_from_faiss(matches, index, query_vector)
-            self.perform_validation_of_results(matches, neighbours)
+            fts_matches = []
+            for i in range(self.k):
+                fts_matches.append(matches[i]['fields']['sno'] - 1)
+            faiss_results = self.perform_validations_from_faiss(matches, index, query_vector, neighbours)
+
+            print("*"*5 + f"Query RESULT # {self.count}" + "*"*5)
+            print(f"FTS MATCHES: {fts_matches}")
+            print(f"FAISS MATCHES: {faiss_results}")
+            print(f"GROUNDTRUTH FILE : {neighbours}")
+
+            self.compare_results(faiss_results, neighbours, "faiss", "groundtruth")
+            self.compare_results(neighbours, faiss_results, "groundtruth", "faiss")
+            self.compare_results(fts_matches, neighbours, "fts", "groundtruth")
+            self.compare_results(neighbours, fts_matches, "groundtruth", "fts")
+
+            print("*" * 30)
 
         # validate no of results are k only
         if self.run_n1ql_search_function:
@@ -205,13 +222,13 @@ class VectorSearch(FTSBaseTest):
         indexes.append(index[0])
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
-        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
 
         for index in indexes:
             index['dataset'] = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(index['dataset'])
             neighbours = self.get_groundtruth_file(index['dataset'])
-            for count, q in enumerate(queries[:5]):
+            for count, q in enumerate(queries):
                 self.query['knn'][0]['vector'] = q.tolist()
                 self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'],
                                       neighbours=neighbours[count])
@@ -272,7 +289,7 @@ class VectorSearch(FTSBaseTest):
         for index in indexes:
             index['dataset'] = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(index['dataset'])
-            for q in queries[:5]:
+            for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
@@ -516,8 +533,8 @@ class VectorSearch(FTSBaseTest):
 
         for index in indexes:
             index['dataset'] = bucketvsdataset['bucket_name']
-            queries = self.get_query_vectors(index['dataset'], False)
-            for q in queries[:5]:
+            queries = self.get_query_vectors(index['dataset'])
+            for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
@@ -550,7 +567,7 @@ class VectorSearch(FTSBaseTest):
         index['dataset'] = bucketvsdataset['bucket_name']
         queries = self.get_query_vectors(index['dataset'])
 
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                           dataset=index['dataset'])
@@ -574,7 +591,7 @@ class VectorSearch(FTSBaseTest):
                                                               "Expected: {}, Actual: {}".format(new_similarity,
                                                                                                 updated_similarity))
 
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                             dataset=index['dataset'])
@@ -599,7 +616,7 @@ class VectorSearch(FTSBaseTest):
         index['dataset'] = bucketvsdataset['bucket_name']
         queries = self.get_query_vectors(index['dataset'])
 
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                           dataset=index['dataset'])
@@ -623,7 +640,7 @@ class VectorSearch(FTSBaseTest):
                                                               "Expected: {}, Actual: {}".format(new_similarity,
                                                                                                 updated_similarity))
 
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                             dataset=index['dataset'])
@@ -659,7 +676,7 @@ class VectorSearch(FTSBaseTest):
         queries = self.get_query_vectors(query_index['dataset'])
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
@@ -683,7 +700,7 @@ class VectorSearch(FTSBaseTest):
         self.is_index_partitioned_balanced(index=index_obj_l2_norm)
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
@@ -717,7 +734,7 @@ class VectorSearch(FTSBaseTest):
         queries = self.get_query_vectors(query_index['dataset'])
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
@@ -742,7 +759,7 @@ class VectorSearch(FTSBaseTest):
         self.is_index_partitioned_balanced(index=index_obj_dot_product)
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
@@ -783,7 +800,7 @@ class VectorSearch(FTSBaseTest):
         queries = self.get_query_vectors(query_index['dataset'])
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
@@ -807,7 +824,7 @@ class VectorSearch(FTSBaseTest):
         self.validate_replica_distribution()
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
@@ -841,7 +858,7 @@ class VectorSearch(FTSBaseTest):
         queries = self.get_query_vectors(query_index['dataset'])
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
@@ -866,7 +883,7 @@ class VectorSearch(FTSBaseTest):
         self.validate_replica_distribution()
 
         self.log.info("Executing queries on index: {}".format(query_index))
-        for q in queries[:5]:
+        for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
@@ -982,7 +999,7 @@ class VectorSearch(FTSBaseTest):
         for index in indexes:
             index['dataset'] = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(index['dataset'])
-            for q in queries[:5]:
+            for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
@@ -993,7 +1010,7 @@ class VectorSearch(FTSBaseTest):
         if create_alias:
             dataset = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(dataset)
-            for q in queries[:5]:
+            for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index_obj_alias,
                                                         dataset=index['dataset'])
@@ -1045,7 +1062,7 @@ class VectorSearch(FTSBaseTest):
         for index in indexes:
             index['dataset'] = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(index['dataset'])
-            for q in queries[:5]:
+            for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])

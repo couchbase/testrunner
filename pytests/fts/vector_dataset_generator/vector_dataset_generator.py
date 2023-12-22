@@ -341,28 +341,37 @@ class VectorDataset:
                         self.learn_vecs = out_vector
                     print(f"{type_of_vec} vectors are initialized")
                 else:
-                    # For "groundtruth" vector data dataformat is different.
-                    # Vector values are integers of train vectors.
-                    print("Extracting vectors from groundtruth files which have train vector ids as neighbors")
-                    total_file_size = os.path.getsize(filepath)
-                    number_of_vectors = total_file_size // (4 + 4 * 100)
-                    print(f"total_file_size:{total_file_size}, number_of_vectors:{number_of_vectors}")
-                    with open(
-                            filepath, "rb"
-                    ) as file:
-                        out_vector = np.zeros(
-                            (100, 100)
-                        )
-                        for i in range(5):
-                            file.read(
-                                4
-                            )  # To move cursor by 4 bytes to ignore dimension of the vector.
-                            out_vector[i] = struct.unpack(
-                                "i" * 100, file.read(100 * 4)
-                            )
-                            print(
-                                f"First 100 neighours using Squared Eucleadean distance in increasing order:{out_vector[i]}")
-                    self.neighbors_vecs = out_vector
+                    with open(filepath, 'rb') as fid:
+                        # Read the vector size
+                        d = np.fromfile(fid, dtype=np.int32, count=1)[0]
+                        vecsizeof = 1 * 4 + d * 4
+
+                        # Get the number of vectors
+                        fid.seek(0, 2)
+                        a = 1
+                        bmax = fid.tell() // vecsizeof
+                        b = bmax
+
+                        assert a >= 1
+                        if b > bmax:
+                            b = bmax
+
+                        if b == 0 or b < a:
+                            return np.array([])
+
+                        # Compute the number of vectors that are really read and go to starting positions
+                        n = b - a + 1
+                        fid.seek((a - 1) * vecsizeof, 0)
+
+                        # Read n vectors
+                        v = np.fromfile(fid, dtype=np.int32, count=(d + 1) * n).astype(np.float64)
+                        v = v.reshape((d + 1, n), order='F')
+
+                        # Check if the first column (dimension of the vectors) is correct
+                        assert np.sum(v[0, 1:] == v[0, 0]) == n - 1
+                        v = v[1:, :]
+                        transposed_array = np.transpose(v)
+                    self.neighbors_vecs = transposed_array
                     print(f"{type_of_vec} vectors are initialized")
             except FileNotFoundError:
                 print(f"Error: File '{filepath}' not found.")
