@@ -215,6 +215,35 @@ class VectorSearch(FTSBaseTest):
                 self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'],
                                       neighbours=neighbours[count])
 
+    def test_vector_search_wrong_parameters(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
+        indexes = []
+
+        # create index i1 with dot product similarity
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": "l2_norm", "store": True}
+        index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        index_obj = index[0]['index_obj']
+        status, index_def = index_obj.get_index_defn()
+
+        buckets = eval(TestInputSingleton.input.param("kv", "{}"))
+        bucket = buckets[0]
+        type_name = bucket[3:]
+
+        if status:
+            index_definition = index_def["indexDef"]
+            store_value = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
+            'fields'][0]['store']
+            if store_value:
+                self.fail("Index got created with store value of vector field set to True")
+
+        #TODO
+        #validate error message
+
     def test_vector_search_with_wrong_dimensions(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)

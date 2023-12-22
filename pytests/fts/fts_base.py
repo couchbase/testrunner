@@ -5580,6 +5580,10 @@ class FTSBaseTest(unittest.TestCase):
                         if create_vector_index:
                             if vector_fields is None:
                                 vector_fields = {"dims": 128, "similarity": "l2_norm"}
+
+                            if 'store' not in vector_fields:
+                                vector_fields['store'] = False
+
                             fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
                                                                               field_type=field_type,
                                                                               field_alias=field_name,
