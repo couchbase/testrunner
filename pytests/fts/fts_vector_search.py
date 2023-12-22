@@ -53,7 +53,7 @@ class VectorSearch(FTSBaseTest):
                 match.append(matches[i]['fields']['sno'])
             print("*" * 20 + "GROUNDTRUTH VALIDATION" + "*" * 20)
             print(f"Groundtruth Neighbours : {neighbours}")
-            print(f"FTS Neighbours: {neighbours}")
+            print(f"FTS Neighbours: {match}")
 
             self.compare_results(match, neighbours, "fts", "groundtruth")
             self.compare_results(neighbours, match, "groundtruth", "fts")
@@ -237,8 +237,6 @@ class VectorSearch(FTSBaseTest):
                 self.query['knn'][0]['vector'] = q.tolist()
                 self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'],
                                       neighbours=neighbours[count])
-
-        self.fail("i am doing it to get logs collected xD")
 
     def test_vector_search_wrong_parameters(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)

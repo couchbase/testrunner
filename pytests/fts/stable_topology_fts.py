@@ -656,6 +656,16 @@ class StableTopFTS(FTSBaseTest):
                                          index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
+
+        time.sleep(1000)
+        time.sleep(1000)
+        time.sleep(1000)
+        time.sleep(1000)
+        time.sleep(1000)
+        time.sleep(1000)
+        time.sleep(1000)
+
+
         if self._update or self._delete:
             self.async_perform_update_delete(self.upd_del_fields)
             if self.vector_search:
