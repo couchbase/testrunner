@@ -12,7 +12,7 @@ class VectorSearch(FTSBaseTest):
     def setUp(self):
         self.input = TestInputSingleton.input
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
-        self.k = self.input.param("k", 3)
+        self.k = self.input.param("k", 100)
         self.vector_dataset = self.input.param("vector_dataset", ["siftsmall"])
         self.dimension = self.input.param("dimension", 128)
         self.similarity = self.input.param("similarity", "l2_norm")
@@ -32,17 +32,37 @@ class VectorSearch(FTSBaseTest):
     def suite_tearDown(self):
         super(VectorSearch, self).suite_tearDown()
 
-    def perform_validation_of_results(self, matches, neighbours):
+    def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
+        common_elements = set(listA) & set(listB)
+        print("Common Elements:", common_elements)
+
+        not_common_elements = set(listA) ^ set(listB)
+        print("Elements not common in both lists:", not_common_elements)
+
+        percentage_exist = (len(common_elements) / len(listB)) * 100
+        print(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
+
+        percentage_exist = (len(common_elements) / len(listA)) * 100
+        print(f"Percentage of elements in {nameA} that exist in {nameB}: {percentage_exist:.2f}%")
+
+    def perform_validation_of_results_with_groundtruth(self, matches, neighbours):
+        print("*"*30)
         match = []
         try:
             for i in range(self.k):
                 match.append(matches[i]['fields']['sno'])
-            print(f"neighbours {neighbours}")
-            print(f"fts matches {match}")
+            print("*" * 20 + "GROUNDTRUTH VALIDATION" + "*" * 20)
+            print(f"Groundtruth Neighbours : {neighbours}")
+            print(f"FTS Neighbours: {neighbours}")
+
+            self.compare_results(match, neighbours, "fts", "groundtruth")
+            self.compare_results(neighbours, match, "groundtruth", "fts")
+
         except Exception as e:
             print("Error", str(e))
+        print("*" * 30)
 
-    def perform_validations_from_faiss(self, matches, index, query_vector):
+    def perform_validations_from_faiss(self, matches, index, query_vector, neighbours):
         import faiss
         import numpy as np
         try:
@@ -50,12 +70,15 @@ class VectorSearch(FTSBaseTest):
             faiss_query_vector = np.array([query_vector]).astype('float32')
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
-            print("Results from faiss index --> ", distances, ann)
             faiss_doc_ids = [i for i in ann[0]]
             fts_doc_ids = [matches[i]['fields']['sno'] for i in range(self.k)]
 
             print(f"Faiss docs sno -----> {faiss_doc_ids}")
             print(f"FTS docs sno -------> {fts_doc_ids}")
+
+            self.compare_results(faiss_doc_ids, neighbours, "faiss", "groundtruth")
+            self.compare_results(neighbours, faiss_doc_ids, "groundtruth", "faiss")
+
             fts_hits = len(matches)
             if len(faiss_doc_ids) != int(fts_hits):
                 msg = "FAIL: FTS hits: %s, while FAISS hits: %s" \
@@ -166,8 +189,8 @@ class VectorSearch(FTSBaseTest):
 
         if neighbours is not None:
             query_vector = query['knn'][0]['vector']
-            self.perform_validations_from_faiss(matches, index, query_vector)
-            self.perform_validation_of_results(matches, neighbours)
+            self.perform_validations_from_faiss(matches, index, query_vector, neighbours)
+            self.perform_validation_of_results_with_groundtruth(matches, neighbours)
 
         # validate no of results are k only
         if len(matches) != self.k and n1ql_hits != self.k:
@@ -214,6 +237,8 @@ class VectorSearch(FTSBaseTest):
                 self.query['knn'][0]['vector'] = q.tolist()
                 self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'],
                                       neighbours=neighbours[count])
+
+        self.fail("i am doing it to get logs collected xD")
 
     def test_vector_search_wrong_parameters(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
