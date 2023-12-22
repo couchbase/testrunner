@@ -174,7 +174,7 @@ class VectorSearch(FTSBaseTest):
             self.fail(
                 f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || FTS hits = {hits}")
 
-        return n1ql_hits, hits
+        return n1ql_hits, hits, matches
 
     # Indexing
     def test_basic_vector_search(self):
@@ -244,7 +244,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:5]:
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 if n1ql_hits != -1 and hits != -1:
                     self.fail("Able to get query results even though index is created with different dimension")
@@ -351,7 +351,7 @@ class VectorSearch(FTSBaseTest):
             # run normal queries
             for q in regular_query:
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 regular_query_hits.append([n1ql_hits, hits])
             # run invalid queries
@@ -359,14 +359,14 @@ class VectorSearch(FTSBaseTest):
                 if isinstance(iv, set):
                     iv = list(iv)
                 self.query['knn'][0]['vector'] = iv
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 if n1ql_hits != -1 and hits != -1:
                     self.fail(f"Able to index invalid vector - {iv}")
             # run normal queries
             for count, q in enumerate(regular_query):
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 if regular_query_hits[count][0] != n1ql_hits or regular_query_hits[count][1] != hits:
                     self.fail("Hits before running invalid queries are different from hits after running invalid "
@@ -489,7 +489,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'], False)
             for q in queries[:5]:
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 if n1ql_hits != -1 and hits != -1:
                     self.fail("Able to get query results even though index is created with different dimension")
@@ -522,7 +522,7 @@ class VectorSearch(FTSBaseTest):
 
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_l2, hits_l2 = self.run_vector_query(query=self.query, index=index['index_obj'],
+            n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                           dataset=index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
@@ -546,7 +546,7 @@ class VectorSearch(FTSBaseTest):
 
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot = self.run_vector_query(query=self.query, index=index['index_obj'],
+            n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                             dataset=index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with dot similarity, N1QL hits: {}, Search Hits: {}, " \
@@ -571,7 +571,7 @@ class VectorSearch(FTSBaseTest):
 
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_l2, hits_l2 = self.run_vector_query(query=self.query, index=index['index_obj'],
+            n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                           dataset=index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with dot similarity, N1QL hits: {}, Search Hits: {}," \
@@ -595,7 +595,7 @@ class VectorSearch(FTSBaseTest):
 
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot = self.run_vector_query(query=self.query, index=index['index_obj'],
+            n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                             dataset=index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
@@ -631,11 +631,13 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_l2, hits_l2 = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_before_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
         # update the index partitions
         index_obj_l2_norm.update_index_partitions(new_partition_number)
@@ -653,11 +655,16 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_l2, hits_l2 = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
+
+        self.assertTrue(results_before_update == results_after_update, "Results do not match before and after update, "\
+                        "Before update: {}, After update: {}".format(results_before_update, results_after_update))
 
         # create a second vector index with dot_product similarity
         idx = [("i2", "b1.s1.c1")]
@@ -682,12 +689,14 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail(
                     "Could not get expected hits for index with dot product, N1QL hits: {}, Search Hits: {}, Expected: {}".
                     format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_before_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
         # update the index partitions
         index_obj_dot_product.update_index_partitions(new_partition_number)
@@ -705,11 +714,16 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
+
+        self.assertTrue(results_before_update == results_after_update, "Results do not match before and after update, "\
+                        "Before update: {}, After update: {}".format(results_before_update, results_after_update))
 
     def test_vector_search_update_replicas(self):
         new_replica_number = self.input.param("update_replicas", 2)
@@ -741,11 +755,13 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_l2, hits_l2 = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_before_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
         # update the index partitions
         index_obj_l2_norm.update_num_replicas(new_replica_number)
@@ -763,11 +779,16 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_l2, hits_l2 = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_l2, hits_l2, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                           dataset=query_index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
+
+        self.assertTrue(results_before_update == results_after_update, "Results do not match before and after update, "\
+                        "Before update: {}, After update: {}".format(results_before_update, results_after_update))
 
         # create a second vector index with dot_product similarity
         idx = [("i2", "b1.s1.c1")]
@@ -792,12 +813,14 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail(
                     "Could not get expected hits for index with dot product, N1QL hits: {}, Search Hits: {}, Expected: {}".
                     format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_before_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
         # update the index partitions
         index_obj_dot_product.update_num_replicas(new_replica_number)
@@ -815,11 +838,16 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for q in queries[:5]:
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot = self.run_vector_query(query=self.query, index=query_index['index_obj'],
+            n1ql_hits_dot, hits_dot, matches = self.run_vector_query(query=self.query, index=query_index['index_obj'],
                                                             dataset=query_index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
+
+        results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
+
+        self.assertTrue(results_before_update == results_after_update, "Results do not match before and after update, "\
+                        "Before update: {}, After update: {}".format(results_before_update, results_after_update))
 
     def test_vector_search_update_index_concurrently(self):
         create_alias = self.input.param("create_alias", False)
@@ -926,7 +954,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:5]:
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 if n1ql_hits != self.k and hits != self.k:
                     self.fail("Could not get expected number of hits for index i1, Expected: {}, N1QL hits: {}, " \
@@ -937,7 +965,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(dataset)
             for q in queries[:5]:
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index_obj_alias,
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index_obj_alias,
                                                         dataset=index['dataset'])
                 if n1ql_hits != self.k and hits != self.k:
                     self.fail("Could not get expected number of hits for alias index, Expected: {}, N1QL hits: {}, " \
@@ -989,7 +1017,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:5]:
                 self.query['knn'][0]['vector'] = q.tolist()
-                n1ql_hits, hits = self.run_vector_query(query=self.query, index=index['index_obj'],
+                n1ql_hits, hits, matches = self.run_vector_query(query=self.query, index=index['index_obj'],
                                                         dataset=index['dataset'])
                 if n1ql_hits != update_doc_no and hits != update_doc_no:
                     self.fail(
