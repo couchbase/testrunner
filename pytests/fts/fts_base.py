@@ -5402,7 +5402,38 @@ class FTSBaseTest(unittest.TestCase):
 
         return index.fts_queries
 
-    def generate_random_geoshape_queries(self, index, num_queries=1, sort=False):
+    def generate_knn_combination_queries(self, search_queries, vector_queries,
+                                         boosting=False):
+
+        fts_queries = [q for q in search_queries if 'vector' not in q]
+
+        knn_combination_queries = []
+        for vector_q in vector_queries:
+            from sentence_transformers import SentenceTransformer
+            encoder = SentenceTransformer(self.llm_model)
+            vector_query = vector_q["vector"]
+            self.log.info(f"Searching for --> {vector_query}")
+            k = vector_q["k"]
+            search_vector = encoder.encode(vector_query)
+            vector_q["vector"] = search_vector.tolist()
+            if boosting:
+                vector_q['boost'] = round(random.uniform(0, 10), 1)
+
+            query_json = {}
+            query_json['knn'] = [vector_q]
+            query_json['explain'] = True
+            query_json['fields'] = ["*"]
+            for fts_q in fts_queries:
+                if boosting:
+                    fts_q['boost'] = round(random.uniform(0, 10), 1)
+                query_json['query'] = fts_q
+                knn_operator = random.choice(["and", "or"])
+                query_json['knn_operator'] = knn_operator
+                knn_combination_queries.append(query_json)
+
+        return knn_combination_queries
+
+    def generate_random_geoshape_queries(self,index,num_queries=1,sort=False):
         gen_queries = 0
         if self.query_shape != "":
             while gen_queries < num_queries:

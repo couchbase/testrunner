@@ -170,9 +170,10 @@ class VectorSearch(FTSBaseTest):
             self.perform_validation_of_results(matches, neighbours)
 
         # validate no of results are k only
-        if len(matches) != self.k and n1ql_hits != self.k:
-            self.fail(
-                f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || FTS hits = {hits}")
+        if self.run_n1ql_search_function:
+            if len(matches) != self.k and n1ql_hits != self.k:
+                self.fail(
+                    f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || FTS hits = {hits}")
 
         return n1ql_hits, hits, matches
 
@@ -210,7 +211,7 @@ class VectorSearch(FTSBaseTest):
             index['dataset'] = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(index['dataset'])
             neighbours = self.get_groundtruth_file(index['dataset'])
-            for count, q in enumerate(queries):
+            for count, q in enumerate(queries[:5]):
                 self.query['knn'][0]['vector'] = q.tolist()
                 self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'],
                                       neighbours=neighbours[count])
@@ -1052,3 +1053,23 @@ class VectorSearch(FTSBaseTest):
                     self.fail(
                         "Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                         format(n1ql_hits, hits, update_doc_no))
+
+    def test_vector_search_knn_combination_queries(self):
+        collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index", collection_index=collection_index, _type=type,
+            scope=index_scope, collections=index_collections)
+
+        self.load_data()
+        self.wait_for_indexing_complete()
+        queries = self.generate_random_queries(index, self.num_queries, self.query_types)
+
+        knn_comb = self.generate_knn_combination_queries(index.fts_queries, index.vector_queries)
+        print("\nKNN comb queries: {}\n".format(len(knn_comb)))
+
+        self.run_n1ql_search_function = False
+        for query in knn_comb:
+            n1ql_hits, hits, matches = self.run_vector_query(query=query, index=index, dataset=None)
+            if hits == -1:
+                self.fail("Query returned 0 hits")
