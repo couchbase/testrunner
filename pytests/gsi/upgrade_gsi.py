@@ -2261,7 +2261,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             for index_node in index_nodes:
                 ip_str = index_node.ip + ":" + index_node.port
                 if host != ip_str:
-                    alter_index_query = "ALTER INDEX {0}.{1} with {{'action':'move','nodes':['{2}:{3}']}}".format(
+                    alter_index_query = "ALTER INDEX {0}.`{1}` with {{'action':'move','nodes':['{2}:{3}']}}".format(
                         self.buckets[0].name, index_name, index_node.ip, index_node.port)
                     result = self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
                     self.assertEqual(result['status'], 'success', 'Query was not run successfully')
