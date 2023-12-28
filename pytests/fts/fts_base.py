@@ -1564,11 +1564,14 @@ class FTSIndex:
         except Exception as e:
             self.__log.info(str(e))
         return res
+
     def execute_query(self, query, zero_results_ok=True, expected_hits=None,
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None, node=None, knn=None,fields=None):
+                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
+                      node=None, knn=None, fields=None,
+                      raise_on_error=False):
 
         vector_search = False
         if self.is_vector_query(query):
@@ -1610,6 +1613,9 @@ class FTSIndex:
             raise ServerUnavailableException
         except Exception as e:
             self.__log.error("Error running query: %s" % e)
+            if raise_on_error:
+                self.__log.info(hits, matches, status)
+                raise Exception
 
         if status == 'fail':
             return hits, matches, time_taken, status
@@ -5546,6 +5552,10 @@ class FTSBaseTest(unittest.TestCase):
                     plan_params=plan_params, _type=tp, collection_index=collection_index,
                     scope=index_scope, collections=index_collections, analyzer=analyzer)
 
+    def generate_queries_all_indexes(self):
+        for index in self._cb_cluster.get_indexes():
+            self.generate_random_queries(index, self.num_queries, self.query_types)
+
     def _decode_index(self, encoded_index):
         decoded_index = {}
 
@@ -6372,7 +6382,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def load_vector_data(self, containers, dataset):
         bucketvsdataset = {}
-        print(f"containers - {containers}")
+        self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
             bucket_name = bucket['name']
             bucketvsdataset['bucket_name'] = dataset[count % len(dataset)]
