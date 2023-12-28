@@ -167,7 +167,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self._create_fts_index_parameterized(field_name="l_vector", field_type="vector", test_indexes=idx,
                                                  vector_fields=vector_fields,
                                                  create_vector_index=True)
-    
+
     def start_data_loading(self):
         if self.type_of_load == "common":
             if not self.vector_search:
@@ -260,6 +260,247 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.validate_index_count(equal_bucket_doc_count=True)
             raise e
         self._cb_cluster.swap_rebalance_master(services=["fts"])
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def failover_non_master_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        self._cb_cluster.failover_and_rebalance_nodes()
+        try:
+            for index in self._cb_cluster.get_indexes():
+                self.is_index_partitioned_balanced(index)
+        except Exception as e:
+            if self._cb_cluster.get_num_fts_nodes() == 0:
+                self.log.info("Expected exception: %s" % e)
+            else:
+                raise e
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def failover_no_rebalance_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        self._cb_cluster.async_failover().result()
+        self.sleep(60)
+        try:
+            for index in self._cb_cluster.get_indexes():
+                self.is_index_partitioned_balanced(index)
+        except Exception as e:
+            self.log.info("Expected exception: %s" % e)
+
+    def failover_master_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self._cb_cluster.failover_and_rebalance_master()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def failover_only_kv_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        try:
+            self._cb_cluster.failover_and_rebalance_master()
+        except Exception as e:
+            self.log.info("Expected exception caught: %s" % e)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def graceful_failover_and_delta_recovery_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        task = self._cb_cluster.async_failover(graceful=True)
+        task.result()
+        self.sleep(60)
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def graceful_failover_and_full_recovery_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        task = self._cb_cluster.async_failover(graceful=True)
+        task.result()
+        self.sleep(60)
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def hard_failover_and_delta_recovery_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        task = self._cb_cluster.async_failover()
+        task.result()
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def hard_failover_and_full_recovery_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        task = self._cb_cluster.async_failover()
+        task.result()
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def warmup_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        self._cb_cluster.warmup_node()
+        self.sleep(60, "waiting for fts to start...")
+        self.wait_for_indexing_complete()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def warmup_master_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        self._cb_cluster.warmup_node(master=True)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def node_reboot_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        #self._cb_cluster.reboot_one_node(test_case=self)
+        self.kill_fts_service(120)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def node_reboot_only_kv_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        #self._cb_cluster.reboot_one_node(test_case=self, master=True)
+        self.kill_fts_service(120)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def memc_crash_on_kv_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        NodeHelper.kill_memcached(self._cb_cluster.get_master_node())
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.sleep(30, "Sleep additional 30 seconds to refresh actual bucket and index docs counts.")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def fts_node_crash_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        NodeHelper.kill_cbft_process(self._cb_cluster.get_random_fts_node())
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def erl_crash_on_kv_during_index_building(self):
+        self.start_data_loading()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        bucket_names = []
+        for bucket in self._cb_cluster.get_buckets():
+            bucket_names.append(bucket.name)
+        NodeHelper.kill_erlang(self._cb_cluster.get_master_node(), bucket_names)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def create_index_generate_queries(self, wait_idx=True):
