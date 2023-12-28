@@ -37,6 +37,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.index_path = rest.get_index_path()
             if self.index_path == "/data":
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
+        self.type_of_load = TestInputSingleton.input.param("type_of_load", "separate")
 
     def tearDown(self):
         super(VectorSearchMovingTopFTS, self).tearDown()
@@ -110,9 +111,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         return index_container
 
     def setup_seperate_load_for_test(self):
-        # 2 BUCKETS
-        # 1 BUCKET-> NORMAL DATA LOAD -> Normal indexes
-        # 2 bucket-> vector load -> vector indexes
+        """
+            Generates seperate buckets for vector data(SIFT, GIST etc) and normal dataset(emp, Person etc)
+        """
         self.load_data()
 
         vect_bucket_containers = self.create_vect_bucket_containers(self.num_vect_buckets)
@@ -139,11 +140,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                      wait_for_index_complete=False)
 
     def setup_common_load_for_test(self):
-        # 3 BUCKETS
-        # 1 BUCKET-> NORMAL DATA LOAD -> Normal indexes
-        # 2 bucket-> vector load -> vector indexes
-        # 3 bucket-> load_data with vector_search = True -> this loads vector within normal doc
-        # -> create both normal and vector indexes on 3 bucket
+        """
+            All documents have vector field in them, there are no seperate buckets containing only vector datasets
+        """
         self.load_data()
         # create 5 indexes in bucket 1 and bucket 2, bucket 1 will only have normal indexes
         self.create_fts_indexes_some_buckets(exempt_bucket=["standard_3"])
@@ -168,14 +167,20 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self._create_fts_index_parameterized(field_name="l_vector", field_type="vector", test_indexes=idx,
                                                  vector_fields=vector_fields,
                                                  create_vector_index=True)
+    
+    def start_data_loading(self):
+        if self.type_of_load == "common":
+            if not self.vector_search:
+                self.fail("Pass `vector_search=True` in order to have vector fields within the documents")
+            self.setup_common_load_for_test()
+        else:
+            self.setup_seperate_load_for_test()
 
     def rebalance_in_during_index_building(self):
         if self._input.param("must_fail", False):
             self.fail("Temporal fail to let all the other tests to be passed")
 
-        self.setup_seperate_load_for_test()
-
-        # self.setup_common_load_for_test()
+        self.start_data_loading()
 
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
@@ -188,7 +193,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def rebalance_out_during_index_building(self):
-        self.setup_seperate_load_for_test()
+        self.start_data_loading()
 
         self.sleep(20)
         self.log.info("Index building has begun...")
@@ -202,7 +207,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def rebalance_out_master_during_index_building(self):
-        self.setup_seperate_load_for_test()
+        self.start_data_loading()
 
         self.sleep(5)
         self.log.info("Index building has begun...")
@@ -216,7 +221,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def swap_rebalance_during_index_building(self):
-        self.setup_seperate_load_for_test()
+        self.start_data_loading()
 
         self.sleep(5)
         self.log.info("Index building has begun...")
@@ -235,7 +240,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def swap_rebalance_kv_during_index_building(self):
-        self.setup_seperate_load_for_test()
+        self.start_data_loading()
 
         self.sleep(10)
         self.log.info("Index building has begun...")
@@ -256,3 +261,76 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             raise e
         self._cb_cluster.swap_rebalance_master(services=["fts"])
         self.validate_index_count(equal_bucket_doc_count=True)
+
+    def create_index_generate_queries(self, wait_idx=True):
+        collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index",
+            collection_index=collection_index,
+            _type=_type,
+            scope=index_scope,
+            collections=index_collections
+        )
+        self.load_data()
+        if wait_idx:
+            self.wait_for_indexing_complete()
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        return index
+
+    def run_tasks_and_report(self, tasks, num_queries):
+        fail_count = 0
+        failed_queries = []
+        for task in tasks:
+            task.result()
+            if hasattr(task, 'passed'):
+                if not task.passed:
+                    fail_count += 1
+                    failed_queries.append(task.query_index+1)
+
+        if fail_count:
+            self.fail("%s out of %s queries failed! - %s" % (fail_count,
+                                                             num_queries,
+                                                             failed_queries))
+        else:
+            self.log.info("SUCCESS: %s out of %s queries passed"
+                          %(num_queries-fail_count, num_queries))
+
+    def rebalance_kill_fts_existing_fts_node(self):
+        index = self.create_index_generate_queries(wait_idx=False)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if self.rebalance_out:
+            rebalance_task = self._cb_cluster.async_rebalance_out_node(node=fts_nodes[0])
+            self.sleep(5)
+            NodeHelper.kill_cbft_process(fts_nodes[1])
+            rebalance_task.result()
+        if self.rebalance_in:
+            rebalance_task = self._cb_cluster.async_rebalance_in(1, services=["fts"])
+            self.sleep(5)
+            NodeHelper.kill_cbft_process(fts_nodes[0])
+            rebalance_task.result()
+        #Add stat validation
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        if not self.disable_file_transfer_rebalance and not index.is_upside_down():
+            file_copy_transfer_found, file_transfer_success, failed_file_transfer = \
+                self.validate_file_copy_rebalance_stats()
+            if not file_copy_transfer_found:
+                self.log.info("no file based transfer found during rebalance")
+            if not file_transfer_success:
+                self.fail(f'Found file transfer failed for these partitions: {failed_file_transfer}')
