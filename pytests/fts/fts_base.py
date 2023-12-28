@@ -3610,6 +3610,10 @@ class CouchbaseCluster:
 
         for remove_node in to_remove_node:
             self.__nodes.remove(remove_node)
+            node_services = remove_node.services.split(",")
+
+            if "kv" in node_services:
+                self.__kv_nodes.remove(remove_node)
 
         self.__nodes.extend(to_add_node)
 
