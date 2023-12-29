@@ -3742,6 +3742,10 @@ class CouchbaseCluster:
     def rebalance_failover_nodes(self):
         self.__clusterop.rebalance(self.__nodes, [], self.__fail_over_nodes)
         [self.__nodes.remove(node) for node in self.__fail_over_nodes]
+        for node in self.__fail_over_nodes:
+            node_services = node.services.split(",")
+            if "kv" in node_services:
+                self.__kv_nodes.remove(node)
         self.__fail_over_nodes = []
 
     def add_back_specific_node(self, recovery_type=None, services=None, node=None):
