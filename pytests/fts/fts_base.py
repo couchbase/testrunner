@@ -654,7 +654,7 @@ class NodeHelper:
                 time.sleep(10)
 
     @staticmethod
-    def kill_erlang(server):
+    def kill_erlang(server, bucket_names=["default"]):
         """Kill erlang process running on server.
         """
         NodeHelper._log.info("Killing erlang on server: {0}".format(server))
@@ -663,7 +663,7 @@ class NodeHelper:
         shell.kill_erlang(os_info)
         shell.start_couchbase()
         shell.disconnect()
-        NodeHelper.wait_warmup_completed([server])
+        NodeHelper.wait_warmup_completed([server], bucket_names)
 
     @staticmethod
     def kill_memcached(server):
