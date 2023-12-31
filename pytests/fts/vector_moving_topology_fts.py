@@ -84,6 +84,15 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.sleep(timeout)
         NodeHelper.kill_erlang(fts_node)
 
+    def _find_expected_indexed_items_number(self):
+        if self.container_type == 'bucket':
+            return self._num_items
+        else:
+            if isinstance(self.collection, list):
+                return self._num_items * len(self.collection)
+            else:
+                return self._num_items
+
     def create_vect_bucket_containers(self, num_buckets):
 
         containers = []
@@ -122,7 +131,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client,
                                                               containers=vect_bucket_containers)
         self.load_vector_data(containers, dataset=self.vector_dataset)
-        vect_index_buckets = self.create_vect_index_containers(vect_bucket_containers,
+        vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
                                                                self.index_per_vect_bucket)
 
         exempt_buckets = [bucket["name"] for bucket in containers["buckets"]]
@@ -134,12 +143,17 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         similarity = random.choice(["l2_norm", "dot_product"])
         vector_fields = {"dims": self.dimension, "similarity": similarity}
         self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
-                                             test_indexes=vect_index_buckets,
+                                             test_indexes=vect_index_containers,
                                              vector_fields=vector_fields,
                                              create_vector_index=True,
                                              wait_for_index_complete=wait_for_index_complete)
+
+        exempt_indexes = []
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                exempt_indexes.append(index.name)
         if generate_queries:
-            self.generate_queries_all_indexes()
+            self.generate_queries_some_indexes(exempt_index=exempt_indexes)
 
     def setup_common_load_for_test(self):
         """
@@ -505,6 +519,658 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
+    def rebalance_in_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        if rest.is_enterprise_edition():
+            services = "kv,fts"
+        else:
+            services = "fts,kv,index,n1ql"
+        self._cb_cluster.rebalance_in(num_nodes=self.num_rebalance,
+                                      services=[services])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def rebalance_out_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def swap_rebalance_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        services = []
+        for _ in range(self.num_rebalance):
+            services.append("fts")
+        self._cb_cluster.swap_rebalance(services=services,
+                                        num_nodes=self.num_rebalance)
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_and_remove_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        self._cb_cluster.failover_and_rebalance_nodes()
+        try:
+            for index in self._cb_cluster.get_indexes():
+                self.is_index_partitioned_balanced(index)
+        except Exception as e:
+            if self._cb_cluster.get_num_fts_nodes() == 0:
+                self.log.info("Expected exception: %s" % e)
+            else:
+                raise e
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_no_rebalance_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        self._cb_cluster.async_failover().result()
+        self.sleep(30)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_master_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        self._cb_cluster.failover_and_rebalance_master()
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_and_delta_recovery_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        task = self._cb_cluster.async_failover()
+        task.result()
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_and_full_recovery_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        task = self._cb_cluster.async_failover()
+        task.result()
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def graceful_failover_and_full_recovery_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        task = self._cb_cluster.async_failover(graceful=True)
+        task.result()
+        self.sleep(30)
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def graceful_failover_and_delta_recovery_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        task = self._cb_cluster.async_failover(graceful=True)
+        task.result()
+        self.sleep(30)
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def warmup_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.wait_for_indexing_complete()
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self._cb_cluster.warmup_node()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.sleep(30, "waiting for fts process to start")
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def warmup_master_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        self._cb_cluster.warmup_node(master=True)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def node_reboot_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        #self._cb_cluster.reboot_one_node(test_case=self)
+        self.kill_fts_service(120)
+        self.sleep(5)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def fts_node_crash_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        NodeHelper.kill_cbft_process(self._cb_cluster.get_random_fts_node())
+        self.sleep(60)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def erl_crash_between_indexing_and_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        index_query_matches_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                index_query_matches_map[index.name] = query_matches_before
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+
+        bucket_names = []
+        for bucket in self._cb_cluster.get_buckets():
+            bucket_names.append(bucket.name)
+        NodeHelper.kill_erlang(self._cb_cluster.get_random_fts_node(), bucket_names)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                          num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+                else:
+                    self.validate_vector_query_matches(query_matches_after,
+                                                       index_query_matches_map[index.name])
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def rebalance_in_during_querying(self):
+        #TESTED
+        #index = self.create_index_generate_queries()
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+
+
+        services = []
+        for _ in range(self.num_rebalance):
+            services.append("fts")
+        rebalance_tasks = []
+        rebalance_tasks.append(self._cb_cluster.async_rebalance_in(
+            num_nodes=self.num_rebalance,
+            services=services))
+
+        index_query_task_map = {}
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, 20)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        for rebalance_task in rebalance_tasks:
+            rebalance_task.result()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
     def create_index_generate_queries(self, wait_idx=True):
         collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(
@@ -539,6 +1205,25 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("SUCCESS: %s out of %s queries passed"
                           %(num_queries-fail_count, num_queries))
             return None
+
+    def validate_vector_query_matches(self, query_matches_returned,
+                                      query_matches_expected):
+
+        for q_idx in range(len(query_matches_returned)):
+            returned_matches = query_matches_returned[q_idx]
+            expected_matches = query_matches_expected[q_idx]
+
+            fts_doc_ids_returned = [returned_matches[i]['id'] for i in range(self.k)]
+            fts_doc_ids_expected = [expected_matches[i]['id'] for i in range(self.k)]
+
+            if fts_doc_ids_returned == fts_doc_ids_expected:
+                self.log.info("SUCCESS: Query matches returned {} are the same as" \
+                              " the query matches expected {}".
+                              format(fts_doc_ids_returned, fts_doc_ids_expected))
+            else:
+                self.fail("FAIL: Query matches returned do not equal the expected"\
+                          " matches for query #{}. Expected: {}, Returned: {}".
+                          format(q_idx, fts_doc_ids_expected, fts_doc_ids_returned))
 
     def run_vector_queries_and_report(self, index, num_queries=None):
         queries = self.get_query_vectors(self.vector_dataset)[:num_queries]

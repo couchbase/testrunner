@@ -5552,6 +5552,12 @@ class FTSBaseTest(unittest.TestCase):
                     plan_params=plan_params, _type=tp, collection_index=collection_index,
                     scope=index_scope, collections=index_collections, analyzer=analyzer)
 
+    def generate_queries_some_indexes(self, exempt_index=[]):
+        for index in self._cb_cluster.get_indexes():
+            if index.name in exempt_index:
+                continue
+            self.generate_random_queries(index, self.num_queries, self.query_types)
+
     def generate_queries_all_indexes(self):
         for index in self._cb_cluster.get_indexes():
             self.generate_random_queries(index, self.num_queries, self.query_types)
