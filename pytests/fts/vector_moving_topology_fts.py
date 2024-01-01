@@ -169,7 +169,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self._create_fts_index_parameterized(field_name="l_vector", field_type="vector", test_indexes=idx,
                                                  vector_fields=vector_fields,
                                                  create_vector_index=True)
-    
+
     def load_data_and_create_indexes(self, wait_for_index_complete=False, generate_queries=False):
         if self.type_of_load == "common":
             if not self.vector_search:
@@ -540,9 +540,10 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                           %(num_queries-fail_count, num_queries))
             return None
 
-    def run_vector_queries_and_report(self, index):
-        queries = self.get_query_vectors(self.vector_dataset)
+    def run_vector_queries_and_report(self, index, num_queries=None):
+        queries = self.get_query_vectors(self.vector_dataset)[:num_queries]
         queries_to_run = []
+        query_matches = []
         failed_queries = []
         fail_count = 0
         for count, q in enumerate(queries):
@@ -567,6 +568,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 if hits == 0:
                     hits = -1
                 self.log.info("FTS Hits for Search query: %s" % hits)
+                query_matches.append(matches)
 
                 # validate no of results are k only
                 if len(matches) != self.k:
@@ -581,11 +583,11 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         if fail_count:
             return ("%s out of %s queries failed! - %s" % (fail_count,
                                                            len(queries),
-                                                           failed_queries))
+                                                           failed_queries)), query_matches
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           %(len(queries)-fail_count, len(queries)))
-            return None
+            return None, query_matches
 
     def rebalance_kill_fts_existing_fts_node(self):
         self.load_data_and_create_indexes(wait_for_index_complete=False, generate_queries=True)
