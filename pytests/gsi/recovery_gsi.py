@@ -1678,7 +1678,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 break
         try:
             # Blocking communication between Node B and Node C
-            conn = RestConnection(self.master)
+            index_node = self.get_nodes_from_services_map(service_type="index")
+            conn = RestConnection(index_node)
             self.block_incoming_network_from_node(node_b, node_c)
 
             # Doing some mutation which replica on Node C won't see
@@ -1737,7 +1738,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.cluster.rebalance(self.servers, [], [])
 
             # Blocking communication between Node B and Node C
-            conn = RestConnection(self.master)
             self.block_incoming_network_from_node(node_b, node_c)
 
             # Doing some mutation which replica on Node C won't see
@@ -1807,9 +1807,10 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         # Checking item_count in all indexes
         # Check whether all the indexes have indexed all the items
         all_items_indexed_flag = False
+        index_node = self.get_nodes_from_services_map(service_type="index")
         for i in range(20):
             result_list = []
-            rest = RestConnection(self.master)
+            rest = RestConnection(index_node)
             for item in range(4):
                 indexed_item = rest.get_index_stats()["default"]["idx_{0}".format(item)]["items_count"]
                 result_list.append(indexed_item == self.docs_per_day * 2016)
@@ -1875,7 +1876,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 node_c = node
                 break
         # get num_rollback stats before triggering in-memory recovery
-        conn = RestConnection(self.master)
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        conn = RestConnection(index_node)
         num_rollback_before_recovery = conn.get_num_rollback_stat(bucket=bucket_name)
         try:
             self.block_incoming_network_from_node(node_b, node_c)
