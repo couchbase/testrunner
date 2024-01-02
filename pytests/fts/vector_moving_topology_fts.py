@@ -1758,6 +1758,150 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         if query_failure:
             self.fail(f"queries failed -> {query_failure}")
 
+    def node_reboot_during_querying(self):
+        self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
+        # node = self._cb_cluster.reboot_one_node(test_case=self)
+        node = self.kill_fts_service(120)
+        self._cb_cluster.set_bypass_fts_node(node)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
+
+    def memc_crash_during_indexing_and_querying(self):
+        self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
+        node = self._cb_cluster.get_random_fts_node()
+        NodeHelper.kill_memcached(node)
+        self._cb_cluster.set_bypass_fts_node(node)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
+
+    def erl_crash_during_querying(self):
+        self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
+        node = self._cb_cluster.get_random_fts_node()
+        NodeHelper.kill_erlang(node)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
+
+    def fts_crash_during_querying(self):
+        # TESTED
+        self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
+
+        node = self._cb_cluster.get_random_fts_node()
+        NodeHelper.kill_cbft_process(node)
+        self._cb_cluster.set_bypass_fts_node(node)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
+
     def memc_crash_during_indexing_and_querying(self):
         self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
         node = self._cb_cluster.get_random_fts_node()
