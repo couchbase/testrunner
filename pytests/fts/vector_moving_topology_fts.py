@@ -21,6 +21,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.vector_dataset = TestInputSingleton.input.param("vector_dataset", "siftsmall")
         self.dimension = TestInputSingleton.input.param("dimension", 128)
         self.k = TestInputSingleton.input.param("k", 100)
+        self.num_vector_queries = TestInputSingleton.input.param("num_vect_queries", 100)
         self.num_rebalance = TestInputSingleton.input.param("num_rebalance", 1)
         self.retry_time = TestInputSingleton.input.param("retry_time", 300)
         self.num_retries = TestInputSingleton.input.param("num_retries", 1)
@@ -92,6 +93,23 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 return self._num_items * len(self.collection)
             else:
                 return self._num_items
+
+    def wait_for_rebalance_to_start(self, timeout=1800):
+
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        status, _ = rest._rebalance_status_and_progress()
+        end_time = time.time() + timeout
+        current_time = time.time()
+        self.log.info("Waiting for rebalance to start")
+        while status != 'running' and current_time < end_time:
+            time.sleep(1)
+            status, _ = rest._rebalance_status_and_progress()
+            current_time = time.time()
+
+        if current_time < end_time:
+            self.log.info("Rebalance has started running.")
+        else:
+            self.fail("Rebalance failed to start")
 
     def create_vect_bucket_containers(self, num_buckets):
 
@@ -1137,12 +1155,62 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             num_nodes=self.num_rebalance,
             services=services))
 
-        index_query_task_map = {}
+        self.wait_for_rebalance_to_start()
 
+        index_query_task_map = {}
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
-                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, 20)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        for rebalance_task in rebalance_tasks:
+            print("\n\nGETTING RESULT FOR REBALANCE TASK\n\n")
+            rebalance_task.result()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def rebalance_out_during_querying(self):
+
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+
+        services = []
+        for _ in range(self.num_rebalance):
+            services.append("fts")
+        rebalance_tasks = []
+        rebalance_tasks.append(self._cb_cluster.async_rebalance_out(
+             num_nodes=self.num_rebalance))
+
+        self.wait_for_rebalance_to_start()
+
+        index_query_task_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
             else:
@@ -1158,6 +1226,294 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
         for rebalance_task in rebalance_tasks:
             rebalance_task.result()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def swap_rebalance_during_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+
+        services = []
+        tasks = []
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        for _ in range(self.num_rebalance):
+            if rest.is_enterprise_edition():
+                services.append("fts")
+            else:
+                services.append("fts,kv,index,n1ql")
+        reb_thread = Thread(
+            target=self._cb_cluster.async_swap_rebalance,
+            args=[self.num_rebalance, services])
+        reb_thread.start()
+        # wait for a bit before querying
+        self.sleep(90)
+
+        index_query_task_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                self.wait_for_indexing_complete()
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def retry_rebalance(self, services=None, nodes_in=[], sleep_before_rebalance=0):
+        rebalance_was_successful = True
+        try:
+            if services:
+                self._cb_cluster.rebalance_in_node(
+                    nodes_in = nodes_in,
+                    services=services,
+                    sleep_before_rebalance=sleep_before_rebalance
+                )
+            else:
+                self._cb_cluster.rebalance_out()
+            rebalance_was_successful = True
+        except Exception as e:
+            rebalance_was_successful = False
+            self.log.error(str(e))
+            self.start_cb_service(nodes_in)
+            self.sleep(5)
+            self._check_retry_rebalance_succeeded()
+        finally:
+            self.start_cb_service(nodes_in)
+            if rebalance_was_successful:
+                self.fail("Rebalance was successful")
+
+    def retry_rebalance_in_during_querying(self):
+        #TESTED
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+        services = []
+
+        node_to_rebalance_in = []
+        for s in self._input.servers:
+            node_in_use = False
+            for s1 in self._cb_cluster.get_nodes():
+                if s.ip == s1.ip:
+                    node_in_use = True
+                    break
+            if not node_in_use:
+                node_to_rebalance_in.append(s)
+            if len(node_to_rebalance_in) == self.num_rebalance:
+                break
+        if len(node_to_rebalance_in) < self.num_rebalance:
+            self.fail("Cannot find free node to rebalance-in.")
+
+        for _ in range(self.num_rebalance):
+            services.append("fts")
+        tasks = []
+
+        stop_CB_thread = Thread(
+            target=self.stop_cb_service,
+            args=[node_to_rebalance_in, 45])
+
+        stop_CB_thread.start()
+        self.retry_rebalance(services=services, nodes_in=node_to_rebalance_in, sleep_before_rebalance=150)
+
+        index_query_task_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        self.sleep(30)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+        self._cb_cluster.disable_retry_rebalance()
+
+    def retry_rebalance_out_during_querying(self):
+        #TESTED
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+        #self.run_query_and_compare(index)
+        tasks = []
+        retry_reb_thread = Thread(
+            target=self.retry_rebalance,
+            args=[])
+        retry_reb_thread.start()
+        #reb_thread = Thread(
+        #    target=self._cb_cluster.reboot_after_timeout,
+        #    args=[2])
+        reb_thread = Thread(
+            target=self.kill_fts_service,
+            args=[2])
+        reb_thread.start()
+
+        index_query_task_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+        self._cb_cluster.disable_retry_rebalance()
+
+    def hard_failover_no_rebalance_during_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+
+        services = []
+        for _ in range(self.num_rebalance):
+            services.append("fts")
+        failover_tasks = []
+        failover_tasks.append(self._cb_cluster.async_failover(
+            num_nodes=1,
+            graceful=False))
+
+        self.sleep(60)
+
+        index_query_task_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        for failover_task in failover_tasks:
+            failover_task.result()
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.is_index_partitioned_balanced(index)
+            else:
+                query_failure = self.run_tasks_and_report(index_query_task_map[index.name], len(index.fts_queries))
+                if query_failure:
+                    self.fail(f"queries failed -> {query_failure} for index {index.name}")
+                self.is_index_partitioned_balanced(index)
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def hard_failover_rebalance_out_during_querying(self):
+        #TESTED
+        self.load_data_and_create_indexes(generate_queries=True)
+
+        self.wait_for_indexing_complete()
+
+        services = []
+        for _ in range(self.num_rebalance):
+            services.append("fts")
+        failover_tasks = []
+        failover_tasks.append(self._cb_cluster.async_failover_and_rebalance(
+            num_nodes=1,
+            graceful=False))
+
+        index_query_task_map = {}
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                self.log.info("\n\nRunning queries for vector index: {}\n\n".format(index.name))
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, self.num_vector_queries)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure} for index {index.name}")
+            else:
+                tasks = []
+                self.log.info("Running queries for fts index: {}".format(index.name))
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                index_query_task_map[index.name] = tasks
+
+        for failover_task in failover_tasks:
+            failover_task.result()
 
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
