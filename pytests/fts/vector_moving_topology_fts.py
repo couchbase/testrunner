@@ -1527,6 +1527,105 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                     expected_hits=self._find_expected_indexed_items_number())
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
+    def update_index_during_rebalance(self):
+        """
+         Perform indexing + rebalance + index defn change in parallel
+        """
+        self.load_data_and_create_indexes()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number()//2)
+        reb_thread = Thread(target=self._cb_cluster.rebalance_out_master,
+                                   name="rebalance",
+                                   args=())
+        reb_thread.start()
+        self.sleep(15)
+        for index_obj in self._cb_cluster.get_indexes():
+            index = self._cb_cluster.get_fts_index_by_name(index_obj.name)
+            new_plan_param = {"maxPartitionsPerPIndex": 64}
+            index.index_definition['planParams'] = \
+                index.build_custom_plan_params(new_plan_param)
+            index.index_definition['uuid'] = index.get_uuid()
+            update_index_thread = Thread(target=index.update,
+                                    name="update_index",
+                                    args=())
+            update_index_thread.start()
+            _, defn = index.get_index_defn()
+            self.log.info(defn['indexDef'])
+            reb_thread.join()
+            update_index_thread.join()
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                                               num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    zero_results_ok=True)
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
+                                                                                               num_queries=1)
+                if vector_query_failure:
+                    self.fail(f"Vector queries failed -> {vector_query_failure}")
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    zero_results_ok=True)
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def delete_index_during_rebalance(self):
+        """
+         Perform indexing + rebalance + index delete in parallel
+        """
+        import copy
+        self.load_data_and_create_indexes()
+
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        indexes = copy.copy(self._cb_cluster.get_indexes())
+        for index in indexes:
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number()//2)
+        reb_thread = Thread(target=self._cb_cluster.rebalance_out,
+                                   name="rebalance",
+                                   args=())
+        reb_thread.start()
+        # the first part of the rebalance is kv, wait for fts rebalance
+        self.sleep(50)
+
+        for index in indexes:
+            index.delete()
+
+        self.sleep(5)
+
+        for index in indexes:
+            try:
+                _, defn = index.get_index_defn()
+                self.log.info(defn['indexDef'])
+            except KeyError as e:
+                self.log.info("Expected exception: {0}".format(e))
+                deleted = self._cb_cluster.are_index_files_deleted_from_disk(index.name)
+                if deleted:
+                    self.log.info("Confirmed: index files deleted from disk")
+                else:
+                    self.fail("ERROR: Index files still present on disk")
+            else:
+                self.fail("ERROR: Index definition still exists after deletion! "
+                          "%s" %defn['indexDef'])
+
     def create_index_generate_queries(self, wait_idx=True):
         collection_index, _type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(
