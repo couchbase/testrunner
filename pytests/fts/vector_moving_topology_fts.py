@@ -132,7 +132,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                               containers=vect_bucket_containers)
         self.load_vector_data(containers, dataset=self.vector_dataset)
         vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
-                                                               self.index_per_vect_bucket)
+                                                                  self.index_per_vect_bucket)
 
         exempt_buckets = [bucket["name"] for bucket in containers["buckets"]]
 
@@ -190,7 +190,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.fail("Pass `vector_search=True` in order to have vector fields within the documents")
             self.setup_common_load_for_test()
         else:
-            self.setup_seperate_load_for_test(wait_for_index_complete=wait_for_index_complete, generate_queries=generate_queries)
+            self.setup_seperate_load_for_test(wait_for_index_complete=wait_for_index_complete,
+                                              generate_queries=generate_queries)
 
     def rebalance_in_during_index_building(self):
         if self._input.param("must_fail", False):
@@ -285,7 +286,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         self._cb_cluster.failover_and_rebalance_nodes()
         try:
             for index in self._cb_cluster.get_indexes():
@@ -305,7 +306,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         self._cb_cluster.async_failover().result()
         self.sleep(60)
         try:
@@ -321,7 +322,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -338,7 +339,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         try:
             self._cb_cluster.failover_and_rebalance_master()
         except Exception as e:
@@ -355,7 +356,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         task = self._cb_cluster.async_failover(graceful=True)
         task.result()
         self.sleep(60)
@@ -372,7 +373,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         task = self._cb_cluster.async_failover(graceful=True)
         task.result()
         self.sleep(60)
@@ -389,7 +390,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         task = self._cb_cluster.async_failover()
         task.result()
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
@@ -405,7 +406,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         task = self._cb_cluster.async_failover()
         task.result()
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
@@ -421,7 +422,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         self._cb_cluster.warmup_node()
         self.sleep(60, "waiting for fts to start...")
         self.wait_for_indexing_complete()
@@ -436,7 +437,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         self._cb_cluster.warmup_node(master=True)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -450,8 +451,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
-        #self._cb_cluster.reboot_one_node(test_case=self)
+                          % (index.name, index.get_indexed_doc_count()))
+        # self._cb_cluster.reboot_one_node(test_case=self)
         self.kill_fts_service(120)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -465,8 +466,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
-        #self._cb_cluster.reboot_one_node(test_case=self, master=True)
+                          % (index.name, index.get_indexed_doc_count()))
+        # self._cb_cluster.reboot_one_node(test_case=self, master=True)
         self.kill_fts_service(120)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -480,7 +481,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         NodeHelper.kill_memcached(self._cb_cluster.get_master_node())
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -495,7 +496,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         NodeHelper.kill_cbft_process(self._cb_cluster.get_random_fts_node())
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -509,7 +510,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Index building has begun...")
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
-                          %(index.name, index.get_indexed_doc_count()))
+                          % (index.name, index.get_indexed_doc_count()))
         bucket_names = []
         for bucket in self._cb_cluster.get_buckets():
             bucket_names.append(bucket.name)
@@ -520,7 +521,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def rebalance_in_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -530,7 +531,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -553,7 +554,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -565,7 +566,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def rebalance_out_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -575,7 +576,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -590,7 +591,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -602,7 +603,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def swap_rebalance_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -612,7 +613,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -631,7 +632,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -643,7 +644,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_and_remove_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.sleep(10)
@@ -655,7 +656,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -677,7 +678,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -689,7 +690,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_no_rebalance_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.sleep(10)
@@ -700,7 +701,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -714,7 +715,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -726,7 +727,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_master_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -735,7 +736,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -751,7 +752,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -763,7 +764,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_and_delta_recovery_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -772,7 +773,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -790,7 +791,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -802,7 +803,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def hard_failover_and_full_recovery_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -811,7 +812,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -829,7 +830,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -841,7 +842,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def graceful_failover_and_full_recovery_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -850,7 +851,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -869,7 +870,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -881,7 +882,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def graceful_failover_and_delta_recovery_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -890,7 +891,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -909,7 +910,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -921,7 +922,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def warmup_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.wait_for_indexing_complete()
@@ -930,7 +931,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -947,7 +948,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -959,7 +960,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def warmup_master_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.sleep(10)
@@ -971,7 +972,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -986,7 +987,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -998,7 +999,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def node_reboot_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.sleep(10)
@@ -1010,7 +1011,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -1018,7 +1019,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        #self._cb_cluster.reboot_one_node(test_case=self)
+        # self._cb_cluster.reboot_one_node(test_case=self)
         self.kill_fts_service(120)
         self.sleep(5)
         for index in self._cb_cluster.get_indexes():
@@ -1028,7 +1029,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -1040,7 +1041,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def fts_node_crash_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.sleep(10)
@@ -1054,7 +1055,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -1068,7 +1069,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -1080,7 +1081,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def erl_crash_between_indexing_and_querying(self):
-        #TESTED
+        # TESTED
         self.load_data_and_create_indexes()
 
         self.sleep(10)
@@ -1092,7 +1093,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_before = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                                num_queries=1)
                 index_query_matches_map[index.name] = query_matches_before
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
@@ -1110,7 +1111,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
                 vector_query_failure, query_matches_after = self.run_vector_queries_and_report(index,
-                                                                          num_queries=1)
+                                                                                               num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
                 else:
@@ -1122,12 +1123,11 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 self.log.info("SUCCESS! Hits: %s" % hits)
 
     def rebalance_in_during_querying(self):
-        #TESTED
-        #index = self.create_index_generate_queries()
+        # TESTED
+        # index = self.create_index_generate_queries()
         self.load_data_and_create_indexes(generate_queries=True)
 
         self.wait_for_indexing_complete()
-
 
         services = []
         for _ in range(self.num_rebalance):
@@ -1195,7 +1195,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             if hasattr(task, 'passed'):
                 if not task.passed:
                     fail_count += 1
-                    failed_queries.append(task.query_index+1)
+                    failed_queries.append(task.query_index + 1)
 
         if fail_count:
             return ("%s out of %s queries failed! - %s" % (fail_count,
@@ -1203,7 +1203,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                            failed_queries))
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
-                          %(num_queries-fail_count, num_queries))
+                          % (num_queries - fail_count, num_queries))
             return None
 
     def validate_vector_query_matches(self, query_matches_returned,
@@ -1221,7 +1221,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                               " the query matches expected {}".
                               format(fts_doc_ids_returned, fts_doc_ids_expected))
             else:
-                self.fail("FAIL: Query matches returned do not equal the expected"\
+                self.fail("FAIL: Query matches returned do not equal the expected" \
                           " matches for query #{}. Expected: {}, Returned: {}".
                           format(q_idx, fts_doc_ids_expected, fts_doc_ids_returned))
 
@@ -1233,8 +1233,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         fail_count = 0
         for count, q in enumerate(queries):
             query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
-                          "knn": [{"field": "vector_data", "k": self.k,
-                                   "vector": []}]}
+                     "knn": [{"field": "vector_data", "k": self.k,
+                              "vector": []}]}
             query['knn'][0]['vector'] = q.tolist()
             queries_to_run.append(query)
 
@@ -1271,8 +1271,328 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                            failed_queries)), query_matches
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
-                          %(len(queries)-fail_count, len(queries)))
+                          % (len(queries) - fail_count, len(queries)))
             return None, query_matches
+
+    def update_index_during_failover_and_rebalance(self):
+        """
+         Perform indexing + failover + index defn change in parallel
+        """
+        self.load_data_and_create_indexes()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        idx_name = None
+        for index in self._cb_cluster.get_indexes():
+            if not idx_name:
+                idx_name = index.name
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        # wait till indexing is midway...
+        self.wait_for_indexing_complete(self._find_expected_indexed_items_number() // 2)
+        fail_thread = Thread(
+            target=self._cb_cluster.failover_and_rebalance_nodes,
+            name="failover",
+            args=())
+
+        index = self._cb_cluster.get_fts_index_by_name(idx_name)
+        new_plan_param = {"maxPartitionsPerPIndex": 128}
+        index.index_definition['planParams'] = \
+            index.build_custom_plan_params(new_plan_param)
+        index.index_definition['uuid'] = index.get_uuid()
+        update_index_thread = Thread(target=index.update,
+                                     name="update_index",
+                                     args=())
+        fail_thread.start()
+        update_index_thread.start()
+        _, defn = index.get_index_defn()
+        self.log.info(defn['indexDef'])
+        fail_thread.join()
+        update_index_thread.join()
+        hits, _, _, _ = index.execute_query(self.query)
+        self.log.info("Hits: %s" % hits)
+        vector_query_failure = []
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index, num_queries=2)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        hits, _, _, _ = index.execute_query(
+            self.query,
+            expected_hits=index.get_src_bucket_doc_count())
+        self.log.info("Hits: %s" % hits)
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+    def test_stop_restart_rebalance_in_loop(self):
+        """
+         Kick off rebalance-out. Stop and stop rebalance in a loop
+         continuously till rebalance finishes.
+        :return:
+        """
+        count = 0
+        self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
+
+        from lib.membase.api.rest_client import RestConnection
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        nodes = rest.node_statuses()
+        ejected_nodes = []
+
+        for node in nodes:
+            if node.ip != self._master.ip:
+                ejected_nodes.append(node.id)
+                break
+        self.log.info(
+            "removing node(s) {0} from cluster".format(ejected_nodes))
+
+        while count < 5:
+            rest.rebalance(otpNodes=[node.id for node in nodes],
+                           ejectedNodes=ejected_nodes)
+            self.sleep(5)
+            stopped = rest.stop_rebalance()
+
+            self.assertTrue(stopped, msg="unable to stop rebalance")
+            count += 1
+
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=ejected_nodes)
+        self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
+                                                     "failed after restarting")
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
+
+    def test_rebalance_cancel_new_rebalance(self):
+        """
+            Load bucket, do not create index
+            From a 3 kv+fts node cluster, rebalance out master + one node
+            Immediately (after few secs), stop rebalance
+            Rebalance out other nodes than master.
+            After rebalance completes, create an index
+        :return:
+        """
+        # create vector buckets
+        vect_bucket_containers = self.create_vect_bucket_containers(self.num_vect_buckets)
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client,
+                                                              containers=vect_bucket_containers)
+
+        self.load_data(exempt_bucket_prefix="vector-data")
+        self.load_vector_data(containers, dataset=self.vector_dataset)
+
+        non_master_nodes = list(set(self._cb_cluster.get_nodes()) -
+                                {self._master})
+
+        from lib.membase.api.rest_client import RestConnection
+        rest = RestConnection(self._master)
+        nodes = rest.node_statuses()
+        ejected_nodes = []
+
+        # first eject a master + non-master node
+        eject_nodes = [self._master] + [non_master_nodes[0]]
+
+        for eject in eject_nodes:
+            for node in nodes:
+                if eject.ip == node.ip:
+                    ejected_nodes.append(node.id)
+                    break
+
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=ejected_nodes)
+        self.sleep(3)
+        rest._rebalance_progress()
+        stopped = rest.stop_rebalance()
+        self.assertTrue(stopped, msg="unable to stop rebalance")
+
+        eject_nodes = non_master_nodes[:2]
+        ejected_nodes = []
+
+        for eject in eject_nodes:
+            for node in nodes:
+                if eject.ip == node.ip:
+                    ejected_nodes.append(node.id)
+                    break
+
+        rest.rebalance(otpNodes=[node.id for node in nodes],
+                       ejectedNodes=ejected_nodes)
+        rest.monitorRebalance()
+
+        self.create_fts_indexes_some_buckets(exempt_bucket_prefix="vector-bucket")
+        similarity = random.choice(["l2_norm", "dot_product"])
+        vector_fields = {"dims": self.dimension, "similarity": similarity}
+        self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
+                                             test_indexes=containers,
+                                             vector_fields=vector_fields,
+                                             create_vector_index=True,
+                                             wait_for_index_complete=False)
+        self.sleep(10)
+
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def rebalance_in_parallel_partitions_move_add_node(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        rest.set_maxFeedsPerDCPAgent(1)
+        rest.set_maxDCPAgents(3)
+
+        self.load_data_and_create_indexes(wait_for_index_complete=False)
+        for index in self._cb_cluster.get_indexes():
+            index.update_index_partitions(self.num_index_partitions)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        start_rebalance_time = time.time()
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+        end_rebalance_time = time.time()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        simple_rebalance_time = end_rebalance_time - start_rebalance_time
+
+        self._cb_cluster.rebalance_out(num_nodes=1)
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
+
+        start_parallel_rebalance_time = time.time()
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+        end_parallel_rebalance_time = time.time()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        parallel_rebalance_time = end_parallel_rebalance_time - start_parallel_rebalance_time
+        self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
+                      format(simple_rebalance_time - parallel_rebalance_time))
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
+                        "Rebalance in with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
+                        "rebalance in with maxConcurrentPartitionMovesPerNode={1}".
+                        format(self.max_concurrent_partition_moves_per_node,
+                               self.default_concurrent_partition_moves_per_node))
+
+    def rebalance_out_parallel_partitions_move(self):
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.default_concurrent_partition_moves_per_node)
+        rest.set_maxFeedsPerDCPAgent(1)
+        rest.set_maxDCPAgents(3)
+
+        self.load_data_and_create_indexes(wait_for_index_complete=False)
+
+        for index in self._cb_cluster.get_indexes():
+            index.update_index_partitions(self.num_index_partitions)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        simple_rebalance_start_time = time.time()
+        self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+        simple_rebalance_finish_time = time.time()
+        simple_rebalance_time = simple_rebalance_finish_time - simple_rebalance_start_time
+
+        self._cb_cluster.rebalance_in(num_nodes=1)
+
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        rest.set_maxConcurrentPartitionMovesPerNode(self.max_concurrent_partition_moves_per_node)
+
+        parallel_rebalance_start_time = time.time()
+        self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+        parallel_rebalance_finish_time = time.time()
+        parallel_rebalance_time = parallel_rebalance_finish_time - parallel_rebalance_start_time
+
+        self.log.info("Delta between simple and concurrent partitions move rebalance is {0} sec.".
+                      format(simple_rebalance_time - parallel_rebalance_time))
+
+        self.wait_for_indexing_complete()
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        vector_query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index, num_queries=2)
+            else:
+                hits, _, _, _ = index.execute_query(query=self.query,
+                                                    expected_hits=self._find_expected_indexed_items_number())
+                self.log.info("SUCCESS! Hits: %s" % hits)
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        self.assertTrue(simple_rebalance_time > parallel_rebalance_time,
+                        "Rebalance out with maxConcurrentPartitionMovesPerNode={0} takes longer time than "
+                        "rebalance out with maxConcurrentPartitionMovesPerNode={1}".
+                        format(self.max_concurrent_partition_moves_per_node,
+                               self.default_concurrent_partition_moves_per_node))
+
+    def rebalance_2_nodes_during_index_building(self):
+        self.load_data_and_create_indexes(wait_for_index_complete=False, generate_queries=True)
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          % (index.name, index.get_indexed_doc_count()))
+        if self.rebalance_out:
+            self._cb_cluster.rebalance_out(2)
+        if self.rebalance_in:
+            self._cb_cluster.rebalance_in(2, services=["fts", "fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        tasks = []
+        vector_query_failure = None
+        query_failure = None
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure = self.run_vector_queries_and_report(index)
+            else:
+                for count in range(0, len(index.fts_queries)):
+                    tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                        fts_index=index,
+                        es=self.es,
+                        es_index_name=None,
+                        query_index=count))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
+
+        if vector_query_failure and query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure} \n Normal queries failed -> {query_failure}")
+
+        if vector_query_failure:
+            self.fail(f"Vector queries failed -> {vector_query_failure}")
+
+        if query_failure:
+            self.fail(f"queries failed -> {query_failure}")
 
     def rebalance_kill_fts_existing_fts_node(self):
         self.load_data_and_create_indexes(wait_for_index_complete=False, generate_queries=True)
@@ -1319,5 +1639,3 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
         if query_failure:
             self.fail(f"queries failed -> {query_failure}")
-
-

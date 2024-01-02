@@ -5536,13 +5536,14 @@ class FTSBaseTest(unittest.TestCase):
                     plan_params=plan_params, _type=tp, collection_index=collection_index,
                     scope=index_scope, collections=index_collections, analyzer=analyzer)
 
-    def create_fts_indexes_some_buckets(self, plan_params=None, analyzer='standard', exempt_bucket=[]):
+    def create_fts_indexes_some_buckets(self, plan_params=None, analyzer='standard', exempt_bucket=[], exempt_bucket_prefix=None):
         """
         Creates 'n' default indexes for all buckets.
         'n' is defined by 'index_per_bucket' test param.
         """
         for bucket in self._cb_cluster.get_buckets():
-            if bucket.name in exempt_bucket:
+            if bucket.name in exempt_bucket or (
+                    exempt_bucket_prefix is not None and exempt_bucket_prefix in bucket.name):
                 continue
             collection_index, tp, index_scope, index_collections = self.define_index_parameters_collection_related()
             for count in range(self.index_per_bucket):
@@ -6087,7 +6088,7 @@ class FTSBaseTest(unittest.TestCase):
                                                          end=self.create_gen[1].end,
                                                          op_type=OPS.DELETE))
 
-    def load_data(self, generator=None, data_loader_output=False, num_items=20000):
+    def load_data(self, generator=None, data_loader_output=False, num_items=20000, exempt_bucket_prefix=None):
         """
          Blocking call to load data to Couchbase and ES
         """
@@ -6106,6 +6107,8 @@ class FTSBaseTest(unittest.TestCase):
             self.gen_create = SDKDataLoader(num_ops=num_items)
             active_resident_threshold = int(self._active_resident_ratio)
             for bucket in self.buckets:
+                if exempt_bucket_prefix is not None and exempt_bucket_prefix in bucket.name:
+                    continue
                 cluster.async_load_gen_docs_till_dgm(server=self.master,
                                                           active_resident_threshold=active_resident_threshold,
                                                           bucket=bucket,
