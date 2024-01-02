@@ -45,6 +45,7 @@ from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
+
 try:
     from lib.couchbase_helper.tuq_helper import N1QLHelper
 except Exception as e:
@@ -66,6 +67,7 @@ import lib.capella.utils as capella_utils
 
 from .vector_dataset_generator.vector_dataset_generator import VectorDataset
 from .vector_dataset_generator.vector_dataset_loader import VectorLoader
+
 
 class RenameNodeException(FTSException):
     """Exception thrown when converting ip to hostname failed
@@ -91,8 +93,8 @@ def raise_if(cond, ex):
 
 
 def download_from_s3(source, dest):
-    print( "Downloading from {0}...".
-           format(source))
+    print("Downloading from {0}...".
+          format(source))
     import urllib.request, urllib.parse, urllib.error
     urllib.request.URLopener().retrieve(
         source,
@@ -446,7 +448,6 @@ class QUERY:
             ]
         }
     }
-
 
 
 # Event Definition:
@@ -816,7 +817,7 @@ class FTSIndex:
         self.scope = scope
         self.faiss_index = None
         self.collections = collections
-        self.multiple_ca=multiple_ca
+        self.multiple_ca = multiple_ca
         self.is_elixir = is_elixir
         self.reduce_query_logging = reduce_query_logging
         if not index_storage_type:
@@ -958,7 +959,8 @@ class FTSIndex:
                                     num_custom_analyzers=self.num_custom_analyzers,
                                     multiple_filters=self.multiple_filters,
                                     custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields,
-                                    text_analyzer=self.text_analyzer, type_mapping=type_mapping, collection_index=collection_index)
+                                    text_analyzer=self.text_analyzer, type_mapping=type_mapping,
+                                    collection_index=collection_index)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print((self.smart_query_fields))
@@ -994,7 +996,7 @@ class FTSIndex:
                 for custom_filter in custom_filters:
                     self.__log.info("custom filter = " + custom_filter)
                     if custom_filter in self.index_definition['params']['mapping']['analysis'] \
-                        ['token_filters'].keys():
+                            ['token_filters'].keys():
                         del self.index_definition['params']['mapping']['analysis'] \
                             ['token_filters'][custom_filter]
             else:
@@ -1079,7 +1081,8 @@ class FTSIndex:
                 ['properties'][fields.pop()] = field_maps.pop()
 
     def add_child_field_to_default_collection_mapping(self, field_name, field_type,
-                                           field_alias=None, analyzer=None, scope=None, collection=None, vector_fields=None):
+                                                      field_alias=None, analyzer=None, scope=None, collection=None,
+                                                      vector_fields=None):
         """
         This method will add a field mapping to a default mapping
         """
@@ -1126,7 +1129,8 @@ class FTSIndex:
         map = {}
         if 'properties' not in self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'] = {}
-        self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][fields.pop()] = field_maps.pop()
+        self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][
+            fields.pop()] = field_maps.pop()
 
     def add_analyzer_to_existing_field_map(self, field_name, field_type,
                                            field_alias=None, analyzer=None):
@@ -1397,11 +1401,13 @@ class FTSIndex:
                     self.__log.info("Validated: all index files for {0} deleted from "
                                     "disk".format(self.name))
         elif not status and "index not found" in content_json['error']:
-            self.__log.warning(f"The following index is found in testware cluster, but is not found in CB cluster: {self.name}. Testware cluster is cleaned up.")
+            self.__log.warning(
+                f"The following index is found in testware cluster, but is not found in CB cluster: {self.name}. Testware cluster is cleaned up.")
             self.__cluster.get_indexes().remove(self)
         else:
             raise FTSException("Index/alias {0} not deleted".format(self.name))
-        global_vars.system_event_logs.add_event(SearchServiceEvents.index_deleted(rest.ip, self.uuid, self.name, self._source_name))
+        global_vars.system_event_logs.add_event(
+            SearchServiceEvents.index_deleted(rest.ip, self.uuid, self.name, self._source_name))
 
     def get_index_defn(self, rest=None):
         if not rest:
@@ -1425,7 +1431,7 @@ class FTSIndex:
             rest = RestConnection(self.__cluster.get_random_fts_node())
         name = self.name
         if self.is_elixir:
-            name = self._source_name+self.scope+self.name
+            name = self._source_name + self.scope + self.name
         status, stat_value = rest.get_fts_stats(index_name=name,
                                                 bucket_name=self._source_name,
                                                 stat_name='num_mutations_to_index')
@@ -1605,7 +1611,8 @@ class FTSIndex:
             else:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
-                self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope, bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest)
+                self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope,
+                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2290,7 +2297,7 @@ class CouchbaseCluster:
             while count != 0:
                 count, err = shell.execute_command(
                     "ls {0}/@fts |grep ^{1} | wc -l".
-                        format(data_dir, index_name))
+                    format(data_dir, index_name))
                 if isinstance(count, list):
                     count = int(count[0])
                 else:
@@ -2301,7 +2308,7 @@ class CouchbaseCluster:
                 if retry > 5:
                     files, err = shell.execute_command(
                         "ls {0}/@fts |grep ^{1}".
-                            format(data_dir, index_name))
+                        format(data_dir, index_name))
                     self.__log.info(files)
                     return False
         return True
@@ -2581,7 +2588,6 @@ class CouchbaseCluster:
                                         s["collections"].append({"name": collection})
         return decoded_containers
 
-
     def create_bucket_scope_collection_multi_structure(self, existing_buckets=None, bucket_params=None,
                                                        data_structure=None, cli_client=None):
         if data_structure is None:
@@ -2599,13 +2605,14 @@ class CouchbaseCluster:
                     scopes = bucket["scopes"]
                     for scope in scopes:
                         if not scope["name"] == "_default":
-                            result = self._create_scope(bucket=bucket["name"], scope=scope["name"], cli_client=cli_client)
+                            result = self._create_scope(bucket=bucket["name"], scope=scope["name"],
+                                                        cli_client=cli_client)
                             if not result:
                                 return False, f"Scope {scope['name']} creation is failed."
                         collections = scope["collections"]
                         for collection in collections:
                             result = self._create_collection(bucket=bucket["name"], scope=scope["name"],
-                                                            collection=collection["name"], cli_client=cli_client)
+                                                             collection=collection["name"], cli_client=cli_client)
                             if not result:
                                 return False, f"Collection {collection['name']} creation is failed."
         except Exception as err:
@@ -2614,7 +2621,7 @@ class CouchbaseCluster:
 
     def _create_collection(self, bucket=None, scope=None, collection=None, cli_client=None):
         if scope != '_default':
-            stdout,_,_ = cli_client.get_bucket_scopes(bucket=bucket)
+            stdout, _, _ = cli_client.get_bucket_scopes(bucket=bucket)
             if scope not in stdout:
                 cli_client.create_scope(bucket=bucket, scope=scope)
                 time.sleep(10)
@@ -2629,7 +2636,7 @@ class CouchbaseCluster:
     def _create_scope(self, bucket=None, scope=None, cli_client=None):
         status = False
         if scope != '_default':
-            stdout,_,status = cli_client.get_bucket_scopes(bucket=bucket)
+            stdout, _, status = cli_client.get_bucket_scopes(bucket=bucket)
             if scope not in stdout:
                 cli_client.create_scope(bucket=bucket, scope=scope)
                 time.sleep(10)
@@ -2733,7 +2740,8 @@ class CouchbaseCluster:
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None, no_check=False):
+                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
+                         scope=None, collections=None, no_check=False):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -2827,7 +2835,8 @@ class CouchbaseCluster:
         """ Delete all FTSIndex objects from self.__indexes """
         self.__indexes.clear()
 
-    def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100, rest=None):
+    def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
+                      rest=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2838,7 +2847,7 @@ class CouchbaseCluster:
         if not node:
             node = self.get_random_fts_node()
         if not rest:
-             rest = RestConnection(node)
+            rest = RestConnection(node)
         if not self.reduce_query_logging:
             self.__log.info("Running query %s on node as %s : %s:%s"
                             % (json.dumps(query_dict, ensure_ascii=False),
@@ -3401,7 +3410,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False,dataset=None):
+                                    use_collections=False, dataset=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3452,7 +3461,7 @@ class CouchbaseCluster:
             len(self.__nodes) <= num_nodes,
             FTSException(
                 "Cluster needs:{0} nodes for rebalance-out, current: {1}".
-                    format((num_nodes + 1), len(self.__nodes)))
+                format((num_nodes + 1), len(self.__nodes)))
         )
         if master:
             to_remove_node = [self.__master_node]
@@ -3535,7 +3544,7 @@ class CouchbaseCluster:
             len(FloatingServers._serverlist) < num_nodes,
             FTSException(
                 "Number of free nodes: {0}, test tried to add {1} new nodes!".
-                    format(len(FloatingServers._serverlist), num_nodes))
+                format(len(FloatingServers._serverlist), num_nodes))
         )
         to_add_node = []
         for _ in range(num_nodes):
@@ -3579,7 +3588,8 @@ class CouchbaseCluster:
         """Rebalance-in nodes
         @param num_nodes: number of nodes to add to cluster.
         """
-        task = self.async_rebalance_in_node(nodes_in=nodes_in, services=services, sleep_before_rebalance=sleep_before_rebalance)
+        task = self.async_rebalance_in_node(nodes_in=nodes_in, services=services,
+                                            sleep_before_rebalance=sleep_before_rebalance)
         task.result()
 
     def __async_swap_rebalance(self, master=False, num_nodes=1, services=None):
@@ -3595,7 +3605,7 @@ class CouchbaseCluster:
             len(FloatingServers._serverlist) < num_nodes,
             FTSException(
                 "Number of free nodes: {0}, test tried to add {1} new nodes!".
-                    format(len(FloatingServers._serverlist), num_nodes))
+                format(len(FloatingServers._serverlist), num_nodes))
         )
         to_add_node = []
         for _ in range(num_nodes):
@@ -3606,8 +3616,8 @@ class CouchbaseCluster:
         self.__log.info(
             "Starting swap-rebalance [remove_node:{0}] -> [add_node:{1}] at"
             " {2} cluster {3}"
-                .format(to_remove_node, to_add_node, self.__name,
-                        self.__master_node.ip))
+            .format(to_remove_node, to_add_node, self.__name,
+                    self.__master_node.ip))
         task = self.__clusterop.async_rebalance(
             self.__nodes,
             to_add_node,
@@ -3773,7 +3783,6 @@ class CouchbaseCluster:
         self.__clusterop.rebalance(self.__nodes, [], [], services=services)
         self.__fail_over_nodes = []
 
-
     def add_back_node(self, recovery_type=None, services=None):
         """add-back failed-over node to the cluster.
             @param recovery_type: delta/full
@@ -3872,6 +3881,7 @@ class CouchbaseCluster:
     def restart_couchbase_on_all_nodes(self):
         for node in self.__nodes:
             NodeHelper.do_a_warm_up(node)
+
     def upload_coveragefiles_s3(self, s3_bucket_cc_name_prefix, aws_access_key_id, aws_secret_access_key):
         for node in self.__nodes:
             coverage_dir = os.path.join("/tmp", f"coverage_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}")
@@ -3888,7 +3898,8 @@ class CouchbaseCluster:
                 for path, subdirs, files in os.walk(coverage_dir):
                     for file in files:
                         self.__log.info(f"Found file : {os.path.join(path, file)}")
-                        s3_client.upload_file(Filename=os.path.join(path, file), Bucket=dest_bucket, Key=f"{s3_bucket_cc_name_prefix}_{node.ip}/{file}")
+                        s3_client.upload_file(Filename=os.path.join(path, file), Bucket=dest_bucket,
+                                              Key=f"{s3_bucket_cc_name_prefix}_{node.ip}/{file}")
             except Exception as e:
                 self.__log.info("Failed to upload file")
             shell.start_couchbase()
@@ -3982,7 +3993,7 @@ class FTSBaseTest(unittest.TestCase):
                                             sdk_compression=sdk_compression)
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
-                .format(self.__case_number, self._testMethodName))
+            .format(self.__case_number, self._testMethodName))
 
         # workaround for MB-16794
         # self.sleep(30, "working around MB-16794")
@@ -3999,7 +4010,7 @@ class FTSBaseTest(unittest.TestCase):
                     nodes_in_zone = rest.get_nodes_in_zone(zone)
                     if nodes_in_zone:
                         rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
-                                                         zone, "Group 1")
+                                                    zone, "Group 1")
                     rest.delete_zone(zone)
 
         self.java_sdk_client = self._input.param("java_sdk_client", False)
@@ -4045,10 +4056,10 @@ class FTSBaseTest(unittest.TestCase):
             self.system_events.set_test_start_time()
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
-                .format(self.__case_number, self._testMethodName))
+            .format(self.__case_number, self._testMethodName))
         if not self.skip_log_scan and not self.capella_run:
             self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
-            _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_BEFORE")
+            _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix + "_BEFORE")
             for _task in _tasks:
                 _task.result()
         self.aws_access_key_id = self._input.param("aws_access_key_id", None)
@@ -4076,7 +4087,6 @@ class FTSBaseTest(unittest.TestCase):
 
         return config
 
-
     def capella_servers_setup(self):
         CbServer.use_https = True
         CbServer.rest_username = self._input.membase_settings.rest_username
@@ -4094,15 +4104,16 @@ class FTSBaseTest(unittest.TestCase):
         self.cluster_id = cluster_id
         CbServer.capella_cluster_id = cluster_id
 
-        self.capella_api.create_db_user(cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        self.capella_api.create_db_user(cluster_id, self._input.membase_settings.rest_username,
+                                        self._input.membase_settings.rest_password)
 
-        servers = self.capella_api.get_nodes_formatted(cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        servers = self.capella_api.get_nodes_formatted(cluster_id, self._input.membase_settings.rest_username,
+                                                       self._input.membase_settings.rest_password)
         for server in self._input.servers:
             server.dummy = True
         for i, server in enumerate(servers):
             server.services = ",".join(server.services)
             self._input.servers[i] = server
-
 
     def __setup_for_test_capella(self):
         no_buckets = self._input.param("no_buckets", False)
@@ -4127,9 +4138,11 @@ class FTSBaseTest(unittest.TestCase):
                 for bucket in self._cb_cluster.get_buckets():
                     if type(self.collection) is list:
                         for c in self.collection:
-                            self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c, cli_client=self.cli_client)
+                            self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c,
+                                                                cli_client=self.cli_client)
                     else:
-                        self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
+                        self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope,
+                                                            collection=self.collection, cli_client=self.cli_client)
         self._master = self._cb_cluster.get_master_node()
 
     def use_capella_setup(self):
@@ -4137,7 +4150,8 @@ class FTSBaseTest(unittest.TestCase):
         capella_credentials = CapellaCredentials(self._input.capella)
         CbServer.capella_credentials = capella_credentials
         self.capella_api = CapellaAPI(capella_credentials)
-        servers = self.capella_api.get_nodes_formatted(self.cluster_id, self._input.membase_settings.rest_username, self._input.membase_settings.rest_password)
+        servers = self.capella_api.get_nodes_formatted(self.cluster_id, self._input.membase_settings.rest_username,
+                                                       self._input.membase_settings.rest_password)
         for server in self._input.servers:
             server.dummy = True
         for i, server in enumerate(servers):
@@ -4159,7 +4173,7 @@ class FTSBaseTest(unittest.TestCase):
                     nodes_in_zone = rest.get_nodes_in_zone(zone)
                     if nodes_in_zone:
                         rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
-                                                         zone, "Group 1")
+                                                    zone, "Group 1")
                     rest.delete_zone(zone)
 
             zones = list(rest.get_zone_names().keys())
@@ -4187,9 +4201,11 @@ class FTSBaseTest(unittest.TestCase):
     def set_impossible_params(self):
         """ Skip various params that are impossible if there is no SSH access to the nodes
         """
+
         def set(param, value):
             setattr(self, param, value)
             TestInputSingleton.input.test_params[param] = value
+
         if self.capella_run:
             set("skip_cleanup", True)
             set("skip-cleanup", True)
@@ -4261,8 +4277,8 @@ class FTSBaseTest(unittest.TestCase):
                 break
 
     def compare_logscan_keyword_count(self):
-        keyword_count_before_filename = self.log_scan_file_prefix+"_BEFORE"
-        keyword_count_after_filename = self.log_scan_file_prefix+"_AFTER"
+        keyword_count_before_filename = self.log_scan_file_prefix + "_BEFORE"
+        keyword_count_after_filename = self.log_scan_file_prefix + "_AFTER"
         keyword_count_diff = {}
         for server in self._input.servers:
             before_keyword_counts = {}
@@ -4286,7 +4302,8 @@ class FTSBaseTest(unittest.TestCase):
                         for keyword, count in keyword_count.items():
                             if keyword in before_keyword_counts[log].keys():
                                 if count > before_keyword_counts[log][keyword]:
-                                    keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = int(count) - int(before_keyword_counts[log][keyword])
+                                    keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = int(count) - int(
+                                        before_keyword_counts[log][keyword])
                             else:
                                 keyword_count_diff[f'{server.ip}:{log}:{keyword}'] = count
                     else:
@@ -4316,7 +4333,7 @@ class FTSBaseTest(unittest.TestCase):
         """Clusters cleanup"""
         if self.capella_run and self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
             self._cb_cluster.delete_bucket('default')
-            #self.capella_api.delete_cluster(self.cluster_id)
+            # self.capella_api.delete_cluster(self.cluster_id)
         sys_event_validation_failure = None
         if self.validate_system_event_logs:
             sys_event_validation_failure = \
@@ -4332,20 +4349,20 @@ class FTSBaseTest(unittest.TestCase):
             # cli.set_ip_family("ipv4")
             # output = cli.get_ip_family()
             cli.setting_autofailover(1, 60)
-            #self.assertEqual(output[0][0], "Cluster using ipv4", "Failed to change IP family")
+            # self.assertEqual(output[0][0], "Cluster using ipv4", "Failed to change IP family")
         if self._input.param("ipv6_only", False):
             self.check_ip_family_enforcement(ip_family="ipv6_only")
             cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
             cli.setting_autofailover(0, 60)
             # TODO : teardown is getting invoked in setup hence disrupting the flow of the tc
             # cli.set_ip_family("ipv6")
-            #output = cli.get_ip_family()
+            # output = cli.get_ip_family()
             cli.setting_autofailover(1, 60)
         self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
         collect_logs = False
         keyword_count_diff = {}
         if not self.skip_log_scan:
-            _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix+"_AFTER")
+            _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix + "_AFTER")
             for _task in _tasks:
                 _task.result()
 
@@ -4360,7 +4377,7 @@ class FTSBaseTest(unittest.TestCase):
             if hasattr(self, '_outcome') and self._outcome.errors[1][1]:
                 self._outcome.errors = []
                 self.log.info("This is marked as a negative test and contains "
-                                "errors as expected, hence not failing it")
+                              "errors as expected, hence not failing it")
             else:
                 raise FTSException("Negative test passed!")
 
@@ -4388,7 +4405,7 @@ class FTSBaseTest(unittest.TestCase):
                 return
             self.log.info(
                 "====  FTSbasetests cleanup is started for test #{0} {1} ===="
-                    .format(self.__case_number, self._testMethodName))
+                .format(self.__case_number, self._testMethodName))
             self._cb_cluster.cleanup_cluster(self)
             skip_disable_nton = self._input.param("skip_disable_nton", False)
             if not skip_disable_nton:
@@ -4400,23 +4417,23 @@ class FTSBaseTest(unittest.TestCase):
 
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
-                    .format(self.__case_number, self._testMethodName))
+                .format(self.__case_number, self._testMethodName))
         finally:
-            #if self.measure_code_coverage:
-                #test_cc_prefix = f"{self.s3_bucket_cc_name}/{self.__case_number}_{self._testMethodName}"
-                #self._cb_cluster.upload_coveragefiles_s3(test_cc_prefix, self.aws_access_key_id, self.aws_secret_access_key)
+            # if self.measure_code_coverage:
+            # test_cc_prefix = f"{self.s3_bucket_cc_name}/{self.__case_number}_{self._testMethodName}"
+            # self._cb_cluster.upload_coveragefiles_s3(test_cc_prefix, self.aws_access_key_id, self.aws_secret_access_key)
 
             self.log.info("closing all ssh connections")
             for ins in RemoteMachineShellConnection.get_instances():
-                #self.log.info(str(ins))
+                # self.log.info(str(ins))
                 ins.disconnect()
             self.log.info("closing all memcached connections")
             for ins in MemcachedClient.get_instances():
-                #self.log.info(str(ins))
+                # self.log.info(str(ins))
                 ins.close()
 
             for ins in MC_MemcachedClient.get_instances():
-                #self.log.info(str(ins))
+                # self.log.info(str(ins))
                 ins.close()
             self.__cluster_op.shutdown(force=True)
             if not self.skip_log_scan and keyword_count_diff:
@@ -4477,8 +4494,6 @@ class FTSBaseTest(unittest.TestCase):
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
 
-
-
         self.enable_dp = self._input.param("enable_dp", False)
         if self.enable_dp:
             for node in self._input.servers:
@@ -4495,9 +4510,11 @@ class FTSBaseTest(unittest.TestCase):
                 for bucket in self._cb_cluster.get_buckets():
                     if type(self.collection) is list:
                         for c in self.collection:
-                            self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c, cli_client=self.cli_client)
+                            self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=c,
+                                                                cli_client=self.cli_client)
                     else:
-                        self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection, cli_client=self.cli_client)
+                        self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope,
+                                                            collection=self.collection, cli_client=self.cli_client)
         self._master = self._cb_cluster.get_master_node()
 
         if self.ntonencrypt == 'enable':
@@ -4541,7 +4558,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')
-        ntonencryptionBase().setup_nton_cluster(self._input.servers,clusterEncryptionLevel=self.ntonencrypt_level)
+        ntonencryptionBase().setup_nton_cluster(self._input.servers, clusterEncryptionLevel=self.ntonencrypt_level)
 
     def construct_serv_list(self, serv_str):
         """
@@ -4606,8 +4623,8 @@ class FTSBaseTest(unittest.TestCase):
         self.analyzer = self._input.param("analyzer", None)
         self.index_replicas = self._input.param("index_replicas", None)
         self.index_kv_store = self._input.param("kvstore", None)
-        self.min_queries_per_shape = self._input.param("min_queries_per_shape",0)
-        self.query_shape = self._input.param("query_shape","")
+        self.min_queries_per_shape = self._input.param("min_queries_per_shape", 0)
+        self.query_shape = self._input.param("query_shape", "")
         self.partitions_per_pindex = \
             self._input.param("max_partitions_pindex", 171)
         self.upd_del_fields = self._input.param("upd_del_fields", None)
@@ -4627,7 +4644,7 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.es = None
 
-        #todo: combine skip_n1ql and run_via_n1ql params into single parameter.
+        # todo: combine skip_n1ql and run_via_n1ql params into single parameter.
         self.run_via_n1ql = False
         if not self._input.param("skip_n1ql", False):
             self.run_via_n1ql = self._input.param("run_via_n1ql", False)
@@ -4676,13 +4693,13 @@ class FTSBaseTest(unittest.TestCase):
             if self.consistency_vectors is not None and self.consistency_vectors != '':
                 if not isinstance(self.consistency_vectors, dict):
                     self.consistency_vectors = json.loads(self.consistency_vectors)
-        self.ntonencrypt = self._input.param('ntonencrypt','disable')
-        self.ntonencrypt_level = self._input.param('ntonencrypt_level','control')
+        self.ntonencrypt = self._input.param('ntonencrypt', 'disable')
+        self.ntonencrypt_level = self._input.param('ntonencrypt_level', 'control')
 
     def _get_mutation_vectors(self):
         self.log.info("Grepping for 'MutationResult' in java_sdk_loader.log")
         return set(subprocess.check_output(['grep', 'MutationResult', 'java_sdk_loader.log'],
-                                              universal_newlines=True).split('\n'))
+                                           universal_newlines=True).split('\n'))
 
     def _convert_mutation_vector_to_scan_vector(self, mvectors):
         vectors = re.findall(r'.*?vbID=(.*?), vbUUID=(.*?), seqno=(.*?),', str(mvectors))
@@ -4914,15 +4931,14 @@ class FTSBaseTest(unittest.TestCase):
                                    end=num_keys)
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
-
-    def load_custom(self,filename="geoshape.json",num_keys=None):
+    def load_custom(self, filename="geoshape.json", num_keys=None):
         """
         Loads custom JSON files
         """
         if not num_keys:
             num_keys = self._num_items
 
-        gen = GeoSpatialDataLoader("custom",start=0,end=num_keys)
+        gen = GeoSpatialDataLoader("custom", start=0, end=num_keys)
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
     def perform_update_delete(self, fields_to_update=None):
@@ -5387,12 +5403,13 @@ class FTSBaseTest(unittest.TestCase):
 
         return index.fts_queries
 
-    def generate_random_geoshape_queries(self,index,num_queries=1,sort=False):
+    def generate_random_geoshape_queries(self, index, num_queries=1, sort=False):
         gen_queries = 0
         if self.query_shape != "":
             while gen_queries < num_queries:
-                fts_queries,es_queries = FTSESQueryGenerator.construct_geo_shape_queries(shape=self.query_shape,\
-                    num_queries=num_queries,compare_es = self.compare_es)
+                fts_queries, es_queries = FTSESQueryGenerator.construct_geo_shape_queries(shape=self.query_shape, \
+                                                                                          num_queries=num_queries,
+                                                                                          compare_es=self.compare_es)
                 for fts_query in fts_queries:
                     index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
                 if self.compare_es:
@@ -5402,31 +5419,32 @@ class FTSBaseTest(unittest.TestCase):
                 num_queries = num_queries - gen_queries
 
         else:
-            shapes = ['point','linestring','polygon','multipoint','multilinestring','multipolygon','circle',
-                'envelope','geometrycollection']
+            shapes = ['point', 'linestring', 'polygon', 'multipoint', 'multilinestring', 'multipolygon', 'circle',
+                      'envelope', 'geometrycollection']
             min_queries_per_shape = self.min_queries_per_shape
             total_queries = (min_queries_per_shape * len(shapes))
             if self.min_queries_per_shape == 0 or (min_queries_per_shape * len(shapes)) > num_queries:
                 total_queries = num_queries
-                min_queries_per_shape = total_queries//len(shapes)
+                min_queries_per_shape = total_queries // len(shapes)
 
             shape_count = 0
             while gen_queries <= total_queries and shape_count < len(shapes):
-                    shape = shapes[shape_count]
-                    fts_queries,es_queries = FTSESQueryGenerator.construct_geo_shape_queries(shape=shape, \
-                       num_queries=min_queries_per_shape,compare_es = self.compare_es)
-                    for fts_query in fts_queries:
-                        index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
-                    if self.compare_es:
-                        for es_query in es_queries:
-                            self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
-                    gen_queries = gen_queries + len(fts_queries)
-                    shape_count+=1
+                shape = shapes[shape_count]
+                fts_queries, es_queries = FTSESQueryGenerator.construct_geo_shape_queries(shape=shape, \
+                                                                                          num_queries=min_queries_per_shape,
+                                                                                          compare_es=self.compare_es)
+                for fts_query in fts_queries:
+                    index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
+                if self.compare_es:
+                    for es_query in es_queries:
+                        self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
+                gen_queries = gen_queries + len(fts_queries)
+                shape_count += 1
 
             while gen_queries < num_queries:
-                fts_queries,es_queries = FTSESQueryGenerator.construct_geo_shape_queries()
+                fts_queries, es_queries = FTSESQueryGenerator.construct_geo_shape_queries()
                 for fts_query in fts_queries:
-                        index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
+                    index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
                 if self.compare_es:
                     for es_query in es_queries:
                         self.es.es_queries.append(json.loads(json.dumps(es_query, ensure_ascii=False)))
@@ -5502,7 +5520,8 @@ class FTSBaseTest(unittest.TestCase):
             return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
-                     plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None, collections=None, no_check=False):
+                     plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None,
+                     collections=None, no_check=False):
         """
         Creates a default index given bucket, index_name and plan_params
         """
@@ -5536,7 +5555,8 @@ class FTSBaseTest(unittest.TestCase):
                     plan_params=plan_params, _type=tp, collection_index=collection_index,
                     scope=index_scope, collections=index_collections, analyzer=analyzer)
 
-    def create_fts_indexes_some_buckets(self, plan_params=None, analyzer='standard', exempt_bucket=[], exempt_bucket_prefix=None):
+    def create_fts_indexes_some_buckets(self, plan_params=None, analyzer='standard', exempt_bucket=[],
+                                        exempt_bucket_prefix=None):
         """
         Creates 'n' default indexes for all buckets.
         'n' is defined by 'index_per_bucket' test param.
@@ -5604,7 +5624,8 @@ class FTSBaseTest(unittest.TestCase):
                 index_collections.append(idx_dict["collection"])
         return collection_index, _type, index_scope, index_collections
 
-    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False, vector_fields=None, field_type=None, field_name=None, extra_fields=None,
+    def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False,
+                                        vector_fields=None, field_type=None, field_name=None, extra_fields=None,
                                         wait_for_index_complete=True):
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
@@ -5615,8 +5636,8 @@ class FTSBaseTest(unittest.TestCase):
             fts_index = None
             if collection_index:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
-                                        decoded_index["name"], collection_index=True, _type=_type,
-                                        scope=index_scope, collections=index_collections)
+                                              decoded_index["name"], collection_index=True, _type=_type,
+                                              scope=index_scope, collections=index_collections)
                 if field_name and field_type:
                     for collection in index_collections:
                         if create_vector_index:
@@ -5627,17 +5648,17 @@ class FTSBaseTest(unittest.TestCase):
                                 vector_fields['store'] = False
 
                             fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
-                                                                              field_type=field_type,
-                                                                              field_alias=field_name,
-                                                                              scope=index_scope,
-                                                                              collection=collection,
-                                                                              vector_fields=vector_fields)
+                                                                                    field_type=field_type,
+                                                                                    field_alias=field_name,
+                                                                                    scope=index_scope,
+                                                                                    collection=collection,
+                                                                                    vector_fields=vector_fields)
                         else:
                             fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
-                                                                              field_type=field_type,
-                                                                              field_alias=field_name,
-                                                                              scope=index_scope,
-                                                                              collection=collection)
+                                                                                    field_type=field_type,
+                                                                                    field_alias=field_name,
+                                                                                    scope=index_scope,
+                                                                                    collection=collection)
 
                 if extra_fields:
                     for collection in index_collections:
@@ -5652,7 +5673,7 @@ class FTSBaseTest(unittest.TestCase):
                         fts_index.update_num_replicas(index_replica)
             else:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
-                                        decoded_index["name"], collection_index=False)
+                                              decoded_index["name"], collection_index=False)
                 if index_replica > 1:
                     fts_index.update_num_replicas(index_replica)
 
@@ -5777,6 +5798,7 @@ class FTSBaseTest(unittest.TestCase):
             faiss_index.add(_v)
 
         return faiss_index
+
     def create_es_index_mapping(self, es_mapping, fts_mapping=None):
         if not (self.num_custom_analyzers > 0):
             self.es.create_index_mapping(index_name="es_index",
@@ -5880,17 +5902,17 @@ class FTSBaseTest(unittest.TestCase):
         self.wait_for_indexing_complete()
         return geo_index
 
-    def create_index_custom_shapes(self,num_shapes=10):
+    def create_index_custom_shapes(self, num_shapes=10):
         if self.compare_es:
             self.log.info("Creating a geo-index on Elasticsearch...")
             self.es.delete_indices()
             geoshape_field = "location"
             es_mapping = {
-                        "properties": {
-                            geoshape_field: {
-                                "type": "geo_shape"
-                            }
-                        }
+                "properties": {
+                    geoshape_field: {
+                        "type": "geo_shape"
+                    }
+                }
             }
             self.create_es_index_mapping(es_mapping=es_mapping)
             self.es.add_circle_ingest_pipeline(geoshape_field)
@@ -5935,7 +5957,7 @@ class FTSBaseTest(unittest.TestCase):
         self.dataset = "geojson"
         self.log.info("Loading geosjon data ...")
 
-        self.async_load_data(filename="geoshape2.json",dataset="geojson")
+        self.async_load_data(filename="geoshape2.json", dataset="geojson")
         self.sleep(10, "Waiting to load data ...")
         self.wait_for_indexing_complete()
 
@@ -5948,7 +5970,7 @@ class FTSBaseTest(unittest.TestCase):
                       % index_name)
 
     def get_generator(self, dataset, num_items, start=0, encoding="utf-8",
-                      lang="EN", data_loader_output=False,filename=None):
+                      lang="EN", data_loader_output=False, filename=None):
         """
            Returns a generator depending on the dataset
         """
@@ -5973,7 +5995,7 @@ class FTSBaseTest(unittest.TestCase):
                 return GeoSpatialDataLoader(name="geojson",
                                             start=start,
                                             end=start + num_items,
-                                            filename = filename)
+                                            filename=filename)
         else:
             elastic_ip = None
             elastic_port = None
@@ -5990,13 +6012,13 @@ class FTSBaseTest(unittest.TestCase):
                                  json_template=dataset,
                                  username=self.master.rest_username,
                                  password=self.master.rest_password,
-                                 start=start, end=start+num_items,
+                                 start=start, end=start + num_items,
                                  es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
-                                 es_login=elastic_username, es_password=elastic_password, key_prefix=dataset+"_",
+                                 es_login=elastic_username, es_password=elastic_password, key_prefix=dataset + "_",
                                  upd_del_shift=self._num_items, output=data_loader_output
                                  )
 
-    def populate_create_gen(self,data_loader_output=False,filename=None):
+    def populate_create_gen(self, data_loader_output=False, filename=None):
         if self.dataset == "all":
             # only emp and wiki
             self.create_gen = []
@@ -6006,7 +6028,7 @@ class FTSBaseTest(unittest.TestCase):
                 "wiki", num_items=self._num_items // 2))
         else:
             self.create_gen = self.get_generator(
-                self.dataset, num_items=self._num_items, data_loader_output=data_loader_output,filename=filename)
+                self.dataset, num_items=self._num_items, data_loader_output=data_loader_output, filename=filename)
 
     def populate_update_gen(self, fields_to_update=None, expiration=0):
         if self.dataset == "emp":
@@ -6110,12 +6132,12 @@ class FTSBaseTest(unittest.TestCase):
                 if exempt_bucket_prefix is not None and exempt_bucket_prefix in bucket.name:
                     continue
                 cluster.async_load_gen_docs_till_dgm(server=self.master,
-                                                          active_resident_threshold=active_resident_threshold,
-                                                          bucket=bucket,
-                                                          scope=None, collection=None,
-                                                          exp=self.expiry,
-                                                          value_size=self.value_size, timeout_mins=60,
-                                                          java_sdk_client=self.java_sdk_client)
+                                                     active_resident_threshold=active_resident_threshold,
+                                                     bucket=bucket,
+                                                     scope=None, collection=None,
+                                                     exp=self.expiry,
+                                                     value_size=self.value_size, timeout_mins=60,
+                                                     java_sdk_client=self.java_sdk_client)
             for bkt in self.buckets:
                 print(stat.get_collection_stats(bkt))
             return
@@ -6124,12 +6146,12 @@ class FTSBaseTest(unittest.TestCase):
             task.result()
         self.log.info("Loading phase complete!")
 
-    def async_load_data(self, generator=None, data_loader_output=False,filename=None,dataset=None):
+    def async_load_data(self, generator=None, data_loader_output=False, filename=None, dataset=None):
         """
          For use to run with parallel tasks like rebalance, failover etc
         """
         load_tasks = []
-        self.populate_create_gen(data_loader_output=data_loader_output,filename=filename)
+        self.populate_create_gen(data_loader_output=data_loader_output, filename=filename)
         if self.compare_es and self.container_type != 'collection':
             if self.container_type == 'bucket':
                 gen = copy.deepcopy(self.create_gen)
@@ -6148,7 +6170,8 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
-    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,dataset=None):
+    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,
+                              dataset=None):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -6225,7 +6248,7 @@ class FTSBaseTest(unittest.TestCase):
                 zipped.close()
                 os.remove(path + '/' + filename)
                 print(("downloaded and zipped diags @ : {0}/{1}".format(path,
-                                                                       filename)))
+                                                                        filename)))
             except urllib.error.URLError as error:
                 print(("unable to obtain fts diags from {0}".format(diag_url)))
             except BadStatusLine:
@@ -6333,7 +6356,7 @@ class FTSBaseTest(unittest.TestCase):
                 while items > self._cb_cluster.get_doc_count_in_bucket(
                         bucket):
                     self.log.info("Docs in bucket {0} = {1}".
-                        format(
+                    format(
                         bucket.name,
                         self._cb_cluster.get_doc_count_in_bucket(
                             bucket)))
@@ -6352,7 +6375,7 @@ class FTSBaseTest(unittest.TestCase):
         for counter, value in enumerate(template_values):
             id = f'{keyname}_{counter}'
             n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":\"{value}\"}});"
-            if isinstance(value,list):
+            if isinstance(value, list):
                 n1ql_query = f"INSERT INTO `{bucket}`.{scope}.{collection} (KEY, VALUE) VALUES (\"{id}\", {{\"{keyname}\":{value}}});"
             self._cb_cluster.run_n1ql_query(n1ql_query, verbose=False)
 
@@ -6400,7 +6423,8 @@ class FTSBaseTest(unittest.TestCase):
                 for collection in scope['collections']:
                     collection_name = collection['name']
                     vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
-                                      self._input.membase_settings.rest_password, bucket_name, scope_name, collection_name, dataset)
+                                      self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                      collection_name, dataset)
                     vl.load_data()
         return bucketvsdataset
 
