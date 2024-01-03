@@ -168,7 +168,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         # Neo Features
         self._post_upgrade_task(task='smart_batching')
         self._post_upgrade_task(task='system_event')
-        self._post_upgrade_task(task='free_tier')
+
 
 
     def _mixed_mode_tasks(self):
@@ -320,7 +320,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             for index in indexer_metadata:
                 for host in index['hosts']:
                     indexes_hosts.add(host.split(':')[0])
-            self.assertTrue(self.servers[4].ip in indexes_hosts, "Indexes re-distribution failed for new Indexer Node")
+            self.assertTrue(self.servers[self.nodes_init].ip in indexes_hosts, "Indexes re-distribution failed for new Indexer Node")
 
         elif task == 'rebalance_out':
             if not node:
@@ -351,6 +351,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.assertTrue(len(result) == 0, f"Not all indexes has been dropped. System query result: {result}")
 
         elif task == 'request_plus_scans':
+            self.update_master_node()
             self.log.info("Running query to check index count")
             index_count_dict = {}
             for namespace in self.namespaces:
@@ -368,8 +369,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     bucket, scope, collection = keyspace.split('.')
                     gen_create = SDKDataLoader(num_ops=num_ops, percent_create=100,
                                                percent_update=0, percent_delete=0, scope=scope,
-                                               collection=collection, key_prefix='request_plus_docs')
-                    task = executor.submit(self._load_all_buckets, self.master, gen_create)
+                                               collection=collection, key_prefix='doc_07')
+                    task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                            generator=gen_create, pause_secs=1,
+                                                            timeout_secs=300, use_magma_loader=True)
+                    # task = executor.submit(self._load_all_buckets, self.master, gen_create)
                     tasks.append(task)
 
                 self.log.info("Running request plus scan till indexes index all the newly added docs")
@@ -916,7 +920,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         # Neo Features
         self._post_upgrade_task(task='smart_batching')
         self._post_upgrade_task(task='system_event')
-        self._post_upgrade_task(task='free_tier')
+
 
 
     def test_online_upgrade_path_with_rebalance(self):
@@ -1031,7 +1035,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         # Neo Features
         self._post_upgrade_task(task='smart_batching')
         self._post_upgrade_task(task='system_event')
-        self._post_upgrade_task(task='free_tier')
 
     def test_master_node_upgrade_swap_rebalance(self):
         self.rest.delete_all_buckets()
