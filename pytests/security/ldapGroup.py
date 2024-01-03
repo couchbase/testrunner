@@ -157,9 +157,9 @@ class ldapGroup(BaseTestCase):
                         self.user_roles.append(self.user_roles[0])
                 final_role = self.user_roles[index]+","+ self.group_roles[0]
                 ldapGroupBase().create_int_group(self.group_name, [usr], self.group_roles, [self.user_roles[index]],self.master)
-        
+
         self.rest.invalidate_ldap_cache()
-        
+
     def test_external_user_group(self):
         for user in self.user_list:
             result = ldapGroupBase().check_permission(user, self.master, external=self.auth_type in ["ExternalUser","ExternalGroup"])
@@ -190,7 +190,7 @@ class ldapGroup(BaseTestCase):
             ldapGroupBase().update_group(self.group_name, self.add_user, 'Add', self.master, external=self.auth_type)
         self.sleep(10)
         if self.auth_type == 'LDAPGroup':
-            ldapGroupBase().update_group(self.group_name, self.add_user,'Add',self.master)
+            ldapGroupBase().update_group(self.group_name, self.add_user,'Add', self.master)
             self.sleep(10)
         if self.auth_type == "InternalGroup":
             content = ldapGroupBase().get_group_detail(self.group_name, self.master)
@@ -653,7 +653,7 @@ class ldapGroup(BaseTestCase):
         remote_cluster2 = 'C2'
         remote_server01 = self.servers[0]
 
-        remote_id = rest2.add_remote_cluster(remote_server01.ip, 8091, 'cbadminbucket', 'password', 
+        remote_id = rest2.add_remote_cluster(remote_server01.ip, 8091, 'cbadminbucket', 'password',
                                             remote_cluster2,demandEncryption="on",encryptionType="half")
         replication_id = rest2.start_replication('continuous', 'default', remote_cluster2)
         if replication_id is not None:
