@@ -1,6 +1,21 @@
 from .user_base_abc import UserBase
 from remote.remote_util import RemoteMachineShellConnection
 
+class ServerInfo():
+
+    def __init__(self,
+                 ip,
+                 port,
+                 ssh_username,
+                 ssh_password,
+                 ssh_key=''):
+
+        self.ip = ip
+        self.ssh_username = ssh_username
+        self.ssh_password = ssh_password
+        self.port = port
+        self.ssh_key = ssh_key
+
 class LdapUser(UserBase):
 
     LDAP_HOST = "172.23.120.205"
@@ -19,6 +34,7 @@ class LdapUser(UserBase):
         self.user_name = user_name
         self.password = password
         self.host = host
+        self.ldap_server = ServerInfo(self.LDAP_HOST, self.LDAP_PORT, 'root', 'couchbase')
 
     def create_user(self):
         userCreateCmmd = 'dn: cn=' + self.user_name + "," + self.LDAP_DN + "\n" \
@@ -29,7 +45,7 @@ class LdapUser(UserBase):
                             "uid: " + self.user_name + "\n"
         fileName = 'name.ldif'
         # Execute ldapadd command to add users to the system
-        shell = RemoteMachineShellConnection(self.host)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         o =''
         r =''
         try:
@@ -50,7 +66,7 @@ class LdapUser(UserBase):
         if isinstance(self.user_name, list)==True and len(self.user_name)==1:
             self.user_name=self.user_name[0]
         userDeleteCmd = 'ldapdelete -h ' + self.LDAP_HOST + " -p " + self.LDAP_PORT + ' cn=' + self.user_name + "," + self.LDAP_DN
-        shell = RemoteMachineShellConnection(self.host)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             command = userDeleteCmd + " -D " + self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
             o, r = shell.execute_command(command)

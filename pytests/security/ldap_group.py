@@ -1,6 +1,20 @@
 from remote.remote_util import RemoteMachineShellConnection
 from .ldap_user import LdapUser
 
+class ServerInfo():
+
+    def __init__(self,
+                 ip,
+                 port,
+                 ssh_username,
+                 ssh_password,
+                 ssh_key=''):
+
+        self.ip = ip
+        self.ssh_username = ssh_username
+        self.ssh_password = ssh_password
+        self.port = port
+        self.ssh_key = ssh_key
 
 class LdapGroup():
     LDAP_HOST = "172.23.120.205"
@@ -21,6 +35,7 @@ class LdapGroup():
         self.host = host
         self.group_name = group_name
         self.user_list = user_list
+        self.ldap_server = ServerInfo(self.LDAP_HOST, self.LDAP_PORT, 'root', 'couchbase')
 
     def create_group(self):
         member_list = ''
@@ -37,7 +52,7 @@ class LdapGroup():
 
         fileName = 'name.ldif'
         # Execute ldapadd command to add users to the system
-        shell = RemoteMachineShellConnection(self.host)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             shell.write_remote_file("/tmp", fileName, userCreateCmmd)
             command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
@@ -53,7 +68,7 @@ class LdapGroup():
 
     def delete_group(self):
         userDeleteCmd = 'ldapdelete -h ' + self.LDAP_HOST + " -p " + self.LDAP_PORT + ' cn=' + self.group_name + "," + self.LDAP_GROUP_DN
-        shell = RemoteMachineShellConnection(self.host)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             command = userDeleteCmd + " -D " + self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
             o, r = shell.execute_command(command)
@@ -81,7 +96,7 @@ class LdapGroup():
 
         fileName = 'name.ldif'
         # Execute ldapadd command to add users to the system
-        shell = RemoteMachineShellConnection(host)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             shell.write_remote_file("/tmp", fileName, str(UserCreateCmmd))
             command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
