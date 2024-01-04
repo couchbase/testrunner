@@ -308,6 +308,33 @@ class QueryUDFN1QLTests(QueryTests):
         self.assertTrue('execute function func1("old hotel")' in str(explain_udf),
                         f"The statement is being used in the explain, please check {explain_udf}")
 
+    def test_profiling_js_udf_queries(self):
+        string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
+        function_names2 = ["concater","comparator"]
+        created2 = self.create_library("strings",string_functions,function_names2)
+        self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func1(a,b) LANGUAGE JAVASCRIPT AS "comparator" AT "strings"')
+        self.run_cbq_query("CREATE OR REPLACE FUNCTION func2(degrees) LANGUAGE INLINE AS (degrees - 32) ")
+        self.run_cbq_query(query='CREATE OR REPLACE FUNCTION func3(a,b) LANGUAGE JAVASCRIPT AS "concater" AT "strings"')
+
+        function_name = 'execute_udf'
+        functions = f'function {function_name}() {{\
+            var query = SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3("old hotel","o") HAVING name > letter;\
+            var query2 = INSERT INTO default (KEY, VALUE) VALUES ("k004", {{"col1": 10 }});\
+            var query3 = SELECT * from default limit 100;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"')
+
+        function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()',query_params={"profile":"timings"})
+        self.assertTrue("~udfStatements" in str(function_result), f"We should see a profile entry for n1ql statements executed inside the udf, please check {function_result}")
+        self.assertTrue('SELECT name FROM default:default.test.test1 LET maximum_no = func2(36) WHERE ANY v in test1.numbers SATISFIES v = maximum_no END GROUP BY name LETTING letter = func3("old hotel","o") HAVING name > letter' in str(function_result), f"One of the queries is not in the profile, please check {function_result}" )
+        self.assertTrue('INSERT INTO default (KEY, VALUE) VALUES ("k004", {"col1": 10 })' in str(function_result), f"One of the queries is not in the profile, please check {function_result}" )
+        self.assertTrue('SELECT * from default limit 100' in str(function_result), f"One of the queries is not in the profile, please check {function_result}" )
+
     def create_n1ql_function(self, function_name, query):
         function_names = [function_name]
         functions = f'function {function_name}() {{\

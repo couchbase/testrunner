@@ -1782,6 +1782,35 @@ class QuerySanityTests(QueryTests):
         res = self.run_cbq_query()
         self.assertTrue(res['results'] == [])
 
+    def test_object_types(self):
+        expected_results = [{"object_types": {"field1": "number","field2": "string","field3": "null","field4": "object"}}]
+        actual_results = self.run_cbq_query('SELECT OBJECT_TYPES({"field1":1,"field2":"two","field3":null,"field4":{"sub1":true}}) AS object_types;')
+        diffs = DeepDiff(actual_results['results'], expected_results, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        expected_results2 = [{"object_types_nested": {"field1": "number",
+                                                      "field2": ["number","number","boolean"],
+                                                      "field3": "null",
+                                                      "field4": {"sub1": "boolean"}}}]
+        actual_results2 = self.run_cbq_query('SELECT OBJECT_TYPES_NESTED({"field1":1,"field2":[1,2,true],"field3":null,"field4":{"sub1":true}}) AS object_types_nested;')
+        diffs = DeepDiff(actual_results2['results'], expected_results2, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        expected_results3 = [{"nested_pairs": [{"name": "attribute.first-part","val": 1},{"name": "attribute.second-part","val": 2}],
+                              "nested_pairs_comp": [{"name": "attribute","val": {"first-part": 1,"second-part": 2}},
+                                                    {"name": "attribute.first-part","val": 1},
+                                                    {"name": "attribute.second-part","val": 2}],
+                              "nested_pairs_pattern": [{"name": "attribute.first-part","val": 1}],
+                              "nested_pairs_types": [{"name": "attribute.first-part","type": "number"},{"name": "attribute.second-part","type": "number"}]}]
+        actual_results3 = self.run_cbq_query('WITH input AS ({"attribute": {"first-part": 1, "second-part": 2}}) '
+                           'SELECT OBJECT_PAIRS_NESTED(input) AS nested_pairs,'
+                           'OBJECT_PAIRS_NESTED(input, {"composites": true}) AS nested_pairs_comp,'
+                           'OBJECT_PAIRS_NESTED(input, {"pattern": "first"}) AS nested_pairs_pattern,'
+                           'OBJECT_PAIRS_NESTED(input, {"types": true}) AS nested_pairs_types;')
+        diffs = DeepDiff(actual_results3['results'], expected_results3, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
     def test_correlated_queries(self):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
