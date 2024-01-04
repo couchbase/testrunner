@@ -153,7 +153,7 @@ class XDCRSecurityTests(XDCRNewBaseTest):
                         shell.restart_couchbase()
                         shell.disconnect()
                         time.sleep(10)
-                        cluster.failover_and_rebalance_nodes()
+                        cluster.failover_and_rebalance_nodes(rebalance=False)
                         cluster.add_back_node("delta")
 
         if self.apply_settings_before_setup:
