@@ -185,6 +185,7 @@ class CustomMapGenerator:
         self.multiple_filters = multiple_filters
         self.vector_search = TestInputSingleton.input.param("vector_search", False)
         self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
+        self.vector_similarity = TestInputSingleton.input.param("vector_similarity", "l2_norm")
         if self.vector_search:
             EMP_FIELDS['vector'] = ["l_vector"]
 
@@ -414,7 +415,7 @@ class CustomMapGenerator:
             from sentence_transformers import SentenceTransformer
             encoder = SentenceTransformer(self.llm_model)
             fts_field_map['dims'] = encoder.get_sentence_embedding_dimension()
-            fts_field_map['similarity'] = self.get_random_value(["l2_norm", "dot_product"])
+            fts_field_map['similarity'] = self.vector_similarity
 
         es_field_map = {}
         es_field_map['type'] = field_type

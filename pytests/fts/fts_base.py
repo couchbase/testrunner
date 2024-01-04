@@ -1464,8 +1464,7 @@ class FTSIndex:
         query_json = copy.deepcopy(QUERY.JSON)
         # query is a unicode dict
         if vector_search:
-            query_type_list = ["match_none", "match_all"]
-            query_type = query_type_list[random.randint(0, 1)]
+            query_type = "match_none"
             query_json['query'][query_type] = {}
             query_json['knn'] = [query]
         else:
