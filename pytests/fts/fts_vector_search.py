@@ -5,6 +5,8 @@ import threading
 
 from TestInput import TestInputSingleton
 from .fts_base import FTSBaseTest
+from .fts_backup_restore import FTSIndexBackupClient
+from lib.membase.api.rest_client import RestConnection
 import copy
 
 
@@ -1090,3 +1092,164 @@ class VectorSearch(FTSBaseTest):
             n1ql_hits, hits, matches = self.run_vector_query(query=query, index=index, dataset=None)
             if hits == -1:
                 self.fail("Query returned 0 hits")
+
+    def _check_indexes_definitions(self, index_definitions={}, indexes_for_backup=[]):
+        errors = {}
+
+        #check backup filters
+        for ix_name in indexes_for_backup:
+            if index_definitions[ix_name]['backup_def'] == {} and ix_name in indexes_for_backup:
+                error = f"Index {ix_name} is expected to be in backup, but it is not found there!"
+                if ix_name not in errors.keys():
+                    errors[ix_name] = []
+                errors[ix_name].append(error)
+
+        for ix_name in index_definitions.keys():
+            if index_definitions[ix_name]['backup_def'] != {} and ix_name not in indexes_for_backup:
+                error = f"Index {ix_name} is not expected to be in backup, but it is found there!"
+                if ix_name not in errors.keys():
+                    errors[ix_name] = []
+                errors[ix_name].append(error)
+
+        #check backup json
+        for ix_name in index_definitions.keys():
+            if index_definitions[ix_name]['backup_def'] != {}:
+                initial_index_defn = index_definitions[ix_name]['initial_def']
+                backup_index_defn = index_definitions[ix_name]['backup_def']
+
+                backup_check = self._validate_backup(backup_index_defn, initial_index_defn)
+                if not backup_check:
+                    if ix_name not in errors.keys():
+                        errors[ix_name] = []
+                    errors[ix_name].append(f"Backup fts index signature differs from original signature for index {ix_name}.")
+
+        #check restored json
+        for ix_name in index_definitions.keys():
+            if index_definitions[ix_name]['restored_def'] != {}:
+                initial_index_defn = index_definitions[ix_name]['initial_def']
+                restored_index_defn = index_definitions[ix_name]['restored_def']['indexDef']
+                restore_check = self._validate_restored(restored_index_defn, initial_index_defn)
+                if not restore_check:
+                    if ix_name not in errors.keys():
+                        errors[ix_name] = []
+                    errors[ix_name].append(f"Restored fts index signature differs from original signature for index {ix_name}")
+
+        return errors
+
+    def _validate_backup(self, backup, initial):
+        if 'uuid' in initial.keys():
+            del initial['uuid']
+        if 'sourceUUID' in initial.keys():
+            del initial['sourceUUID']
+        if 'uuid' in backup.keys():
+            del backup['uuid']
+        return backup == initial
+
+    def _validate_restored(self, restored, initial):
+        del restored['uuid']
+        if 'kvStoreName' in restored['params']['store'].keys():
+            del restored['params']['store']['kvStoreName']
+        if 'sourceUUID' in restored:
+            del restored['sourceUUID']
+        if 'sourceUUID' in initial:
+            del initial['sourceUUID']
+        if restored != initial:
+            self.log.info(f"Initial index JSON: {json.dumps(initial)}")
+            self.log.info(f"Restored index JSON: {json.dumps(restored)}")
+            return False
+        return True
+
+    def test_vector_search_backup_restore(self):
+        index_definitions = {}
+
+        bucket_name = TestInputSingleton.input.param("bucket", None)
+
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
+        indexes = []
+
+        # create index i1 with l2_norm similarity
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        indexes = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+
+        for index in indexes:
+            test_index = index['index_obj']
+            index_definitions[test_index.name] = {}
+            index_definitions[test_index.name]['initial_def'] = {}
+            index_definitions[test_index.name]['backup_def'] = {}
+            index_definitions[test_index.name]['restored_def'] = {}
+
+            _, index_def = test_index.get_index_defn()
+            initial_index_def = index_def['indexDef']
+            index_definitions[test_index.name]['initial_def'] = initial_index_def
+
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if not fts_nodes or len(fts_nodes) == 0:
+            self.fail("At least 1 fts node must be presented in cluster")
+
+        backup_filter = eval(TestInputSingleton.input.param("filter", "None"))
+        if bucket_name:
+            backup_client = FTSIndexBackupClient(fts_nodes[0], self._cb_cluster.get_bucket_by_name(bucket_name))
+        else:
+            backup_client = FTSIndexBackupClient(fts_nodes[0])
+
+        # perform backup
+        if bucket_name:
+            status, content = backup_client.backup_bucket_level(_filter=backup_filter, bucket=self._cb_cluster.get_bucket_by_name(bucket_name))
+        else:
+            status, content = backup_client.backup(_filter=backup_filter)
+
+        backup_json = json.loads(content)
+        backup = backup_json['indexDefs']['indexDefs']
+
+        # store backup index definitions
+        #indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
+        indexes_for_backup = ["i1"]
+        for idx in indexes_for_backup:
+            backup_index_def = backup[idx]
+            index_definitions[idx]['backup_def'] = backup_index_def
+
+        # delete all indexes before restoring from backup
+        self._cb_cluster.delete_all_fts_indexes()
+
+        # restoring indexes from backup
+        backup_client.restore()
+
+        # getting restored indexes definitions and storing them in indexes definitions dict
+        rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        for ix_name in indexes_for_backup:
+            _,restored_index_def = rest.get_fts_index_definition(ix_name)
+            index_definitions[ix_name]['restored_def'] = restored_index_def
+
+        #compare all 3 types of index definitions: initial, backed up, and restored from backup
+        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=indexes_for_backup)
+
+        # self._cleanup_indexes(index_definitions)
+
+        #errors analysis
+        if len(errors.keys()) > 0:
+            err_msg = ""
+            for err in errors.keys():
+                index_errors = errors[err]
+                for msg in index_errors:
+                    err_msg = err_msg + msg + "\n"
+            self.fail(err_msg)
+
+        self.wait_for_indexing_complete()
+
+        self.sleep(60, "Wait before running queries")
+
+        for index in indexes:
+            index['dataset'] = self.vector_dataset[0]
+            index_obj = index['index_obj']
+            index_obj.faiss_index = self.create_faiss_index_from_train_data(index['dataset'])
+            queries = self.get_query_vectors(index['dataset'])
+            neighbours = self.get_groundtruth_file(index['dataset'])
+            for count, q in enumerate(queries[:5]):
+                self.query['knn'][0]['vector'] = q.tolist()
+                self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'],
+                                      neighbours=neighbours[count])
