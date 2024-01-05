@@ -1218,12 +1218,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             time.sleep(30)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                      services=services_in, cluster_config=self.cluster_config)
-            self.log.info(f"Rebalance task re-triggered after chaos action. Wait in loop until the rebalance starts")
-            time.sleep(3)
-            status, _ = self.rest._rebalance_status_and_progress()
-            while status != 'running':
-                time.sleep(1)
-                status, _ = self.rest._rebalance_status_and_progress()
+            self.log.info(f"Rebalance task re-triggered after chaos action. Wait for 20 seconds until the rebalance starts")
+            time.sleep(20)
         time.sleep(10)
         if not self.capella_run:
             reached = RestHelper(self.rest).rebalance_reached()
