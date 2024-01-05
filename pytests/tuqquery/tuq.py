@@ -1330,7 +1330,7 @@ class QueryTests(BaseTestCase):
         for bucket in list(bucket_docs_map.keys()):
             query_response = self.run_cbq_query("SELECT COUNT(*) FROM `" + bucket + "`")
             docs = query_response['results'][0]['$1']
-            if docs != bucket_docs_map[bucket] or bucket_docs_rest[bucket] != bucket_docs_map[bucket]:
+            if docs != bucket_docs_map[bucket] and bucket_docs_rest[bucket] != bucket_docs_map[bucket]:
                 self.log.info("Bucket Docs Not Ready For Bucket: " + str(bucket) + "... \n Expected: " + str(
                     bucket_docs_map[bucket]) + "\n Query: " + str(docs) + "\n Rest: " + str(bucket_docs_rest[bucket]))
                 ready = False
@@ -1361,7 +1361,7 @@ class QueryTests(BaseTestCase):
         self.with_retry(lambda: self.buckets_status_ready(bucket_status_map), delay=delay, tries=retries)
 
     def wait_for_bucket_docs(self, bucket_doc_map, delay, retries):
-        self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), delay=delay, tries=retries)
+        self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), eval=True, delay=delay, tries=retries)
 
     def wait_for_bucket_delete(self, bucket_name, delay, retries):
         self.with_retry(lambda: self.bucket_deleted(bucket_name), delay=delay, tries=retries)

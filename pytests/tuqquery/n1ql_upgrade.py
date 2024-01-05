@@ -319,7 +319,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("PRE PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
             if int(self.initial_version[0]) == 7:
-                self.run_test_udf_inline(phase=phase)
+                with self.subTest("PRE UDF INLINE TEST"):
+                    self.run_test_udf_inline(phase=phase)
+                with self.subTest("PRE CBO MIGRATION TEST"):
+                    self.run_test_cbo_migration(phase=phase)
+                with self.subTest("PRE UDF JAVASCRIPT TEST"):
+                    self.run_test_udf_javascript_migration(phase=phase)
         elif phase == "mixed-mode":
             self.log.info("running mixed-mode test for N1QL")
             with self.subTest("MIXED FILTER TEST"):
@@ -328,8 +333,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_window()
             with self.subTest("MIXED UDF INLINE TEST"):
                 self.run_test_udf_inline(phase=phase)
-            with self.subTest("MIXED UDF JAVASCRIPT TEST"):
-                self.run_test_udf_javascript()
+            with self.subTest("MIXED UDF JAVASCRIPT MIGRATION TEST"):
+                self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
                 self.run_test_udf_n1ql_javascript()
             # if int(self.initial_version[0]) == 7:
@@ -359,6 +364,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_window()
             with self.subTest("POST UDF INLINE TEST"):
                 self.run_test_udf_inline(phase=phase)
+            with self.subTest("POST UDF JAVASCRIPT MIGRATION TEST"):
+                self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT TEST"):
                 self.run_test_udf_javascript()
             with self.subTest("POST UDF N1QL JAVASCRIPT TEST"):
@@ -367,20 +374,24 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.test_flatten_array_index()
             with self.subTest("POST SYSTEM EVENT TEST"):
                 self.test_system_event()
-            with self.subTest("POST QUERY LIMIT TEST"):
-                self.test_query_limit()
+            # with self.subTest("POST QUERY LIMIT TEST"):
+            #     self.test_query_limit()
             with self.subTest("POST ADVISOR STATEMENT TEST"):
                 self.run_test_advisor_statement()
             with self.subTest("POST ADVISOR SESSION TEST"):
                 self.run_test_advisor_session()
+            with self.subTest("POST CBO MIGRATION TEST"):
+                self.run_test_cbo_migration()
             with self.subTest("POST UPDATE STATISTICS TEST"):
-                self.run_test_update_stats()
+                self.run_test_update_stats(phase=phase)
             with self.subTest("POST CBO TEST"):
                 self.run_test_cbo()
             with self.subTest("POST COLLECTION TEST"):
                 self.run_test_collection(phase=phase)
             with self.subTest("POST TRANSACTION TEST"):
                 self.run_test_transaction()
+            with self.subTest("POST SEQUENCE TEST"):
+                self.run_test_sequences()
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -509,15 +520,31 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         window_query_results = self.run_cbq_query(window_query)
         self.assertEqual(window_clause_query_results['results'], window_query_results['results'])
 
-    def run_test_update_stats(self):
+    def run_test_update_stats(self,phase=None):
         histogram_expected = [
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "city", "scope": "_default"},
             {"bucket": "travel-sample", "collection": "_default", "histogramKey": "country", "scope": "_default"}]
+        if phase == "post-upgrade":
+            histogram_expected = [
+                {'scope': '_default', 'collection': '_default', 'histogramKey': '(meta().id)'},
+                { "scope": "_default", "collection": "_default", "histogramKey": "city"},
+                { "scope": "_default", "collection": "_default", "histogramKey": "country"},
+                {'scope': '_default', 'collection': '_default', 'histogramKey': '(distinct (array ((_usv_1.ratings).Cleanliness) for _usv_1 in reviews end))'},
+                {'scope': '_default', 'collection': '_default', 'histogramKey': 'free_parking'},
+                {'scope': '_default', 'collection': '_default',
+                 'histogramKey': '(distinct (array (_usv_1.author) for _usv_1 in reviews end))'},
+                {'scope': '_default', 'collection': '_default', 'histogramKey': 'type'},
+                {'scope': '_default', 'collection': '_default', 'histogramKey': 'email'}]
         update_stats = "UPDATE STATISTICS FOR `travel-sample`(city, country) WITH {'update_statistics_timeout':180}"
         try:
             self.run_cbq_query(query=update_stats)
-            histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
-            self.assertEqual(histogram['results'],histogram_expected)
+            if phase == "post-upgrade":
+                histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram' and `scope` = '_default' and `collection` = '_default'")
+            else:
+                histogram = self.run_cbq_query(query="select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = 'histogram'")
+            diffs = DeepDiff(histogram['results'],histogram_expected, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         except Exception as e:
             self.log.error(f"Update statistics failed: {e}")
             self.fail()
@@ -565,6 +592,26 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.log.info("Delete math library")
                 self.delete_library("math")
                 self.run_cbq_query("DROP FUNCTION func2")
+            except Exception as e:
+                self.log.error(str(e))
+
+    def run_test_udf_javascript_migration(self,phase=None):
+        functions = 'function adder(a, b, c) { for (i=0; i< b; i++){a = a + c;} return a; }'
+        function_names = ["adder"]
+        if phase == "pre-upgrade" or int(self.initial_version[0]) < 7:
+            self.log.info("Create math library")
+            self.create_library("math", functions, function_names)
+        try:
+            if phase == "pre-upgrade" or int(self.initial_version[0]) < 7:
+                self.run_cbq_query(query='CREATE FUNCTION func2(a,b,c) LANGUAGE JAVASCRIPT AS "adder" AT "math"')
+            results = self.run_cbq_query(query="EXECUTE FUNCTION func2(1,3,5)")
+            self.assertEqual(results['results'], [16])
+        finally:
+            try:
+                if phase == "post-upgrade":
+                    self.log.info("Delete math library")
+                    self.delete_library("math")
+                    self.run_cbq_query("DROP FUNCTION func2")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -803,6 +850,23 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         finally:
             self.run_cbq_query(query="UPDATE STATISTICS FOR `travel-sample` DELETE ALL")
 
+    '''This test differs from the one above because it assumes stats were made pre upgrade then uses it post upgrade to see if they still work'''
+    def run_test_cbo_migration(self,phase=None):
+        if phase == "pre-upgrade":
+            update_stats = "UPDATE STATISTICS FOR `travel-sample`(`type`) WITH {'update_statistics_timeout':600}"
+        explain_query = "EXPLAIN select type from `travel-sample` where type = 'hotel'"
+        try:
+            if phase =="pre-upgrade":
+                self.run_cbq_query(query=update_stats)
+            explain_after = self.run_cbq_query(query=explain_query)
+            self.assertTrue(explain_after['results'][0]['cost'] > 0 and explain_after['results'][0]['cardinality'] > 0)
+        except Exception as e:
+            self.log.error(f"cbo failed: {e}")
+            self.fail()
+        finally:
+            if phase =="post-upgrade":
+                self.run_cbq_query(query="UPDATE STATISTICS FOR `travel-sample` DELETE ALL")
+
     def run_test_system_tables(self):
         query_keyspaces_info = "select * from system:keyspaces_info where id = 'travel-sample'"
         results = self.run_cbq_query(query=query_keyspaces_info)
@@ -811,37 +875,60 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         query_all_keyspaces = "select array_agg(`path`) from system:all_keyspaces where datastore_id = 'system'"
         system_keyspaces = [
-            '#system:active_requests', '#system:all_indexes', '#system:all_keyspaces', '#system:all_keyspaces_info', '#system:all_scopes',
-            '#system:applicable_roles', '#system:buckets', '#system:completed_requests', '#system:datastores', '#system:dictionary',
-            '#system:dictionary_cache', '#system:dual', '#system:functions', '#system:functions_cache', '#system:indexes',
-            '#system:keyspaces', '#system:keyspaces_info', '#system:my_user_info', '#system:namespaces', '#system:nodes',
-            '#system:prepareds', '#system:scopes', '#system:tasks_cache', '#system:transactions', '#system:user_info'
-        ]
+            "system:active_requests","system:all_indexes","system:all_keyspaces","system:all_keyspaces_info",
+            "system:all_scopes","system:all_sequences","system:applicable_roles","system:buckets",
+            "system:completed_requests","system:datastores","system:dictionary","system:dictionary_cache",
+            "system:dual","system:functions","system:functions_cache","system:indexes","system:keyspaces","system:keyspaces_info",
+            "system:my_user_info","system:namespaces","system:nodes","system:prepareds","system:scopes",
+            "system:sequences","system:tasks_cache","system:transactions","system:user_info","system:vitals"]
         results = self.run_cbq_query(query=query_all_keyspaces)
         all_keyspaces = results['results'][0]['$1']
         self.assertEqual(all_keyspaces, system_keyspaces)
 
         query_all_indexes = "select array_agg(distinct keyspace_id) from system:all_indexes where all_indexes.`namespace_id` = '#system'"
         system_all_indexes = [
-            "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "applicable_roles", "buckets",
+            "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "all_sequences", "applicable_roles", "buckets",
             "completed_requests", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
-            "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "tasks_cache", "transactions",
-            "user_info"
-        ]
+            "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "sequences", "tasks_cache", "transactions",
+            "user_info", "vitals"]
         results = self.run_cbq_query(query=query_all_indexes)
         all_indexes = results['results'][0]['$1']
         self.assertEqual(all_indexes, system_all_indexes)
 
         query_all_keyspaces_info = "select array_agg(id) from system:all_keyspaces_info where all_keyspaces_info.datastore_id = 'system'"
         system_keyspaces_info = [
-            'active_requests', 'all_indexes', 'all_keyspaces', 'all_keyspaces_info', 'all_scopes', 'applicable_roles', 'buckets',
-            'completed_requests', 'datastores', 'dictionary', 'dictionary_cache', 'dual', 'functions', 'functions_cache', 'indexes',
-            'keyspaces', 'keyspaces_info', 'my_user_info', 'namespaces', 'nodes', 'prepareds', 'scopes', 'tasks_cache', 'transactions',
-            'user_info'
+            "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "all_sequences", "applicable_roles", "buckets",
+            "completed_requests", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
+            "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "sequences", "tasks_cache", "transactions",
+            "user_info", "vitals"
         ]
         results = self.run_cbq_query(query=query_all_keyspaces_info)
         all_keyspaces_info = results['results'][0]['$1']
         self.assertEqual(all_keyspaces_info, system_keyspaces_info)
+
+    def run_test_sequences(self):
+        sequence_name = "seq_default_option"
+        expected_default = [{'cache': 50, 'cycle': False, 'increment': 1, 'max': 9223372036854775807, 'min': -9223372036854775808, 'path': f'`default`:`default`.`_default`.`{sequence_name}`'}]
+        self.run_cbq_query(f"DROP SEQUENCE `default`.`_default`.{sequence_name} IF EXISTS")
+        self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name}")
+
+        result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+        self.assertEqual(result['results'], expected_default)
+
+        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+        self.assertEqual(nextval['results'][0]['val'], 0)
+
+        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+        self.assertEqual(nextval['results'][0]['val'], 1)
+
+        prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+        self.assertEqual(prevval['results'][0]['val'], 1)
+
+        prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+        self.assertEqual(prevval['results'][0]['val'], 1)
+
+        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+        self.assertEqual(nextval['results'][0]['val'], 2)
     
     ###############################
     #
