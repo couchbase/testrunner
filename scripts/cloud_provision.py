@@ -167,6 +167,9 @@ AWS_AMI_MAP = {
         "rhel8" : {
             "x86_64" : "ami-07f5ef252bd61130b"
         },
+        "rhel9" : {
+            "x86_64" : "ami-0859d5937ea3b22db"
+        },
         "suse15" : {
             "x86_64" : "ami-059c3ca86322facbe"
         },
@@ -191,6 +194,7 @@ AWS_OS_USERNAME_MAP = {
     "ubuntu22nonroot": "ubuntu",
     "oel8": "ec2-user",
     "rhel8": "ec2-user",
+    "rhel9": "ec2-user",
     "suse15": "ec2-user",
     "suse12": "ec2-user"
 }
