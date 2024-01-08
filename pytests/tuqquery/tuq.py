@@ -3411,6 +3411,22 @@ class QueryTests(BaseTestCase):
                 if time.time() > end_time:
                     raise Exception("nothing")
             # time.sleep(3)
+    ##############################################################################################
+    #
+    #   tuq_subquery.py helpers
+    ##############################################################################################
+
+    def get_num_requests(self,index,num_nodes):
+        num_requests = 0
+        for i in range(num_nodes):
+            cmd = f'curl -u {self.username}:{self.password} http://{self.servers[i].ip}:9102/api/v1/stats?skipEmpty=true'
+            o = self.shell.execute_command(cmd)
+            new_curl = json.dumps(o)
+            formatted = json.loads(new_curl)
+            actual_results = json.loads(formatted[0][0])
+            if index in actual_results.keys():
+                num_requests = actual_results[index]['num_requests'] + num_requests
+        return num_requests
 
     ##############################################################################################
     #

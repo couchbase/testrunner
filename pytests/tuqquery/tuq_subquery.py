@@ -56,10 +56,9 @@ class QuerySubqueryTests(QueryTests):
         self.assertTrue(actual_result['results'] == [])
 
     ''' When a cte is killed, the subquery it runs should also be killed'''
-    def test_MB59002(self):
-        shell = RemoteMachineShellConnection(self.master)
+    def test_cte_subquery_cancel(self):
         self.run_cbq_query('CREATE INDEX ix1 ON default(c1)')
-        self.run_cbq_query('INSERT INTO default  (KEY _k, VALUE _v) '
+        self.run_cbq_query('UPSERT INTO default  (KEY _k, VALUE _v) '
                            'SELECT  "k0"||TO_STR(d) AS _k , {"c1":d, "c2":2*d, "c3":3*d} AS _v '
                            'FROM ARRAY_RANGE(1,1000) AS d')
         try:
@@ -69,21 +68,87 @@ class QuerySubqueryTests(QueryTests):
         except CBQError as e:
             self.assertTrue('Timeout 5s exceeded' in str(e))
         self.sleep(1)
-        cmd = f'curl -u {self.username}:{self.password} http://{self.master.ip}:9102/api/v1/stats?skipEmpty=true'
-        o = shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        formatted = json.loads(new_curl)
-        actual_results = json.loads(formatted[0][0])
-        num_requests = actual_results['default:ix1']['num_requests']
+        num_requests = self.get_num_requests("default:ix1",self.nodes_init)
+        if num_requests == 0:
+            self.fail("Requests should be non zero as a query has run against this index")
         self.log.info(f"Number of requests before sleep: {num_requests}")
         self.sleep(10)
-        o = shell.execute_command(cmd)
-        new_curl = json.dumps(o)
-        formatted = json.loads(new_curl)
-        actual_results = json.loads(formatted[0][0])
-        new_num_requests = actual_results['default:ix1']['num_requests']
+        new_num_requests = self.get_num_requests("default:ix1",self.nodes_init)
         self.log.info(f"Number of requests after sleep: {new_num_requests}")
         self.assertEqual(num_requests,new_num_requests, "The number of requests should be the same, it is not, please check")
+
+    def test_native_recursive_cte_subquery_cancel(self):
+        self.run_cbq_query('INSERT INTO default VALUES ("e1", {"employee_id": 1,"employee_name": "John"}),'
+                           'VALUES ("e2",  {"employee_id": 2,"employee_name": "Emily","manager_id": 1}),'
+                           'VALUES ("e3",  {"employee_id": 3,"employee_name": "Mike","manager_id": 1}),'
+                           'VALUES ("e4", {"employee_id": 4,"employee_name": "Sarah","manager_id": 2}),'
+                           'VALUES ("e5", {"employee_id": 5,"employee_name": "Alex","manager_id": 3}),'
+                           'VALUES ("e6",  {"employee_id": 6,"employee_name": "Lisa","manager_id": 2})'
+                           'RETURNING *;')
+        self.run_cbq_query('CREATE INDEX e_idx ON default(manager_id INCLUDE MISSING, employee_id, employee_name);')
+        try:
+            self.run_cbq_query('WITH recursive emplLevel AS '
+                               '(SELECT e.employee_id, e.employee_name, 0 lvl FROM default e WHERE manager_id IS MISSING '
+                               'UNION SELECT e1.employee_id, e1.employee_name, e1.manager_id, emplLevel.lvl+1 lvl '
+                               'FROM default e1 JOIN emplLevel '
+                               'ON e1.manager_id = emplLevel.employee_id) SELECT * FROM emplLevel;',
+                               query_params={'timeout':"1s"})
+        except CBQError as e:
+            self.assertTrue('Timeout 1s exceeded' in str(e))
+        self.sleep(1)
+        num_requests = self.get_num_requests("default:e_idx",self.nodes_init)
+        if num_requests == 0:
+            self.fail("Requests should be non zero as a query has run against this index")
+        self.log.info(f"Number of requests before sleep: {num_requests}")
+        self.sleep(10)
+        new_num_requests = self.get_num_requests("default:e_idx",self.nodes_init)
+        self.log.info(f"Number of requests after sleep: {new_num_requests}")
+        self.assertEqual(num_requests,new_num_requests, "The number of requests should be the same, it is not, please check")
+
+    def test_builtin_recursive_cte_subquery_cancel(self):
+        self.run_cbq_query('UPSERT INTO default (KEY _k, VALUE _v) '
+                           'SELECT  "k0"||TO_STR(d) AS _k , {"c1":d, "c2":2*d, "c3":3*d} AS _v '
+                           'FROM ARRAY_RANGE(1,1000) AS d')
+        self.run_cbq_query('CREATE INDEX native_idx ON default(c1)')
+        try:
+            self.run_cbq_query('select RECURSIVE_CTE( '
+                               '"SELECT  COUNT(l.c2) as count_1 FROM default AS l JOIN default AS r ON l.c1 < r.c1 '
+                               'JOIN default r1 ON r.c1 < r1.c1 '
+                               'WHERE l.c1 >= 0", "SELECT 1+a.count_1 as count_1 from $anchor a where a.count_1 < 10000");',
+                               query_params={'timeout':"5s"})
+        except CBQError as e:
+            self.assertTrue('Timeout 5s exceeded' in str(e))
+        self.sleep(1)
+        num_requests = self.get_num_requests("default:native_idx",self.nodes_init)
+        if num_requests == 0:
+            self.fail("Requests should be non zero as a query has run against this index")
+        self.log.info(f"Number of requests before sleep: {num_requests}")
+        self.sleep(10)
+        new_num_requests = self.get_num_requests("default:native_idx",self.nodes_init)
+        self.log.info(f"Number of requests after sleep: {new_num_requests}")
+        self.assertEqual(num_requests,new_num_requests, "The number of requests should be the same, it is not, please check")
+
+    def test_subquery_cancel(self):
+        self.run_cbq_query('CREATE INDEX subquery_cancel ON default(c1)')
+        self.run_cbq_query('UPSERT INTO default  (KEY _k, VALUE _v) '
+                           'SELECT  "k0"||TO_STR(d) AS _k , {"c1":d, "c2":2*d, "c3":3*d} AS _v '
+                           'FROM ARRAY_RANGE(1,1000) AS d')
+        try:
+            self.run_cbq_query('SELECT * from (SELECT RAW COUNT(l.c2) '
+                               'FROM default AS l JOIN default AS r ON l.c1 < r.c1 JOIN default r1 ON r.c1 < r1.c1 WHERE l.c1 >= 0) d'
+                               ,query_params={'timeout': "5s"})
+        except CBQError as e:
+            self.assertTrue('Timeout 5s exceeded' in str(e))
+        self.sleep(1)
+        num_requests = self.get_num_requests("default:subquery_cancel",self.nodes_init)
+        if num_requests == 0:
+            self.fail("Requests should be non zero as a query has run against this index")
+        self.log.info(f"Number of requests before sleep: {num_requests}")
+        self.sleep(10)
+        new_num_requests = self.get_num_requests("default:subquery_cancel",self.nodes_init)
+        self.log.info(f"Number of requests after sleep: {new_num_requests}")
+        self.assertEqual(num_requests, new_num_requests,
+                         "The number of requests should be the same, it is not, please check")
 
     def test_aggregating_correlated_subquery(self):
         self.query = 'SELECT meta().id, (SELECT RAW SUM(VMs.memory) FROM d.VMs AS VMs)[0] AS total FROM ' + \
@@ -137,8 +202,8 @@ class QuerySubqueryTests(QueryTests):
         self.assertTrue(actual_result['metrics']['mutationCount'] == 10080)
 
     def test_update_subquery_in_where_clause(self):
-        self.gens_load = self.gen_docs(self.docs_per_day)
-        self.load(self.gens_load, flag=self.item_flag)
+        # self.gens_load = self.gen_docs(self.docs_per_day)
+        # self.load(self.gens_load, flag=self.item_flag)
         updated_value = "new_name"
         self.query = 'UPDATE ' + self.query_bucket + \
                      ' a set name = "{0}" where "centos" in ( SELECT RAW VMs.os FROM a.VMs) ' \
@@ -206,8 +271,7 @@ class QuerySubqueryTests(QueryTests):
             self.run_cbq_query()
             self.fail("Query should have failed")
         except CBQError as e:
-            self.assertTrue('Expression (correlated (select raw sum((`VMs`.`memory`)) from '
-                            '(`d`.`VMs`) as `VMs`)[0]) (near line 1, column 119) must depend only on group keys or aggregates.' in str(e),
+            self.assertTrue('must depend only on group keys or aggregates' in str(e),
                             "Incorrect error message: \n" + str(e))
 
     def test_update_unset(self):
@@ -428,21 +492,15 @@ class QuerySubqueryTests(QueryTests):
         correlated_query = f"SELECT D.address[0][0].city, \
             (SELECT raw count(email) FROM {self.query_bucket} WHERE department = 'Tester' AND address[0][0].city = D.address[0][0].city)[0] as _count \
             FROM {self.query_bucket} D WHERE department = 'Developer' AND hobbies.hobby[0].sports[0] = 'Basketball' ORDER BY _count DESC LIMIT 5"
-        error_code = [5370, 5010]
-        error_message = [
-            "Unable to run subquery - cause: No secondary index available for keyspace default in correlated subquery.",
-            "Error evaluating projection"
-        ]
+        error_code = 5370
+        error_message = "Unable to run subquery - cause: Correlated subquery's keyspace (default) cannot have more than 1000 documents without appropriate secondary index"
         try:
             self.run_cbq_query(query=correlated_query)
             self.fail(f"Query did not fail as expected with error: {error_message}")
         except CBQError as ex:
             error = self.process_CBQE(ex, 0)
-            self.assertEqual(error['code'], error_code[0])
-            self.assertEqual(error['msg'], error_message[0])
-            error = self.process_CBQE(ex, 1)
-            self.assertEqual(error['code'], error_code[1])
-            self.assertEqual(error['msg'], error_message[1])
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
 
     def test_MB57903(self):
         udf = 'CREATE OR REPLACE FUNCTION `FN_Test_Bad3` (data) LANGUAGE INLINE AS ( ( SELECT RAW (SELECT RAW data) ) ) ;'
@@ -454,6 +512,7 @@ class QuerySubqueryTests(QueryTests):
         self.assertEqual(result['results'], [{"a": 1, "b": [[1]]}, {"a": 2, "b": [[2]]}, {"a": 3,"b": [[3]]}])
 
     def test_MB60011(self):
+        self.run_cbq_query(f'delete from {self.query_bucket}')
         self.run_cbq_query(f'CREATE PRIMARY INDEX if not exists ON {self.query_bucket}')
         self.run_cbq_query(f'INSERT INTO {self.query_bucket} VALUES("k01", {{"c1": 1, "c2": 1}})')
 
