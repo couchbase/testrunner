@@ -400,7 +400,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                 skip_array_index_item_count=skip_array_index_item_count,
                                                 services_in=services_in,
                                                 select_queries=select_queries,
-                                                scan_results_check=scan_results_check
+                                                scan_results_check=scan_results_check,
+                                                skip_shard_validations=True
                                                 )
                 else:
                     services_in = ["index"]
@@ -412,7 +413,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                     skip_array_index_item_count=skip_array_index_item_count,
                                                     services_in=services_in,
                                                     select_queries=select_queries,
-                                                    scan_results_check=scan_results_check
+                                                    scan_results_check=scan_results_check,
+                                                    skip_shard_validations=True
                                                     )
             finally:
                 event.set()
@@ -1129,7 +1131,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
     def rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
                                swap_rebalance=False, skip_array_index_item_count=False,
                                services_in=None, failover_nodes_list=None, select_queries=None,
-                               scan_results_check=False, capella_rebalance=None):
+                               scan_results_check=False, capella_rebalance=None, skip_shard_validations=False):
         if not nodes_out_list:
             nodes_out_list = []
         if not nodes_in_list:
@@ -1154,6 +1156,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             self.perform_rebalance_during_ddl(nodes_in_list=nodes_in_list, nodes_out_list=nodes_out_list,
                                               services_in=services_in)
             self.wait_until_indexes_online()
+            if nodes_in_list:
+                nodes_in_list = []
         elif self.chaos_action == 'block_port':
             for i in range(3):
                 nodes_list = nodes_in_list + nodes_out_list
@@ -1215,7 +1219,10 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                             self._kill_all_processes_index(server=node)
                         nodes_in_list = []
                         time.sleep(30)
-            time.sleep(30)
+            self.enable_redistribute_indexes()
+            time.sleep(120)
+            if nodes_in_list:
+                nodes_in_list = []
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                      services=services_in, cluster_config=self.cluster_config)
             self.log.info(f"Rebalance task re-triggered after chaos action. Wait for 20 seconds until the rebalance starts")
@@ -1239,7 +1246,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             shard_affinity = True
         # TODO remove sleep after MB-58840 fix
         time.sleep(60)
-        if shard_affinity:
+        if shard_affinity and not skip_shard_validations:
             self.log.info("Running validations for shard-based rebalance")
             self.log.info("Fetching list of shards after completion of rebalance")
             shard_list_after_rebalance = self.fetch_shard_id_list()

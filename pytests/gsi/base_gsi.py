@@ -2595,16 +2595,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         tasks = []
         replica_count = random.randint(0, 2)
         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+        all_queries = []
         for namespace in self.namespaces:
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace,
                                                               num_replica=replica_count,
                                                               randomise_replica_count=True)
-            with ThreadPoolExecutor() as executor:
-                for query in create_queries:
-                    tasks.append(executor.submit(self.run_cbq_query, query=query, server=query_node))
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
-                                                 services=services_in, cluster_config=self.cluster_config)
+            all_queries.extend(create_queries)
+        with ThreadPoolExecutor() as executor:
+            for query in all_queries:
+                tasks.append(executor.submit(self.run_cbq_query, query=query, server=query_node))
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
+                                                     services=services_in, cluster_config=self.cluster_config)
         self.log.info(f"Rebalance task triggered. Sleeping for 60 seconds until the rebalance starts")
         time.sleep(60)
         try:
