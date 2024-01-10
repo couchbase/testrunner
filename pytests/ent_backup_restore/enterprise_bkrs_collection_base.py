@@ -528,10 +528,6 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
     def get_bucket_scope_cluster_host(self):
         bucket_name = self.buckets[0].name
-        if self.backupset.map_buckets and len(self.backupset.map_bucket_name) > 0:
-            # length condition ensures only executed after a -map-buckets restore
-            # otherwise method will attempt to get the now-deleted source bucket
-            bucket_name = self.backupset.map_bucket_name[0]
         if self.use_rest:
             scopes = self.rest_bk.get_bucket_scopes(bucket_name)
         else:
