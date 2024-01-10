@@ -74,7 +74,7 @@ DEFAULT_NONROOT_CLI_PATH = \
         "WINDOWS_SERVER": DEFAULT_NONROOT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
     }
 
-WGET_CMD = "rm -rf {0}*; cd {0}; wget -Nq -O {1} {2}"
+WGET_CMD = "cd {0}; wget -Nq -O {1} {2}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
