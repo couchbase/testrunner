@@ -74,7 +74,7 @@ DEFAULT_NONROOT_CLI_PATH = \
         "WINDOWS_SERVER": DEFAULT_NONROOT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
     }
 
-WGET_CMD = "rm -rf {0}*; cd {0}; wget -Nq -O {1} {2}"
+WGET_CMD = "cd {0}; wget -Nq -O {1} {2}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
@@ -111,6 +111,7 @@ CREATE_SERVERLESS_PROFILE_FILE = {
 CMDS = {
     "deb": {
         "uninstall":
+            "rm -rf /tmp/tmp* ; " +
             "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
             "service ntp restart ; "
@@ -181,6 +182,7 @@ CMDS = {
         "uninstall":
             UNMOUNT_NFS_CMD +
             "yes | yum remove 'couchbase*' > /dev/null; " +
+            "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
