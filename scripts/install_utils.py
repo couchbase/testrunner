@@ -853,8 +853,9 @@ def download_build():
                     or not check_file_size(node):
                 node.install_success = False
                 ok = False
+                log.error("Unable to copy build to {} at {}, exiting".format(node.ip, node.build.path))
         if not ok:
-            print_result_and_exit("Unable to copy build to {}, exiting".format(node.build.path))
+            print_result_and_exit()
         for node in NodeHelpers:
             if node.build.debug_build_present:
                 if not check_file_exists(node,
@@ -862,9 +863,9 @@ def download_build():
                         or not check_file_size(node, debug_build=True):
                     node.install_success = False
                     ok = False
+                    log.error("Unable to copy debug build to {} at {}, exiting".format(node.ip, node.build.debug_path))
         if not ok:
-            print_result_and_exit("Unable to copy debug build to "
-                                  "{}, exiting".format(node.build.debug_path))
+            print_result_and_exit()
     else:
         for node in NodeHelpers:
             build_url = node.build.url
