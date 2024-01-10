@@ -349,8 +349,8 @@ class VectorSearch(FTSBaseTest):
                 self.run_vector_query(query=self.query, index=index['index_obj'], dataset=index['dataset'])
 
     def generate_random_float_array(self, n):
-        min_float_value = sys.float_info.min
-        max_float_value = sys.float_info.max
+        min_float_value = 1.401298464324817e-45  # Minimum representable value for float32 in Go
+        max_float_value = 3.4028234663852886e+38  # Maximum representable value for float32 in Go
         return [random.uniform(min_float_value, max_float_value) for _ in range(n)]
 
     def test_vector_search_with_invalid_values(self):
