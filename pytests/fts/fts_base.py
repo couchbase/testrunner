@@ -18,6 +18,7 @@ import random
 import subprocess
 import string
 import boto3
+import docker
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -2599,7 +2600,8 @@ class CouchbaseCluster:
             buckets = data_structure["buckets"]
             for bucket in buckets:
                 if bucket not in existing_buckets:
-                    self.create_standard_buckets(bucket_size=256, name=bucket["name"])
+                    self.bucket_quota = TestInputSingleton.input.param("bucket_quota", 256)
+                    self.create_standard_buckets(bucket_size=self.bucket_quota, name=bucket["name"])
                 if "scopes" in bucket.keys():
                     scopes = bucket["scopes"]
                     for scope in scopes:
@@ -4072,6 +4074,7 @@ class FTSBaseTest(unittest.TestCase):
                                         aws_secret_access_key=self.aws_secret_access_key,
                                         s3_bucket=self.s3_bucket, region=self.region)
         self.storage_prefix = self._input.param("storage_prefix", None)
+        self.docker_containers = []
 
     def create_capella_config(self):
         services_count = {}
@@ -4413,6 +4416,28 @@ class FTSBaseTest(unittest.TestCase):
                 CbServer.use_https = False
             if self.compare_es:
                 self.teardown_es()
+
+            self.log.info("Cleaning up docker containers")
+            docker_client = docker.from_env()
+            for docker_container in self.docker_containers:
+                try:
+                    container = docker_client.containers.get(docker_container)
+                    if container.status == "running":
+                        try:
+                            self.log.info(f"Docker container {docker_container} is running")
+                            container.stop()
+                            self.log.info(f"Docker container {docker_container} stopped")
+                        except Exception as e:
+                            self.log.error(f"Failed to stop docker container: {e}")
+                    else:
+                        self.log.info(f"Docker conainter {docker_container} is not running")
+                        self.log.info("Prune stopped containers")
+                        try:
+                            docker_client.containers.prune()
+                        except Exception as e:
+                            self.log.error(f"Failed to prune docker containers {e}")
+                except docker.errors.NotFound:
+                    self.log.info(f"Docker container {docker_container} does not exist")
 
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
@@ -6442,6 +6467,15 @@ class FTSBaseTest(unittest.TestCase):
         # create a folder in S3 bucket
         self.s3_utils_obj.create_s3_folder(folder=self.storage_prefix)
 
+    def generate_random_container_name(self):
+        random.seed(time.time())
+        container_name = "vector-search-"
+        random_suffix = ''.join(random.choices(string.ascii_lowercase, k=10))
+
+        container_name += random_suffix
+
+        return container_name
+
     def load_vector_data(self, containers, dataset):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6455,7 +6489,9 @@ class FTSBaseTest(unittest.TestCase):
                     vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
                                       self._input.membase_settings.rest_password, bucket_name, scope_name,
                                       collection_name, dataset)
-                    vl.load_data()
+                    container_name = self.generate_random_container_name()
+                    self.docker_containers.append(container_name)
+                    vl.load_data(container_name)
         return bucketvsdataset
 
     def get_query_vectors(self, dataset_name):

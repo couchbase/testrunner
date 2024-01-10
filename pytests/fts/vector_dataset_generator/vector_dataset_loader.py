@@ -6,6 +6,7 @@ import subprocess
 import time
 import uuid
 from functools import partial
+import docker
 
 import pkg_resources
 
@@ -267,8 +268,9 @@ class VectorLoader:
         self.scope = scope
         self.collection = collection
         self.capella_run = capella
+        self.docker_client = docker.from_env()
 
-    def load_data(self):
+    def load_data(self, container_name=None):
         min_sdk_version = "3.0.0"
         try:
             couchbase_version = pkg_resources.get_distribution("couchbase").version
@@ -288,34 +290,28 @@ class VectorLoader:
                     cbops.upsert()
             else:
                 print("Couchbase SDK version is less than 3.0.0.")
-
-                docker_pull_command = ["docker", "pull", "sequoiatools/vectorloader"]
-
+                docker_image = "sequoiatools/vectorloader"
                 dataset_name = self.dataset[0]
-                docker_run_command = [
-                    "docker", "run", "sequoiatools/vectorloader",
-                    "-n", self.node.ip,
-                    "-u", self.username,
-                    "-p", self.password,
-                    "-b", self.bucket,
-                    "-sc", self.scope,
-                    "-coll", self.collection,
-                    "-ds", dataset_name
-                ]
-                print("docker pull command: {}".format(docker_pull_command))
+                docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
+                                    f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
+                                    f"-ds {dataset_name}"
+
                 # Run the Docker pull command
                 try:
-                    subprocess.run(docker_pull_command, check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"Error running Docker pull command: {e}")
-                    exit(1)  # Exit the script if the pull command fails
-                print("Successfully ran docker pull command!")
+                    print(f"Pulling docker image {docker_image}")
+                    self.docker_client.images.pull('sequoiatools/vectorloader')
+                except docker.errors.APIError as e:
+                    print("Exception will pulling docker image {}: {}".
+                          format(docker_image, e))
+
                 # Run the Docker run command
-                print("docker run command: {}".format(docker_run_command))
                 try:
-                    subprocess.run(docker_run_command, check=True)
-                except subprocess.CalledProcessError as e:
-                    print(f"Error running Docker run command: {e}")
+                    print(f"Running docker container {docker_image} with name {container_name}")
+                    docker_output = self.docker_client.containers.run(docker_image, docker_run_params,
+                                                                      name=container_name)
+                except Exception as e:
+                    print(f"Exception while running docker container: {e}")
+
         except pkg_resources.DistributionNotFound:
             print("Couchbase SDK is not installed.")
         except Exception as e:
