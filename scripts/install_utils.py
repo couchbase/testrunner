@@ -533,9 +533,11 @@ def print_result_and_exit(err=None):
             success.append(server)
 
     # Print node status if install failed or not started
-    if len(fail) > 0 or len(install_not_started) > 0:
-        check_nodes_statuses(fail + install_not_started,
-                             display_process_info=True)
+    # Commenting as the commands print a lot of lines
+    # TODO - Redirect the info to a file
+    # if len(fail) > 0 or len(install_not_started) > 0:
+    #     check_nodes_statuses(fail + install_not_started,
+    #                          display_process_info=True)
 
     log.info("-" * 100)
     for server in install_not_started:
