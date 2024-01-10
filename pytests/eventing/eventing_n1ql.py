@@ -423,3 +423,14 @@ class EventingN1QL(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    # MB-59344
+    def test_n1ql_queries_after_internal_password_rotation(self):
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        self.rest.refresh_credentials()
+        self.load_data_to_collection(self.docs_per_day * self.num_docs * 2, "src_bucket._default._default")
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs * 2)
+        self.undeploy_and_delete_function(body)
