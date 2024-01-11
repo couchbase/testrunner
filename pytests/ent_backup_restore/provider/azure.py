@@ -33,7 +33,10 @@ class AZURE(provider.Provider):
         if "BACKUP_RESTORE_AZURE_SUBSCRIPTION_KEY" in os.environ:
             self.subscription_id = os.environ["BACKUP_RESTORE_AZURE_SUBSCRIPTION_KEY"]
         else:
-            raise Exception("The environment variable 'BACKUP_RESTORE_AZURE_SUBSCRIPTION_KEY' needs to be set")
+            raise Exception("""The environment variable 'BACKUP_RESTORE_AZURE_SUBSCRIPTION_KEY' needs to be set.
+                            It sets the Azure AZURE_SUBSCRIPTION_KEY environment variable.
+                            Its value is the Azure subscription ID, which can be found in:
+                            Azure protal --> Subscriptions --> Overview --> Subscription ID""")
         self.region = region
         self.resource_group_name = "backuprestoretests" + str(uuid.uuid4())
         self.storage_name = "storage" +  str(uuid.uuid4())[:8]
