@@ -2635,14 +2635,14 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def fetch_plasma_shards_list(self):
         json_resp = self.index_rest.get_index_aggregate_metadata()
-        json_parsed = json_resp['result']['metadata'][0]
         shards = set()
-        for item in json_parsed['topologies']:
-            for defn in item['definitions']:
-                for instance in defn['instances']:
-                    for partition in instance['partitions']:
-                        for shard in partition['shardIds']:
-                            shards.add(shard)
+        for each_item in json_resp['result']['metadata']:
+            for item in each_item['topologies']:
+                for defn in item['definitions']:
+                    for instance in defn['instances']:
+                        for partition in instance['partitions']:
+                            for shard in partition['shardIds']:
+                                shards.add(shard)
         return list(shards)
 
     def find_max_plasma_shards_allowed(self):

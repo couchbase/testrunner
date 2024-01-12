@@ -32,6 +32,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         self.capella_rebalance = self.input.param("capella_rebalance", "None")
         self.rebalance_type = self.input.param("rebalance_type", True)
         self.stress_factor = self.input.param("stress_factor", 0.5)
+        self.disable_shard_affinity = self.input.param("disable_shard_affinity", False)
         self.index_resident_ratio = int(self.input.param("index_resident_ratio", 20))
         self.disk_full = self.input.param("disk_full", False)
         self.rand = random.randint(1, 1000000000)
@@ -501,6 +502,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         self.set_flush_buffer_quota(0.5)
         # 26 MB
         self.set_maximum_disk_usage_per_shard(26843545)
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        allowed_num_shards = self.fetch_total_shards_limit() * len(indexer_nodes)
         time.sleep(10)
         select_queries = set()
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -514,11 +517,20 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
                 shards_list = self.fetch_plasma_shards_list()
-                allowed_num_shards = self.fetch_total_shards_limit()
                 if len(shards_list) > allowed_num_shards:
                     raise Exception(f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
         self.wait_until_indexes_online()
         self.validate_shard_affinity()
+        if self.disable_shard_affinity:
+            shards_list_before = self.fetch_plasma_shards_list()
+            self.disable_shard_based_rebalance()
+            for namespace in self.namespaces:
+                queries = [f'create index idx on {namespace}(name)']
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                shards_list_after = self.fetch_plasma_shards_list()
+                if sorted(shards_list_before) == sorted(shards_list_after):
+                    raise Exception("Indexes with alternate shard ID share shards with indexes with no alternate shard ID")
+
 
     def test_recovery_from_disk_snapshot(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
