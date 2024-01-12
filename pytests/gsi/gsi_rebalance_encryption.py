@@ -13,6 +13,7 @@ __created_on__ = 09/10/23 4:24 pm
 from membase.api.capella_rest_client import RestConnection as RestConnectionCapella
 from membase.api.rest_client import RestConnection
 from .base_gsi import BaseSecondaryIndexingTests
+from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import SDKDataLoader
 import random
 import string
@@ -26,6 +27,8 @@ from membase.api.rest_client import RestConnection, RestHelper
 class RebalanceEncryption(BaseSecondaryIndexingTests):
     def setUp(self):
         super(RebalanceEncryption, self).setUp()
+        self.rest = RestConnection(self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)[0])
+        self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.log.info("==============  RebalanceEncryption setup has started ==============")
         if self.capella_run:
             buckets = self.rest.get_buckets()
@@ -50,7 +53,6 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
         self.num_index_batches = self.input.param("num_index_batches", 1)
         self.state = self.input.param("state", "disable")
         self.encryption_setting = self.input.param("encryption_setting", "control")
-        self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.log.info("==============  RebalanceEncryption setup has completed ==============")
 
     def tearDown(self):
@@ -173,18 +175,35 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
             self.log.info(f'node being balanced out {out_node}')
             in_node = self.servers[self.nodes_init + idx]
 
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [in_node],
-                                                     [out_node], services=services_in)
-            while self.rest._rebalance_progress_status() != 'running':
-                continue
-            if RestHelper(self.rest).rebalance_reached(percentage=10):
-                node_rest = RestConnection(self.master)
-                status, content = node_rest.set_min_tls_version(version='tlsv1.3')
-                if not status:
-                    self.fail(content)
+            try:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [in_node],
+                                                         [out_node], services=services_in)
+                while self.rest._rebalance_progress_status() != 'running':
+                    continue
+                if RestHelper(self.rest).rebalance_reached(percentage=10):
+                    self.update_master_node()
+                    node_rest = RestConnection(self.master)
+                    status, content = node_rest.set_min_tls_version(version='tlsv1.3')
+                    if not status:
+                        self.fail(content)
+            except Exception as e:
+                if "TLSV1_ALERT_PROTOCOL_VERSION" in str(e):
+                    self.log.info(str(e))
+                    self.cluster = Cluster()
+                    reconnected_node = self.get_nodes_from_services_map(get_all_nodes=False)
+                    self.rest = RestConnection(self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False))
+                    while self.rest._rebalance_progress_status() != 'none':
+                        continue
+                    self.sleep(60)
+                    self.log.info("Rebalance finished...")
+                    self.assertTrue(RestHelper(reconnected_node).rebalance_reached(percentage=100),
+                                    "rebalance failed, stuck or did not complete")
+                else:
+                    self.fail(str(e))
 
 
-            rebalance.result()
+            #rebalance.result()
+
 
     def test_change_cert_settings_during_rebalance(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -213,28 +232,50 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
             self.log.info(f'node being balanced out {out_node}')
             in_node = self.servers[self.nodes_init + idx]
 
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [in_node],
-                                                     [out_node], services=services_in)
-            while self.rest._rebalance_progress_status() != 'running':
-                continue
-            if RestHelper(self.rest).rebalance_reached(percentage=10):
-                node_rest = RestConnection(self.master)
-                if self.state == 'disable':
-                    status, content = node_rest.client_cert_auth(state="enable", prefixes=[
-                        {"delimiter": "", "prefix": "", "path": "subject.cn"}])
-                    if not status:
-                        self.fail(content)
-                    self.sleep(2)
-                    status, content = node_rest.client_cert_auth(state=self.state, prefixes=[
-                        {"delimiter": "", "prefix": "", "path": "subject.cn"}])
-                    if not status:
-                        self.fail(content)
+            try:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [in_node],
+                                                         [out_node], services=services_in)
+                while self.rest._rebalance_progress_status() != 'running':
+                    continue
+                if RestHelper(self.rest).rebalance_reached(percentage=10):
+                    self.update_master_node()
+                    node_rest = RestConnection(self.master)
+                    if self.state == 'disable':
+                        status, content = node_rest.client_cert_auth(state="enable", prefixes=[
+                            {"delimiter": "", "prefix": "", "path": "subject.cn"}])
+                        if not status:
+                            self.fail(content)
+                        self.sleep(2)
+                        status, content = node_rest.client_cert_auth(state=self.state, prefixes=[
+                            {"delimiter": "", "prefix": "", "path": "subject.cn"}])
+                        if not status:
+                            self.fail(content)
+                    else:
+                        status, content = node_rest.client_cert_auth(state=self.state, prefixes=[
+                            {"delimiter": "", "prefix": "", "path": "subject.cn"}])
+                        if not status:
+                            self.fail(content)
+
+            except Exception as e:
+                ex = str(e)
+                print(f"exception caught is {ex}")
+                if "sslv3 alert handshake failure" in ex:
+                    self.log.info(str(e))
+                    reconnected_node = self.get_nodes_from_services_map(get_all_nodes=False)
+                    self.rest = RestConnection(self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False))
+                    while self.rest._rebalance_progress_status() != 'none':
+                        continue
+                    self.log.info('rebalance done')
+                    self.sleep(60)
+                    self.assertTrue(RestHelper(reconnected_node).rebalance_reached(percentage=100),
+                                    "rebalance failed, stuck or did not complete")
+                    self.cluster = Cluster()
                 else:
-                    status, content = node_rest.client_cert_auth(state=self.state, prefixes=[
-                        {"delimiter": "", "prefix": "", "path": "subject.cn"}])
-                    if not status:
-                        self.fail(content)
-            rebalance.result()
+                    self.fail(str(e))
+            else:
+                while self.rest._rebalance_progress_status() != 'none':
+                    continue
+                self.log.info('rebalance done')
 
     def test_change_encryption_settings_during_rebalance(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
