@@ -25,7 +25,7 @@ def invite_user(api_url, user, password, tenant):
     try:
         api = CapellaAPI(api_url, None, None, user, password)
         resp = api.invite_new_user(
-            tenant, user_name, user_email, user_password)
+            tenant, user_email, user_password)
         if resp.status_code != 200:
             print("Creating capella User {0} failed: {1}".format(
                 user_name, resp.content))
