@@ -1013,10 +1013,17 @@ class StatsWaitTask(Task):
                 self.state = FINISHED
                 self.set_exception(ex)
                 return
-            cbo_doc_items = self.collection_stats.get_collection_item_count_cumulative(self.bucket,
-                                                                                       CbServer.system_scope,
-                                                                                       CbServer.query_collection)
-            stat_result = stat_result - cbo_doc_items
+            # if self.stat != 'ep_queue_size':
+            #     cbo_doc_items = self.collection_stats.get_collection_item_count_cumulative(self.bucket,
+            #                                                                                CbServer.system_scope,
+            #                                                                                CbServer.query_collection)
+            #     stat_result = stat_result - cbo_doc_items
+
+            if self.stat in ['curr_items', 'vb_active_curr_items', 'vb_replica_curr_items', 'curr_items_tot']:
+                cbo_doc_items = self.collection_stats.get_collection_item_count_cumulative(self.bucket,
+                                                                                           CbServer.system_scope,
+                                                                                           CbServer.query_collection)
+                stat_result = stat_result - cbo_doc_items
         if not self._compare(self.comparison, str(stat_result), self.value):
             self.log.warning("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
                                                                                    self.comparison, self.value,

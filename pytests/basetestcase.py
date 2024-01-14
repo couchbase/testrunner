@@ -2873,8 +2873,9 @@ class OnPremBaseTestCase(unittest.TestCase):
             task.result()
         self.num_items = items + start_items
 
+        #disabling check bucket stats since there is a deduplication of the same check
         if verify_data:
-            self.verify_cluster_stats(self.servers[:self.nodes_init])
+            self.verify_cluster_stats(self.servers[:self.nodes_init], check_bucket_stats=False)
         self.log.info("LOAD IS FINISHED")
 
     def async_load(self, generators_load, exp=0, flag=0,
