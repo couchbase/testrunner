@@ -7,6 +7,7 @@ from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest, log
+from lib.Cb_constants.CBServer import CbServer
 
 log = logging.getLogger()
 
@@ -243,7 +244,9 @@ class EventingLifeCycle(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "undeployed")
         # Check to ensure metada bucket does not have any documents after undeploy
         stats_meta = self.rest.get_bucket_stats(self.metadata_bucket_name)
-        if stats_meta["curr_items"] != 0:
+        coll_item_count = self.stat.get_collection_item_count_cumulative(self.metadata_bucket_name, CbServer.system_scope,
+                                                                         CbServer.query_collection, self.get_kv_nodes())
+        if stats_meta["curr_items"] - coll_item_count != 0:
             self.fail("Metadata bucket still has some docs left after undeploy : {0}".format(stats_meta["curr_items"]))
 
     def test_eventing_debugger_source_bucket_mutation(self):

@@ -67,9 +67,8 @@ class EventingBucket(EventingBaseTest):
             pass
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         try:
             # delete all documents
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
