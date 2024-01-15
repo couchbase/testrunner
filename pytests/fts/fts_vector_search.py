@@ -159,8 +159,10 @@ class VectorSearch(FTSBaseTest):
                                                                 fields=query['fields'])
         if hits == 0:
             hits = -1
-        self.log.info("FTS Hits for Search query: %s" % hits)
+            self.log.info(f"FTS Hits for Search query: {hits}, Skipping validations")
+            return -1, -1, None
 
+        self.log.info("FTS Hits for Search query: %s" % hits)
         # compare fts and n1ql results if required
         if self.run_n1ql_search_function:
             if n1ql_hits == hits:

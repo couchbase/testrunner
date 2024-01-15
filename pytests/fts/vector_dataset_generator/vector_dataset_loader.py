@@ -2,13 +2,14 @@
 Downloads dataset, extract vectors and dumps into couchbase.
 """
 import concurrent.futures
-import subprocess
 import time
 import uuid
+from datetime import timedelta
 from functools import partial
-import docker
 
+import docker
 import pkg_resources
+import requests
 
 from .vector_dataset_generator import VectorDataset
 
@@ -25,6 +26,8 @@ if pkg_resources.parse_version(couchbase_version) >= pkg_resources.parse_version
         CollectionAlreadyExistsException,
         ScopeAlreadyExistsException
     )
+
+    from couchbase.cluster import ClusterTimeoutOptions
     from couchbase.management.buckets import BucketType, CreateBucketSettings, ConflictResolutionType
     from couchbase.management.collections import CollectionSpec
 
@@ -99,7 +102,9 @@ class CouchbaseOps:
             dataset_name="sift",
             bucket_name="",
             scope_name="",
-            collection_name=""
+            collection_name="",
+            capella_run=False,
+            cbs=False
     ):
         self.couchbase_endpoint_ip = couchbase_endpoint_ip
         self.username = username
@@ -123,6 +128,8 @@ class CouchbaseOps:
             )
         else:
             self.collection_name = collection_name
+            self.capella_run = capella_run
+            self.cbs = cbs
 
     def create_bucket(self, cluster):
         bucket_manager = cluster.buckets()
@@ -166,21 +173,13 @@ class CouchbaseOps:
             print(
                 f"Failed to create collection. Status code: {response.status_code}, Response: {response.text}")
 
-    def create_bucket_scope_collection(self):
+    def create_bucket_scope_collection(self, cluster, couchbase_endpoint):
         """
         Creates couchbase bucket, scope and collection
 
         Returns:
             couchbase collection object
         """
-        couchbase_endpoint = "couchbase://" + self.couchbase_endpoint_ip
-
-        # Check if the scope exists, create it if not
-        print(
-            f"user:{self.username} pass: {self.password} endpoint: {couchbase_endpoint} bucket_name: {self.bucket_name} {self.scope_name}   {self.collection_name} "
-        )
-        auth = PasswordAuthenticator(self.username, self.password)
-        cluster = Cluster(couchbase_endpoint, ClusterOptions(auth))
         print(f"Creating bucket on {couchbase_endpoint} with bucket name:{self.bucket_name}")
         self.create_bucket(cluster)
         time.sleep(5)
@@ -222,12 +221,33 @@ class CouchbaseOps:
             use_hdf5_datasets (bool, optional): To choose tar.gz or hdf5 files .
             Defaults to False.
         """
+        auth = PasswordAuthenticator(self.username, self.password)
+        if not self.capella_run:
+            couchbase_endpoint = "couchbase://" + self.couchbase_endpoint_ip
+            cluster = Cluster(couchbase_endpoint, ClusterOptions(auth))
+        else:
+            timeout_options = ClusterTimeoutOptions(kv_timeout=timedelta(seconds=120),
+                                                    query_timeout=timedelta(seconds=10))
+            options = ClusterOptions(PasswordAuthenticator(self.username, self.password),
+                                     timeout_options=timeout_options)
+            cluster = Cluster('couchbases://' + self.couchbase_endpoint_ip + '?ssl=no_verify',
+                              options)
+            couchbase_endpoint = f"couchbases://{self.couchbase_endpoint_ip}"
+
+        print(
+            f"user:{self.username} pass: {self.password} endpoint: {couchbase_endpoint} bucket_name: {self.bucket_name} {self.scope_name}   {self.collection_name} "
+        )
 
         # create Bucket, Scope and Collection.
-        collection = self.create_bucket_scope_collection()
-        if collection is None:
-            print(f"Error: collection object cannot be None")
-            return
+        if self.cbs:
+            time.sleep(10)
+            collection = self.create_bucket_scope_collection(cluster, couchbase_endpoint)
+            if collection is None:
+                print(f"Error: collection object cannot be None")
+                return
+        else:
+            bucket = cluster.bucket(self.bucket_name)
+            collection = bucket.scope(self.scope_name).collection(self.collection_name)
 
         # initialize the needed vectors.
         ds = VectorDataset(self.dataset_name)
@@ -255,7 +275,8 @@ class CouchbaseOps:
 
 class VectorLoader:
 
-    def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False):
+    def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False,
+                 create_bucket_struct=False):
 
         self.node = node
         self.username = username
@@ -268,6 +289,7 @@ class VectorLoader:
         self.scope = scope
         self.collection = collection
         self.capella_run = capella
+        self.create_bucket_struct = create_bucket_struct
         self.docker_client = docker.from_env()
 
     def load_data(self, container_name=None):
@@ -278,14 +300,17 @@ class VectorLoader:
 
             if pkg_resources.parse_version(couchbase_version) >= pkg_resources.parse_version(min_sdk_version):
                 print("Couchbase SDK version is greater than or equal to 3.0.0")
-                # from couchbase.cluster import Cluster, ClusterOptions
-                # from couchbase.auth import PasswordAuthenticator
+                if self.capella_run and self.create_bucket_struct:
+                    print("creating bucket isn't allowed with capella clusters using SDK, aborting")
+                    return
                 for dataset_name in self.dataset:
                     cbops = CouchbaseOps(
                         couchbase_endpoint_ip=self.node, username=self.username, password=self.password,
                         bucket_name=self.bucket,
                         dataset_name=dataset_name,
-                        scope_name=self.scope, collection_name=self.collection
+                        scope_name=self.scope, collection_name=self.collection,
+                        capella_run=self.capella_run,
+                        cbs=self.create_bucket_struct
                     )
                     cbops.upsert()
             else:
@@ -294,7 +319,7 @@ class VectorLoader:
                 dataset_name = self.dataset[0]
                 docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
                                     f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
-                                    f"-ds {dataset_name}"
+                                    f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct}"
 
                 # Run the Docker pull command
                 try:

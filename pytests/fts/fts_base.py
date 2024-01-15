@@ -2606,14 +2606,13 @@ class CouchbaseCluster:
                     scopes = bucket["scopes"]
                     for scope in scopes:
                         if not scope["name"] == "_default":
-                            result = self._create_scope(bucket=bucket["name"], scope=scope["name"],
-                                                        cli_client=cli_client)
+                            result = self.create_scope_using_rest(bucket=bucket["name"], scope=scope["name"])
                             if not result:
                                 return False, f"Scope {scope['name']} creation is failed."
                         collections = scope["collections"]
                         for collection in collections:
-                            result = self._create_collection(bucket=bucket["name"], scope=scope["name"],
-                                                             collection=collection["name"], cli_client=cli_client)
+                            result = self.create_collection_using_rest(bucket=bucket["name"], scope=scope["name"],
+                                                             collection=collection["name"])
                             if not result:
                                 return False, f"Collection {collection['name']} creation is failed."
         except Exception as err:
@@ -2642,6 +2641,16 @@ class CouchbaseCluster:
                 cli_client.create_scope(bucket=bucket, scope=scope)
                 time.sleep(10)
         return status
+
+    def create_scope_using_rest(self, bucket, scope):
+        rest = RestConnection(self.__master_node)
+        if scope != '_default':
+            return rest.create_scope(bucket, scope)
+
+    def create_collection_using_rest(self, bucket, scope, collection):
+        rest = RestConnection(self.__master_node)
+        if scope != '_default':
+            return rest.create_collection(bucket, scope, collection)
 
     def _drop_scope(self, bucket=None, scope=None, cli_client=None):
         cli_client.delete_scope(bucket=bucket, scope=scope)
@@ -6488,7 +6497,7 @@ class FTSBaseTest(unittest.TestCase):
                     collection_name = collection['name']
                     vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
                                       self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                      collection_name, dataset)
+                                      collection_name, dataset, self.capella_run, False)
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
