@@ -112,6 +112,7 @@ CMDS = {
     "deb": {
         "uninstall":
             "rm -rf /tmp/tmp* ; " +
+            "rm -rf /tmp/cbbackupmgr-staging;" +
             "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
             "service ntp restart ; "
