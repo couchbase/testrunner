@@ -108,7 +108,7 @@ CMDS = {
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null;"
             "dpkg --configure -a; apt-get update; "
-
+            "journalctl --vacuum-size=100M; journalctl --vacuum-time=10d; "
             "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
             "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
             "&& service procps restart) ; "
