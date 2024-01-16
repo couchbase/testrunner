@@ -3,7 +3,8 @@ import docker
 class VectorLoader:
 
     def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False,
-                 create_bucket_struct=False, use_cbimport=False, dims_for_resize=[], percentages_to_resize=[]):
+                 create_bucket_struct=False, use_cbimport=False, dims_for_resize=[], percentages_to_resize=[],
+                 iterations=1):
 
         self.node = node
         self.username = username
@@ -17,6 +18,7 @@ class VectorLoader:
         self.collection = collection
         self.capella_run = capella
         self.use_cbimport = use_cbimport
+        self.iterations = iterations
         self.create_bucket_struct = create_bucket_struct
         self.docker_client = docker.from_env()
         self.percentages_to_resize = percentages_to_resize
@@ -28,7 +30,8 @@ class VectorLoader:
             dataset_name = self.dataset[0]
             docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
                                 f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
-                                f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct} -i {self.use_cbimport}"
+                                f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct} -i {self.use_cbimport} "\
+                                f"-iter {self.iterations}"
 
             if len(self.percentages_to_resize) > 0:
                 if len(self.percentages_to_resize) != len(self.dims_for_resize):

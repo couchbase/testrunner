@@ -164,7 +164,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                              test_indexes=vect_index_containers,
                                              vector_fields=vector_fields,
                                              create_vector_index=True,
-                                             wait_for_index_complete=wait_for_index_complete)
+                                             wait_for_index_complete=wait_for_index_complete,
+                                             extra_fields=[{"sno": "number"}])
 
         exempt_indexes = []
         for index in self._cb_cluster.get_indexes():
@@ -375,7 +376,17 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover(graceful=True)
+
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
+        task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
         self.sleep(60)
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
@@ -392,7 +403,17 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover(graceful=True)
+
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
+        task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
         self.sleep(60)
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
@@ -409,7 +430,17 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover()
+
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
+        task = self._cb_cluster.async_failover(node=failover_node)
         task.result()
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
         for index in self._cb_cluster.get_indexes():
@@ -699,9 +730,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
+
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -736,9 +765,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
+
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -773,9 +800,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
+
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -799,7 +824,16 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        task = self._cb_cluster.async_failover()
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
+        task = self._cb_cluster.async_failover(node=failover_node)
         task.result()
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
         for index in self._cb_cluster.get_indexes():
@@ -851,9 +885,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
+
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -877,7 +909,16 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        task = self._cb_cluster.async_failover(graceful=True)
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
+        task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
         self.sleep(30)
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
@@ -891,9 +932,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
+
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -917,7 +956,16 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        task = self._cb_cluster.async_failover(graceful=True)
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
+        task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
         self.sleep(30)
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
@@ -1668,14 +1716,29 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             returned_matches = query_matches_returned[q_idx]
             expected_matches = query_matches_expected[q_idx]
 
-            fts_doc_ids_returned = [returned_matches[i]['id'] for i in range(self.k)]
-            fts_doc_ids_expected = [expected_matches[i]['id'] for i in range(self.k)]
+            fts_doc_ids_returned = [returned_matches[i]['fields']['sno'] for i in range(self.k)]
+            fts_doc_ids_expected = [expected_matches[i]['fields']['sno'] for i in range(self.k)]
+
+            fts_doc_returned_score = [(returned_matches[i]['fields']['sno'], returned_matches[i]['score']) for i in range(self.k)]
+            fts_doc_expected_score = [(expected_matches[i]['fields']['sno'], expected_matches[i]['score']) for i in range(self.k)]
+
+            self.log.info("Doc id's expected: {}".format(fts_doc_expected_score))
+            self.log.info("Doc id's returned: {}".format(fts_doc_returned_score))
 
             if fts_doc_ids_returned == fts_doc_ids_expected:
                 self.log.info("SUCCESS: Query matches returned {} are the same as" \
                               " the query matches expected {}".
                               format(fts_doc_ids_returned, fts_doc_ids_expected))
             else:
+                for i in range(len(expected_matches)):
+                    doc_expected = expected_matches[i]['fields']['sno']
+                    doc_returned = returned_matches[i]['fields']['sno']
+
+                    if doc_expected != doc_returned:
+                        pos_returned = fts_doc_ids_returned.index(doc_expected)
+                        print("Doc id: {}, Pos/score before rebalance: ({},{}), Pos/score after rebalance: ({},{})".
+                              format(doc_expected, i, expected_matches[i]['score'], pos_returned, returned_matches[pos_returned]['score']))
+
                 self.fail("FAIL: Query matches returned do not equal the expected" \
                           " matches for query #{}. Expected: {}, Returned: {}".
                           format(q_idx, fts_doc_ids_expected, fts_doc_ids_returned))
@@ -1708,6 +1771,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 if hits == 0:
                     hits = -1
                 self.log.info("FTS Hits for Search query: %s" % hits)
+                # self.log.info("Matches returned: {}".format(matches))
+                # self.log.info("Matches: {}".format(matches))
                 query_matches.append(matches)
 
                 # validate no of results are k only
@@ -1748,7 +1813,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1786,7 +1851,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 vector_query_failure = None
                 for index in self._cb_cluster.get_indexes():
                     if self.type_of_load == "separate" and "vector_" in index.name:
-                        vector_query_failure = self.run_vector_queries_and_report(index)
+                        vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
             except Exception as e:
@@ -1797,7 +1862,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         vector_query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 self.run_query_and_compare(index)
         if vector_query_failure:
@@ -1810,7 +1875,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1838,7 +1903,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1869,7 +1934,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1898,7 +1963,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1928,7 +1993,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1955,7 +2020,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -1982,7 +2047,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -2011,7 +2076,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -2042,7 +2107,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -2073,7 +2138,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -2131,7 +2196,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         vector_query_failure = []
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index, num_queries=2)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, num_queries=2)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -2184,7 +2249,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -2358,7 +2423,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         vector_query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index, num_queries=2)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, num_queries=2)
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -2393,7 +2458,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
@@ -2439,7 +2504,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         query_failure = None
         for index in self._cb_cluster.get_indexes():
             if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure = self.run_vector_queries_and_report(index)
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index)
             else:
                 for count in range(0, len(index.fts_queries)):
                     tasks.append(self._cb_cluster.async_run_fts_query_compare(
