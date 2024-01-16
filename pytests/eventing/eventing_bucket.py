@@ -617,11 +617,11 @@ class EventingBucket(EventingBaseTest):
                                          collection=self.src_bucket_name)
         # handler should undeploy since src bucket is deleted
         self.wait_for_handler_state(body['appname'], "undeployed")
-        self.deploy_function(body)
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         else:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        self.deploy_function(body)
         if self.non_default_collection:
             self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
