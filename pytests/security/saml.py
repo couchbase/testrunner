@@ -3435,6 +3435,12 @@ class SAMLTest(BaseTestCase):
         self.log.info("Status: {0} --- Content: {1} --- Header: {2}".
                       format(status, content, header))
 
+        # Add the SSO user as an external user to Couchbase
+        self.log.info("STEP 2: Add the SSO user as an external user to Couchbase")
+        body = urllib.parse.urlencode({"roles": "admin"})
+        content = self.rest.add_external_user(self.saml_user, body)
+        self.log.info("Content: {0}".format(content))
+
         # Initiate single sign on
         self.log.info('Initiate single sign on')
         action, SAMLRequest = self.saml_util.saml_auth_url(self.master)
