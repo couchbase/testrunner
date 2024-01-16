@@ -127,7 +127,7 @@ CMDS = {
             "dpkg -P couchbase-server; "
             "rm -rf /var/lib/dpkg/info/couchbase-server*;"
             "dpkg --configure -a; apt-get update; "
-
+            "journalctl --vacuum-size=100M; journalctl --vacuum-time=10d; "
             "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
             "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
             "&& service procps restart) ; "
