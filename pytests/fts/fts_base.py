@@ -3487,6 +3487,12 @@ class CouchbaseCluster:
 
         [self.__nodes.remove(node) for node in to_remove_node]
 
+        for remove_node in to_remove_node:
+            node_services = remove_node.services.split(",")
+
+            if "kv" in node_services:
+                self.__kv_nodes.remove(remove_node)
+
         if master:
             self.__master_node = self.__nodes[0]
 
@@ -6486,7 +6492,8 @@ class FTSBaseTest(unittest.TestCase):
         return container_name
 
 
-    def load_vector_data(self, containers, dataset, use_cbimport=True, percentages_to_resize=[], dims_to_resize=[]):
+    def load_vector_data(self, containers, dataset, use_cbimport=True, percentages_to_resize=[], dims_to_resize=[],
+                         iterations=1):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
@@ -6501,10 +6508,12 @@ class FTSBaseTest(unittest.TestCase):
                                       collection_name, dataset, self.capella_run, False,
                                       use_cbimport=use_cbimport,
                                       dims_for_resize=dims_to_resize,
-                                      percentages_to_resize=percentages_to_resize)
+                                      percentages_to_resize=percentages_to_resize,
+                                      iterations=iterations)
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
+
         return bucketvsdataset
 
     def get_query_vectors(self, dataset_name, dimension=None):
