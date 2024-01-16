@@ -359,7 +359,7 @@ class EventingN1QL(EventingBaseTest):
         dst_bucket = self.rest.get_bucket(self.dst_bucket_name)
         self.shell.execute_cbepctl(dst_bucket, "", "set flush_param", "exp_pager_stime", 5)
         query = "SELECT COUNT(*) from dst_bucket"
-        self.load(self.gens_load, buckets=[self.src_bucket, dst_bucket], flag=self.item_flag, verify_data=False,
+        self.load(self.gens_load, buckets=[self.src_bucket[0], dst_bucket], flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
 
         # Deploying eventing function
