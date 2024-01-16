@@ -3388,7 +3388,7 @@ class SAMLTest(BaseTestCase):
         else:
             self.fail("SSO session creation should have failed for incomplete SAML response")
 
-        self.saml_util.reset_okta_application(self.okta_token, self.master)
+        self.saml_util.reset_okta_application(self.master, self.okta_token)
 
     def test_unsigned_response_uncheck(self):
         """
@@ -3478,7 +3478,7 @@ class SAMLTest(BaseTestCase):
         else:
             self.fail("SSO Log in Failed")
 
-        self.saml_util.reset_okta_application(self.okta_token, self.master)
+        self.saml_util.reset_okta_application(self.master, self.okta_token)
 
     def test_custom_url_node_address(self):
         """
