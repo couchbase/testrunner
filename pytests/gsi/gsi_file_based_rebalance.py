@@ -33,7 +33,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         self.rebalance_type = self.input.param("rebalance_type", True)
         self.stress_factor = self.input.param("stress_factor", 0.5)
         self.disable_shard_affinity = self.input.param("disable_shard_affinity", False)
-        self.index_resident_ratio = int(self.input.param("index_resident_ratio", 20))
+        self.index_resident_ratio = int(self.input.param("index_resident_ratio", 50))
         self.disk_full = self.input.param("disk_full", False)
         self.rand = random.randint(1, 1000000000)
         self.alter_index = self.input.param("alter_index", None)
@@ -642,17 +642,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 time.sleep(10)
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
-                for _ in range(3):
-                    replica_count = random.randint(1, 2)
-                    for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
-                        select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                                   namespace=namespace))
-                        queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                          namespace=namespace,
-                                                                          num_replica=replica_count,
-                                                                          randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                replica_count = random.randint(1, 2)
+                for namespace in self.namespaces:
+                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                    select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                               namespace=namespace))
+                    queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                      namespace=namespace,
+                                                                      num_replica=replica_count,
+                                                                      randomise_replica_count=True)
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
                 self.wait_until_indexes_online()
                 time.sleep(30)
                 self.validate_shard_affinity()
@@ -666,8 +665,9 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                     nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                     to_remove_nodes = nodes_out_list[:2]
                 future_query = executor_main.submit(self.run_query_load, select_queries, event)
-                index_resident_ratio = int(self.input.param("index_resident_ratio", 20))
+                index_resident_ratio = self.index_resident_ratio
                 self.log.info(f"Target index RR is {index_resident_ratio}")
+                time.sleep(120)
                 self.load_until_index_dgm(resident_ratio=index_resident_ratio)
                 if self.disk_full:
                     nodes_dict = self.fill_up_disk(disk_fill_percent=80)
@@ -1405,7 +1405,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             self.log.info(f"space_to_fill is  {space_to_fill}")
             cmd_disk_fill_up = fr"dd if={device} of={storage_dir}/{DUMMY_FILE_NAME} bs=1M count={space_to_fill}"
             self.log.info(f"cmd_disk_fill_up is  {cmd_disk_fill_up}")
-            shell.execute_command(cmd_disk_fill_up)
+            shell.execute_command(cmd_disk_fill_up, timeout=3600)
             nodes_paths_dict[node] = f"rm -f {storage_dir}/{DUMMY_FILE_NAME}"
         return nodes_paths_dict
 
@@ -1433,36 +1433,45 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                 print(f"Disk output as seen on {node.ip} is {disk_output}")
                 time.sleep(60)
 
+    def compute_cluster_avg_rr_index(self):
+        index_rr_percentages = []
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            rest = RestConnection(node)
+            all_stats = rest.get_all_index_stats()
+            index_rr_percentages.append(all_stats['avg_resident_percent'])
+            self.log.info(f"Index avg_resident_ratio for node {node.ip} is {all_stats['avg_resident_percent']}")
+        avg_avg_rr = sum(index_rr_percentages) / len(index_rr_percentages)
+        return avg_avg_rr
+
     def load_until_index_dgm(self, resident_ratio=50):
-        rr_achieved, end_num = False, self.num_of_docs_per_collection
-        while not rr_achieved:
-            for item in self.namespaces:
-                s_item, c_item = item.split(":")[1].split(".")[1], item.split(":")[1].split(".")[2]
-                end_num = end_num + self.num_of_docs_per_collection
-                self.gen_create = SDKDataLoader(num_ops=end_num, percent_create=100,
-                                                percent_update=0, percent_delete=0, scope=s_item,
-                                                collection=c_item, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password,
-                                                start=end_num-self.num_of_docs_per_collection+1, end=end_num)
-                tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
-                                                                batch_size=self.num_of_docs_per_collection,
-                                                                dataset=self.json_template)
-                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                index_rr_percentages = []
-                for node in index_nodes:
-                    rest = RestConnection(node)
-                    all_stats = rest.get_all_index_stats()
-                    index_rr_percentages.append(all_stats['avg_resident_percent'])
-                    self.log.info(f"Index avg_resident_ratio for node {node.ip} is {all_stats['avg_resident_percent']}")
-                avg_avg_rr = sum(index_rr_percentages) / len(index_rr_percentages)
+        rr_achieved, end_num, batch_size = False, self.num_of_docs_per_collection, 10000
+        avg_avg_rr = self.compute_cluster_avg_rr_index()
+        self.log.info(f"Before load_until_index_dgm: Avg of avg_resident_ratio across the cluster is {avg_avg_rr}")
+        if avg_avg_rr > resident_ratio:
+            while not rr_achieved:
+                for item in self.namespaces:
+                    s_item, c_item = item.split(":")[1].split(".")[1], item.split(":")[1].split(".")[2]
+                    end_num = end_num + batch_size
+                    self.gen_create = SDKDataLoader(num_ops=end_num, percent_create=100,
+                                                    percent_update=0, percent_delete=0, scope=s_item,
+                                                    collection=c_item, json_template=self.json_template,
+                                                    output=True, username=self.username, password=self.password,
+                                                    end=end_num, start_seq_num=end_num-batch_size+1)
+                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                    batch_size=batch_size,
+                                                                    dataset=self.json_template, start_from_zero=False)
+                time.sleep(10)
+                avg_avg_rr = self.compute_cluster_avg_rr_index()
                 self.log.info(f"Avg of avg_resident_ratio across the cluster is {avg_avg_rr}")
                 if avg_avg_rr <= resident_ratio:
                     rr_achieved = True
                     self.log.info("Target RR achieved")
-                    break
                 for task in tasks:
                     task.result()
             self.sleep(10)
+        else:
+            self.log.info(f"The avg RR is already below targeted {resident_ratio}. Not loading any more data")
 
     def run_query_load(self, select_queries, event, timeout=1800):
         query_tasks = []
