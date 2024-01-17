@@ -507,7 +507,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                 'isAdHoc': True,
                                 'statement': 'select * from ' + self.query_buckets[0] + ' limit 100;',
                                 'description': 'A N1QL SELECT statement was executed',
-                                'real_userid': {'source': 'local', 'user': 'no_select'},
+                                'real_userid': {'source': 'local', 'user': 'no_query'},
                                 'userAgent': 'Go-http-client/1.1',
                                 'id': self.eventID, 'name': 'SELECT statement'}
         self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
@@ -706,7 +706,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
 
     def test_user_filter(self):
         self.set_audit(disable_user=True)
-        cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_select' -p 'password' -q " % (self.master.ip, self.n1ql_port)
+        cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_query' -p 'password' -q " % (self.master.ip, self.n1ql_port)
         query = 'select * from ' + self.query_buckets[0] + ' limit 100'
         self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
         self.checkFilter(self.unauditedID, self.master)
@@ -726,13 +726,13 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         elif disable_user:
             curl_output = self.shell.execute_command(
                 "%s -u Administrator:password -X POST -d 'auditdEnabled=%s;disabledUsers=%s' %s"
-                % (self.curl_path, 'true', 'no_select/local', self.audit_url))
+                % (self.curl_path, 'true', 'no_query/local', self.audit_url))
         else:
             curl_output = self.shell.execute_command(
                 "%s -u Administrator:password -X POST -d 'auditdEnabled=%s;disabled=' %s"
                 % (self.curl_path, 'true', self.audit_url))
         if "errors" in str(curl_output):
-            self.log.error("Auditing settings were not set correctly")
+            self.log.error(f"Auditing settings were not set correctly: {curl_output}")
         self.sleep(10)
 
     def execute_filtered_query(self):
