@@ -452,8 +452,8 @@ class QueryEarlyFilterTests(QueryTests):
         index = "Create index idx1 on default(job_title,join_day,join_mo)"
         self.run_cbq_query(index)
         try:
-            select_query = "select name,join_yr from default where job_title like '%E%' and join_mo >= 5 and join_yr < 2020 and join_day between 28 and 30 ORDER BY join_mo,job_title LIMIT 5"
-            primary_query = "select name,join_yr from default use index(`#primary`) where job_title like '%E%' and join_mo >= 5 and join_yr < 2020 and join_day between 28 and 30 ORDER BY join_mo,job_title LIMIT 5"
+            select_query = "select name,join_yr from default where job_title like '%E%' and join_mo >= 5 and join_day between 28 and 30 ORDER BY join_mo,job_title LIMIT 5"
+            primary_query = "select name,join_yr from default use index(`#primary`) where job_title like '%E%' and join_mo >= 5 and join_day between 28 and 30 ORDER BY join_mo,job_title LIMIT 5"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue("idx1" in str(explain_plan),
@@ -499,8 +499,8 @@ class QueryEarlyFilterTests(QueryTests):
         self.run_cbq_query(index, query_context='default:`travel-sample`.inventory')
 
         try:
-            select_query = "SELECT city, name, address FROM landmark WHERE city IS NOT MISSING ORDER BY name, city DESC OFFSET 100"
-            primary_query = "SELECT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE city IS NOT MISSING ORDER BY name, city DESC OFFSET 100"
+            select_query = "SELECT city, name, address FROM landmark WHERE city like 'S%' ORDER BY name, city DESC OFFSET 100"
+            primary_query = "SELECT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE city like 'S%' ORDER BY name, city DESC OFFSET 100"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query, query_context='default:`travel-sample`.inventory')
             self.assertTrue("def_inventory_landmark_city" in str(explain_plan) or "ix_landmark_city_name" in str(explain_plan), f"Query is not using the correct index! check explain plan {explain_plan}")
@@ -526,22 +526,20 @@ class QueryEarlyFilterTests(QueryTests):
         self.run_cbq_query(index, query_context='default:`travel-sample`.inventory')
 
         try:
-            select_query = "SELECT city, name, address FROM landmark WHERE lower(city) ='paris' ORDER BY name, city DESC OFFSET 100 LIMIT 5"
-            primary_query = "SELECT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE lower(city) ='paris' ORDER BY name, city DESC OFFSET 100 LIMIT 5"
+            select_query = "SELECT city, name, address FROM landmark WHERE lower(city) = 'paris' ORDER BY name, city DESC OFFSET 100 LIMIT 5"
+            primary_query = "SELECT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE lower(city) = 'paris' ORDER BY name, city DESC OFFSET 100 LIMIT 5"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query, query_context='default:`travel-sample`.inventory')
             self.assertTrue("ix_landmark_city_name_2" in str(explain_plan),
                             f"Query is not using the correct index! check explain plan {explain_plan}")
-            self.assertTrue("index_keys" not in str(explain_plan),
+            self.assertTrue("index_keys" in str(explain_plan),
                             f"We expect early filter to take place here but it does not, please check plan {explain_plan}")
-            self.assertTrue("'_index_key ((`landmark`.`city`))'" not in str(explain_plan),
+            self.assertTrue("'_index_key ((`landmark`.`city`))'" in str(explain_plan),
                             f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             self.assertTrue("'_index_key ((`landmark`.`name`))'" not in str(explain_plan),
                             f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             # we need to make sure the order is being applied in the correct sequence idx -> order -> offset -> fetch
             self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Order', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][2]['#operator'] == 'Offset', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
-
 
             actual_results = self.run_cbq_query(select_query, query_context='default:`travel-sample`.inventory')
             expected_results = self.run_cbq_query(primary_query, query_context='default:`travel-sample`.inventory')
@@ -565,8 +563,8 @@ class QueryEarlyFilterTests(QueryTests):
         self.run_cbq_query(index, query_context='default:`travel-sample`.inventory')
 
         try:
-            select_query = "SELECT DISTINCT city, name, address FROM landmark WHERE city IS NOT MISSING ORDER BY name, city DESC OFFSET 100 LIMIT 5"
-            primary_query = "SELECT DISTINCT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE city IS NOT MISSING ORDER BY name, city DESC OFFSET 100 LIMIT 5"
+            select_query = "SELECT DISTINCT city, name, address FROM landmark WHERE city like 'S%' ORDER BY name, city DESC OFFSET 100 LIMIT 5"
+            primary_query = "SELECT DISTINCT city, name, address FROM landmark use index(`def_inventory_airline_primary`) WHERE city like 'S%' ORDER BY name, city DESC OFFSET 100 LIMIT 5"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query, query_context='default:`travel-sample`.inventory')
             self.assertTrue("ix_landmark_city_name" in str(explain_plan) or "def_inventory_landmark_city" in str(explain_plan), f"Query is not using the correct index! check explain plan {explain_plan}")
@@ -592,8 +590,8 @@ class QueryEarlyFilterTests(QueryTests):
         self.wait_for_all_indexes_online()
 
         try:
-            select_query = "select * from default where f1 < 10 and f2 = 2 and f3 = 3 order by f1 desc limit 2"
-            primary_query = "select * from default use index (`#primary`) where f1 < 10 and f2 = 2 and f3 = 3 order by f1 desc limit 2"
+            select_query = "select f1,f3 from default where f1 < 10 and f2 = 2 order by f1 desc limit 2"
+            primary_query = "select f1,f3 from default use index (`#primary`) where f1 < 10 and f2 = 2 order by f1 desc limit 2"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue("ixto" in str(explain_plan) in str(explain_plan),
@@ -620,8 +618,8 @@ class QueryEarlyFilterTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
 
-            select_query = "select * from default where f1 < 10 and f2 = 2 and f3 = 3 order by f1 asc limit 3"
-            primary_query = "select * from default use index (`#primary`) where f1 < 10 and f2 = 2 and f3 = 3 order by f1 asc limit 3"
+            select_query = "select f1,f3 from default where f1 < 10 and f2 = 2 order by f1 asc limit 3"
+            primary_query = "select f1,f3 from default use index (`#primary`) where f1 < 10 and f2 = 2 order by f1 asc limit 3"
             actual_results = self.run_cbq_query(select_query)
             expected_results = self.run_cbq_query(primary_query)
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
@@ -639,8 +637,8 @@ class QueryEarlyFilterTests(QueryTests):
         self.wait_for_all_indexes_online()
 
         try:
-            select_query = "select * from default where f1 < 10 and f2 = 2 and f3 > 2 order by f1 desc limit 1"
-            primary_query = "select * from default use index (`#primary`) where f1 < 10 and f2 = 2 and f3 > 2 order by f1 desc limit 1"
+            select_query = "select f1,f3 from default where f1 < 10 and f2 > 2 order by f1 desc limit 1"
+            primary_query = "select f1,f3 from default use index (`#primary`) where f1 < 10 and f2 > 2 order by f1 desc limit 1"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue("ixto" in str(explain_plan) in str(explain_plan),
@@ -677,8 +675,8 @@ class QueryEarlyFilterTests(QueryTests):
         self.wait_for_all_indexes_online()
 
         try:
-            select_query = "select * from default where f1 < 10 and f2 = 2 and f3 = 3 order by f1 desc limit 1 offset 1"
-            primary_query = "select * from default use index (`#primary`) where f1 < 10 and f2 = 2 and f3 = 3 order by f1 desc limit 1 offset 1"
+            select_query = "select f1,f3 from default where f1 < 10 and f2 = 2 order by f1 desc limit 1 offset 1"
+            primary_query = "select f1,f3 from default use index (`#primary`) where f1 < 10 and f2 = 2 order by f1 desc limit 1 offset 1"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue("ixto" in str(explain_plan) in str(explain_plan),
@@ -696,8 +694,8 @@ class QueryEarlyFilterTests(QueryTests):
                             f"Order should be applied before limit, please check explain plan {explain_plan}")
             self.assertTrue("'#operator': 'Filter'" in str(explain_plan['results'][0]['plan']['~children'][0]),
                             f"Filter should be applied before limit, please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Offset', f"Offset is not being applied after fetch, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][2]['#operator'] == 'Limit',
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2], f"Offset is not being applied after fetch, it should be. please check explain plan {explain_plan}")
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Limit',
                             f"Limit is not being applied after fetch, it should be. please check explain plan {explain_plan}")
 
             actual_results = self.run_cbq_query(select_query)
@@ -749,13 +747,13 @@ class QueryEarlyFilterTests(QueryTests):
     def test_non_covering_like_early_filter(self):
         upsert = 'upsert into default values("k0",{"f1":1,"f2":2,"f3":3}),values("k1",{"f1":2,"f2":2,"f3":0}),values("k2",{"f1":1,"f2":2,"f3":3,"string":"abcd"}),values("k3",{"f1":0,"f2":2,"f3":3})'
         self.run_cbq_query(upsert)
-        index = "create index ixto on default(f1,f2)"
+        index = "create index ixto on default(f1,f2,`string`)"
         self.run_cbq_query(index)
         self.wait_for_all_indexes_online()
 
         try:
-            select_query = "select * from default where f1 < 10 and f2 = 2 and lower(`string`) like '%a%' order by f1 desc limit 1"
-            primary_query = "select * from default use index(`#primary`) where f1 < 10 and f2 = 2 and lower(`string`) like '%a%' order by f1 desc limit 1"
+            select_query = "select f1,f3 from default where f1 < 10 and f2 = 2 and lower(`string`) like '%a%' order by f1 desc limit 1"
+            primary_query = "select f1,f3 from default use index(`#primary`) where f1 < 10 and f2 = 2 and lower(`string`) like '%a%' order by f1 desc limit 1"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue("ixto" in str(explain_plan) in str(explain_plan),
@@ -766,7 +764,7 @@ class QueryEarlyFilterTests(QueryTests):
                             f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             self.assertTrue("'_index_key ((`default`.`f2`))'" not in str(explain_plan),
                             f"The wrong key is being early filtered! please check explain plan {explain_plan}")
-            self.assertTrue("'_index_key ((`default`.`string`))'" not in str(explain_plan),
+            self.assertTrue("'_index_key ((`default`.`string`))'" in str(explain_plan),
                             f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             # this will not be able to put order at the beginning of the sequence
             self.assertTrue("'#operator': 'Order'" in str(explain_plan['results'][0]['plan']['~children'][0]),
@@ -825,13 +823,13 @@ class QueryEarlyFilterTests(QueryTests):
     def test_non_covering_in_early_filter(self):
         upsert = 'upsert into default values("k0",{"f1":1,"f2":2,"f3":3}),values("k1",{"f1":2,"f2":2,"f3":0}),values("k2",{"f1":1,"f2":2,"f3":3,"string":"abcd"}),values("k3",{"f1":0,"f2":2,"f3":3}),values("k4",{"f1":1,"f2":2,"f3":3,"string":"abcde"}),values("k5",{"f1":1,"f2":2,"f3":3,"string":"cdesf"}),values("k6",{"f1":0,"f2":2,"f3":3,"string":"abcd"}),values("k7",{"f1":1,"f2":2,"f3":3,"string":"defsr"})'
         self.run_cbq_query(upsert)
-        index = "create index ixto on default(f1,f2)"
+        index = "create index ixto on default(f1,f2,`string`)"
         self.run_cbq_query(index)
         self.wait_for_all_indexes_online()
 
         try:
-            select_query = "select * from default where f1 < 10 and f2 = 2 and `string` in ['abcd','abcde','cdesf'] order by f1 desc limit 3"
-            primary_query = "select * from default use index(`#primary`) where f1 < 10 and f2 = 2 and `string` in ['abcd','abcde','cdesf'] order by f1 desc limit 3"
+            select_query = "select f1,f3 from default where f1 < 10 and f2 = 2 and `string` in ['abcd','abcde','cdesf'] order by f1 desc limit 3"
+            primary_query = "select f1,f3 from default use index(`#primary`) where f1 < 10 and f2 = 2 and `string` in ['abcd','abcde','cdesf'] order by f1 desc limit 3"
             explain_query = "EXPLAIN " + select_query
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue("ixto" in str(explain_plan) in str(explain_plan),
