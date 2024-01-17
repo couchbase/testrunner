@@ -233,7 +233,7 @@ class QueryNewTuqTests(QueryTests):
                           'SELECT $str0._last_name as DATABASE ?': 'syntax error',
                           'SELECT $str0 AS NULL FROM {0}': 'syntax error',
                           'SELECT $str1 as $str0, $str0 FROM {0}':
-                              'Duplicate result alias name'}
+                              "Duplicate result alias 'name'"}
 
         if self.does_test_meet_server_version(6, 5, 0):
             queries_errors['SELECT test.$obj0 as points FROM {0} AS TEST ' +
