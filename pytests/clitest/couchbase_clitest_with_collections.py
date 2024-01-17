@@ -822,7 +822,8 @@ class XdcrCLITest(CliBaseTest):
                 for stats in col_stats:
                     if isinstance(col_stats, str):
                         col_stats = col_stats.split(",")
-                    for key, value in stats:
+                    for stat in stats:
+                        key, value = stat.split(" ")
                         if self.custom_scopes and not self.custom_collections:
                             break
                         if self.custom_collections or self.buckets[0].name == "default":
