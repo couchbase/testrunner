@@ -476,9 +476,10 @@ class QueryMiscTests(QueryTests):
             bucket_doc_map = {self.default_bucket_name: 250000}
             self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
 
-            end_time = time.time() + 60
+            end_time = time.time() + 120
             cpu_rdy = False
             while time.time() < end_time:
+                self.sleep(1)
                 cluster_stats = self.rest.get_cluster_stats()
                 node_stats = cluster_stats[str(self.master.ip) + ":8091"]
                 cpu_utilization = node_stats['cpu_utilization']
@@ -544,18 +545,18 @@ class QueryMiscTests(QueryTests):
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 3000)
-                self.assertEqual(error['msg'],  f"syntax error - line 1, column 8, near 'select', at: {keyword} (reserved word)")
+                self.assertEqual(error['msg'],  f"syntax error - line 1, column 8, near 'select ', at: {keyword} (reserved word)")
             # reserved keyword in where clause
             try:
                 result = self.run_cbq_query(f"select * from {self.temp_bucket_name} where {keyword} = 0")
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 3000)
-                self.assertEqual(error['msg'],  f"syntax error - line 1, column 33, near 'om {self.temp_bucket_name} where', at: {keyword} (reserved word)")
+                self.assertEqual(error['msg'],  f"syntax error - line 1, column 33, near '...m {self.temp_bucket_name} where ', at: {keyword} (reserved word)")
             # reserved keyword in from clause
             try:
                 result = self.run_cbq_query(f"select * from {keyword}")
             except CBQError as ex:
                 error = self.process_CBQE(ex)
                 self.assertEqual(error['code'], 3000)
-                self.assertEqual(error['msg'],  f"syntax error - line 1, column 15, near 'select * from', at: {keyword} (reserved word)")
+                self.assertEqual(error['msg'],  f"syntax error - line 1, column 15, near 'select * from ', at: {keyword} (reserved word)")
