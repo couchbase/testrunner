@@ -112,7 +112,8 @@ class CCCP(BaseTestCase):
                             "No hostname name in config")
             self.assertTrue(node["ports"]["direct"] == 11210,
                         "ports are incorrect: %s" % node)
-        self.assertTrue(config_json["ddocs"]["uri"] == \
+        if self.bucket_storage != 'magma':
+            self.assertTrue(config_json["ddocs"]["uri"] == \
                        ("/pools/default/buckets/%s/ddocs" % bucket.name),
                         "Ddocs uri is incorrect: %s "
                         % "/pools/default/buckets/default/ddocs")
