@@ -426,7 +426,7 @@ class QueryANSIMERGETests(QueryTests):
             self.log.info(f"actual plan: {actual_result['results'][0]['plan']['~children']}")
             self.assertEqual(actual_result['results'][0]['plan']['~children'][0]['index'],
                              'name2', "The incorrect index is being used")
-            self.assertEqual(actual_result['results'][0]['plan']['~children'][2]['~child']['~children'][1][
+            self.assertEqual(actual_result['results'][0]['plan']['~children'][2]['~child']['~children'][0][
                                  '~child']['~children'][0]['index'],
                              'name', "The incorrect index is being used")
 
