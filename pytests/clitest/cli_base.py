@@ -316,6 +316,7 @@ class CliBaseTest(BaseTestCase):
                         if message in line:
                             return True
             log.info("Did not receive expected error message `ERROR: %s`", message)
+            log.info("The command output was:%s", output)
             return False
         else:
             for line in output:
