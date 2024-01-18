@@ -30,6 +30,7 @@ from testconstants import INDEX_QUOTA, FTS_QUOTA, \
     CLUSTER_QUOTA_RATIO, GCP_AUTH_PATH
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
+from tasks.future import Future
 
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
@@ -1551,20 +1552,24 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     cli_command_location=self.cli_command_location,
                     cb_version=self.cb_version,
                     num_shards=num_shards)
-                self.sleep(5)
+                self.wait_for_DCP_stream_start(backup_result)
                 conn.kill_erlang(self.os_name)
-                output = backup_result.result(timeout=600)
-                self.log.info(str(output))
-                status, output, message = self.backup_list()
-                if not status:
-                    self.fail(message)
-                for line in output:
-                    if "enterprise" in line:
-                        continue
-                    if re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                        old_backup_name = re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
-                                                    r"_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                        self.log.info("Backup name before resume: " + old_backup_name)
+                try:
+                    output = backup_result.result(timeout=600)
+                    self.log.info(str(output))
+                    status, output, message = self.backup_list()
+                    if not status:
+                        self.fail(message)
+                    for line in output:
+                        if "enterprise" in line:
+                            continue
+                        if re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                            old_backup_name = re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                                                        r"_\d{2}.\d+-\d{2}_\d{2}", line).group()
+                            self.log.info("Backup name before resume: " + old_backup_name)
+                except Exception as e:
+                    conn.start_couchbase()
+                    raise(e)
                 conn.start_couchbase()
                 ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
                 if not ready:
@@ -2127,6 +2132,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if index_found < len(self.gsi_names):
                 self.fail("GSI indexes are not restored in bucket {0}".format(bucket.name))
         shell.disconnect()
+
+    def wait_for_DCP_stream_start(self, backup_result):
+        """
+        Waiting for an async backup to start streaming DCP.
+        backup_result is the future object of an async backup (the output of async_backup_cluster)
+        """
+        log_directory = self.backupset.objstore_staging_directory + "/*/logs" if self.objstore_provider else self.backupset.directory + "/logs"
+        command = "tail -n 1 {}/backup-*.log | grep ' (DCP) '"\
+                                                   .format(log_directory)
+        backup_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        Future.wait_until(
+            lambda: (bool(backup_client.execute_command(command)[0]) or backup_result.done()),
+            lambda x: x is True,
+            200,
+            interval_time=0.1,
+            exponential_backoff=False)
+             # If the backup finished and we never saw a DCP connection something's not right.
+        if backup_result.done():
+            self.fail("Never found evidence of open DCP stream in backup logs.")
 
     def _delete_repo(self):
         # We should remove all the remote objects as well as the files in the staging directory

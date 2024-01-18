@@ -2491,23 +2491,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
                                                           cb_version=self.cb_version)
-        self.sleep(10)
+        self.wait_for_DCP_stream_start(backup_result)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
-        output = backup_result.result(timeout=200)
-        self.log.info(str(output))
-        status, output, message = self.backup_list()
-        if not status:
-            self.fail(message)
-        if output and output[0]:
-            bk_info = json.loads(output[0])
-            bk_info = bk_info["repos"][0]
-        else:
-            return False, "No output content"
-        if bk_info["backups"]:
-            for i in range(0, len(bk_info["backups"])):
-                old_backup_name = bk_info["backups"][i]["date"]
-                self.log.info("Backup name before purge: " + old_backup_name)
+        try:
+            output = backup_result.result(timeout=200)
+            self.log.info(str(output))
+            status, output, message = self.backup_list()
+            if not status:
+                self.fail(message)
+            if output and output[0]:
+                bk_info = json.loads(output[0])
+                bk_info = bk_info["repos"][0]
+            else:
+                conn.start_couchbase()
+                return False, "No output content"
+            if bk_info["backups"]:
+                for i in range(0, len(bk_info["backups"])):
+                    old_backup_name = bk_info["backups"][i]["date"]
+                    self.log.info("Backup name before purge: " + old_backup_name)
+        except Exception as e:
+            conn.start_couchbase()
+            raise e
         conn.start_couchbase()
         conn.disconnect()
         self.sleep(30)
