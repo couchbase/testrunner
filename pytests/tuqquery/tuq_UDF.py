@@ -623,7 +623,7 @@ class QueryUDFTests(QueryTests):
                 "CREATE OR REPLACE FUNCTION func1(nameval) {{ (select * from default:default.{0}.{1} where name = nameval) }}".format(
                     self.scope, self.collections[0]))
             results = self.run_cbq_query("EXECUTE FUNCTION func1('old hotel')")
-            diffs = DeepDiff(results['results'], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}], ignore_order=True)
+            diffs = DeepDiff(results['results'][0], [{'test1': {'name': 'old hotel', 'type': 'hotel'}}, {'test1': {'name': 'old hotel', 'nested': {'fields': 'fake'}}}, {'test1': {'name': 'old hotel', 'numbers': [1, 2, 3, 4]}}], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         except Exception as e:
