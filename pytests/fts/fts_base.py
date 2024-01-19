@@ -6485,7 +6485,8 @@ class FTSBaseTest(unittest.TestCase):
 
         return container_name
 
-    def load_vector_data(self, containers, dataset, use_cbimport=True):
+
+    def load_vector_data(self, containers, dataset, use_cbimport=True, percentages_to_resize=[], dims_to_resize=[]):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
@@ -6497,19 +6498,43 @@ class FTSBaseTest(unittest.TestCase):
                     collection_name = collection['name']
                     vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
                                       self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                      collection_name, dataset, self.capella_run, False, use_cbimport)
+                                      collection_name, dataset, self.capella_run, False,
+                                      use_cbimport=use_cbimport,
+                                      dims_for_resize=dims_to_resize,
+                                      percentages_to_resize=percentages_to_resize)
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
         return bucketvsdataset
 
-    def get_query_vectors(self, dataset_name):
+    def get_query_vectors(self, dataset_name, dimension=None):
         ds = VectorDataset(dataset_name)
         use_hdf5_datasets = True
         if ds.dataset_name in ds.supported_sift_datasets:
             use_hdf5_datasets = False
         ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="query")
+
+        if dimension:
+            import numpy as np
+            ds.query_vecs = list(ds.query_vecs)
+
+            for index in range(len(ds.query_vecs)):
+                vector = ds.query_vecs[index]
+                current_dim = len(vector)
+
+                # Resize the vector to the desired dimension
+                if current_dim < dimension:
+                    # If the current dimension is less than the desired dimension, repeat the values
+                    repeat_values = dimension - current_dim
+                    repeated_values = np.tile(vector, ((dimension + current_dim - 1) // current_dim))
+                    ds.query_vecs[index] = repeated_values[:dimension]
+                elif current_dim > dimension:
+                    # If the current dimension is greater than the desired dimension, truncate the vector
+                    ds.query_vecs[index] = vector[:dimension]
+
         print(f"First Query vector:{str(ds.query_vecs[0])}")
+        print(f"Length of first query vector: {len(ds.query_vecs[0])}")
+
         return ds.query_vecs
 
     def get_groundtruth_file(self, dataset_name):
@@ -6521,7 +6546,7 @@ class FTSBaseTest(unittest.TestCase):
         print(f"First groundtruth vector:{str(ds.neighbors_vecs[0])}")
         return ds.neighbors_vecs
 
-    def create_faiss_index_from_train_data(self, dataset_name, index_type="IndexFlatL2"):
+    def create_faiss_index_from_train_data(self, dataset_name, index_type="IndexFlatL2", dimension=None):
         import faiss
         import numpy as np
 
@@ -6538,6 +6563,25 @@ class FTSBaseTest(unittest.TestCase):
             if ds.dataset_name in ds.supported_sift_datasets:
                 use_hdf5_datasets = False
             ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="train")
+            if dimension:
+                ds.train_vecs = list(ds.train_vecs)
+
+                for index in range(len(ds.train_vecs)):
+                    vector = ds.train_vecs[index]
+                    current_dim = len(vector)
+
+                    # Resize the vector to the desired dimension
+                    if current_dim < dimension:
+                        # If the current dimension is less than the desired dimension, repeat the values
+                        repeat_values = dimension - current_dim
+                        repeated_values = np.tile(vector, ((dimension + current_dim - 1) // current_dim))
+                        ds.train_vecs[index] = repeated_values[:dimension]
+                    elif current_dim > dimension:
+                        # If the current dimension is greater than the desired dimension, truncate the vector
+                        ds.train_vecs[index] = vector[:dimension]
+
+            self.log.info(f"Length of first doc vector to be added to faiss: {len(ds.train_vecs[0])}")
+
             if index_type == "IndexFlatL2":
                 faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
             else:
@@ -6546,6 +6590,6 @@ class FTSBaseTest(unittest.TestCase):
             index_vectors = np.array(ds.train_vecs).astype('float32')
             faiss.normalize_L2(index_vectors)
             faiss_index.add(index_vectors)
-            faiss.write_index(faiss_index, file_path)
+            # faiss.write_index(faiss_index, file_path)
 
         return faiss_index

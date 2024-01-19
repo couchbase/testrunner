@@ -20,9 +20,9 @@ class VectorSearch(FTSBaseTest):
         self.__init_logger()
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 10)
-        self.vector_dataset = self.input.param("vector_dataset", "['siftsmall']")
+        self.vector_dataset = self.input.param("vector_dataset", "siftsmall")
         if not isinstance(self.vector_dataset, list):
-            self.vector_dataset = ast.literal_eval(self.vector_dataset)
+            self.vector_dataset = [self.vector_dataset]
         self.dimension = self.input.param("dimension", 128)
         self.similarity = self.input.param("similarity", "l2_norm")
         self.max_threads = 1000
@@ -162,7 +162,8 @@ class VectorSearch(FTSBaseTest):
                 self.fail("Failed to update doc: {}".format(doc_key))
 
     def run_vector_query(self, query, index, dataset, neighbours=None,
-                         validate_result_count=True, perform_faiss_validation=False):
+                         validate_result_count=True, perform_faiss_validation=False,
+                         validate_fts_with_faiss=False):
         self.log.info("*" * 20 + f" Running Query # {self.count} - on index {index.name} " + "*" * 20)
         self.count += 1
         if isinstance(query, str):
@@ -198,6 +199,26 @@ class VectorSearch(FTSBaseTest):
                 self.log.info({"query": query, "reason": f"N1QL hits =  {n1ql_hits}, FTS hits = {hits}"})
 
         recall_and_accuracy = {}
+
+        if validate_fts_with_faiss:
+            query_vector = query['knn'][0]['vector']
+            fts_matches = []
+            for i in range(self.k):
+                fts_matches.append(matches[i]['fields']['sno'] - 1)
+
+            faiss_results = self.perform_validations_from_faiss(matches, index, query_vector, neighbours)
+
+            self.log.info("*" * 5 + f"Query RESULT # {self.count - 1}" + "*" * 5)
+            self.log.info(f"FTS MATCHES: {fts_matches}")
+            self.log.info(f"FAISS MATCHES: {faiss_results}")
+
+            fts_faiss_accuracy, fts_faiss_recall = self.compare_results(faiss_results, fts_matches, "faiss",
+                                                                    "fts")
+            recall_and_accuracy['fts_faiss_accuracy'] = fts_faiss_accuracy
+            recall_and_accuracy['fts_faiss_recall'] = fts_faiss_recall
+
+            self.log.info("*" * 30)
+
         if neighbours is not None:
             query_vector = query['knn'][0]['vector']
             fts_matches = []
@@ -1171,6 +1192,74 @@ class VectorSearch(FTSBaseTest):
                     self.fail(
                         "Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                         format(n1ql_hits, hits, update_doc_no))
+
+    def test_vector_search_different_dimensions(self):
+
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+
+        per_to_resize = eval(TestInputSingleton.input.param("per_to_resize", "[]"))
+        dims_to_resize = eval(TestInputSingleton.input.param("dims_to_resize", "[]"))
+        perform_faiss_validation = self.input.param("perform_faiss_validation", False)
+
+        print(f"Percentages to resize {per_to_resize}")
+        print(f"Dimensions to resize {dims_to_resize}")
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset,
+                                                percentages_to_resize=per_to_resize,
+                                                dims_to_resize=dims_to_resize)
+
+        indexes = []
+        for index, dim in enumerate(dims_to_resize):
+            vector_fields = {"dims": dim, "similarity": self.similarity}
+
+            index_name = "i{}".format(index)
+            idx = [(index_name, "b1.s1.c1")]
+            index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
+                                                        vector_fields=vector_fields,
+                                                        create_vector_index=True,
+                                                        extra_fields=[{"sno": "number"}])
+
+            indexes.append(index[0])
+            if perform_faiss_validation:
+                index[0]['dataset'] = bucketvsdataset['bucket_name']
+                index_obj = index[0]['index_obj']
+                index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], dimension=dim)
+
+        self.sleep(120, "Wait before running queries")
+
+        for idx, index in enumerate(indexes):
+            index['dataset'] = bucketvsdataset['bucket_name']
+            self.log.info("Running queries for index: {}".format(index['name']))
+            faiss_accuracy = []
+            faiss_recall = []
+            queries = self.get_query_vectors(index['dataset'], dimension=dims_to_resize[idx])
+            for q in queries[:self.num_queries]:
+                index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                           'faiss_recall': 0, 'fts_faiss_accuracy': 0, 'fts_faiss_recall': 0}
+                self.query['knn'][0]['vector'] = q.tolist()
+
+                n1ql_hits, hits, matches, recall_and_accuracy = self.run_vector_query(query=self.query, index=index['index_obj'],
+                                                                                    dataset=index['dataset'],
+                                                                                    validate_fts_with_faiss=perform_faiss_validation)
+                if n1ql_hits != self.k or hits != self.k:
+                    self.fail("Could not get expected number of hits, Expected: {}, N1QL hits: {}, " \
+                              " FTS query hits: {}".format(self.k, n1ql_hits, hits))
+
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['fts_faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['fts_faiss_recall'])
+
+
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            if perform_faiss_validation:
+                index_stats['fts_faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['fts_faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+                self.log.info("Index Stats: {}".format(index_stats))
+
+
 
     def test_vector_search_knn_combination_queries(self):
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
