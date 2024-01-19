@@ -192,8 +192,8 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                                                         log_name="http_access.log",
                                                         timeout=10,
                                                         print_matches=False)
+        total_successful_prereps = 0
         if count > 0:
-            total_successful_prereps = 0
             for call in prerep_calls:
                 call_datetime = self._extract_timestamp(call)
                 # Ignore calls that happened before the test started
