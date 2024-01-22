@@ -237,12 +237,13 @@ class QuerySeqScanTests(QueryTests):
             self.fail("Query did not fail as expected")
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 4000)
-            self.assertEqual(error['msg'], f'No index available on keyspace `default`:`{self.bucket}` that matches your query. Use CREATE PRIMARY INDEX ON `default`:`{self.bucket}` to create a primary index, or check that your expected index is online.')
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on `default`:`{self.bucket}` to allow the statement to run.')
 
     def test_rbac_collection(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
         self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1 IF not exists')
+        self.sleep(3)
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
@@ -268,8 +269,8 @@ class QuerySeqScanTests(QueryTests):
             self.fail("Query did not fail as expected")
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 4000)
-            self.assertEqual(error['msg'], f'No index available on keyspace `default`:`{self.bucket}`.`scope1`.`collection2` that matches your query. Use CREATE PRIMARY INDEX ON `default`:`{self.bucket}`.`scope1`.`collection2` to create a primary index, or check that your expected index is online.')
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:default.scope1.collection2 to allow the statement to run.')
 
     def test_rbac_bucket(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
@@ -374,5 +375,5 @@ class QuerySeqScanTests(QueryTests):
             self.fail("Query did not fail as expected")
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 4000)
-            self.assertEqual(error['msg'], f'No index available on keyspace `default`:`{self.bucket}` that matches your query. Use CREATE PRIMARY INDEX ON `default`:`{self.bucket}` to create a primary index, or check that your expected index is online.')
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
