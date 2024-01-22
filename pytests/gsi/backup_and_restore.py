@@ -290,7 +290,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     indexes_dict[namespace] = [f"`{index['name']}`"]
         for namespace, indexes in indexes_dict.items():
             build_task = self.async_build_index(namespace, indexes)
-            build_task.result()
+            try:
+                build_task.result()
+            except Exception as err:
+                if "transient error" in str(err):
+                    self.log.info("Build index encountered transient error. Ignoring the error")
+                else:
+                    raise Exception("Build index failure")
 
     def test_steady_state_backup_restore_with_include_scopes(self):
         for bucket in self.buckets:
