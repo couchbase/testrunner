@@ -1460,7 +1460,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                     end=end_num, start_seq_num=end_num-batch_size+1)
                     tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                                     batch_size=batch_size,
-                                                                    dataset=self.json_template, start_from_zero=False)
+                                                                    dataset=self.json_template)
                 time.sleep(10)
                 avg_avg_rr = self.compute_cluster_avg_rr_index()
                 self.log.info(f"Avg of avg_resident_ratio across the cluster is {avg_avg_rr}")
