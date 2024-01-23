@@ -951,6 +951,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             self._create_restore_cluster()
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
+                        if ram_size - bucket_size < 1:
+                            bucket_size = ram_size - 1
                         rest_conn.create_bucket(bucket=bucket_name,
                                                 ramQuotaMB=int(bucket_size),
                                                 replicaNumber=replicas,

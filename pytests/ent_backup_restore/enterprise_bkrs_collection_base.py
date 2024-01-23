@@ -1097,7 +1097,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
                         if ram_size - bucket_size < 1:
-                            bucket_size -= 1
+                            bucket_size = ram_size - 1
                         rest_conn.create_bucket(bucket=bucket_name,
                                                 ramQuotaMB=int(bucket_size),
                                                 replicaNumber=replicas,
@@ -1131,7 +1131,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                         BucketOperationHelper.delete_bucket_or_assert( \
                             self.backupset.restore_cluster_host, bucket.name, self)
                     if ram_size - bucket_size < 1:
-                        bucket_size -= 1
+                        bucket_size = ram_size - 1
                     rest_conn.create_bucket(bucket=bucket_name,
                                             ramQuotaMB=int(bucket_size),
                                             replicaNumber=replicas,
