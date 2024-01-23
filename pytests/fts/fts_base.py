@@ -6485,7 +6485,7 @@ class FTSBaseTest(unittest.TestCase):
 
         return container_name
 
-    def load_vector_data(self, containers, dataset):
+    def load_vector_data(self, containers, dataset, use_cbimport=True):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
@@ -6497,7 +6497,7 @@ class FTSBaseTest(unittest.TestCase):
                     collection_name = collection['name']
                     vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
                                       self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                      collection_name, dataset, self.capella_run, False)
+                                      collection_name, dataset, self.capella_run, False, use_cbimport)
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)

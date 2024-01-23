@@ -276,7 +276,7 @@ class CouchbaseOps:
 class VectorLoader:
 
     def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False,
-                 create_bucket_struct=False):
+                 create_bucket_struct=False, use_cbimport=False):
 
         self.node = node
         self.username = username
@@ -289,6 +289,7 @@ class VectorLoader:
         self.scope = scope
         self.collection = collection
         self.capella_run = capella
+        self.use_cbimport = use_cbimport
         self.create_bucket_struct = create_bucket_struct
         self.docker_client = docker.from_env()
 
@@ -319,7 +320,7 @@ class VectorLoader:
                 dataset_name = self.dataset[0]
                 docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
                                     f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
-                                    f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct}"
+                                    f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct} -i {self.use_cbimport}"
 
                 # Run the Docker pull command
                 try:
