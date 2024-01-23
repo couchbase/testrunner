@@ -9,11 +9,14 @@ from .fts_base import FTSBaseTest
 from .fts_backup_restore import FTSIndexBackupClient
 from lib.membase.api.rest_client import RestConnection
 import copy
-
+import logger
+import logging
 
 class VectorSearch(FTSBaseTest):
     def setUp(self):
         self.input = TestInputSingleton.input
+        self.log = logger.Logger.get_logger()
+        self.__init_logger()
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 10)
         self.vector_dataset = self.input.param("vector_dataset", "['siftsmall']")
@@ -37,17 +40,31 @@ class VectorSearch(FTSBaseTest):
     def suite_tearDown(self):
         super(VectorSearch, self).suite_tearDown()
 
+    def __init_logger(self):
+        if self.input.param("log_level", None):
+            self.log.setLevel(level=0)
+            for hd in self.log.handlers:
+                if str(hd.__class__).find('FileHandler') != -1:
+                    hd.setLevel(level=logging.DEBUG)
+                else:
+                    hd.setLevel(
+                        level=getattr(
+                            logging,
+                            self.input.param(
+                                "log_level",
+                                None)))
+
     def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
         common_elements = set(listA) & set(listB)
 
         not_common_elements = set(listA) ^ set(listB)
-        print("Elements not common in both lists:", not_common_elements)
+        self.log.info("Elements not common in both lists:", not_common_elements)
 
         percentage_exist = (len(common_elements) / len(listB)) * 100
-        print(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
+        self.log.info(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
 
         percentage_exist = (len(common_elements) / len(listA)) * 100
-        print(f"Percentage of elements in {nameA} that exist in {nameB}: {percentage_exist:.2f}%")
+        self.log.info(f"Percentage of elements in {nameA} that exist in {nameB}: {percentage_exist:.2f}%")
 
     def perform_validations_from_faiss(self, matches, index, query_vector, neighbours):
         import faiss
@@ -60,8 +77,8 @@ class VectorSearch(FTSBaseTest):
             faiss_doc_ids = [i for i in ann[0]]
             fts_doc_ids = [matches[i]['fields']['sno'] -1 for i in range(self.k)]
 
-            print(f"Faiss docs sno -----> {faiss_doc_ids}")
-            print(f"FTS docs sno -------> {fts_doc_ids}")
+            self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
+            self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
 
             fts_hits = len(matches)
             if len(faiss_doc_ids) != int(fts_hits):
@@ -86,7 +103,7 @@ class VectorSearch(FTSBaseTest):
                     # self.fail("Validation failed with FAISS index")
             return faiss_doc_ids
         except Exception as e:
-            print(f"Error {str(e)}")
+            self.log.info(f"Error {str(e)}")
 
     def get_docs(self, num_items, source_bucket_idx=0):
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
@@ -132,16 +149,16 @@ class VectorSearch(FTSBaseTest):
             doc_key = doc_copy["id"]
 
             upsert_query = f'''UPSERT INTO {source_bucket} (KEY, VALUE) VALUES ('{doc_key}', {doc_copy});'''
-            print("\nUPSERT QUERY: {}\n".format(upsert_query))
+            self.log.info("\nUPSERT QUERY: {}\n".format(upsert_query))
             res = self._cb_cluster.run_n1ql_query(upsert_query)
-            print("\n\nUpsert query result: {}\n\n".format(res))
+            self.log.info("\n\nUpsert query result: {}\n\n".format(res))
             status = res['status']
             if not (status == 'success'):
                 self.fail("Failed to update doc: {}".format(doc_key))
 
     def run_vector_query(self, query, index, dataset, neighbours=None,
                          validate_result_count=True, perform_faiss_validation=False):
-        print("*" * 20 + f" Running Query # {self.count} - on index {index.name} " + "*" * 20)
+        self.log.info("*" * 20 + f" Running Query # {self.count} - on index {index.name} " + "*" * 20)
         self.count += 1
         if isinstance(query, str):
             query = json.loads(query)
@@ -150,14 +167,14 @@ class VectorSearch(FTSBaseTest):
         n1ql_hits = -1
         if self.run_n1ql_search_function:
             n1ql_query = f"SELECT COUNT(*) FROM `{index._source_name}`.{index.scope}.{index.collections[0]} AS t1 WHERE SEARCH(t1, {query});"
-            print(f" Running n1ql Query - {n1ql_query}")
+            self.log.info(f" Running n1ql Query - {n1ql_query}")
             n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
             if n1ql_hits == 0:
                 n1ql_hits = -1
             self.log.info("FTS Hits for N1QL query: %s" % n1ql_hits)
 
         # Run fts query
-        print(f" Running FTS Query - {query}")
+        self.log.info(f" Running FTS Query - {query}")
         hits, matches, time_taken, status = index.execute_query(query=query['query'], knn=query['knn'],
                                                                 explain=query['explain'], return_raw_hits=True,
                                                                 fields=query['fields'])
@@ -184,11 +201,11 @@ class VectorSearch(FTSBaseTest):
             if perform_faiss_validation:
                 faiss_results = self.perform_validations_from_faiss(matches, index, query_vector, neighbours)
 
-            print("*"*5 + f"Query RESULT # {self.count}" + "*"*5)
-            print(f"FTS MATCHES: {fts_matches}")
+            self.log.info("*"*5 + f"Query RESULT # {self.count}" + "*"*5)
+            self.log.info(f"FTS MATCHES: {fts_matches}")
             if perform_faiss_validation:
-                print(f"FAISS MATCHES: {faiss_results}")
-            print(f"GROUNDTRUTH FILE : {neighbours}")
+                self.log.info(f"FAISS MATCHES: {faiss_results}")
+            self.log.info(f"GROUNDTRUTH FILE : {neighbours}")
 
             if perform_faiss_validation:
                 self.compare_results(faiss_results, neighbours, "faiss", "groundtruth")
@@ -196,7 +213,7 @@ class VectorSearch(FTSBaseTest):
             self.compare_results(fts_matches, neighbours, "fts", "groundtruth")
             self.compare_results(neighbours, fts_matches, "groundtruth", "fts")
 
-            print("*" * 30)
+            self.log.info("*" * 30)
 
         # validate no of results are k only
         if self.run_n1ql_search_function:
@@ -495,7 +512,7 @@ class VectorSearch(FTSBaseTest):
 
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
         index_doc_count = index_obj.get_indexed_doc_count()
-        print("\nIndex doc count before updating: {}\n".format(index_doc_count))
+        self.log.info("\nIndex doc count before updating: {}\n".format(index_doc_count))
         indexes.append(index[0])
 
         # update vector index dimension
@@ -524,7 +541,7 @@ class VectorSearch(FTSBaseTest):
 
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_doc_count = index_obj.get_indexed_doc_count()
-        print("\nIndex doc count before updating: {}\n".format(index_doc_count))
+        self.log.info("\nIndex doc count before updating: {}\n".format(index_doc_count))
         indexes.append(index[0])
 
         # update vector index dimension
@@ -629,7 +646,7 @@ class VectorSearch(FTSBaseTest):
 
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_doc_count = index_obj.get_indexed_doc_count()
-        print("\nIndex doc count before updating: {}\n".format(index_doc_count))
+        self.log.info("\nIndex doc count before updating: {}\n".format(index_doc_count))
         indexes.append(index[0])
 
         index = indexes[1]
@@ -951,7 +968,7 @@ class VectorSearch(FTSBaseTest):
             index_obj_alias.scope = index_scope
             index_obj_alias.collections = index_collections
             index_obj_alias._source_name = decoded_index['bucket']
-            print("\n\nIndex Alias object: {}\n\n".format(index_obj_alias.__dict__))
+            self.log.info("\n\nIndex Alias object: {}\n\n".format(index_obj_alias.__dict__))
 
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
         bucket = buckets[0]
@@ -1115,7 +1132,7 @@ class VectorSearch(FTSBaseTest):
         queries = self.generate_random_queries(index, self.num_queries, self.query_types)
 
         knn_comb = self.generate_knn_combination_queries(index.fts_queries, index.vector_queries)
-        print("\nKNN comb queries: {}\n".format(len(knn_comb)))
+        self.log.info("\nKNN comb queries: {}\n".format(len(knn_comb)))
 
         self.sleep(60, "Wait before executing queries")
 
