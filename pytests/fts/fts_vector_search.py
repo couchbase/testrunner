@@ -20,7 +20,7 @@ class VectorSearch(FTSBaseTest):
         self.__init_logger()
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 10)
-        self.vector_dataset = self.input.param("vector_dataset", "['gist']")
+        self.vector_dataset = self.input.param("vector_dataset", "['siftsmall']")
         if not isinstance(self.vector_dataset, list):
             self.vector_dataset = ast.literal_eval(self.vector_dataset)
         self.dimension = self.input.param("dimension", 128)
