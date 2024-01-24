@@ -3849,17 +3849,22 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.fail("Replication restarted on one of the nodes, scroll above"
                       "for reason")
             
-    def get_collection_names(self, bucket, master):
+    def get_collection_info(self, bucket, master):
         shell = RemoteMachineShellConnection(master)
-        output, error = shell.execute_cbstats(bucket, "collections",
+        nameOutput, error = shell.execute_cbstats(bucket, "collections",
                                                    cbadmin_user="Administrator",
                                                    options=" | grep ':name'")
+        itemsOutput, error = shell.execute_cbstats(bucket, "collections",
+                                                   cbadmin_user="Administrator",
+                                                   options=" | grep ':items'")
         shell.disconnect()
-        collection_names = []
-        if output:
-            for x in output:                
-                collection_names.append(x.split(":name:")[1].strip())
-        return collection_names, error
+        # collection_names = []
+        collection_info = {}
+        if nameOutput and itemsOutput:
+            for x, y in zip(nameOutput, itemsOutput):
+                collection_info[x.split(":name:")[1].strip()] = int(y.split(":items:")[1].strip())
+                # collection_names.append(x.split(":name:")[1].strip())
+        return collection_info, error
 
     def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute"):
 
@@ -3878,7 +3883,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     while time.time() < end_time :
                         try:
                             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
-                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
+                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]                                                    
                         except Exception as e:
                             self.log.warning(e)
                             self.log.info("Trying other method to fetch bucket current items")
@@ -3892,19 +3897,32 @@ class XDCRNewBaseTest(unittest.TestCase):
                             nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
-                                _count2 += node["interestingStats"]["curr_items"]
-                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated
-                        if self._rdirection == "unidirection" and _count1 - _count2 == self._num_items and _count1 % self._num_items == 0:
-                            collections = self.get_collection_names(bucket, cb_cluster.get_master_node())
-                            if "_query" in collections[0]:
-                                _count1 -= self._num_items
-                        if _count1 == _count2:
-                            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-                            break
+                                _count2 += node["interestingStats"]["curr_items"]  
                         self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
-                                   format(bucket.name, _count1, _count2))
+                                   format(bucket.name, _count1, _count2))                        
+                        if _count1 == _count2:
+                            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
+                            break                                                  
                     else:
+                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated                            
+                        collections_info = self.get_collection_info(bucket, cb_cluster.get_master_node())[0]
+                        dest_collections_info = self.get_collection_info(bucket, remote_cluster.get_dest_cluster().get_master_node())[0]
+
+                        if "_query" in collections_info or "_query" in dest_collections_info:
+                            for node in cb_cluster.get_nodes():
+                                collections_info = self.get_collection_info(bucket, node)[0]
+                                self.log.info(collections_info)
+                                _count1 -= collections_info["_query"]
+                                _count1 -= collections_info["_mobile"] 
+                            for node in remote_cluster.get_dest_cluster().get_nodes():
+                                dest_collections_info = self.get_collection_info(bucket, node)[0]
+                                self.log.info(dest_collections_info)
+                                _count2 -= dest_collections_info["_query"]
+                                _count2 -= dest_collections_info["_mobile"]                                              
+                        if _count1 == _count2:
+                            self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
+                            break                        
                         self.fail("Not all items replicated in {0} sec for {1} "
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
