@@ -58,7 +58,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.meta_ids = []
         if self.feature == "curl-whitelist":
             self.google_error_msg = "Errorevaluatingprojection-cause:Theendpointhttps://maps.googleapis.com/maps/api/geocode/jsonisnotpermitted"
-            self.jira_error_msg = "Errorevaluatingprojection-cause:Theendpointhttps://jira.atlassian.com/rest/api/latest/issue/JRA-9isnotpermitted.Listallowedendpointsintheconfiguration."
+            self.jira_error_msg = "Theendpointhttps://jira.atlassian.com/rest/api/latest/issue/JRA-9isnotpermitted.Listallowedendpointsintheconfiguration."
             self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                                  % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
         if self.feature == "auditing":
@@ -885,7 +885,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.log.info(f"Error: {actual_curl['errors'][0]}")
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
