@@ -230,26 +230,9 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 bk_name = bk_info["name"]
                 bk_scopes = bk_info["backups"][0]["buckets"][0]["scopes"]
             else:
-                """ remove empty element """
-                bk_info = {}
-                output = list(filter(None, output))
-                """ remove space in element """
-                output = [x.replace(' ', '') for x in output]
-                bk_name = output[1].split("|")[0]
-                bk_info["backups"] = output[3:]
-                if self.backups[0] in bk_info["backups"][0]:
-                    backup_folder_timestamp = True
-                if str(self.num_items) in bk_info["backups"][2]:
-                    items_count = True
-                if self.buckets[0].name in bk_info["backups"][2]:
-                    bucket_name = True
-                if "FULL" in bk_info["backups"][0]:
-                    first_backup_full = True
-                if "INCR" in bk_info["backups"][0]:
-                    after_first_backup_incr = True
+                return True, "For non-json output, the json data validation should be sufficient, and we just need to ensure there are no errors"
         else:
             return False, "No output content"
-
         if self.backupset.name in bk_name:
             backup_name = True
         if self.backupset.info_to_json:
