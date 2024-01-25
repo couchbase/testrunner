@@ -255,12 +255,12 @@ class QueryTests(BaseTestCase):
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
 
     def check_gsi_logs_for_panic(self):
-        """ Checks if a string 'str' is present in goxdcr.log on server
-            and returns the number of occurances
+        """ Checks for panics/other errors in indexer and projector logs
         """
         self.generate_map_nodes_out_dist()
-        panic_str, fail_test = "panic", False
+        panic_str, fail_test, vbs_out_of_range_str = "panic", False, "NumVbs out of valid range"
         indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        strings_to_monitor = [panic_str, vbs_out_of_range_str]
         if not indexers:
             return None
         for server in indexers:
@@ -269,16 +269,17 @@ class QueryTests(BaseTestCase):
                 _, dir = RestConnection(server).diag_eval(
                     'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
                 indexer_log = str(dir) + '/indexer.log*'
-                count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                                   format(panic_str, indexer_log))
-                if isinstance(count, list):
-                    count = int(count[0])
-                else:
-                    count = int(count)
+                for string in strings_to_monitor:
+                    count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                                       format(string, indexer_log))
+                    if isinstance(count, list):
+                        count = int(count[0])
+                    else:
+                        count = int(count)
+                    if count > 0:
+                        self.log.info("===== {0} OBSERVED IN INDEXER LOGS ON SERVER {1}=====".format(string, server.ip))
+                        fail_test = True
                 shell.disconnect()
-                if count > 0:
-                    self.log.info("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
-                    fail_test = True
         projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         if not projectors:
             return None

@@ -6,7 +6,6 @@ from membase.api.rest_client import RestConnection, RestHelper
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
 from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
 from .base_gsi import BaseSecondaryIndexingTests, log
 
@@ -14,7 +13,7 @@ from threading import Event
 from deepdiff import DeepDiff
 
 
-class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelper):
+class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
     def setUp(self):
         super().setUp()
         self.rest = RestConnection(self.servers[0])
