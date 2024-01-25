@@ -297,6 +297,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query_3)
 
     def test_gsi_indexes_with_WITH_clause(self):
+        if self.capella_run:
+            self.skipTest("With clause cannot be used in provsioned tests")
         index_nodes = self.get_nodes_from_services_map(service_type="index",
                                                        get_all_nodes=True)
         if len(index_nodes) < 2:
