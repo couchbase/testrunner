@@ -3115,7 +3115,7 @@ class BackupServiceTest(BackupServiceBase):
             '(REST) POST /api/v1/cluster/self/repository/active/repo_name0',
             '(ClockKeeper) Adding job',
             '(Dispatcher) Dispatching task',
-            '(Worker) Added task to queue',
+            '(Worker) Adding task to queue',
             '(Worker) Running task',
             '(Worker) Task done',
             '(Runner) Running command /opt/couchbase/bin/cbbackupmgr restore'
