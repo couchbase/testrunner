@@ -301,6 +301,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.fail("Node info not provided for Rebalancing In new node")
             node_rest = RestConnection(node)
             cb_version = "-".join(node_rest.get_nodes_version().split('-')[0:-1])
+            self.log.info(f'cb version {cb_version}')
+            self.log.info(f'upgrade version {self.upgrade_versions}')
             if cb_version != self.upgrade_versions:
                 upgrade_th = self._async_update(self.upgrade_to, [node])
                 for th in upgrade_th:
@@ -313,6 +315,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                 to_remove=[], services=['index'])
             result = task.result()
+            self.update_master_node()
+            self.rest = RestConnection(self.master)
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             indexer_metadata = self.index_rest.get_indexer_metadata()['status']
@@ -330,6 +334,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                 to_remove=remove_nodes, services=['index'])
             task.result()
+            self.update_master_node()
+            self.rest = RestConnection(self.master)
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
 
@@ -473,6 +479,17 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         elif task == 'smart_batching':
             add_nodes = self.servers[self.nodes_init:]
+            for node in add_nodes:
+                node_rest = RestConnection(node)
+                cb_version = "-".join(node_rest.get_nodes_version().split('-')[0:-1])
+                self.log.info(f'cb version (smart batching validation) {cb_version}')
+                self.log.info(f'upgrade version {self.upgrade_versions}')
+                if cb_version != self.upgrade_to:
+                    upgrade_th = self._async_update(self.upgrade_to, [node])
+                    for th in upgrade_th:
+                        th.join()
+                    self.sleep(120)
+
             services = ['index'] * len(add_nodes)
             rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                           to_remove=[], services=services)
@@ -539,6 +556,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.nodes_out_list, [],
                                                  services=services_in)
+        while self.rest._rebalance_progress_status() != 'running':
+            continue
+        if RestHelper(self.rest).rebalance_reached(percentage=40):
+            self.validate_indexing_rebalance_master()
         if 'index' in services_in:
             self.validate_indexing_rebalance_master()
         rebalance.result()
@@ -876,8 +897,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  index_nodes, [],
                                                  services=services_in)
-
-        self.validate_indexing_rebalance_master()
         rebalance.result()
         self.sleep(60)
         if self.set_circular_compaction:
@@ -906,6 +925,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         #                         stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
         self._post_upgrade_task(task='auto_failover')
+        remote_connection = RemoteMachineShellConnection(index_node)
+        remote_connection.restart_couchbase()
+        self.sleep(20)
         self._post_upgrade_task(task='create_indexes')
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
@@ -1932,9 +1954,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             return False
 
     def validate_indexing_rebalance_master(self):
+        self.update_master_node()
         if self.upgrade_to < "7.2.1":
             return
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.log.info(f'index {index_node}')
+        self.log.info(f'ip addr {index_node.ip}')
         index_rest_1 = RestConnection(index_node)
         status = True
         if status:
