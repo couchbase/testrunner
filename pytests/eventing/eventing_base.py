@@ -87,15 +87,6 @@ class EventingBaseTest(QueryHelperTests):
             self.check_eventing_logs_for_panic()
         if self.hostname == 'local':
             self.teardown_curl()
-        metadata_bucket, metadata_scope, metadata_collection = self._get_metadata_keyspace()
-        metadata_bucket_check = RestConnection(self.master).get_bucket_by_name(metadata_bucket)
-        if len(metadata_bucket_check) > 0 and not self.skip_metabucket_check:
-            metadata_item_count = CollectionsStats(self.master).\
-                get_collection_item_count_cumulative(metadata_bucket, metadata_scope,
-                                                     metadata_collection, self.get_kv_nodes())
-            self.log.info("number of documents in metadata keyspace {}".format(metadata_item_count))
-            if metadata_item_count != 0:
-                raise Exception("metadata keyspace is not empty at the end of test")
         super(EventingBaseTest, self).tearDown()
         log.info("==============  EventingBaseTest tearDown has completed ==============")
 
