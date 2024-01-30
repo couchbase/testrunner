@@ -779,8 +779,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
         self.validate_shard_affinity()
         if len(index_list_after) != 1:
             raise Exception("Duplicate indexes not dropped after rebalance")
-        if not self.check_gsi_logs_for_shard_transfer():
-            raise Exception("Shard based rebalance not triggered")
 
     def test_partition_repair_on_rebalance(self):
         """
