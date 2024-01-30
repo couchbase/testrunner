@@ -914,6 +914,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 bucket_size = 256
             else:
                 bucket_size = int(bucket_size * .7)
+            if self.bucket_storage == 'magma':
+                rest_conn.set_internalSetting("magmaMinMemoryQuota", 256)
+                if bucket_size < 256:
+                    bucket_size = 256
 
             count = 0
             buckets = []
