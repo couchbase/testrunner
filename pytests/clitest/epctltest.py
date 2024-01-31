@@ -26,8 +26,6 @@ class epctlTests(CliBaseTest):
                            \nthis test will be skipped in 6.5.0 ********\n")
             return
         for bucket in self.buckets:
-            if self.param == "item_num_based_new_chk":
-                self.param_value = "true"
             """ from Watson, there is not tap_throttle_threshold param """
             if self.param == "tap_throttle_threshold":
                 self.param = "replication_throttle_threshold"
@@ -45,7 +43,7 @@ class epctlTests(CliBaseTest):
     def verify_results(self, output, error):
         if len(error) > 0 :
             raise Exception("Command throw out error message. "
-                            "Please check the output of remote_util")
+                            "Please check the output of remote_util. Output: " + str(output) + "    Error: " + str(error))
         if self.persistence != "":
             if output[0].find("Error") != -1:
                 raise Exception("Command throw out error message. "

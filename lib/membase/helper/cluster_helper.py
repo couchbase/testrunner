@@ -397,7 +397,7 @@ class ClusterOperationHelper(object):
     def _get_engine_param_type(key):
         tap_params = ['tap_keepalive', 'tap_throttle_queue_cap', 'tap_throttle_threshold']
         checkpoint_params = ['chk_max_items', 'chk_period', 'inconsistent_slave_chk', 'keep_closed_chks',
-                             'max_checkpoints', 'item_num_based_new_chk']
+                             'max_checkpoints']
         flush_params = ['bg_fetch_delay', 'couch_response_timeout', 'exp_pager_stime', 'flushall_enabled',
                         'klog_compactor_queue_cap', 'klog_max_log_size', 'klog_max_entry_ratio',
                         'queue_age_cap', 'max_size', 'max_txn_size', 'mem_high_wat', 'mem_low_wat',
