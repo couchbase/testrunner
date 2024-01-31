@@ -1802,12 +1802,23 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             services = ['kv,fts']
         else:
             services = ['fts']
+
+        failover_node = self._cb_cluster.get_nodes()[-1:]
+        for node in self._cb_cluster.get_nodes():
+            if node.ip == self._cb_cluster.get_master_node().ip:
+                continue
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                failover_node = node
+                break
+
         tasks = []
         tasks.append(self._cb_cluster.async_failover_add_back_node(
             num_nodes=1,
             graceful=graceful,
             recovery_type=recovery,
-            services=services))
+            services=services,
+            node=failover_node))
 
         vector_query_failure = None
         query_failure = None
@@ -1821,7 +1832,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                         es=self.es,
                         es_index_name=None,
                         query_index=count))
-                query_failure, _ = self.run_tasks_and_report(tasks, len(index.fts_queries))
+                query_failure = self.run_tasks_and_report(tasks, len(index.fts_queries))
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
                 self.log.info("SUCCESS! Hits: %s" % hits)
@@ -2128,7 +2139,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
     def fts_crash_during_querying(self):
         self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
-        for index in self._cb_cluster.get_indexes:
+        for index in self._cb_cluster.get_indexes():
             self.run_query_and_compare(index)
         node = self._cb_cluster.get_random_fts_node()
         NodeHelper.kill_cbft_process(node)

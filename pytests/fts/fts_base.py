@@ -3824,14 +3824,16 @@ class CouchbaseCluster:
         self.__fail_over_nodes = []
 
     def async_failover_add_back_node(self, num_nodes=1, graceful=False,
-                                     recovery_type=None, services=None):
+                                     recovery_type=None, services=None,
+                                     node=None):
         """add-back failed-over node to the cluster.
             @param recovery_type: delta/full
         """
         task = self.__async_failover(
             master=False,
             num_nodes=num_nodes,
-            graceful=graceful)
+            graceful=graceful,
+            node=node)
         task.result()
         time.sleep(60)
         if graceful:
