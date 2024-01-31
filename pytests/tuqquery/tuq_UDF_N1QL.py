@@ -10,7 +10,7 @@ class QueryUDFN1QLTests(QueryTests):
         'create_index': {
             'pre': 'DROP INDEX udf_ix IF EXISTS on default',
             'query': 'CREATE INDEX udf_ix ON default(a)',
-            'function_expected': [[]],
+            'function_expected': {'name': 'udf_ix', 'state': 'online'},
             'post': 'SELECT name FROM system:indexes WHERE name = "udf_ix"',
             'post_expected': [{"name": "udf_ix"}]
         },
@@ -95,15 +95,16 @@ class QueryUDFN1QLTests(QueryTests):
             'pre': 'UPDATE STATISTICS FOR default DELETE ALL',
             'query': 'UPDATE STATISTICS FOR default(job_title)',
             'function_expected': [[]],
-            'post': 'select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = "histogram"',
-            'post_expected' : [{"bucket": "default", "collection": "_default", "histogramKey": "job_title", "scope": "_default"}]
+
+            'post': 'select `bucket`, `scope`, `collection`, `histogramKey` from `default`.`_system`.`_query` data WHERE type = "histogram" and `scope` = "_default" and `collection` = "_default"',
+            'post_expected' : {'scope': '_default', 'collection': '_default', 'histogramKey': 'job_title'}
         },
         'analyze': {
             'pre': 'UPDATE STATISTICS FOR default DELETE ALL',
             'query': 'ANALYZE default(job_title)',
             'function_expected': [[]],
-            'post': 'select `bucket`, `scope`, `collection`, `histogramKey` from `N1QL_SYSTEM_BUCKET`.`N1QL_SYSTEM_SCOPE`.`N1QL_CBO_STATS` data WHERE type = "histogram"',
-            'post_expected' : [{"bucket": "default", "collection": "_default", "histogramKey": "job_title", "scope": "_default"}]
+            'post': 'select `bucket`, `scope`, `collection`, `histogramKey` from `default`.`_system`.`_query` data WHERE type = "histogram" and `scope` = "_default" and `collection` = "_default"',
+            'post_expected' : {'scope': '_default', 'collection': '_default', 'histogramKey': 'job_title'}
         },
         'grant': {
             'pre': 'REVOKE query_select on default from jackdoe',
@@ -459,13 +460,20 @@ class QueryUDFN1QLTests(QueryTests):
                 self.assertTrue('not a readonly request' in str(error))
         else:
             function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
-            self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
+            if self.statement == "create_index":
+                self.assertTrue(function_result['results'][0][0]['state'] == 'online', f"Index should be online please check {function_result}")
+                self.assertTrue(function_result['results'][0][0]['name'] == "udf_ix", f"Index name is incorrect please check {function_result}")
+            else:
+                self.assertEqual(function_result['results'], self.ddls[self.statement]['function_expected'])
             self.sleep(30)
             # Run post check
             post_query = self.ddls[self.statement]['post']
             post_expected = self.ddls[self.statement]['post_expected']
             post_actual = self.run_cbq_query(post_query)
-            self.assertEqual(post_expected, post_actual['results'])
+            if self.statement == "update_statistics" or self.statement == "analyze":
+                self.assertTrue(post_expected in post_actual['results'], f"We expect the histogram key to be in the actual results, please check them {post_actual}")
+            else:
+                self.assertEqual(post_expected, post_actual['results'])
 
     def test_curl(self):
         url = "https://jsonplaceholder.typicode.com/todos"
@@ -884,12 +892,12 @@ class QueryUDFN1QLTests(QueryTests):
             f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql2"')
         # Execute function as user
         try:
-            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_params={'timeout': "2m"})
             self.fail("Query should have CBQ error'd")
         except CBQError as ex:
             error = self.process_CBQE(ex)
-            self.assertEqual(error['code'], 10109)
-            self.assertTrue('stopped after running beyond 120000 ms' in str(error), f"Error is not what we expected {str(ex)}")
+            self.assertEqual(error['code'], 1080)
+            self.assertTrue('Timeout 2m0s exceeded' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_nested_udf_inline(self):
         # Create an inline function on scope that user does not have perms on
@@ -1027,6 +1035,75 @@ class QueryUDFN1QLTests(QueryTests):
 
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
         self.assertEqual(function_result['results'], [[{'name': 'old hotel'}]])
+
+    def test_cancel_n1ql_udf(self):
+        self.run_cbq_query('CREATE INDEX ix1 ON default(c1)')
+        self.run_cbq_query('UPSERT INTO default  (KEY _k, VALUE _v) '
+                           'SELECT  "k0"||TO_STR(d) AS _k , {"c1":d, "c2":2*d, "c3":3*d} AS _v '
+                           'FROM ARRAY_RANGE(1,1000) AS d')
+        function_name = 'execute_udf'
+        functions = f'function {function_name}() {{\
+            var query = WITH aa AS (WITH a1 AS (SELECT RAW COUNT(l.c2) \
+                    FROM default AS l JOIN default AS r ON l.c1 < r.c1 \
+                    JOIN default r1 ON r.c1 < r1.c1 WHERE l.c1 >= 0) SELECT a1) SELECT aa;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"')
+
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()', query_params={'timeout': "5s"})
+        except CBQError as e:
+            self.assertTrue('Timeout 5s exceeded' in str(e))
+        self.sleep(1)
+        num_requests = self.get_num_requests("default:ix1",self.nodes_init)
+        if num_requests == 0:
+            self.fail("Requests should be non zero as a query has run against this index")
+        self.log.info(f"Number of requests before sleep: {num_requests}")
+        self.sleep(10)
+        new_num_requests = self.get_num_requests("default:ix1",self.nodes_init)
+        self.log.info(f"Number of requests after sleep: {new_num_requests}")
+        self.assertEqual(num_requests, new_num_requests,
+                         "The number of requests should be the same, it is not, please check")
+
+    def test_cancel_udf_nested_inline(self):
+        self.run_cbq_query('CREATE INDEX ix10 ON default(c1)')
+        self.run_cbq_query('UPSERT INTO default  (KEY _k, VALUE _v) '
+                           'SELECT  "k0"||TO_STR(d) AS _k , {"c1":d, "c2":2*d, "c3":3*d} AS _v '
+                           'FROM ARRAY_RANGE(1,1000) AS d')
+        function_name = 'execute_udf'
+        functions = f'function {function_name}() {{\
+            var query = WITH aa AS (WITH a1 AS (SELECT RAW COUNT(l.c2) \
+                    FROM default AS l JOIN default AS r ON l.c1 < r.c1 \
+                    JOIN default r1 ON r.c1 < r1.c1 WHERE l.c1 >= 0) SELECT a1) SELECT aa;\
+            var acc = [];\
+            for (const row of query) {{\
+                acc.push(row);\
+            }}\
+            return acc;}}'
+        self.create_library("library", functions, [function_name])
+        self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "library"')
+        # Create an inline function that executes the js udf that runs a n1ql statement
+        self.run_cbq_query(
+            f"CREATE OR REPLACE FUNCTION udf_nested() {{(SELECT {function_name}())}}")
+
+        try:
+            self.run_cbq_query(f'EXECUTE FUNCTION udf_nested()', query_params={'timeout': "10s"})
+        except CBQError as e:
+            self.assertTrue('Timeout 10s exceeded' in str(e))
+        self.sleep(1)
+        num_requests = self.get_num_requests("default:ix10",self.nodes_init)
+        if num_requests == 0:
+            self.fail("Requests should be non zero as a query has run against this index")
+        self.log.info(f"Number of requests before sleep: {num_requests}")
+        self.sleep(10)
+        new_num_requests = self.get_num_requests("default:ix10",self.nodes_init)
+        self.log.info(f"Number of requests after sleep: {new_num_requests}")
+        self.assertEqual(num_requests, new_num_requests,
+                         "The number of requests should be the same, it is not, please check")
 
     def test_global_query_context(self):
         self.run_cbq_query(
@@ -1782,9 +1859,9 @@ class QueryUDFN1QLTests(QueryTests):
             self.run_cbq_query(sleep_query, query_params={'timeout':'10s'})
             self.fail("Query should have CBQ error'd")
         except CBQError as ex:
-            error = self.process_CBQE(ex, 1)
-            self.assertEqual(error['code'], 10109)
-            self.assertTrue('sleep stopped after running beyond 10000 ms' in str(error), f"Error is not what we expected {str(ex)}")
+            error = self.process_CBQE(ex, 0)
+            self.assertEqual(error['code'], 1080)
+            self.assertTrue('Timeout 10s exceeded' in str(error), f"Error is not what we expected {str(ex)}")
 
         try:
             self.run_cbq_query(sleep_query, query_params={'timeout':'600s'})
@@ -1792,7 +1869,7 @@ class QueryUDFN1QLTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 10109)
-            self.assertTrue('sleep stopped after running beyond 120000 ms' in str(error), f"Error is not what we expected {str(ex)}")
+            self.assertTrue('stopped after running beyond 120000 ms' in str(error), f"Error is not what we expected {str(ex)}")
 
     def test_try_catch(self):
         function_name = "syntax_error"
