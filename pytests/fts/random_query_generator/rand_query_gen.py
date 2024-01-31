@@ -1251,6 +1251,8 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
     def get_custom_n1ql_query_types(self):
         query_types = []
         for field_type in list(self.fields.keys()):
+            if field_type == 'vector':
+                continue
             if self.fields[field_type].__len__() != 0:
                 query_types += QUERY_TYPE.N1QL_QUERY_TYPES[field_type]
         return list(set(query_types))
