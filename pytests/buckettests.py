@@ -10,6 +10,7 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_SAMPLE_PATH_C
+
 from scripts.install import InstallerJob
 from ep_mc_bin_client import MemcachedClient, MemcachedError
 
@@ -28,12 +29,7 @@ class CreateBucketTests(BaseTestCase):
         self.server = self.master
         self.rest = RestConnection(self.server)
         self.node_version = self.rest.get_nodes_version()
-        self.total_items_travel_sample = 31569
-        # Toy build or Greater than CC build
-        if float(self.node_version[:3]) == 0.0 or float(self.node_version[:3]) >= 7.0:
-            self.total_items_travel_sample = 63288
-        else:
-            self.total_items_travel_sample = 63182
+        self.total_items_travel_sample = 63288
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
         shell.disconnect()
@@ -213,7 +209,6 @@ class CreateBucketTests(BaseTestCase):
             self.log.info("There is extra index %s" % index_name)
 
     def test_cli_travel_sample_bucket(self):
-        sample = "travel-sample"
         """ couchbase-cli does not have option to reset the node yet
             use rest to reset node to set services correctly: index,kv,n1ql """
         self.rest.force_eject_node()
@@ -234,18 +229,11 @@ class CreateBucketTests(BaseTestCase):
         self.log.info("Add new user after reset node! ")
         self.add_built_in_server_user(node=self.master)
         shell = RemoteMachineShellConnection(self.master)
-        cluster_flag = "-c"
-        bucket_quota_flag = "-m"
-        data_set_location_flag = "-d"
-        shell.execute_command("{0}cbdocloader -u Administrator -p password \
-                      {3} {1}:{6} -b travel-sample {4} 200 {5} {2}travel-sample.zip" \
-                                                      .format(self.bin_path,
-                                                       self.master.ip,
-                                                       self.sample_path,
-                                                       cluster_flag,
-                                                       bucket_quota_flag,
-                                                       data_set_location_flag,
-                                                       self.master.port))
+        shell.execute_command(
+            "{0}cbimport json -f sample -u Administrator -p password "
+            "-c {1}:{2} -b travel-sample -m 200 -d {3}travel-sample.zip"
+            .format(self.bin_path, self.master.ip, self.master.port,
+                    self.sample_path))
         shell.disconnect()
 
         buckets = RestConnection(self.master).get_buckets()
@@ -291,7 +279,7 @@ class CreateBucketTests(BaseTestCase):
         elif len(index_name) == index_count:
             self.log.info("travel-sample bucket is created and complete indexing")
             self.log.info("index list in travel-sample bucket: {0}"
-                                       .format(index_name))
+                          .format(index_name))
         else:
             self.log.info("There is extra index %s" % index_name)
 
@@ -307,7 +295,7 @@ class CreateBucketTests(BaseTestCase):
         options = ' --cluster-port=8091 \
                     --cluster-ramsize=300 \
                     --cluster-index-ramsize=300 \
-                    --services=data,index,query %s ' \
+                    --services=data,index %s ' \
                   % set_index_storage_type
         o, e = shell.execute_couchbase_cli(cli_command="cluster-init",
                                            options=options)
@@ -325,21 +313,16 @@ class CreateBucketTests(BaseTestCase):
                                            options=options)
         self.assertEqual(o[0], 'SUCCESS: Bucket created')
 
-        self.sleep(30, "Sleep before loading doc using cbdocloader")
-
-        cluster_flag = "-c"
-        bucket_quota_flag = "-m"
-        data_set_location_flag = "-d"
-        shell.execute_command(
-            "{0}cbdocloader -u Administrator -p password "
-            "{3} {1} -b default {4} 100 {5} {2}travel-sample.zip"
-            .format(self.bin_path, self.master.ip, self.sample_path,
-                    cluster_flag, bucket_quota_flag,
-                    data_set_location_flag))
+        self.sleep(30, "Sleep before loading doc using cbimport")
+        for _ in range(2):
+            shell.execute_command(
+                "{0}cbimport json -u Administrator -p password -f sample "
+                "-c {1}:8091 -b default -d {2}travel-sample.zip"
+                .format(self.bin_path, self.master.ip, self.sample_path))
+            self.sleep(10, "Sleep before checking")
         shell.disconnect()
 
-        buckets = RestConnection(self.master).get_buckets()
-        for bucket in buckets:
+        for bucket in RestConnection(self.master).get_buckets():
             if bucket.name != "default":
                 self.fail("default bucket did not get created")
 
@@ -347,14 +330,13 @@ class CreateBucketTests(BaseTestCase):
         end_time = time.time() + 120
         num_actual = 0
         while time.time() < end_time:
-            self.sleep(10)
             num_actual = self.get_item_count(self.master, "default")
             if int(num_actual) == self.total_items_travel_sample:
                 break
-        self.assertTrue(int(num_actual) == self.total_items_travel_sample,
-                        "Items number expected %s, actual %s"
-                        % (self.total_items_travel_sample, num_actual))
-        self.log.info("Total items %s " % num_actual)
+            self.sleep(10, "Sleep before checking")
+        else:
+            self.fail("Items number expected %s, actual %s"
+                      % (self.total_items_travel_sample, num_actual))
         self.sleep(400, "Waiting for docs to expire as per maxttl")
         self.expire_pager([self.master])
         self.sleep(20, "Wait for expiry_purger to run")
