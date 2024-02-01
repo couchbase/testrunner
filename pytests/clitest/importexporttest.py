@@ -1076,8 +1076,10 @@ class ImportExportTests(CliBaseTest):
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
                 RbacBase().add_user_role(role_list, RestConnection(import_servers[2]), 'builtin')
                 
+                if self.bucket_storage == 'magma':
+                    imp_rest.set_internalSetting("magmaMinMemoryQuota", 256)
                 bucket_params=self._create_bucket_params(server=import_servers[2],
-                                        size=250,
+                                        size=256,
                                         replicas=self.num_replicas,
                                         enable_replica_index=self.enable_replica_index,
                                         eviction_policy=self.eviction_policy)
