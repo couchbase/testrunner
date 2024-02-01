@@ -1,3 +1,4 @@
+from lib.collection.collections_stats import CollectionsStats
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -174,8 +175,12 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         self.sleep(maxttl, "waiting for docs to be expired automatically per maxttl rule")
         self._expiry_pager(self.master)
         self.sleep(60, "wait for expiry pager to run on all nodes...")
+        c_stats = CollectionsStats(self.master)
+        rest = RestConnection(self.master)
         for bucket in self.buckets:
-            items = RestConnection(self.master).get_active_key_count(bucket)
+            items = rest.get_active_key_count(bucket) \
+                    - c_stats.get_collection_item_count(
+                        bucket.name, "_system", "_query")
             self.log.info("Docs in source bucket is {0} after maxttl has elapsed".format(items))
             if items != 0:
                 self.fail("Docs in source bucket is not 0 after maxttl has elapsed")
