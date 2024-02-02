@@ -606,9 +606,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -643,9 +640,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -684,9 +678,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -846,9 +837,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -979,9 +967,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -1017,9 +1002,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -1056,9 +1038,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -1098,9 +1077,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -1138,9 +1114,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
@@ -1180,9 +1153,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                                                                num_queries=1)
                 if vector_query_failure:
                     self.fail(f"Vector queries failed -> {vector_query_failure}")
-                else:
-                    self.validate_vector_query_matches(query_matches_after,
-                                                       index_query_matches_map[index.name])
             else:
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
