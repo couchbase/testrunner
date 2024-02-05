@@ -2462,11 +2462,18 @@ class OnPremBaseTestCase(unittest.TestCase):
 
         return status
 
-    def remove_user(self, user_id):
-        """ Removes a user given a single ID """
-        rest = RestConnection(self.master)
-        # info log
-        status = RbacBase().remove_user_role([user_id], rest)
+    def remove_user(self, testuser=None, node=None):
+        """
+            Removes a user given a single ID.
+            Default to cbadminbucket.
+        """
+        if node is None:
+            node = self.master
+        if testuser is None:
+            testuser = "cbadminbucket"
+
+        self.log.info("**** remove built-in '{0}' user from node {1} ****".format(testuser, node.ip))
+        status = RbacBase().remove_user_role([testuser], RestConnection(node), "builtin")
         return status
 
     def get_all_users(self):
