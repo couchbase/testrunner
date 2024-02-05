@@ -852,6 +852,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += f" {'--exclude-data' if int(version[0]) >= 7 else '--exclude-buckets'} {''.join(self.backupset.exclude_buckets)}"
         if self.backupset.include_buckets:
             args += f" {'--include-data' if int(version[0]) >= 7 else '--include-buckets'} {''.join(self.backupset.include_buckets)}"
+        if self.backupset.enable_users:
+            args += " --enable-users"
         if self.backupset.disable_views:
             args += " --disable-views "
         if self.backupset.disable_gsi_indexes:

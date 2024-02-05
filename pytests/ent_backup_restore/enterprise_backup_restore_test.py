@@ -1220,132 +1220,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                   validate_keys=self.validate_keys,
                                   regex_pattern=regex_check)
 
-    def test_backup_restore_user_info(self):
-        """
-            Backup and restore of user info
-            1.  Create a bucket
-            2.  Add two users, add one to a new group and give one an extra role
-            3.  Backup with -enable-users flag
-            4.  Verify number of users/groups in backup
-            5.  Delete one user
-            6.  Restore and check for conflict message
-            7.  Verify deleted user restored and extra role still present
-            8.  Backup without --enable-users flag
-            9.  Verify no users/groups in backup
-            10. Delete one user again
-            11. Restore and check there is no conflict message
-            12. Verify deleted user not restored and extra role still present
-        """
-
-        # Create bucket
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        self._load_all_buckets(self.master, gen, "create", 0)
-
-        # Add two users, create a group, add one user to it and then add an additional role to one of the users
-        testuser1 = {"id": "testuser1", "name": "testuser1", "password": "password"}
-        testuser2 = {"id": "testuser2", "name": "testuser2", "password": "password"}
-        if not self.add_built_in_server_user([testuser1]):
-            self.fail("Failed to add user: {0}".format(testuser1))
-        if not self.add_built_in_server_user([testuser2]):
-            self.fail("Failed to add user: {0}".format(testuser2))
-        if not self.create_new_group("testgroup", "test group"):
-            self.fail("Failed to create new user group")
-        if not self.add_user_to_group("testgroup", "testuser1"):
-            self.fail("Failed to add user to a group")
-        role_list = {"id": "testuser1", "name": "testuser1", "roles": "cluster_admin, admin"}
-        self.add_role_to_user(role_list)
-        users = self.get_all_users()
-
-        # Run backup with -enable-users flag
-        self.backupset.enable_users = True
-        self.backup_create()
-        output, error = self.backup_cluster()
-        if not self._check_output("Backup completed successfully", output):
-            self.fail("Taking cluster backup failed: {0}".format(error))
-
-        # Verify there are three users and one group in the backup
-        output, error = self.backup_info()
-        bk_info = json.loads(output[0])
-        bk_info = bk_info["backups"]
-        user_count = bk_info[0]["users_count"]
-        group_count = bk_info[0]["groups_count"]
-        if user_count != 3:
-            self.fail("Backup includes {0} users rather than the expected 3".format(user_count))
-        if group_count != 1:
-            self.fail("Backup includes {0} groups rather than the expected 1".format(group_count))
-
-        # Delete one of the users
-        user_to_delete = "testuser2"
-        if not self.remove_user(user_to_delete):
-            self.fail("Deleting user: {0} failed".format(user_to_delete))
-
-        # Run restore and check for conflict resolution message
-        output, error = self.backup_restore()
-        if not self._check_output("Restore completed successfully", output):
-            self.fail("Restoring backup failed: {0}".format(error))
-        if not self._check_output(
-        "Restore has skipped some users and/or groups. Please check the logs for more information", output):
-            self.fail("Expected conflict resolution message not found")
-
-        # Verify the deleted user and extra role are both present post restore
-        users_post_restore = self.get_all_users()
-        users_post_restore[2]["uuid"] = users[2]["uuid"]
-        users_post_restore[2]["password_change_date"] = users[2]["password_change_date"]
-        if users_post_restore != users:
-            err = "User details malformed: "
-            if len(users_post_restore) != len(users):
-                err += "Deleted user not restored"
-            for i in range(len(users_post_restore)):
-                if users_post_restore[i]["roles"] != users[i]["roles"]:
-                    err += "{0}'s roles not restored properly".format(users_post_restore["id"])
-            err += "\nAfter Restore:\n{0}\nBefore Restore:\n{1}".format(users_post_restore, users)
-            self.fail(err)
-
-        # Run backup without --enable-users flag
-        self.backupset.start = 2
-        self.backupset.end = 2
-        self.backupset.enable_users = False
-        self.backup_create()
-        output, error = self.backup_cluster()
-        if not self._check_output("Backup completed successfully", output):
-            self.fail("Taking cluster backup failed: {0}".format(error))
-
-        # Verify no users or groups in backup
-        output, error = self.backup_info()
-        bk_info = json.loads(output[0])
-        bk_info = bk_info["backups"]
-        user_count = bk_info[0]["users_count"]
-        group_count = bk_info[0]["groups_count"]
-        if user_count != 0:
-            self.fail("Backup includes {0} users rather than the expected 0".format(user_count))
-        if group_count != 0:
-            self.fail("Backup includes {0} groups rather than the expected 0".format(group_count))
-
-        # Delete testuser2 again
-        if not self.remove_user(user_to_delete):
-            self.fail("Deleting user: {0} failed".format(user_to_delete))
-        users = self.get_all_users()
-
-        # Run restore and check there is no conflict message
-        output, error = self.backup_restore()
-        if not self._check_output("Restore completed successfully", output):
-            self.fail("Restoring backup failed: {0}".format(error))
-        if self._check_output(
-        "Restore has skipped some users and/or groups. Please check the logs for more information", output):
-            self.fail("Conflict resolution message found when not expected")
-
-        # Verify the previously deleted user is not present and the extra role added to testuser1 is present
-        users_post_restore = self.get_all_users()
-        if users_post_restore != users:
-            err = "User details malformed: "
-            if len(users_post_restore) != len(users):
-                err += "Deleted user restored"
-            for i in range(len(users_post_restore)):
-                if users_post_restore[i]["roles"] != users[i]["roles"]:
-                    err += "{0}'s roles not preserved properly".format(users_post_restore["id"])
-            err += "\nAfter Restore:\n{0}\nBefore Restore:\n{1}".format(users_post_restore, users)
-            self.fail(err)
-
     def test_backup_with_rbac(self):
         """
             1. Create a cluster
@@ -1696,6 +1570,116 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      self.cluster_new_user)
             output, error = shell.execute_command(cmd)
             shell.disconnect()
+
+    def test_backup_restore_of_users(self):
+        """
+        Backup/Restore of Users Test
+        1. Create a cluster
+        2. Create a bucket and load data
+        3. Create a user with specific role
+            param in conf: cluster_new_user
+            param in conf: cluster_new_role
+        4. Attempt backup with newly created user
+        5. Handle backup result based on admin or non-admin role
+            Only 'admin' backup should succeed
+            Check no. users/groups
+        6. If backup successful, attempt restore similarly
+            Delete 'cbadminbucket' user before restoring
+            Again only 'admin' role permitted
+            Deleted user should be recreated
+            Conflict message included in restore output
+        """
+        all_buckets = self.input.param("all_buckets", False)
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self.backupset.enable_users = True
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+
+        if all_buckets:
+            if "-" in self.cluster_new_role:
+                self.cluster_new_role = "[*],".join(self.cluster_new_role.split("-")) + "[*]"
+            else:
+                self.cluster_new_role = self.cluster_new_role + "[*]"
+            admin_roles = ["cluster_admin", "eventing_admin"]
+            for role in admin_roles:
+               if role in self.cluster_new_role:
+                   self.cluster_new_role = self.cluster_new_role.replace(role + "[*]", role)
+
+        self.log.info("\n***** Create new user: {0} with role: {1} to backup user info *****"\
+                      .format(self.cluster_new_user, self.cluster_new_role))
+        testuser = [{"id": "{0}".format(self.cluster_new_user),
+                     "name": "{0}".format(self.cluster_new_user),
+                     "password": "password"}]
+        rolelist = [{"id": "{0}".format(self.cluster_new_user),
+                     "name": "{0}".format(self.cluster_new_user),
+                     "roles": "{0}".format(self.cluster_new_role)}]
+
+        status = self.add_built_in_server_user(testuser, rolelist)
+        if not status:
+            self.fail("Fail to add user: {0} with role: {1} " \
+                    .format(self.cluster_new_user, self.cluster_new_role))
+        if not self.create_new_group("testgroup", "test group"):
+            self.fail("Failed to create new user group")
+        backup_failed = False
+        output, error = self.backup_cluster()
+        fail_msg = ["Error backing up cluster:"]
+        for bucket in self.buckets:
+            fail_msg.append('Backed up bucket "{0}" failed'.format(bucket.name))
+        if "admin" == self.cluster_new_role:
+            if error or self._check_output(fail_msg, output):
+                self.fail("User {0} failed to backup data.\n"
+                            .format(self.cluster_new_role) + \
+                            "Here is the output {0} ".format(output))
+            info, error = self.backup_info()
+            if error:
+                self.fail("Error getting backup info: {0}".format(error))
+            bk_info = json.loads(info[0])
+            bk_info = bk_info["backups"]
+            user_count = bk_info[0]["users_count"]
+            group_count = bk_info[0]["groups_count"]
+            expected_no_users = 2
+            expected_no_groups = 1
+            if user_count != expected_no_users:
+                self.fail("User {0} failed to backup users properly.\n"
+                            .format(self.cluster_new_role) + \
+                            "Expected {0} != {1} Observed.".format(user_count, expected_no_users))
+            elif group_count != expected_no_groups:
+                self.fail("User {0} failed to backup groups properly.\n"
+                            .format(self.cluster_new_role) + \
+                            "Expected {0} != {1} Observed.".format(group_count, expected_no_groups))
+        elif not self._check_output(fail_msg, output):
+            self.fail("User {0} performed backup with enable-users flag.\n"
+                        .format(self.cluster_new_role) + \
+                        "Only admin role should be able to backup users.")
+        else:
+            backup_failed = True
+            self.log.info("cbbackupmgr blocked user: {0} from backup with --enable-users flag"\
+                        .format(self.cluster_new_role))
+
+        if not backup_failed:
+            self.log.info("Beginning --enable-users sanity restore")
+            status = self.remove_user()
+            if not status:
+                self.fail("Error removing user: cbadminbucket")
+            rst_output, error = self.backup_restore()
+            users_post_restore = []
+            for user in self.get_all_users():
+                users_post_restore.append(user["id"])
+            if "admin" == self.cluster_new_role:
+                if error or not self._check_output("Restore completed successfully", rst_output):
+                    self.fail("Restoring backup failed: {0}".format(rst_output))
+                elif not self._check_output(
+                "Restore has skipped some users and/or groups. Please check the logs for more information", rst_output):
+                    self.fail("Expected conflict resolution message not found: {0}".format(rst_output))
+                elif not users_post_restore.__contains__("cbadminbucket"):
+                    self.fail("User 'cbadminbucket' not recreated from backup as expected.")
+            elif not self._check_output("Error restoring cluster:", rst_output):
+                self.fail("User {0} performed restore with --enable-users flag.\n"
+                            .format(self.cluster_new_role)) + \
+                            "Only admin role should be able to restore users."
+            else:
+                self.log.info("cbbackupmgr blocked user: {0} from restore with --enable-users flag"\
+                            .format(self.cluster_new_role))
 
     def test_backup_restore_with_nodes_reshuffle(self):
         """
