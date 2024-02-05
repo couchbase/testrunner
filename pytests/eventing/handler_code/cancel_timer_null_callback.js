@@ -13,7 +13,7 @@ function OnDelete(meta) {
     var cancelled=cancelTimer(null,meta.id);
     }catch(e){
         log(e);
-        if(e=="First argument to cancelTimer must be a valid global function"){
+        if(e["message"]=="First argument to cancelTimer must be a valid global function"){
             log("cancellation failed with:",e)
             dst_bucket[meta.id]="First argument to cancelTimer must be a valid global function";
         }
