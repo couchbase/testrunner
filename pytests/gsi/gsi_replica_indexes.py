@@ -276,9 +276,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             index_lists.append(index_name)
 
         tasks = []
-        err_msg1 = 'The index is scheduled for background creation'
-        err_msg2 = 'Index creation will be retried in background'
-        err_msg3 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
+        err_msg1 = 'Create index or Alter replica cannot proceed due to another concurrent create index request'
+        err_msg2 = 'will retry building in the background'
+        err_msg3 = 'Encountered transient error'
+
+
         with ThreadPoolExecutor() as executor:
             for count, query in enumerate(index_gen_query_list):
                 task = executor.submit(self.run_cbq_query, query=query)
