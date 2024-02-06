@@ -180,7 +180,10 @@ class CollectinfoTests(CliBaseTest):
             type = info.type.lower()
             if type == 'windows':
                 os = "windows"
-
+            if "debian" in info.distribution_version.lower():
+                self.shell.execute_command("apt install unzip")
+            if "centos" in info.distribution_version.lower():
+                self.shell.execute_command("yum install unzip")
             if os == "linux":
                 command = "unzip %s" % (zip_file)
                 output, error = self.shell.execute_command(command)
