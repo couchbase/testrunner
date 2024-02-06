@@ -2128,9 +2128,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
 
     def validate_shard_affinity(self, specific_indexes=None, node_in=None, provisioned=True):
-        if not self.is_shard_based_rebalance_enabled(provisioned=provisioned, node_in=node_in):
-            self.log.info("Skipping validating shard affinity since shard based rebalance is disabled")
-            return
+        if not self.capella_run:
+            if not self.is_shard_based_rebalance_enabled(provisioned=provisioned, node_in=node_in):
+                self.log.info("Skipping validating shard affinity since shard based rebalance is disabled")
+                return
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = None
         for node in indexer_nodes:
