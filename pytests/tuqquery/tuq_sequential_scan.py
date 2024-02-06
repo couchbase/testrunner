@@ -238,7 +238,7 @@ class QuerySeqScanTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 13014)
-            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+            self.assertEqual(error['msg'].replace('`', ''), f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
 
     def test_rbac_collection(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
