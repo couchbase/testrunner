@@ -57,7 +57,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         rest.set_index_settings_internal(doc)
 
         shell = RemoteMachineShellConnection(index_node)
-        output1, error1 = shell.execute_command("killall -9 indexer")
+        output1, error1 = shell.execute_command("pkill -9 indexer")
         self.sleep(30)
 
         if self.index_partitioned:
@@ -118,7 +118,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                         if self.failover_index:
                             self.sleep(60)
                             shell = RemoteMachineShellConnection(index_node)
-                            output1, error1 = shell.execute_command("killall -9 indexer")
+                            output1, error1 = shell.execute_command("pkill -9 indexer")
                             self.sleep(30)
                             break
                     else:

@@ -281,7 +281,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
             rest.update_autofailover_settings(False, 60)
             if self.os == 'linux':
                 output, error = self.shell.execute_command(
-                                    "killall -9 memcached & killall -9 beam.smp")
+                                    "pkill -9 memcached & pkill -9 beam.smp")
         output, error = self.shell.execute_cbcollect_info("%s.zip"
                                                            % (self.log_filename))
 

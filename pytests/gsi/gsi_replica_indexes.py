@@ -3660,4 +3660,4 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def _kill_all_processes_index(self, server):
         shell = RemoteMachineShellConnection(server)
-        shell.execute_command("killall indexer")
+        shell.execute_command("pkill indexer")

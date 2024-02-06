@@ -199,15 +199,15 @@ class QueryTests(BaseTestCase):
         # self.log.info('-' * 100)
         # self.log.info('Temp fix for MB-16888')
         # if self.cluster_ops == False:
-        #    output, error = self.shell.execute_command("killall -9 cbq-engine")
-        #    output1, error1 = self.shell.execute_command("killall -9 indexer")
+        #    output, error = self.shell.execute_command("pkill -9 cbq-engine")
+        #    output1, error1 = self.shell.execute_command("pkill -9 indexer")
         #    if (len(error) == 0 or len(error1) == 0):
         #        self.sleep(30, 'wait for indexer')
         #    else:
         #        if (len(error) > 0):
-        #            self.log.info("Error executing shell command: killall -9 cbq-engine! Error - " + str(error[0]))
+        #            self.log.info("Error executing shell command: pkill -9 cbq-engine! Error - " + str(error[0]))
         #        if (len(error1) > 0):
-        #            self.log.info("Error executing shell command: killall -9 indexer! Error - " + str(error1[0]))
+        #            self.log.info("Error executing shell command: pkill -9 indexer! Error - " + str(error1[0]))
         # self.log.info('-' * 100)
         if self.analytics:
             self.setup_analytics()
