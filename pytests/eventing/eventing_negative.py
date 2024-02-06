@@ -436,12 +436,12 @@ class EventingNegative(EventingBaseTest):
                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_op_without_index.js', worker_count=3)
         self.deploy_function(body)
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
+        self.verify_doc_count_collections("dst_bucket._default._default", 0)
         self.undeploy_and_delete_function(body)
 
     def test_n1ql_max_connection(self):
