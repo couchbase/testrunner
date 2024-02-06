@@ -72,8 +72,7 @@ class EventingBaseTest(QueryHelperTests):
                 num_reader_threads="disk_io_optimized",
                 num_writer_threads="disk_io_optimized")
         self._create_bucket_scope_collections()
-        indexer_node = self.get_nodes_from_services_map(service_type="index")
-        if self.n1ql_server and indexer_node:
+        if self.n1ql_server:
             self.n1ql_helper = N1QLHelper(shell=self.shell, buckets=self.buckets, n1ql_port=self.n1ql_port,
                                             full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                             master=self.master, use_rest=True)
