@@ -1143,7 +1143,13 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         bucket_names = []
         for bucket in self._cb_cluster.get_buckets():
             bucket_names.append(bucket.name)
-        NodeHelper.kill_erlang(self._cb_cluster.get_random_fts_node(), bucket_names)
+        fts_node = self._cb_cluster.get_random_fts_node()
+        for node in self._cb_cluster.get_fts_nodes():
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                fts_node = node
+                break
+        NodeHelper.kill_erlang(fts_node, bucket_names)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
@@ -1965,8 +1971,16 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
     def erl_crash_during_querying(self):
         self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
-        node = self._cb_cluster.get_random_fts_node()
-        NodeHelper.kill_erlang(node)
+        bucket_names = []
+        for bucket in self._cb_cluster.get_buckets():
+            bucket_names.append(bucket.name)
+        fts_node = self._cb_cluster.get_random_fts_node()
+        for node in self._cb_cluster.get_fts_nodes():
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                fts_node = node
+                break
+        NodeHelper.kill_erlang(fts_node, bucket_names=bucket_names)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         tasks = []

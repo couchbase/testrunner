@@ -1,5 +1,6 @@
 import ast
 import json
+import os
 import random
 import sys
 import threading
@@ -55,6 +56,20 @@ class VectorSearch(FTSBaseTest):
                             self.input.param(
                                 "log_level",
                                 None)))
+
+    def get_host_ip(self):
+        ip = None
+
+        # could be "linux", "linux2", "linux3", ...
+        if sys.platform.startswith("linux"):
+            ip = os.popen(
+                'ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2')\
+                .read().strip()
+        else:
+            ip = '127.0.0.1'
+
+        self.log.info("Host_ip = %s" % ip)
+        return ip
 
     def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
         common_elements = set(listA) & set(listB)
@@ -1193,6 +1208,120 @@ class VectorSearch(FTSBaseTest):
                         "Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                         format(n1ql_hits, hits, update_doc_no))
 
+    def test_vector_search_update_doc_dimension(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        per_to_resize = eval(TestInputSingleton.input.param("per_to_resize", "[]"))
+        dims_to_resize = eval(TestInputSingleton.input.param("dims_to_resize", "[]"))
+        faiss_indexes = eval(TestInputSingleton.input.param("faiss_indexes", "[]"))
+        perform_faiss_validation = self.input.param("perform_faiss_validation", False)
+        faiss_index_node = self.get_host_ip()
+
+        self.log.info(f"Percentage of docs to resize: {per_to_resize}")
+        self.log.info(f"Dimensions to resize {dims_to_resize}")
+        self.log.info(f"Faiss indexes: {faiss_indexes}")
+
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
+
+
+
+        indexes = []
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+
+        index_name = "i0"
+        idx = [(index_name, "b1.s1.c1")]
+        index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
+                                                    vector_fields=vector_fields,
+                                                    create_vector_index=True,
+                                                    extra_fields=[{"sno": "number"}])
+        if len(dims_to_resize) == 0:
+            index[0]['perc_docs'] = 1
+        else:
+            total_per = sum(per_to_resize)
+            index[0]['perc_docs'] = 1 - total_per
+        indexes.append(index[0])
+
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset,
+                                                percentages_to_resize=per_to_resize,
+                                                dims_to_resize=dims_to_resize,
+                                                update=True,
+                                                faiss_indexes=faiss_indexes,
+                                                faiss_index_node=faiss_index_node)
+
+
+        for i, dim in enumerate(dims_to_resize):
+            vector_fields = {"dims": dim, "similarity": self.similarity}
+
+            index_name = "i{}".format(i + 1)
+            idx = [(index_name, "b1.s1.c1")]
+            index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
+                                                        vector_fields=vector_fields,
+                                                        create_vector_index=True,
+                                                        extra_fields=[{"sno": "number"}])
+
+            index[0]['perc_docs'] = per_to_resize[i]
+            indexes.append(index[0])
+            if perform_faiss_validation:
+                index[0]['dataset'] = bucketvsdataset['bucket_name']
+                index_obj = index[0]['index_obj']
+                index_obj.faiss_index = self.get_faiss_index_from_file(faiss_indexes[i])
+
+        if perform_faiss_validation:
+            if len(faiss_indexes) > len(dims_to_resize):
+                index = indexes[0]
+                index['dataset'] = bucketvsdataset['bucket_name']
+                index_obj = index['index_obj']
+                index_obj.faiss_index = self.get_faiss_index_from_file(faiss_indexes[-1])
+
+
+        self.wait_for_indexing_complete()
+        self.sleep(60, "Wait before running queries")
+
+        for idx, index in enumerate(indexes):
+            index['dataset'] = bucketvsdataset['bucket_name']
+            if index['perc_docs'] == 0:
+                continue
+
+            self.log.info("Running queries for index: {}".format(index['name']))
+            faiss_accuracy = []
+            faiss_recall = []
+
+            if idx == 0:
+                queries = self.get_query_vectors(index['dataset'])
+            else:
+                queries = self.get_query_vectors(index['dataset'], dimension=dims_to_resize[idx-1])
+
+            for q in queries[:self.num_queries]:
+                index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                           'faiss_recall': 0, 'fts_faiss_accuracy': 0, 'fts_faiss_recall': 0}
+                self.query['knn'][0]['vector'] = q.tolist()
+
+                n1ql_hits, hits, matches, recall_and_accuracy = self.run_vector_query(query=self.query, index=index['index_obj'],
+                                                                                    dataset=index['dataset'],
+                                                                                    validate_fts_with_faiss=perform_faiss_validation)
+                if n1ql_hits != self.k or hits != self.k:
+                    self.sleep(3000, "Wait before failing")
+                    self.fail("Could not get expected number of hits, Expected: {}, N1QL hits: {}, " \
+                              " FTS query hits: {}".format(self.k, n1ql_hits, hits))
+
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['fts_faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['fts_faiss_recall'])
+
+
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            if perform_faiss_validation:
+                index_stats['fts_faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['fts_faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+                self.log.info("Index Stats: {}".format(index_stats))
+
+        for faiss_index in faiss_indexes:
+            if perform_faiss_validation:
+                self.delete_faiss_index_files(faiss_index)
+
     def test_vector_search_different_dimensions(self):
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1208,10 +1337,10 @@ class VectorSearch(FTSBaseTest):
                                                 dims_to_resize=dims_to_resize)
 
         indexes = []
-        for index, dim in enumerate(dims_to_resize):
+        for i, dim in enumerate(dims_to_resize):
             vector_fields = {"dims": dim, "similarity": self.similarity}
 
-            index_name = "i{}".format(index)
+            index_name = "i{}".format(i)
             idx = [(index_name, "b1.s1.c1")]
             index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
                                                         vector_fields=vector_fields,
@@ -1224,7 +1353,8 @@ class VectorSearch(FTSBaseTest):
                 index_obj = index[0]['index_obj']
                 index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], dimension=dim)
 
-        self.sleep(120, "Wait before running queries")
+        self.wait_for_indexing_complete()
+        self.sleep(60, "Wait before running queries")
 
         for idx, index in enumerate(indexes):
             index['dataset'] = bucketvsdataset['bucket_name']

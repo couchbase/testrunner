@@ -7,7 +7,7 @@ class VectorLoader:
 
     def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False,
                  create_bucket_struct=False, use_cbimport=False, dims_for_resize=[], percentages_to_resize=[],
-                 iterations=1):
+                 iterations=1, update=False, faiss_indexes = [], faiss_index_node='127.0.0.1'):
 
         self.node = node
         self.username = username
@@ -26,6 +26,11 @@ class VectorLoader:
         self.docker_client = docker.from_env()
         self.percentages_to_resize = percentages_to_resize
         self.dims_for_resize = dims_for_resize
+        self.update = update
+        if self.update:
+            self.use_cbimport = False
+        self.faiss_indexes = faiss_indexes
+        self.faiss_index_node = faiss_index_node
 
     def load_data(self, container_name=None):
         try:
@@ -37,8 +42,8 @@ class VectorLoader:
                                 f"-iter {self.iterations}"
 
             if len(self.percentages_to_resize) > 0:
-                if len(self.percentages_to_resize) != len(self.dims_for_resize):
-                    raise ValueError("percentages and dims lists must have the same length")
+                # if len(self.percentages_to_resize) != len(self.dims_for_resize):
+                #     raise ValueError("percentages and dims lists must have the same length")
 
                 total_percentage = 0
                 for per in self.percentages_to_resize:
@@ -51,11 +56,28 @@ class VectorLoader:
                 for per in self.percentages_to_resize:
                     per_arg += " " + str(per)
 
-                dims_arg = "-dims"
-                for dim in self.dims_for_resize:
-                    dims_arg += " " + str(dim)
+                docker_run_params += " " + per_arg
 
-                docker_run_params += " " + per_arg + " " + dims_arg
+                if len(self.dims_for_resize) > 0:
+                    dims_arg = "-dims"
+                    for dim in self.dims_for_resize:
+                        dims_arg += " " + str(dim)
+
+                    docker_run_params += " " + dims_arg
+
+                if self.update:
+                    docker_run_params += " -update " + str(self.update)
+
+                if len(self.faiss_indexes) > 0:
+                    faiss_index_arg = "-indexes"
+                    for faiss_index in self.faiss_indexes:
+                        faiss_index_arg += " " + faiss_index
+
+                    docker_run_params += " " + faiss_index_arg
+
+                    docker_run_params += " -fn" + " " + self.faiss_index_node
+
+
 
                 print("docker run params: {}".format(docker_run_params))
 

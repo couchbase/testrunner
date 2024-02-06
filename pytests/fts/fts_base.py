@@ -6498,7 +6498,7 @@ class FTSBaseTest(unittest.TestCase):
 
 
     def load_vector_data(self, containers, dataset, use_cbimport=True, percentages_to_resize=[], dims_to_resize=[],
-                         iterations=1):
+                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1'):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
@@ -6514,7 +6514,10 @@ class FTSBaseTest(unittest.TestCase):
                                       use_cbimport=use_cbimport,
                                       dims_for_resize=dims_to_resize,
                                       percentages_to_resize=percentages_to_resize,
-                                      iterations=iterations)
+                                      iterations=iterations,
+                                      update=update,
+                                      faiss_indexes=faiss_indexes,
+                                      faiss_index_node=faiss_index_node)
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
@@ -6607,3 +6610,23 @@ class FTSBaseTest(unittest.TestCase):
             # faiss.write_index(faiss_index, file_path)
 
         return faiss_index
+
+    def get_faiss_index_from_file(self, faiss_index_name):
+        import faiss
+        import numpy as np
+
+        INDEX_FILE = "/tmp/" + faiss_index_name + ".index"
+
+        faiss_index = faiss.read_index(INDEX_FILE)
+
+        return faiss_index
+
+    def delete_faiss_index_files(self, faiss_index_name):
+        INDEX_FILE = "/tmp/" + faiss_index_name + ".index"
+
+        if os.path.exists(INDEX_FILE):
+            self.log.info(f"File '{INDEX_FILE}' exists. Deleting...")
+            os.remove(INDEX_FILE)
+            self.log.info(f"File '{INDEX_FILE}' has been deleted.")
+        else:
+            self.log.info(f"File '{INDEX_FILE}' does not exist.")
