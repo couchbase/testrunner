@@ -231,6 +231,7 @@ def append_test(tests, name):
         "test_add_nodes_x509_rebalance" not in name and \
         "test_init_nodes_x509" not in name and \
         "test_basic_rebalance" not in name and \
+        "test_function_scope_modification_after_function_creation" not in name and \
          name.find('*') > 0:
         for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
             tests.append(prefix + '.' + t._testMethodName)
