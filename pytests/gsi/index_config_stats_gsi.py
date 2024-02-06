@@ -92,7 +92,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.sleep(60)
 
         shell = RemoteMachineShellConnection(index_node)
-        output1, error1 = shell.execute_command("killall -9 indexer")
+        output1, error1 = shell.execute_command("pkill -9 indexer")
 
         self.sleep(30)
 
@@ -326,7 +326,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.sleep(60)
 
         shell = RemoteMachineShellConnection(index_node)
-        output1, error1 = shell.execute_command("killall -9 indexer")
+        output1, error1 = shell.execute_command("pkill -9 indexer")
 
         self.sleep(30)
 

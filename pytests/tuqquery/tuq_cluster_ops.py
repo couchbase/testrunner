@@ -518,7 +518,7 @@ class QueriesOpsTests(QuerySanityTests):
                                                      [], [self.servers[self.nodes_init - 1]])
             rebalance.result()
             if self.stop_server:
-                self.shell.execute_command("killall -9 cbq-engine")
+                self.shell.execute_command("pkill -9 cbq-engine")
             thread1.join()
             self.assertFalse(self.fail_status, "Queries failed")
         except Exception as e:

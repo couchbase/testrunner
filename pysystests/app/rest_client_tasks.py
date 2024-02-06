@@ -527,7 +527,7 @@ def failover_by_killing_mc(ip):
     if cfg.COUCHBASE_OS == "windows":
         cmd = "taskkill /F /T /IM memcached* && taskkill /F /T /IM erl*"
     else:
-        cmd = "killall -9 memcached && killall -9 beam.smp"
+        cmd = "pkill -9 memcached && pkill -9 beam.smp"
     logger.error(cmd)
     result = node_ssh.execute_command(cmd, node)
     logger.error(result)

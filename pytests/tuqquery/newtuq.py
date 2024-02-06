@@ -113,8 +113,8 @@ class QueryTests(BaseTestCase):
     def suite_tearDown(self):
         if not self.input.param("skip_build_tuq", False):
             if hasattr(self, 'shell'):
-                self.shell.execute_command("killall /tmp/tuq/cbq-engine")
-                self.shell.execute_command("killall tuqtng")
+                self.shell.execute_command("pkill /tmp/tuq/cbq-engine")
+                self.shell.execute_command("pkill tuqtng")
                 self.shell.disconnect()
 
 ##############################################################################################

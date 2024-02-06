@@ -70,7 +70,7 @@ class MemcachetestRunner():
         return self.shell.log_command_output(output, error, track_words=("downstream timeout",))
 
     def stop_memcachetest(self):
-        cmd = "killall -9 memcachetest"
+        cmd = "pkill -9 memcachetest"
         output, error = self.shell.execute_command(cmd)
         self.shell.log_command_output(output, error)
         self.log.info("memcachetest was stopped on {0}".format(self.server.ip))
