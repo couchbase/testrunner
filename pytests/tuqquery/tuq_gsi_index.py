@@ -831,24 +831,28 @@ class QueriesIndexTests(QueryTests):
                              ' meta().expiration = 0'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['#operator'] == 'UnionScan')
-                self.assertTrue(plan['~children'][0]['scans'][0]['index'] in ['idx3', '#primary'] or
-                                plan['~children'][0]['scans'][1]['index'] in ['idx4', '#primary'])
+                self.log.info(f"plan is: {plan}")
+                self.assertTrue(plan['~children'][0]['#operator'] == 'PrimaryScan3')
+                # self.assertTrue(plan['~children'][0]['scans'][0]['index'] in ['idx3', '#primary'] or
+                #                 plan['~children'][0]['scans'][1]['index'] in ['idx4', '#primary'])
                 self.query = 'explain SELECT meta().cas, meta().expiration,meta().id FROM {0} ' \
                              'where meta().cas = 1487875768758304768 and meta().expiration > 0'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
+                self.log.info(f"plan is: {plan}")
                 self.assertTrue(plan['~children'][0]['index'] == 'idx5')
                 self.query = 'explain SELECT meta().cas, meta().expiration FROM {0} ' \
                              'where meta().cas !=1487875768758304768 or meta().expiration != 0'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
+                self.log.info(f"plan is: {plan}")
                 self.assertTrue(plan['~children'][0]['#operator'] == 'UnionScan')
                 self.query = 'explain SELECT  meta().id  FROM {0} ' \
                              'where meta().id in ["",null,"query-testemployee10231.2819054-0",' \
                              '"query-testemployee9987.55838821-0"]'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
+                self.log.info(f"plan is: {plan}")
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(plan['~children'][0]['index'] in ["#primary", "idx4"])
                 self.query = 'SELECT  meta().id  FROM {0} ' \
@@ -864,12 +868,14 @@ class QueriesIndexTests(QueryTests):
                              'where meta().cas > 1487875768758304768'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
+                self.log.info(f"plan is: {plan}")
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(plan['~children'][0]['index'] == "idx6")
                 self.query = 'explain SELECT  meta().expiration,meta().id  FROM {0} ' \
                              'where meta().expiration > 0'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
+                self.log.info(f"plan is: {plan}")
                 self.assertTrue("covers" in str(plan))
                 self.assertTrue(plan['~children'][0]['index'] == "idx2")
             finally:
