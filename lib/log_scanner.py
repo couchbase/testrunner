@@ -67,7 +67,7 @@ class LogScanner(object):
             },
             "fts": {
                 "fts.log": {
-                    "keywords" : ["panic"]
+                    "keywords" : ["panic", "exited with status"]
                     }
             },
             "index": {
