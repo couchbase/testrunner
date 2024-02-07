@@ -93,6 +93,7 @@ class GatewayBaseTest(unittest.TestCase):
     def kill_processes_gateway(self, shell):
         self.log.info('=== Killing Sync Gateway')
         shell.terminate_process(process_name='sync_gateway')
+        shell.execute_command('killall sync_gateway')
         shell.execute_command('pkill sync_gateway')  # centos 7
 
     def uninstall_gateway(self, shell):

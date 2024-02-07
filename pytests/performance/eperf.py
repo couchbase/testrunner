@@ -388,7 +388,7 @@ class EPerfMaster(perf.PerfBase):
     def stop_measure_sched_delay(self):
         for server in self.input.servers:
             shell = RemoteMachineShellConnection(server)
-            cmd = "pkill -9 -r .*measure-sched-delays"
+            cmd = "killall -9 -r .*measure-sched-delays"
             self._exec_and_log(shell, cmd)
             shell.disconnect()
 

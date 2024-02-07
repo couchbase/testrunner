@@ -546,7 +546,7 @@ class RemoteMachineShellConnection(KeepRefs):
             cmd = "ps aux | grep {0} | awk '{{print $2}}' | xargs kill -9 ".format(cb_process)
             o, r = self.execute_command(cmd)
             self.log_command_output(o, r)
-            o, r = self.execute_command("pkill -9 epmd")
+            o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
         else:
             log.error("stop_server: don't know operating system " + os + " or product version")
@@ -703,7 +703,10 @@ class RemoteMachineShellConnection(KeepRefs):
                     log.error("erlang process is not killed")
                     break
         else:
-            o, r = self.execute_command("pkill -9 beam.smp")
+            o, r = self.execute_command("killall beam.smp")
+            if r and r[0] and "command not found" in r[0]:
+                o, r = self.execute_command("pkill beam.smp")
+                self.log_command_output(o, r)
             self.log_command_output(o, r, debug=False)
             all_killed = False
             count = 0
@@ -717,8 +720,10 @@ class RemoteMachineShellConnection(KeepRefs):
                 if process_count == 0:
                     all_killed = True
                 if count == 3:
-                    o, r = self.execute_command("pkill -9 beam.smp")
-                    self.log_command_output(o, r)
+                    o, r = self.execute_command("killall beam.smp")
+                    if r and r[0] and "command not found" in r[0]:
+                        o, r = self.execute_command("pkill beam.smp")
+                        self.log_command_output(o, r)
                 count += 1
             if not all_killed:
                 raise Exception("Could not kill erlang process")
@@ -730,7 +735,7 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command("taskkill /F /T /IM cbft.exe*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("pkill -9 cbft")
+            o, r = self.execute_command("killall -9 cbft")
             self.log_command_output(o, r)
             if r and r[0] and "command not found" in r[0]:
                 o, r = self.execute_command("pkill cbft")
@@ -814,7 +819,7 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command("taskkill /F /T /IM goxdcr*")
             self.log_command_output(o, r)
         else:
-            o, r = self.execute_command("pkill -9 goxdcr")
+            o, r = self.execute_command("killall -9 goxdcr")
             self.log_command_output(o, r)
         return o, r
 
@@ -826,7 +831,7 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, r)
         else:
             RemoteMachineHelper(self).is_process_running(name)
-            o, r = self.execute_command(command="pkill -9 {0}".format(name))
+            o, r = self.execute_command(command="killall -9 {0}".format(name))
             self.log_command_output(o, r)
         return o, r
 
@@ -2883,7 +2888,7 @@ class RemoteMachineShellConnection(KeepRefs):
                         sys.exit(1)
                     self.stop_server()
                 else:
-                    output, error = self.execute_command("pkill -9 rpm")
+                    output, error = self.execute_command("killall -9 rpm")
                     self.log_command_output(output, error)
                     output, error = self.execute_command("rm -f /var/lib/rpm/.rpm.lock")
                     self.log_command_output(output, error)
@@ -3107,7 +3112,7 @@ class RemoteMachineShellConnection(KeepRefs):
             elif type in RPM_DIS_NAME:
                 """ Sometimes, vm left with unfinish uninstall/install process.
                     We need to kill them before doing uninstall """
-                output, error = self.execute_command("pkill -9 rpm")
+                output, error = self.execute_command("killall -9 rpm")
                 self.log_command_output(output, error)
                 uninstall_cmd = 'rpm -e {0}'.format('membase-server')
                 log.info('running rpm -e to remove membase-server')
@@ -3946,7 +3951,7 @@ class RemoteMachineShellConnection(KeepRefs):
             cmd = "ps aux | grep {0} | awk '{{print $2}}' | xargs kill -9 ".format(cb_process)
             o, r = self.execute_command(cmd)
             self.log_command_output(o, r)
-            o, r = self.execute_command("pkill -9 epmd")
+            o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
 
     def start_couchbase(self):
@@ -3995,7 +4000,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if not running and retry >= 3:
             sys.exit("Server not started even after 3 retries on "+self.info.ip)
 
-    # To be used when a calling a method with pkill is used, because it's 
+    # To be used when a calling a method with killall is used, because it's 
     # not necessarily installed on the VM.
     def install_psmisc(self):
         if "centos" in self.info.distribution_version.lower():
@@ -4017,9 +4022,9 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, [])
         else:
             if self.nonroot:
-                o, r = self.execute_command("pkill -SIGSTOP memcached.bin")
+                o, r = self.execute_command("killall -SIGSTOP memcached.bin")
             else:
-                o, r = self.execute_command("pkill -SIGSTOP memcached")
+                o, r = self.execute_command("killall -SIGSTOP memcached")
             self.log_command_output(o, r)
         log.info("wait %s seconds to make node down." % timesleep)
         time.sleep(timesleep)
@@ -4032,17 +4037,17 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, [])
         else:
             if self.nonroot:
-                o, r = self.execute_command("pkill -SIGCONT memcached.bin")
+                o, r = self.execute_command("killall -SIGCONT memcached.bin")
             else:
-                o, r = self.execute_command("pkill -SIGCONT memcached")
+                o, r = self.execute_command("killall -SIGCONT memcached")
         self.log_command_output(o, r)
 
     def pause_beam(self):
-        o, r = self.execute_command("pkill -SIGSTOP beam.smp")
+        o, r = self.execute_command("killall -SIGSTOP beam.smp")
         self.log_command_output(o, r)
 
     def unpause_beam(self):
-        o, r = self.execute_command("pkill -SIGCONT beam.smp")
+        o, r = self.execute_command("killall -SIGCONT beam.smp")
         self.log_command_output(o, r)
 
 

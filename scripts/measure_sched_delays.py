@@ -62,7 +62,7 @@ class SchedDelays():
     def stop_measure_sched_delay(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
-            cmd = "pkill -9 -r .*measure-sched-delays"
+            cmd = "killall -9 -r .*measure-sched-delays"
             output, error = shell.execute_command(cmd)
             shell.log_command_output(output, error)
             shell.disconnect()
