@@ -1852,7 +1852,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server failed over"),
-                            "Expected command to succeed")
+                            "Expected command to succeed. The command  output: " + str(stdout))
             self.assertTrue(self.verifyActiveServers(server, num_initial_servers - 1),
                             "Servers not failed over")
             self.assertTrue(self.verifyFailedServers(server, 1),
