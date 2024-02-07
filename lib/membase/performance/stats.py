@@ -794,7 +794,7 @@ class StatsCollector(object):
             except SystemExit:
                 log.error("can't establish SSH session with {0}".format(node.ip))
             else:
-                cmd = "pkill atop; rm -fr /tmp/*.atop;" + \
+                cmd = "killall atop; rm -fr /tmp/*.atop;" + \
                     "atop -w /tmp/{0}.atop -a 15".format(node.ip) + \
                     " > /dev/null 2> /dev.null < /dev/null &"
                 shell.execute_command(cmd)
@@ -807,7 +807,7 @@ class StatsCollector(object):
             except SystemExit:
                 log.error("can't establish SSH session with {0}".format(node.ip))
             else:
-                shell.execute_command("pkill atop")
+                shell.execute_command("killall atop")
 
 class CallbackStatsCollector(StatsCollector):
 

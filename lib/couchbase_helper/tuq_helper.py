@@ -139,9 +139,9 @@ class N1QLHelper():
         return collection_created
 
     def killall_tuq_process(self):
-        self.shell.execute_command("pkill cbq-engine")
-        self.shell.execute_command("pkill tuqtng")
-        self.shell.execute_command("pkill indexer")
+        self.shell.execute_command("killall cbq-engine")
+        self.shell.execute_command("killall tuqtng")
+        self.shell.execute_command("killall indexer")
 
     def run_query_from_template(self, query_template):
         self.query = self.gen_results.generate_query(query_template)

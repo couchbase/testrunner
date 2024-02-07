@@ -814,8 +814,8 @@ class MongoInstaller(Installer):
     def uninstall(self, params):
         server = self.get_server(params)
         remote_client = self.mk_remote_client(server)
-        remote_client.execute_command("pkill mongod mongos")
-        remote_client.execute_command("pkill -9 mongod mongos")
+        remote_client.execute_command("killall mongod mongos")
+        remote_client.execute_command("killall -9 mongod mongos")
         remote_client.execute_command("rm -rf ./{0}".format(server.product_name))
 
     def install(self, params):

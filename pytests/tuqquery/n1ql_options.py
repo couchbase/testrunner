@@ -24,7 +24,7 @@ class OptionsTests(QueryTests):
         super(OptionsTests, self).suite_tearDown()
 
     def test_metrics(self):
-        self.shell.execute_command("pkill cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-metrics=false')
         for query_bucket in self.query_buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" + \
@@ -34,14 +34,14 @@ class OptionsTests(QueryTests):
             self.assertFalse('metrics' in actual_result, 'Metrics are shown!')
 
     def test_readonly(self):
-        self.shell.execute_command("pkill cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-readonly=true')
         for query_bucket in self.query_buckets:
             self.query = 'INSERT into %s (key, value) VALUES ("%s", %s)' % (query_bucket, 'key1', 'value')
             self.run_cbq_query()
 
     def test_namespace(self):
-        self.shell.execute_command("pkill cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-namespace=default')
         for query_bucket in self.query_buckets:
             self.query = "SELECT count(name) FROM %s" % query_bucket
@@ -49,7 +49,7 @@ class OptionsTests(QueryTests):
             self.assertTrue(actual_result['results'], 'There are no results for namespace')
 
     def test_signature(self):
-        self.shell.execute_command("pkill cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-signature=false')
         for query_bucket in self.query_buckets:
             self.query = "SELECT name, CASE WHEN join_mo < 3 OR join_mo > 11 THEN" + \
@@ -59,7 +59,7 @@ class OptionsTests(QueryTests):
             self.assertFalse('signature' in actual_result, 'signature are shown!')
 
     def test_timeout(self):
-        self.shell.execute_command("pkill cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self._start_command_line_query(self.master, options='-timeout=1ms')
         for query_bucket in self.query_buckets:
             self.query = "SELECT count(name) FROM %s" % query_bucket
@@ -72,7 +72,7 @@ class OptionsTests(QueryTests):
                 self.assertTrue(actual_result['status'] == 'stopped', 'Server timeout did not work')
 
     def test_http(self):
-        self.shell.execute_command("pkill cbq-engine")
+        self.shell.execute_command("killall cbq-engine")
         self.n1ql_port = 8094
         self._start_command_line_query(self.master, options='-http=:%s' % self.n1ql_port)
         for query_bucket in self.query_buckets:

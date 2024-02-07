@@ -901,7 +901,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         t1.start()
 
         shell = RemoteMachineShellConnection(index_node)
-        output1, error1 = shell.execute_command("pkill -9 indexer")
+        output1, error1 = shell.execute_command("killall -9 indexer")
 
         t1.join()
 
