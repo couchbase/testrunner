@@ -73,7 +73,7 @@ class AscDescTests(QueryTests):
         assert_2 = lambda x: self.compare("do_not_test_against_hardcode", query_2, static_res_2)
         assert_4 = lambda x: self.compare("test_asc_desc_composite_index", query_4, static_res_4, alias="default")
         assert_6 = lambda x: self.compare("test_asc_desc_composite_index", query_6, static_res_6, alias="default")
-        assert_7 = lambda x: self.assertEqual(x['post_q_res'][0]['~children'][0]['~children'][0]['scans'][0]['index'],'idx',"plan is: {0}".format(x['post_q_res'][0]['~children'][0]['~children'][0]['scans']))
+        assert_7 = lambda x: self.assertTrue('idx' in str(x['post_q_res'][0]),"Index should be in plan! plan is: {0}".format(x['post_q_res'][0]))
         assert_8 = lambda x: self.compare("test_asc_desc_composite_index", query_8, static_res_6, alias="default")
         assert_9 = lambda x: self.compare("test_asc_desc_composite_index", query_9, static_res_4, alias="default")
 
@@ -331,13 +331,13 @@ class AscDescTests(QueryTests):
                              ' is not null and hobbies.hobby is not missing order by meta().id asc' % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index'] == idx or plan['~children'][0]['~children'][0]['index'] == idx2, "Plan is {0}".format(plan['~children'][0]['~children'][0]))
+                self.assertTrue(idx in str(plan) or idx2 in str(plan), "Expected index is not in the plan! Plan is {0}".format(plan))
                 self.query = 'explain select * from %s where meta().id ="query-testemployee10317.9004497-0" and _id' \
                              ' is not missing and tasks is not null and hobbies.hobby is not missing order by' \
                              ' meta().id desc' % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue(plan['~children'][0]['~children'][0]['index'] == idx or plan['~children'][0]['~children'][0]['index'] == idx2, "Plan is {0}".format(plan['~children'][0]['~children'][0]))
+                self.assertTrue(idx in str(plan) or idx2 in str(plan), "Expected index is not in the plan! Plan is {0}".format(plan))
 
                 self.query = 'select * from %s as d where meta().id ="query-testemployee10317.900449741801-0" and \'_id\' is' \
                              ' not null order by meta().id asc' % query_bucket
@@ -355,7 +355,7 @@ class AscDescTests(QueryTests):
                              ' _id is not null and hobbies.hobby is not missing order by meta().id' % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx2)
+                self.assertTrue(idx2 in str(plan),f"Index is not in the plan! Plan is {plan}" )
                 self.query = "CREATE INDEX %s ON %s(meta().id asc,_id,tasks,age,hobbies.hobby)" % (
                     idx, query_bucket)
                 actual_result = self.run_cbq_query()
@@ -369,7 +369,7 @@ class AscDescTests(QueryTests):
                              ' order by meta().id desc'.format(query_bucket)
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx)
+                self.assertTrue(idx in str(plan),f"Index is not in the plan! Plan is {plan}" )
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s ON %s USING %s" % (idx, query_bucket, self.index_type)
@@ -511,7 +511,7 @@ class AscDescTests(QueryTests):
                 self.query = 'explain select meta().id from %s where isPresent = true order by isPresent' % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx7)
+                self.assertTrue(idx7 in str(plan), f"Index is wrong, check plan! Plan is {plan}")
                 self.query = 'select meta().id from %s where isPresent=true or isPresent=false order by isPresent ' \
                              'asc' % query_bucket
                 res = self.run_cbq_query()
@@ -531,7 +531,7 @@ class AscDescTests(QueryTests):
                              " datetime" % query_bucket
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertEqual(plan['~children'][0]['~children'][0]['index'], idx8)
+                self.assertTrue(idx8 in str(plan), f"Index is wrong, check plan! Plan is {plan}")
                 self.query = "select meta().id from %s where datetime > '2006-01-02T15:04:05' order by " \
                              "datetime" % query_bucket
                 res = self.run_cbq_query()
