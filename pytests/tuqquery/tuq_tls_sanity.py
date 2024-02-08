@@ -183,8 +183,8 @@ class QuerySanityTLSTests(QueryTests):
         ft_object = FlexIndexTests()
         ft_object.init_flex_object(self)
         flex_query_list = ["select meta().id from default {0} where name = 'employee-6'"]
-        self.create_fts_index(
-            name="default_index", source_name="default", doc_count=2016, index_storage_type=self.fts_index_type)
+        ft_object.fts_index = self.create_fts_index(
+            name="default_index", source_name="default", doc_count=2016, index_storage_type=self.fts_index_type)        
         failed_to_run_query, not_found_index_in_response, result_mismatch = ft_object.run_query_and_validate(flex_query_list)
         if failed_to_run_query or not_found_index_in_response or result_mismatch:
             self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
