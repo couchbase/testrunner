@@ -2971,6 +2971,8 @@ class QueryTests(BaseTestCase):
             self.assertEqual(res['metrics']['resultCount'], 5)
         elif role == 'query_select(default)' and self.load_collections == True:
             self.assertEqual(res['metrics']['resultCount'], 3)
+        elif role in ["query_select({0})".format(self.rbac_context)] and "test1" in self.bucket_name:
+            self.assertTrue(res['metrics']['resultCount'] == 5)
         elif role in ["query_select({0})".format(self.rbac_context)]:
             self.assertTrue(res['metrics']['resultCount'] == 2)
         elif role in ["bucket_admin(standard_bucket0)", "bucket_admin(default)", "select(default)",
