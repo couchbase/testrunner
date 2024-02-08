@@ -454,7 +454,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.compare_against_primary(query, primary_query)
 
     def test_flatten_advise_equivalent(self):
-        self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author) FOR r IN reviews END,country,email)")
+        self.run_cbq_query(query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author) FOR r IN reviews END,email,country)")
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN SELECT * FROM default "
                                                    "WHERE country = 'Norfolk Island' and email = 'Willian.Abshire@hotels.com' "
