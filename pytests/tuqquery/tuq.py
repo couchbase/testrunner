@@ -3553,9 +3553,12 @@ class QueryTests(BaseTestCase):
             if query.find("CREATE INDEX") < 0:
                 res = self.run_cbq_query(query=query)
                 plan = self.ExplainPlanHelper(res)
+                self.log.info(f"plan is: {plan}")
                 result = plan["~children"][0]["~children"][0] if "~children" in plan["~children"][0] else \
                     plan["~children"][0]
-                if result['scans'][0]['#operator'] != 'DistinctScan':
+                if result['#operator'] == 'IndexScan3':
+                    self.assertTrue('inter_index' in result['index'])
+                elif result['scans'][0]['#operator'] != 'DistinctScan':
                     if result["#operator"] != 'UnionScan':
                         if "ORDER BY" in query:
                             self.assertTrue(result["#operator"] == 'OrderedIntersectScan',
