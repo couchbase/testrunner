@@ -1276,7 +1276,7 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 self.query = "CREATE INDEX {0} ON {1}( DISTINCT ARRAY ( DISTINCT array j.region1 for j in" \
-                             " i.Marketing end) FOR i in {1}.{2} END) where VMs[0].os = 'ubuntu' " \
+                             " i.Marketing end) FOR i in {2} END) where VMs[0].os = 'ubuntu' " \
                              "USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
