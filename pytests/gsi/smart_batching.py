@@ -38,6 +38,8 @@ class SmartBatching(BaseSecondaryIndexingTests):
         self.index_rest.set_index_settings(index_transfer_batch_size)
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.index_rest.set_index_settings(redistribute)
+        index_stats_cache_timeout = {"indexer.stats_cache_timeout": 2000}
+        self.index_rest.set_index_settings(index_stats_cache_timeout)
         self.log.info("==============  SmartBatching setup has completed ==============")
 
     def tearDown(self):
