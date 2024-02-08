@@ -2176,9 +2176,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info("Hits: %s" % hits)
         vector_query_failure = []
         for index in self._cb_cluster.get_indexes():
-            if self.type_of_load == "separate" and "vector_" in index.name:
-                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, num_queries=2)
-        for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
@@ -2186,6 +2183,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.query,
             expected_hits=index.get_src_bucket_doc_count())
         self.log.info("Hits: %s" % hits)
+        for index in self._cb_cluster.get_indexes():
+            if self.type_of_load == "separate" and "vector_" in index.name:
+                vector_query_failure, query_matches = self.run_vector_queries_and_report(index, num_queries=2)
         if vector_query_failure:
             self.fail(f"Vector queries failed -> {vector_query_failure}")
 
@@ -2265,6 +2265,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
         self.load_data(exempt_bucket_prefix="vector-data")
         self.load_vector_data(containers, dataset=self.vector_dataset)
+        vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
+                                                                  self.index_per_vect_bucket)
 
         non_master_nodes = list(set(self._cb_cluster.get_nodes()) -
                                 {self._master})
@@ -2303,11 +2305,19 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                        ejectedNodes=ejected_nodes)
         rest.monitorRebalance()
 
+        self.log.info("Cluster nodes: {}".format(self._cb_cluster.get_nodes()))
+        for remove_node in eject_nodes:
+            self._cb_cluster.get_nodes().remove(remove_node)
+            node_services = remove_node.services.split(",")
+
+            if "kv" in node_services:
+                self._cb_cluster.get_kv_nodes().remove(remove_node)
+
         self.create_fts_indexes_some_buckets(exempt_bucket_prefix="vector-bucket")
         similarity = random.choice(["l2_norm", "dot_product"])
         vector_fields = {"dims": self.dimension, "similarity": similarity}
         self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
-                                             test_indexes=containers,
+                                             test_indexes=vect_index_containers,
                                              vector_fields=vector_fields,
                                              create_vector_index=True,
                                              wait_for_index_complete=False)
