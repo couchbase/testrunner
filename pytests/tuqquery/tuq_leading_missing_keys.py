@@ -248,6 +248,7 @@ class QueryLMKTests(QueryTests):
             query = "SELECT city, name,address FROM landmark where lower(city) = 'paris' ORDER BY name, city DESC LIMIT 5"
             primary_query = "SELECT city, name,address FROM landmark use index (def_inventory_landmark_primary) where lower(city) = 'paris' ORDER BY name, city DESC LIMIT 5"
 
+            self.run_cbq_query("drop index `default`:`travel-sample`.inventory.landmark.def_inventory_landmark_city")
             explain_plan = self.run_cbq_query("EXPLAIN " + query, query_context="default:`travel-sample`.inventory")
             self.assertTrue("idx1" in str(explain_plan), f"Query is not using the correct index! check explain plan {explain_plan}")
             self.assertTrue("index_keys" in str(explain_plan), f"We expect early filter to take place here but it does not, please check plan {explain_plan}")
@@ -262,6 +263,11 @@ class QueryLMKTests(QueryTests):
                 self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query("drop index landmark.idx1", query_context="default:`travel-sample`.inventory")
+            try:
+                # recreate index that comes w/travel-sample so there are no run order dependencies
+                self.run_cbq_query("CREATE INDEX `def_inventory_landmark_city` ON `travel-sample`.`inventory`.`landmark`(`city`)")
+            except:
+                pass
 
     def test_lmk_cte(self):
         index = "Create index idx1 on `travel-sample`(city INCLUDE MISSING,name,country)"
@@ -389,9 +395,7 @@ class QueryLMKTests(QueryTests):
             # technically non missing index is a superior index and will be picked up, we need to drop it
             self.run_cbq_query("drop index default:`travel-sample`.inventory.landmark.def_inventory_landmark_city")
             explain_plan = self.run_cbq_query("EXPLAIN " + query, query_context= "default:`travel-sample`.inventory")
-            self.fail()
-        except Exception as e:
-            self.assertTrue("No index available for ANSI join term lmark" in str(e), f"The test failed for an unexpected reason please check error {str(e)}")
+            self.assertTrue("idx1" not in str(explain_plan), f"This index should not be in the explain plan! Plan is {explain_plan}")
         finally:
             self.run_cbq_query("drop index default:`travel-sample`.`inventory`.`landmark`.idx1")
             try:
