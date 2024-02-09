@@ -474,11 +474,11 @@ class JoinTests(QuerySanityTests):
                 if self.type_join.upper() == JOIN_LEFT:
                     expected_result.extend([{}] * self.gens_tasks[-1].end)
                 try:
-                    self.query = "create primary index on %s" % query_bucket
+                    self.query = "create primary index if not exists on %s" % query_bucket
                     self.run_cbq_query()
                     self.sleep(15, 'wait for index')
                 except Exception as e:
-                    if "Index #primary already exists." in str(e):
+                    if "The index #primary already exists." in str(e):
                         continue
                     else:
                         self.fail("Index failed to be created! {0}".format(str(e)))

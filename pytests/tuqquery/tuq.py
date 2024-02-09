@@ -2835,14 +2835,14 @@ class QueryTests(BaseTestCase):
         else:
             self.assertEqual(res['metrics']['resultCount'], 2)
 
-        self.query = 'create primary index on `{0}`'.format(self.buckets[0].name)
+        self.query = 'create primary index if not exists on `{0}`'.format(self.buckets[0].name)
         try:
             self.curl_with_roles(self.query)
         except Exception as ex:
             self.log.error(ex)
 
         if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),"query_insert(`{0}`)".format(self.bucket_name),"query_update(`{0}`)".format(self.bucket_name),"query_delete(`{0}`)".format(self.bucket_name)]:
-            self.query = 'create primary index on `{0}`'.format(self.buckets[1].name)
+            self.query = 'create primary index if not exists on `{0}`'.format(self.buckets[1].name)
             try:
                 self.curl_with_roles(self.query)
             except Exception as ex:
