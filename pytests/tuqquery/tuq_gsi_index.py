@@ -1331,9 +1331,10 @@ class QueriesIndexTests(QueryTests):
                          "address[1][0].country = 'United States of America' and gender = 'M'".format(query_bucket)
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
+            self.log.info(f"plan is: {plan}")
             self.assertTrue("cover" in str(plan))
-            self.assertTrue("IntersectScan" in str(plan))
-            self.assertTrue(plan['~children'][0]['scans'][0]['scan']['index'] == idx2)
+            self.assertTrue("DistinctScan" in str(plan))
+            self.assertTrue(plan['~children'][0]['scan']['index'] == idx2)
             self.query = "select count(*) from {0} where _id = 'query-testemployee10194.855617-0' and " \
                          "address[1][0].country = 'United States of America' and gender = 'M'".format(query_bucket)
             actual_result = self.run_cbq_query()
