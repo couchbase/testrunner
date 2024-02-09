@@ -1,4 +1,7 @@
-import docker
+try:
+    import docker
+except ImportError:
+    print("WARN: fail to import docker")
 
 class VectorLoader:
 
