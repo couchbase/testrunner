@@ -18,7 +18,10 @@ import random
 import subprocess
 import string
 import boto3
-import docker
+try:
+    import docker
+except ImportError:
+    print('WARN: fail to import docker')
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
