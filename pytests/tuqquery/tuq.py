@@ -409,7 +409,18 @@ class QueryTests(BaseTestCase):
                           end=1000):
         # Load Emp Dataset
         for bucket in self.buckets:
-            self.cluster.bucket_flush(self.master, bucket)
+            retry = 0
+            while retry <= 5:
+                try:
+                    self.cluster.bucket_flush(self.master, bucket)
+                except Exception as e:
+                    self.sleep(60)
+                    retry += 1
+                    continue
+                else:
+                    break
+            if retry > 5:
+                raise Exception("bucket flush failed after 5 attempts")
 
         if end > 0:
             self._kv_gen = JsonDocGenerator("emp_",
