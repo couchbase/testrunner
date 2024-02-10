@@ -384,19 +384,26 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ Failover active vb0 node from a cluster """
     def failover_activevb0_node(self, master):
-        pre_failover_uuid, _ =self.get_failover_log(master)
+        pre_failover_uuid, _ = self.get_failover_log(master)
         self.log.info("Starting failover ...")
         # find which node contains vb0, we will failover that node
         node = self.get_active_vb0_node(master)
         self.log.info("Node {0} contains active vb0".format(node))
         if node in self.src_nodes:
+            self.log.info("Node {0} found in source cluster nodes".format(node))
             if node == self.src_master:
                 self.src_cluster.failover_and_rebalance_master()
             else:
                 self.src_cluster.failover_and_rebalance_master(master=False)
         else:
-            self.dest_cluster.failover_and_rebalance_master()
+            self.log.info("Node {0} found in destination cluster nodes".format(node))
+            if node == self.dest_master:
+                self.dest_cluster.failover_and_rebalance_master()
+            else:
+                self.dest_cluster.failover_and_rebalance_master(master=False)
 
+        self.log.info("Failover and rebalance completed for {0}".format(node))
+        self.log.info("Getting post failover uuid")
         if "source" in self._failover:
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.src_cluster.get_master_node()))
         else:
