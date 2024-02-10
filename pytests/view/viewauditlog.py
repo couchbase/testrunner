@@ -64,6 +64,8 @@ class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
         self._verify_ddoc_data_all_buckets()
 
         shell = RemoteMachineShellConnection(self.master)
+        command = "curl --version | awk 'NR==1{print $2}'"
+        result = shell.execute_command(command)
 
         # By default views audit logs are not enabled, Run below curl command to enable all view audit events
         shell.execute_command("curl -v  POST -u Administrator:password http://localhost:8091/settings/audit -d auditdEnabled=true -d disabled=8255,20485,20488,20489,20490,20491,20493,28672,28673,28674,28675,28676,28677,28678,28679,28680,28681,28682,28683,28684,28685,28686,28687,28688,28689,28690,28691,28692,28693,28694,28695,28697,28698,28699,28700,28701,28702,28704,28705,28706,28707,28708,28709,28710,28711,28712,28713,28714,28715,28716,28717,28718,28719,28720,28721,28722,28723,28724,28725,28726,28727,28728,32770,32771,32772,32780,32783,32784,32785,32786,36867,36868,36869,36870,36871,36872,36873,36877,36878,36879,36880,45057,45061,45066,45070")
@@ -73,7 +75,7 @@ class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
         expected_results_authentication_failure = {
                                                      "auth":"Administrator",
                                                      "error":"unauthorized",
-                                                     "user_agent": "curl/7.29.0",
+                                                     "user_agent": "curl/"+result[0][0],
                                                      "id": 40966,
                                                      "name": "Access denied",
                                                      "description": "Access denied to the REST API due to invalid permissions or credentials",
@@ -94,7 +96,7 @@ class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
         expected_results_authorization_failure = {
                                                      "auth": "test",
                                                      "error": "forbidden",
-                                                     "user_agent": "curl/7.29.0",
+                                                     "user_agent": "curl/"+result[0][0],
                                                      "id": 40966,
                                                      "name": "Access denied",
                                                      "description": "Access denied to the REST API due to invalid permissions or credentials",
