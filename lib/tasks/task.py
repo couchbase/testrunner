@@ -2727,9 +2727,11 @@ class VerifyCollectionDocCountTask(Task):
         self.src_stats = self.src_conn.get_collection_stats(self.bucket)
         self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)
 
-    def execute(self, task_manager):
+    def execute(self, task_manager):        
         try:
+            time.sleep(60)
             for map_exp in self.mapping.items():
+                self.log.info("Map expression: {0}".format(str(map_exp)))
                 if ':' in map_exp[0]:
                     src_scope = map_exp[0].split(':')[0]
                     src_collection = map_exp[0].split(':')[1]
@@ -2738,12 +2740,16 @@ class VerifyCollectionDocCountTask(Task):
                                                                         self.src.get_nodes(),
                                                                         self.src_stats)
                 else:
-                    src_scope = map_exp[0]
-                    src_collection = "all"
+                    if '.' in map_exp[0]:
+                        src_scope = map_exp[0].split('.')[0]
+                        src_collection = map_exp[0].split('.')[1]
+                    else:                    
+                        src_scope = map_exp[0]
+                        src_collection = "all"
                     src_count = self.src_conn.get_scope_item_count(self.bucket, src_scope,
                                                                    self.src.get_nodes(), self.src_stats)
 
-                if map_exp[1]:
+                if map_exp[1]:                                                                     
                     if map_exp[1].lower() == "null":
                         self.log.info("{} mapped to null, skipping doc count verification"
                                   .format())
@@ -2751,7 +2757,7 @@ class VerifyCollectionDocCountTask(Task):
                     if ':' in map_exp[1]:
                         dest_collection_specified = True
                         dest_scope = map_exp[1].split(':')[0]
-                        dest_collection = map_exp[1].split(':')[1]
+                        dest_collection = map_exp[1].split(':')[1]                        
                     elif "colon" in map_exp[1]:
                         dest_collection_specified = True
                         dest_scope = map_exp[1].split("colon")[0]
@@ -2762,10 +2768,18 @@ class VerifyCollectionDocCountTask(Task):
                                                                               self.dest.get_nodes(),
                                                                               self.dest_stats)
                     else:
-                        dest_scope = map_exp[1]
-                        dest_collection = "all"
+                        if '.' in map_exp[1]:
+                            dest_scope = map_exp[1].split('.')[0]
+                            dest_collection = map_exp[1].split('.')[1]
+                        else:
+                            dest_scope = map_exp[1]
+                            dest_collection = "all"
                         dest_count = self.dest_conn.get_scope_item_count(self.bucket, dest_scope,
                                                                          self.dest.get_nodes(), self.dest_stats)
+                else:
+                    dest_scope = None
+                    dest_count = -1                                
+                    
                 self.log.info('-' * 100)
                 if src_count == dest_count:
                     self.log.info("Item count on src:{} {} = {} on dest:{} for "
@@ -2774,8 +2788,32 @@ class VerifyCollectionDocCountTask(Task):
                                   .format(self.src.get_master_node().ip, src_count,
                                           dest_count, self.dest.get_master_node().ip,
                                           self.bucket, src_scope, src_collection,
-                                          dest_scope, dest_collection))
-                else:
+                                          dest_scope, dest_collection))   
+                elif dest_scope == None:
+                    dest_scope = src_scope
+                    dest_collection = src_collection
+                    dest_count = self.dest_conn.get_scope_item_count(self.bucket, dest_scope,
+                                                                        self.dest.get_nodes(), self.dest_stats)
+                    if dest_count == 0:
+                        self.log.info("Item count on src:{} {} != {} on dest:{} for "
+                                    "bucket {} \nsrc : scope {}-> collection {},"
+                                    "dest: scope {}-> collection {}, due to "
+                                    "scope denial (dest_scope=null) as expected"
+                                    .format(self.src.get_master_node().ip, src_count,
+                                            dest_count, self.dest.get_master_node().ip,
+                                            self.bucket, src_scope, src_collection,
+                                            dest_scope, dest_collection))
+                elif dest_scope == "nonexistent" or dest_collection == "nonexistent":
+                    if dest_count == 0:
+                        self.log.info("Item count on src:{} {} != {} on dest:{} for "
+                                    "bucket {} \nsrc : scope {}-> collection {},"
+                                    "dest: scope {}-> collection {}, due to "
+                                    "nonexistent scope/collection as expected"
+                                    .format(self.src.get_master_node().ip, src_count,
+                                            dest_count, self.dest.get_master_node().ip,
+                                            self.bucket, src_scope, src_collection,
+                                            dest_scope, dest_collection))
+                else:                    
                     self.set_exception(Exception("ERROR: Item count on src:{} {} != {} on dest:{} for "
                                   "bucket {} \nsrc : scope {}-> collection {},"
                                   "dest: scope {}-> collection {}"
