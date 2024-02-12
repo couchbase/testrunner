@@ -558,10 +558,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                  services=services_in)
         while self.rest._rebalance_progress_status() != 'running':
             continue
-        if RestHelper(self.rest).rebalance_reached(percentage=40):
-            self.validate_indexing_rebalance_master()
         if 'index' in services_in:
-            self.validate_indexing_rebalance_master()
+            if RestHelper(self.rest).rebalance_reached(percentage=40):
+                self.validate_indexing_rebalance_master()
         rebalance.result()
         self._run_tasks([kv_ops, in_between_tasks])
         self.sleep(60)
