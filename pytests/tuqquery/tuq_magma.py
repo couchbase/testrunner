@@ -228,6 +228,7 @@ class QueryMagmaTests(QueryTests):
 
     def test_union_aggr_fns(self):
         self.load_data()
+        self.sleep(600)
         for query_bucket in self.query_buckets:
             self.query = "select count(firstName) as firstnames from default union select count(lastName) as " \
                          "lastnames from default"
@@ -281,6 +282,7 @@ class QueryMagmaTests(QueryTests):
 
     def test_udf_letting(self):
         self.load_data()
+        self.sleep(600)
         string_functions = 'function concater(a,b) { var text = ""; var x; for (x in a) {if (x = b) { return x; }} return "n"; } function comparator(a, b) {if (a > b) { return "old hotel"; } else { return "new hotel" }}'
         function_names2 = ["concater","comparator"]
         created2 = self.create_library("strings",string_functions,function_names2)
