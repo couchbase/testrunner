@@ -2185,8 +2185,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 replica_id = int(index_metadata['replicaId'])
                                 if shard_replica_id != replica_id:
                                     self.log.error(f"Indexer metadata {indexer_metadata}")
+                                    self.log.error(f"shard_replica_id  {shard_replica_id} and replica_id {replica_id}")
                                     raise Exception(f"Alternate shard ID and replica ID mismatch for index "
-                                                    f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
+                                                    f"{index_metadata['name']} with definition {index_metadata['definition']} and definition ID {index_metadata['defnId']}. Alt shard ID {shard}.")
                 else:
                     if index_metadata['name'] in specific_indexes:
                         for host in index_metadata['alternateShardIds']:
@@ -2436,6 +2437,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             rest.set_shard_affinity_provisoned_mode({"indexer.default.enable_shard_affinity": False})
         else:
             rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
+
+    def enable_corrupt_index_backup(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.settings.enable_corrupt_index_backup": True})
 
     def enable_corrupt_index_backup(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
