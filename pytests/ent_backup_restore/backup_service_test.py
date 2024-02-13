@@ -1029,12 +1029,10 @@ class BackupServiceTest(BackupServiceBase):
         self.backupset.name = repository.repo
 
         cluster_host = self.master
-
-        body = Body1(target=f"{cluster_host.ip}:{cluster_host.port}", user=cluster_host.rest_username, password=cluster_host.rest_password)
-
+        protocol = "https://" if cluster_host.port == "18091" else ""
+        body = Body1(target=f"{protocol}{cluster_host.ip}:{cluster_host.port}", user=cluster_host.rest_username, password=cluster_host.rest_password)
         # Perform a restore
         task_name = self.take_one_off_restore_with_name("active", repo_name, body=body).task_name
-
         # Wait until task has completed
         self.assertTrue(self.wait_for_task(repo_name, task_name))
 
