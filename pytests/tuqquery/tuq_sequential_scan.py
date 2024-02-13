@@ -145,7 +145,9 @@ class QuerySeqScanTests(QueryTests):
     def test_collection(self):
         try:
             result = self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1')
+            self.sleep(3)
             result = self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1')
+            self.sleep(3)
             self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
             scan_before = self.get_index_scan(self.bucket, '#sequentialscan', "scope1", "collection1")
             result = self.run_cbq_query(f'SELECT * FROM {self.bucket}.scope1.collection1')
@@ -305,6 +307,7 @@ class QuerySeqScanTests(QueryTests):
     def test_rbac_scope(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
         self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1 IF not exists')
+        self.sleep(3)
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
