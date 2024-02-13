@@ -1453,9 +1453,9 @@ class QueryCollectionsDDLTests(QueryTests):
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
 
         self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
-
+        self.sleep(3)
         self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
-
+        self.sleep(3)
         objects = self.rest.get_bucket_scopes(bucket_name)
         if scope_name in objects:
             self.assertEquals(True, False, "Scope still exists after scope drop.")
