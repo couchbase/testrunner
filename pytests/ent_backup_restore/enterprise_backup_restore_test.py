@@ -853,6 +853,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             5. Do backup and kill backup process
             6. Merge backup.  Merge should fail
         """
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        os_dist = shell.info.distribution_version.replace(" ", "").lower()
+        if "debian" in os_dist:
+            shell.execute_command("apt install -y gawk")
         gen = BlobGenerator("ent-backup1", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
