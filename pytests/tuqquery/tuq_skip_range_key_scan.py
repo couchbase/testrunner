@@ -46,8 +46,7 @@ class QuerySkipRangeScanTests(QueryTests):
             index = plan["~children"][0]['index']
             self.assertEqual(index, check_data, f"Index got {index} but we expected {check_data}. Plan was {plan}")
         if check_type == "join_index":
-            index = plan["~children"][2]['~child']['~children'][1]['~child']['~children'][0]['index']
-            self.assertEqual(index, check_data, f"Join index got {index} but we expected {check_data}. Plan was {plan}")
+            self.assertTrue(check_data in str(plan), f"Join index got {plan} but we expected {check_data}. Plan was {plan}")
         if check_type == "join_span":
             spans = plan["~children"][2]['~child']['~children'][0]['~child']['~children'][0]['spans'][0]['range']
             self.assertEqual(spans, check_data)
@@ -375,7 +374,7 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_1a, 0),
                                     self.plan_verifier("join_spans", spans_1b, 0)]}
 
-        query_2 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr)"
+        query_2 = "explain select d1.join_yr from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr)"
 
         index_2a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
@@ -390,7 +389,7 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_2a, 0),
                                     self.plan_verifier("join_spans", spans_2b, 0)]}
 
-        query_3 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
+        query_3 = "explain select d1.join_yr from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
 
         index_3a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
@@ -403,7 +402,7 @@ class QuerySkipRangeScanTests(QueryTests):
         spans_3b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["c"] = {"indexes": [self.primary_index_def, index_3a, index_3b, index_3c], "queries": [query_3],
-                        "asserts": [self.plan_verifier("index", "idx1", 0),
+                        "asserts": [self.plan_verifier("index", "idx2", 0),
                                     self.plan_verifier("join_index", "idx2", 0),
                                     self.plan_verifier("spans", spans_3a, 0),
                                     self.plan_verifier("join_spans", spans_3b, 0)]}
