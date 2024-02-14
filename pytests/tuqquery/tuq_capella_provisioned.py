@@ -81,7 +81,7 @@ class QueryProvisionedTests(QueryTests):
 
     def test_update_statistics(self):
         result = self.run_cbq_query(f'UPDATE STATISTICS FOR {self.bucket}(name)')
-        result = self.run_cbq_query(f'SELECT `scope`, `collection`, `histogramKey` FROM N1QL_SYSTEM_BUCKET.N1QL_SYSTEM_SCOPE.N1QL_CBO_STATS WHERE `scope` = "_default" AND `collection` = "_default" AND `histogramKey` = "name"')
+        result = self.run_cbq_query(f'SELECT `scope`, `collection`, `histogramKey` FROM `{self.bucket}`.`_system`.`_query` WHERE `scope` = "_default" AND `collection` = "_default" AND `histogramKey` = "name"')
         self.log.info(f"results: {result['results']}")
         self.assertEqual(result['results'], [{'collection': '_default', 'histogramKey': 'name', 'scope': '_default'}])
         explain = self.run_cbq_query(f'EXPLAIN SELECT * FROM {self.bucket} WHERE name is not null')
