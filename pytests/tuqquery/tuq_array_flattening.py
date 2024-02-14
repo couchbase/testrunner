@@ -1352,13 +1352,14 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(
             query="create index idx1 on default(DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Overall) for r in reviews END,country)")
         explain_results = self.run_cbq_query(query="explain " + query)
-
         self.assertTrue("idx1" in str(explain_results),
                         "The query should be using idx1 check explain results {0}".format(
                             explain_results))
-        merge_results = self.run_cbq_query(query=query)
-        self.assertTrue(merge_results['status'] == 'success',
-                        "Merge did not occur successfully! {0}".format(merge_results))
+        try:
+            merge_results = self.run_cbq_query(query=query)
+            self.fail("The ANSI merge operates on multiple documents and should therefore throw an error")
+        except Exception as ex:
+            self.assertTrue("Multiple UPDATE/DELETE of the same document" in str(ex), f"The error message is not what we expected please check {str(ex)}")
 
     ##############################################################################################
     #
