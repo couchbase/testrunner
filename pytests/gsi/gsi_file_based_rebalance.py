@@ -6,7 +6,6 @@ from membase.api.rest_client import RestConnection, RestHelper
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
 from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
 from .base_gsi import BaseSecondaryIndexingTests, log
 
@@ -14,7 +13,7 @@ from threading import Event
 from deepdiff import DeepDiff
 
 
-class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelper):
+class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
     def setUp(self):
         super().setUp()
         self.rest = RestConnection(self.servers[0])
@@ -1237,7 +1236,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
                                                      services=services_in, cluster_config=self.cluster_config)
             self.log.info(f"Rebalance task re-triggered after chaos action. Wait for 20 seconds until the rebalance starts")
             time.sleep(20)
-        time.sleep(10)
+        self.sleep(10)
         if not self.capella_run:
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1245,8 +1244,25 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelp
             shard_affinity = self.is_shard_based_rebalance_enabled()
         else:
             if not capella_rebalance == 'swap_rebalance':
-                reached = RestHelper(self.rest).rebalance_reached()
+                try:
+                    reached = RestHelper(self.rest).rebalance_reached()
+                    self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                except Exception as e:
+                    if self.capella_rebalance == 'rebalance_in':
+                        retry = 0
+                        while retry < 5:
+                            self.sleep(30)
+                            try:
+                                reached = RestHelper(self.rest).rebalance_reached()
+                            except Exception as e:
+                                continue
+                            else:
+                                break
+                            retry += 1
+                    else:
+                        raise Exception(str(e))
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
             else:
                 self.capella_api.wait_for_cluster(cluster_id=self.cluster_id, sleep_timer=60)
             servers = self.capella_api.get_nodes_formatted(cluster_id=self.cluster_id, username=self.username,

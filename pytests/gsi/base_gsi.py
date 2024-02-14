@@ -2128,9 +2128,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
 
     def validate_shard_affinity(self, specific_indexes=None, node_in=None, provisioned=True):
-        if not self.is_shard_based_rebalance_enabled(provisioned=provisioned, node_in=node_in):
-            self.log.info("Skipping validating shard affinity since shard based rebalance is disabled")
-            return
+        if not self.capella_run:
+            if not self.is_shard_based_rebalance_enabled(provisioned=provisioned, node_in=node_in):
+                self.log.info("Skipping validating shard affinity since shard based rebalance is disabled")
+                return
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = None
         for node in indexer_nodes:
@@ -2184,8 +2185,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 replica_id = int(index_metadata['replicaId'])
                                 if shard_replica_id != replica_id:
                                     self.log.error(f"Indexer metadata {indexer_metadata}")
+                                    self.log.error(f"shard_replica_id  {shard_replica_id} and replica_id {replica_id}")
                                     raise Exception(f"Alternate shard ID and replica ID mismatch for index "
-                                                    f"{index_metadata['name']} with definition {index_metadata['definition']}. Alt shard ID {shard}.")
+                                                    f"{index_metadata['name']} with definition {index_metadata['definition']} and definition ID {index_metadata['defnId']}. Alt shard ID {shard}.")
                 else:
                     if index_metadata['name'] in specific_indexes:
                         for host in index_metadata['alternateShardIds']:

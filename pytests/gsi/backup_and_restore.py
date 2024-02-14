@@ -2283,7 +2283,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 new_indexes = False
                 if self.decrease_node_count > 0:
                     nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                    nodes_out_list = nodes_out[:self.decrease_node_count]
+                    nodes_out_list = []
+                    for i in range(len(nodes_out)):
+                        node = nodes_out[i]
+                        if node.ip != self.master.ip:
+                            nodes_out_list.append(node)
+                            if len(nodes_out_list) == self.decrease_node_count:
+                                break
                     rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out_list,
                                                              services=['index'], cluster_config=self.cluster_config)
                     self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
@@ -2299,18 +2305,21 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     self.enable_honour_nodes_in_definition()
                     new_indexes = True
                     num_nodes = 0
+                    indexer_nodes = self.get_nodes_from_services_map(
+                        service_type="index", get_all_nodes=True)
                     if self.create_index_on_n_nodes == 'all':
-                        num_nodes = len(self.indexer_nodes)
+                        num_nodes = len(indexer_nodes)
                     elif self.create_index_on_n_nodes == 'partial':
-                        f = math.floor(len(self.indexer_nodes) / 2)
+                        f = math.floor(len(indexer_nodes) / 2)
                         num_nodes = random.randint(1, f)
                     for i in range(num_nodes):
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
-                        deploy_node_info = self.indexer_nodes[i].ip + ":" + self.node_port
+                        deploy_node_info = indexer_nodes[i].ip + ":" + self.node_port
                         for namespace in self.namespaces:
                             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                               namespace=namespace,
                                                                               deploy_node_info=deploy_node_info)
+                            query_node = self.get_nodes_from_services_map(service_type="n1ql")
                             self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                                  query_node=query_node)
                 restore_result = backup_client.restore(use_https=self.use_https)
