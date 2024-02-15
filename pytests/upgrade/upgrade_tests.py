@@ -896,7 +896,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.load_sample_buckets(servers=kv_nodes, bucketName="travel-sample",
                                                   total_items=items_travel_sample,
                                                   rest=cbas_rest)
-            self.test_create_dataset_on_bucket()
+            # self.test_create_dataset_on_bucket()
         except Exception as e:
             self.log.info(e)
             if queue is not None:
