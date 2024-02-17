@@ -5,7 +5,12 @@ import sys
 import threading
 import time
 import os
+from time import sleep
+
 from couchbase_helper.cluster import Cluster
+
+from lib.membase.api.exception import ServerUnavailableException
+from lib.membase.api.on_prem_rest_client import RestHelper
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
@@ -44,6 +49,7 @@ params = {
     "ntp": False,
     "install_debug_info": False,
     "use_hostnames": False,
+    "force_reinstall": True,
 
     # For serverless change
     # None - Leave it default
@@ -522,6 +528,51 @@ def hdiutil_attach(shell, dmg_path):
     return shell.file_exists("/tmp/", "couchbase-server-" + params["version"])
 
 
+def check_if_version_already_installed(server, install_version, cb_edition,
+                                       cluster_profile):
+    if cluster_profile is None:
+        cluster_profile = "default"
+    try:
+        pools_info = RestConnection(server, timeout=3).get_pools_info()
+        existing_ver, existing_build_num, existing_edition = pools_info[
+            "implementationVersion"].split("-")
+        if "%s-%s" % (existing_ver, existing_build_num) == install_version \
+                and cb_edition == existing_edition:
+            if float(ver[:3]) >= 7.5:
+                if cluster_profile != pools_info["configProfile"]:
+                    return False
+            return True
+    except (ServerUnavailableException, Exception):
+        pass
+    return False
+
+
+def reinit_node(server):
+    rest = RestConnection(server)
+    data_path = rest.get_data_path()
+    version = rest.get_nodes_self().version
+    if float(version[:3]) >= 7.6:
+        rest.reset_node()
+    else:
+        shell = RemoteMachineShellConnection(server)
+        shell.stop_couchbase()
+        count = 0
+        while shell.is_couchbase_running() and count < 10:
+            time.sleep(2)
+            print("Waiting for 2 sec to check if Couchbase is still running")
+            count += 2
+
+        # Delete Config
+        shell.cleanup_data_config(data_path)
+
+        # Start Couchbase
+        shell.start_couchbase()
+    is_running = RestHelper(rest).is_ns_server_running(timeout_in_seconds=60)
+    if not is_running:
+        return False
+    return True
+
+
 def get_node_helper(ip):
     for node_helper in NodeHelpers:
         if node_helper.ip == ip:
@@ -622,6 +673,9 @@ def _parse_user_input():
         if key == 'v' or key == "version":
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
                 params["version"] = value
+        if key == "force_reinstall":
+            params["force_reinstall"] = True \
+                if value.lower() == "true" else False
         if key == "url":
             if value.startswith("http"):
                 params["url"] = value
@@ -730,11 +784,11 @@ def _check_version_compatibility(node):
     pass
 
 
-def pre_install_steps():
+def pre_install_steps(n_helpers):
     # CBQE-6402
     if "ntp" in params and params["ntp"]:
         ntp_threads = []
-        for node in NodeHelpers:
+        for node in n_helpers:
             ntp_thread = threading.Thread(target=node.shell.is_ntp_installed)
             ntp_threads.append(ntp_thread)
             ntp_thread.start()
@@ -742,16 +796,16 @@ def pre_install_steps():
             ntpt.join()
 
     if "tools" in params["install_tasks"]:
-        for node in NodeHelpers:
+        for node in n_helpers:
             tools_name = __get_tools_package_name(node)
             node.tools_name = tools_name
             tools_url = __get_tools_url(node, tools_name)
             node.tools_url = tools_url
-    if "install" in params["install_tasks"]:
+    if "install" in params["install_tasks"] and n_helpers:
         if params["url"] is not None:
-            if NodeHelpers[0].shell.is_url_live(params["url"]):
+            if n_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True
-                for node in NodeHelpers:
+                for node in n_helpers:
                     build_binary = __get_build_binary_name(node)
                     build_url = params["url"]
                     filepath = __get_download_dir(node) + build_binary
@@ -761,7 +815,7 @@ def pre_install_steps():
         else:
             install_debug_info = params["install_debug_info"]
             is_release_build = check_for_release_or_latest_build()
-            for node in NodeHelpers:
+            for node in n_helpers:
                 build_binary = __get_build_binary_name(node, is_release_build)
                 debug_binary = __get_debug_binary_name(node, is_release_build) if \
                     install_debug_info else None
@@ -810,9 +864,9 @@ def __copy_thread(src_path, dest_path, node):
     logging.info("Done copying build to %s.", node.ip)
 
 
-def _copy_to_nodes(debug=False):
+def _copy_to_nodes(node_helpers, debug=False):
     copy_threads = []
-    for node in NodeHelpers:
+    for node in node_helpers:
         if debug:
             src_path = node.build.debug_path
         else:
@@ -862,35 +916,40 @@ def __get_tools_url(node, tools_package):
         return latestbuilds_url
     return None
 
-def download_build():
+
+def download_build(node_helpers):
+    if not node_helpers:
+        # List is empty meaning no node needs download process
+        return
     log.debug("Downloading the builds now")
-    all_nodes_same_version = len(set([node.build.url for node in NodeHelpers])) == 1
+    all_nodes_same_version = len(set([node.build.url for node in node_helpers])) == 1
     if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
-        check_and_retry_download_binary_local(NodeHelpers[0])
-        _copy_to_nodes(debug=False)
-        if NodeHelpers[0].build.debug_build_present:
-            _copy_to_nodes(debug=True)
+        check_and_retry_download_binary_local(node_helpers[0])
+        _copy_to_nodes(node_helpers, debug=False)
+        if node_helpers[0].build.debug_build_present:
+            _copy_to_nodes(node_helpers, debug=True)
         ok = True
-        for node in NodeHelpers:
+        for node in node_helpers:
             if not check_file_exists(node, node.build.path) \
                     or not check_file_size(node):
                 node.install_success = False
                 ok = False
-                log.error("Unable to copy build to {} at {}, exiting".format(node.ip, node.build.path))
+                log.error("Unable to copy build to {} at {}, exiting"
+                          .format(node.ip, node.build.path))
         if not ok:
             print_result_and_exit()
-        for node in NodeHelpers:
+        for node in node_helpers:
             if node.build.debug_build_present:
-                if not check_file_exists(node,
-                                             node.build.debug_path) \
+                if not check_file_exists(node, node.build.debug_path) \
                         or not check_file_size(node, debug_build=True):
                     node.install_success = False
                     ok = False
-                    log.error("Unable to copy debug build to {} at {}, exiting".format(node.ip, node.build.debug_path))
+                    log.error("Unable to copy debug build to {} at {}, exiting"
+                              .format(node.ip, node.build.debug_path))
         if not ok:
             print_result_and_exit()
     else:
-        for node in NodeHelpers:
+        for node in node_helpers:
             build_url = node.build.url
             filepath = node.build.path
             debug_url = node.build.debug_url if \
@@ -913,10 +972,7 @@ def download_build():
                                                   ["download_binary"])
                 else:
                     cmd_debug = None
-
-
             elif "wget" in cmd_master:
-
                 cmd = cmd_master.format(__get_download_dir(node),
                                         node.build.name,
                                         build_url)
@@ -934,9 +990,10 @@ def download_build():
                                                 node.build.debug_path
                                                 , debug_build=True)
     log.debug("Done downloading build binary")
-    for node in NodeHelpers:
+    for node in node_helpers:
         if node.shell.nonroot:
             download_cb_non_package_installer()
+
 
 def download_cb_non_package_installer():
     log.debug("Downloading install script now")
@@ -959,9 +1016,10 @@ def download_cb_non_package_installer():
         node.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
                                                              cb_non_package_installer_name))
 
-def install_tools():
+
+def install_tools(node_helpers):
     log.debug("Downloading the tools package now")
-    for node in NodeHelpers:
+    for node in node_helpers:
         cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
         download_dir = __get_download_dir(node)
         if "curl" in cmd_master:
@@ -984,6 +1042,7 @@ def install_tools():
         cmd = install_cmd.format(f"{download_dir}/{node.tools_name}", install_dir)
         node.shell.execute_command(cmd, debug=True)
         node.shell.execute_command(f"rm {download_dir}/{node.tools_name}")
+
 
 def check_and_retry_download_binary_local(node):
     log.info("Downloading build binary to {0}..".format(node.build.path))

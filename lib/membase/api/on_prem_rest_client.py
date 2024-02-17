@@ -266,7 +266,7 @@ class RestConnection(object):
     POST = "POST"
     PUT = "PUT"
 
-    def __new__(cls, serverInfo={}):
+    def __new__(cls, serverInfo={}, timeout=120):
         # allow port to determine
         # behavior of restconnection
         port = None
@@ -292,7 +292,7 @@ class RestConnection(object):
 
         return obj
 
-    def __init__(self, serverInfo):
+    def __init__(self, serverInfo, timeout=120):
         # serverInfo can be a json object/dictionary
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
@@ -409,7 +409,8 @@ class RestConnection(object):
 
         # for Node is unknown to this cluster error
         for iteration in range(5):
-            http_res, success = self.init_http_request(api=self.baseUrl + "pools/default")
+            http_res, success = self.init_http_request(api=self.baseUrl + "pools/default",
+                                                       timeout=timeout)
             if not success and isinstance(http_res, str) and\
                (http_res.find('Node is unknown to this cluster') > -1 or \
                 http_res.find('Unexpected server error, request logged') > -1):

@@ -118,13 +118,13 @@ def validate_install(params):
                                                                                     node['services']))
     install_utils.print_result_and_exit()
 
-def do_install(params):
+
+def do_install(params, install_tasks):
     # Per node, spawn one thread, which will process a queue of install tasks
     for server in params["servers"]:
         node_helper = install_utils.get_node_helper(server.ip)
-        install_tasks = params["install_tasks"]
         q = queue.Queue()
-        for _ in install_tasks:
+        for _ in install_tasks[server]:
             q.put(_)
         t = threading.Thread(target=node_installer, args=(node_helper, q))
         t.daemon = True
@@ -150,15 +150,12 @@ def do_install(params):
         validate_install(params)
 
 
-def do_uninstall(params):
+def do_uninstall(params, node_helpers):
     # Per node, spawn one thread, which will process a queue of
     # uninstall tasks
-    for server in params["servers"]:
-        node_helper = install_utils.get_node_helper(server.ip)
-        install_tasks = ['uninstall']
+    for node_helper in node_helpers:
         q = queue.Queue()
-        for _ in install_tasks:
-            q.put(_)
+        q.put("uninstall")
         t = threading.Thread(target=node_installer,
                              args=(node_helper, q))
         t.daemon = True
@@ -166,37 +163,56 @@ def do_uninstall(params):
         node_helper.queue = q
         node_helper.thread = t
     force_stop = start_time + params["timeout"]
-    for node in install_utils.NodeHelpers:
+    for node_helper in node_helpers:
         try:
-            while node.queue.unfinished_tasks and time.time() < \
+            while node_helper.queue.unfinished_tasks and time.time() < \
                     force_stop:
                 time.sleep(install_constants.INSTALL_POLL_INTERVAL)
             else:
                 raise InstallException
         except InstallException:
             if time.time() >= force_stop:
-                log.error(
-                    "Uninstall TIMED OUT AFTER {0}s. "
-                    "VALIDATING..".format(
-                        params["timeout"]))
+                log.error("Uninstall TIMED OUT AFTER {0}s. "
+                          "VALIDATING..".format(params["timeout"]))
                 break
 
+
 def main():
+    install_tasks = dict()
     params = install_utils.process_user_input()
-    install_utils.pre_install_steps()
+    node_helpers_to_install = list()
+
+    if not params["force_reinstall"]:
+        # Checking if node already installed with version
+        for server in params["servers"]:
+            try:
+                is_installed = install_utils.check_if_version_already_installed(
+                    server, params["version"], params["cb_edition"],
+                    params["cluster_profile"])
+                if not is_installed \
+                        or (install_utils.reinit_node(server) is False):
+                    install_tasks[server] = params['install_tasks']
+                    node_helpers_to_install.append(
+                        install_utils.get_node_helper(server.ip))
+                else:
+                    install_tasks[server] = ["reset_node", "init", "cleanup"]
+            except Exception:
+                # In case of any exception force usual way of install
+                install_tasks[server] = params['install_tasks']
+                node_helpers_to_install.append(
+                    install_utils.get_node_helper(server.ip))
+
+    install_utils.pre_install_steps(node_helpers_to_install)
     if 'uninstall' in params['install_tasks']:
         # Do uninstallation of products first before downloading the
         # builds.
-        do_uninstall(params)
+        do_uninstall(params, node_helpers_to_install)
         params['install_tasks'].remove('uninstall')
-
     if 'install' in params['install_tasks']:
-        install_utils.download_build()
+        install_utils.download_build(node_helpers_to_install)
     if 'tools' in params['install_tasks']:
-        install_utils.install_tools()
-    do_install(params)
-
-
+        install_utils.install_tools(node_helpers_to_install)
+    do_install(params, install_tasks)
 
 
 if __name__ == "__main__":
