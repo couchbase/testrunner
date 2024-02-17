@@ -3415,6 +3415,13 @@ class RestConnection(object):
             log.error('failed to change autoReprovision_settings!')
         return status
 
+    def reset_node(self):
+        api = self.baseUrl + "controller/hardResetNode"
+        status, _, _ = self._http_request(api, "POST",
+                                          headers=self._create_headers())
+        if not status:
+            raise Exception("Failed during hard resetting '%s'" % self.ip)
+
     def reset_autofailover(self):
         api = self.baseUrl + 'settings/autoFailover/resetCount'
         status, content, header = self._http_request(api, 'POST', '')
