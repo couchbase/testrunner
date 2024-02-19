@@ -686,10 +686,11 @@ class StableTopFTS(FTSBaseTest):
         num_collections = TestInputSingleton.input.param("num_collections", 1)
 
         self.load_data()
+        time.sleep(240)
         self.wait_for_indexing_complete()
         query = {"query": "mutated:0"}
         hits,_,_,_ = index.execute_query(query)
-        self.assertEquals(hits, 1000*num_collections, f"Expected hits does not match after insert. Expected - {1000*num_collections}, found {hits}")
+        self.assertEquals(hits, 1000 * num_collections, f"Expected hits does not match after insert. Expected - {1000 * num_collections}, found {hits}")
 
         self._update = True
         self.async_perform_update_delete(self.upd_del_fields)
@@ -702,8 +703,10 @@ class StableTopFTS(FTSBaseTest):
         self._update = False
         self._delete = True
         self.async_perform_update_delete(self.upd_del_fields)
+        time.sleep(120)
         self.wait_for_indexing_complete()
         query = {"query": "type:emp"}
+        time.sleep(120)
         hits,_,_,_ = index.execute_query(query)
         self.assertEquals(hits, 700*num_collections, f"Expected hits does not match after delete. Expected - {700*num_collections}, found {hits}")
 
