@@ -60,6 +60,7 @@ class StableTopFTS(FTSBaseTest):
             if self._update:
                 self.sleep(60, "Waiting for updates to get indexed...")
         self.wait_for_indexing_complete()
+        time.sleep(20)
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def test_index_docvalues_option(self):
