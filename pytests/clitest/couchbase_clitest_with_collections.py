@@ -364,6 +364,11 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 os = "windows"
 
             if os == "linux":
+                os_dist = self.shell.info.distribution_version.replace(" ", "").lower()
+                if "debian" in os_dist:
+                    self.shell.execute_command("apt update -y && apt install -y unzip")
+                if "centos" in os_dist:
+                    self.shell.execute_command("yum install -y unzip")
                 command = "unzip %s" % (zip_file)
                 output, error = self.shell.execute_command(command)
                 self.sleep(2)
