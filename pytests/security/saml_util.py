@@ -66,6 +66,8 @@ class SAMLUtils:
                              data="SAMLRequest={0}&RelayState={1}".format(SAMLRequest, ""),
                              headers=header,
                              timeout=300, verify=False, allow_redirects=False)
+        self.log.info("Redirecting to IdP...")
+        self.log.info("Response: {0}".format(resp.content))
         assert resp.status_code == 200
         state_token = ""
         for line in resp.content.decode().split("\n"):
@@ -96,6 +98,8 @@ class SAMLUtils:
                   'JSESSIONID': j_session_id
                   }
         resp = requests.post(url, data=json.dumps(body), headers=header)
+        self.log.info("Logging in to IdP...")
+        self.log.info("Response: {0}".format(resp.content))
         assert resp.status_code == 200
         next_url = resp.content.decode()[resp.content.decode().index("success-redirect\","
                                                                      "\"href\":\"") + 26:
