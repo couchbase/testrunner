@@ -1453,7 +1453,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
         except Exception as ex:
-            if "Rebalance stopped by janitor" not in str(ex):
+            if "Rebalance Failed" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
             self.fail("rebalance did not fail after kv node reboot")
