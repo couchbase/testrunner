@@ -1,6 +1,7 @@
 import json
 import random
 import ipaddress
+
 from .stable_topology_fts import StableTopFTS
 from TestInput import TestInputSingleton
 import fts.IP_Dataset.ip_data as ip_data
@@ -173,7 +174,10 @@ class StableTopExtendedFTS(StableTopFTS):
             n1ql_hits = -1
             if self.run_n1ql_search_function:
                 n1ql_query = f"SELECT COUNT(*) FROM `default`.{index_scope}.{index_collections[0]} AS t1 WHERE SEARCH(t1, {{\"field\": \"ip\", \"cidr\": \"{ip_address}\"}});"
-                n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+                try:
+                    n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+                except:
+                    n1ql_hits = -1
                 if n1ql_hits == 0:
                     n1ql_hits = -1
                 self.log.info("FTS Hits for N1QL query: %s" % n1ql_hits)
