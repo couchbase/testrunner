@@ -1577,7 +1577,7 @@ class MovingTopFTS(FTSBaseTest):
                                    args=())
         reb_thread.start()
         self.sleep(15)
-        index = self._cb_cluster.get_fts_index_by_name('default._default.default_index_1')
+        index = self._cb_cluster.get_indexes()[0]
         new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
