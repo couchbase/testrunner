@@ -50,7 +50,7 @@ class StableTopFTS(FTSBaseTest):
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self.restart_couchbase:
             self._cb_cluster.restart_couchbase_on_all_nodes()
-
+        time.sleep(180)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
             self.validate_index_count(equal_bucket_doc_count=True,
