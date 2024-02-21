@@ -44,6 +44,7 @@ params = {
     "ntp": False,
     "install_debug_info": False,
     "use_hostnames": False,
+    "force_reinstall": True,
 
     # For serverless change
     # None - Leave it default
@@ -716,6 +717,9 @@ def _parse_user_input():
             params["use_hostnames"] = value.lower() == "true"
         if key == "cluster_profile":
             params["cluster_profile"] = value
+        if key == "force_reinstall":
+            params["force_reinstall"] = False \
+                if value.lower() == "false" else True
 
     if userinput.bkrs_client and not params["cluster_version"]:
         print_result_and_exit("Need 'cluster_version' in params to proceed")

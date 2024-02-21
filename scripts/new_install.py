@@ -175,11 +175,10 @@ def do_uninstall(params):
                 raise InstallException
         except InstallException:
             if time.time() >= force_stop:
-                log.error(
-                    "Uninstall TIMED OUT AFTER {0}s. "
-                    "VALIDATING..".format(
-                        params["timeout"]))
+                log.error("Uninstall TIMED OUT AFTER {0}s. VALIDATING.."
+                          .format(params["timeout"]))
                 break
+
 
 def main():
     params = install_utils.process_user_input()
