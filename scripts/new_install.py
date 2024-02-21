@@ -155,12 +155,9 @@ def do_uninstall(params):
     # uninstall tasks
     for server in params["servers"]:
         node_helper = install_utils.get_node_helper(server.ip)
-        install_tasks = ['uninstall']
         q = queue.Queue()
-        for _ in install_tasks:
-            q.put(_)
-        t = threading.Thread(target=node_installer,
-                             args=(node_helper, q))
+        q.put('uninstall')
+        t = threading.Thread(target=node_installer, args=(node_helper, q))
         t.daemon = True
         t.start()
         node_helper.queue = q
