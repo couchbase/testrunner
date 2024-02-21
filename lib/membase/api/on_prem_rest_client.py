@@ -266,7 +266,7 @@ class RestConnection(object):
     POST = "POST"
     PUT = "PUT"
 
-    def __new__(cls, serverInfo={}):
+    def __new__(cls, serverInfo={}, check_connectivity=True):
         # allow port to determine
         # behavior of restconnection
         port = None
@@ -292,7 +292,7 @@ class RestConnection(object):
 
         return obj
 
-    def __init__(self, serverInfo):
+    def __init__(self, serverInfo, check_connectivity=True):
         # serverInfo can be a json object/dictionary
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
@@ -406,6 +406,9 @@ class RestConnection(object):
             self.cbas_port = CbServer.ssl_cbas_port
         self.cbas_base_url = generic_url % (self.cbas_ip, self.cbas_port)
         self.cbas_base_url = self.cbas_base_url[:-1]
+
+        if not check_connectivity:
+            return
 
         # for Node is unknown to this cluster error
         for iteration in range(5):

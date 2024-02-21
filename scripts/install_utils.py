@@ -522,6 +522,52 @@ def hdiutil_attach(shell, dmg_path):
     return shell.file_exists("/tmp/", "couchbase-server-" + params["version"])
 
 
+def check_if_version_already_installed(server, install_version, cb_edition,
+                                       cluster_profile):
+    if cluster_profile is None:
+        cluster_profile = "default"
+    try:
+        pools_info = RestConnection(server,
+                                    check_connectivity=False).get_pools_info()
+        existing_ver, existing_build_num, existing_edition = pools_info[
+            "implementationVersion"].split("-")
+        if "%s-%s" % (existing_ver, existing_build_num) == install_version \
+                and cb_edition == existing_edition:
+            if float(ver[:3]) >= 7.5:
+                if cluster_profile != pools_info["configProfile"]:
+                    return False
+            return True
+    except (ServerUnavailableException, Exception):
+        pass
+    return False
+
+
+def reinit_node(server):
+    rest = RestConnection(server)
+    data_path = rest.get_data_path()
+    version = rest.get_nodes_self().version
+    if float(version[:3]) >= 7.6:
+        rest.reset_node()
+    else:
+        shell = RemoteMachineShellConnection(server)
+        shell.stop_couchbase()
+        count = 0
+        while shell.is_couchbase_running() and count < 10:
+            time.sleep(2)
+            print("Waiting for 2 sec to check if Couchbase is still running")
+            count += 2
+
+        # Delete Config
+        shell.cleanup_data_config(data_path)
+
+        # Start Couchbase
+        shell.start_couchbase()
+    is_running = RestHelper(rest).is_ns_server_running(timeout_in_seconds=60)
+    if not is_running:
+        return False
+    return True
+
+
 def get_node_helper(ip):
     for node_helper in NodeHelpers:
         if node_helper.ip == ip:
