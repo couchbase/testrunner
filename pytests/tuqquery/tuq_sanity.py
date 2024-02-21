@@ -1145,6 +1145,7 @@ class QuerySanityTests(QueryTests):
 
     def test_meta_flags(self):
         self.fail_if_no_buckets()
+        self.sleep(5)
         for query_bucket in self.query_buckets:
             self.query = 'SELECT DISTINCT META().flags as flags FROM %s' % query_bucket
             actual_result = self.run_cbq_query()
