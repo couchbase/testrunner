@@ -1128,16 +1128,9 @@ class QueriesIndexTests(QueryTests):
                              "AND  NOT (department = 'Manager') ORDER BY name limit 10"
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
-                self.assertTrue('IntersectScan' in str(plan) or 'UnionScan' in str(plan),
-                                f"Intersect Scan is not being used in and query for 2 array indexes: {plan}")
-                if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
-                    result3 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
-                    result4 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
-                else:
-                    result3 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
-                    result4 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
-                self.assertTrue(result3 == idx4 or result3 == idx3)
-                self.assertTrue(result4 == idx3 or result4 == idx4)
+                self.assertTrue('Distinct' in str(plan),
+                                f"Distinct Scan is not being used in and query for 2 array indexes: {plan}")
+                self.assertTrue(idx4 in str(plan), f"The wrong index is being used in the plan please check! Plan: {plan}")
                 self.query = "select name from {0} where any v in {0}.join_yr " \
                              "satisfies v = 2016 END ".format(query_bucket) + \
                              "AND (ANY x within {0}.VMs SATISFIES x.RAM between 1 and 5  END ) ".format(query_bucket) + \

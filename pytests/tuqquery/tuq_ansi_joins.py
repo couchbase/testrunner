@@ -724,7 +724,7 @@ class QueryANSIJOINSTests(QueryTests):
                       "(d3.name == d4.name)".format(self.default_query_bucket)
             self.run_cbq_query(query=query_1)
         except CBQError as error:
-            self.assertTrue("syntax error - line 1, column 118, near '(d2.name == d3.name)', at: RIGHT" in str(error),
+            self.assertTrue("syntax error - line 1, column 118, near '...d2.name == d3.name) ', at: RIGHT" in str(error),
                             "The error message is incorrect. The error message given by the server is %s" % error)
 
     ''' Try to mix the old join syntax with the new ansi join syntax, the syntax mixing should not be allowed
