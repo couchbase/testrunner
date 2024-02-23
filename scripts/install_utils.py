@@ -780,11 +780,14 @@ def _check_version_compatibility(node):
     pass
 
 
-def pre_install_steps():
+def pre_install_steps(node_helpers):
+    if not node_helpers:
+        return
+
     # CBQE-6402
     if "ntp" in params and params["ntp"]:
         ntp_threads = []
-        for node in NodeHelpers:
+        for node in node_helpers:
             ntp_thread = threading.Thread(target=node.shell.is_ntp_installed)
             ntp_threads.append(ntp_thread)
             ntp_thread.start()
@@ -792,16 +795,16 @@ def pre_install_steps():
             ntpt.join()
 
     if "tools" in params["install_tasks"]:
-        for node in NodeHelpers:
+        for node in node_helpers:
             tools_name = __get_tools_package_name(node)
             node.tools_name = tools_name
             tools_url = __get_tools_url(node, tools_name)
             node.tools_url = tools_url
     if "install" in params["install_tasks"]:
         if params["url"] is not None:
-            if NodeHelpers[0].shell.is_url_live(params["url"]):
+            if node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True
-                for node in NodeHelpers:
+                for node in node_helpers:
                     build_binary = __get_build_binary_name(node)
                     build_url = params["url"]
                     filepath = __get_download_dir(node) + build_binary
@@ -811,7 +814,7 @@ def pre_install_steps():
         else:
             install_debug_info = params["install_debug_info"]
             is_release_build = check_for_release_or_latest_build()
-            for node in NodeHelpers:
+            for node in node_helpers:
                 build_binary = __get_build_binary_name(node, is_release_build)
                 debug_binary = __get_debug_binary_name(node, is_release_build) if \
                     install_debug_info else None
@@ -860,20 +863,23 @@ def __copy_thread(src_path, dest_path, node):
     logging.info("Done copying build to %s.", node.ip)
 
 
-def _copy_to_nodes(debug=False):
+def _copy_to_nodes(node_helpers, debug=False):
     copy_threads = []
-    for node in NodeHelpers:
+    for node_helper in node_helpers:
         if debug:
-            src_path = node.build.debug_path
+            src_path = node_helper.build.debug_path
         else:
-            src_path = node.build.path
-        dst_path = __get_download_dir(node, disregard_skip_local_download=True) \
-                   + node.build.name
-        node.build.path = dst_path
+            src_path = node_helper.build.path
+        dst_path = \
+            __get_download_dir(node_helper,
+                               disregard_skip_local_download=True) \
+            + node_helper.build.name
+        node_helper.build.path = dst_path
         # don't copy if the file already exists and size matches
-        if check_file_size(node, debug):
+        if check_file_size(node_helper, debug):
             continue
-        copy_to_node = threading.Thread(target=__copy_thread, args=(src_path, dst_path, node))
+        copy_to_node = threading.Thread(target=__copy_thread,
+                                        args=(src_path, dst_path, node_helper))
         copy_threads.append(copy_to_node)
         copy_to_node.start()
 
@@ -901,6 +907,7 @@ def __get_build_url(node, build_binary):
         return release_url
     return None
 
+
 def __get_tools_url(node, tools_package):
     cb_version = params["version"]
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
@@ -912,79 +919,85 @@ def __get_tools_url(node, tools_package):
         return latestbuilds_url
     return None
 
-def download_build():
+
+def download_build(node_helpers):
+    if not node_helpers:
+        return
+
     log.debug("Downloading the builds now")
-    all_nodes_same_version = len(set([node.build.url for node in NodeHelpers])) == 1
-    if params["all_nodes_same_os"] and all_nodes_same_version and not params["skip_local_download"]:
+    all_nodes_same_version = len(set([node.build.url
+                                      for node in NodeHelpers])) == 1
+    if params["all_nodes_same_os"] and all_nodes_same_version \
+            and not params["skip_local_download"]:
         check_and_retry_download_binary_local(NodeHelpers[0])
-        _copy_to_nodes(debug=False)
+        _copy_to_nodes(node_helpers, debug=False)
         if NodeHelpers[0].build.debug_build_present:
-            _copy_to_nodes(debug=True)
+            _copy_to_nodes(node_helpers, debug=True)
         ok = True
-        for node in NodeHelpers:
-            if not check_file_exists(node, node.build.path) \
-                    or not check_file_size(node):
-                node.install_success = False
+        for node_helper in node_helpers:
+            if not check_file_exists(node_helper, node_helper.build.path) \
+                    or not check_file_size(node_helper):
+                node_helper.install_success = False
                 ok = False
-                log.error("Unable to copy build to {} at {}, exiting".format(node.ip, node.build.path))
+                log.error("Unable to copy build to {} at {}, exiting"
+                          .format(node_helper.ip, node_helper.build.path))
         if not ok:
             print_result_and_exit()
-        for node in NodeHelpers:
-            if node.build.debug_build_present:
-                if not check_file_exists(node,
-                                             node.build.debug_path) \
-                        or not check_file_size(node, debug_build=True):
-                    node.install_success = False
+        for node_helper in node_helpers:
+            if node_helper.build.debug_build_present:
+                if not check_file_exists(node_helper,
+                                         node_helper.build.debug_path) \
+                        or not check_file_size(node_helper, debug_build=True):
+                    node_helper.install_success = False
                     ok = False
-                    log.error("Unable to copy debug build to {} at {}, exiting".format(node.ip, node.build.debug_path))
+                    log.error("Unable to copy debug build to {} at {}, exiting"
+                              .format(node_helper.ip,
+                                      node_helper.build.debug_path))
         if not ok:
             print_result_and_exit()
     else:
-        for node in NodeHelpers:
-            build_url = node.build.url
-            filepath = node.build.path
-            debug_url = node.build.debug_url if \
-                node.build.debug_build_present else None
-            filepath_debug = node.build.debug_path if \
-                node.build.debug_build_present else None
+        for node_helper in node_helpers:
+            build_url = node_helper.build.url
+            filepath = node_helper.build.path
+            debug_url = node_helper.build.debug_url if \
+                node_helper.build.debug_build_present else None
+            filepath_debug = node_helper.build.debug_path if \
+                node_helper.build.debug_build_present else None
             cmd_master = install_constants.DOWNLOAD_CMD[
-                node.info.deliverable_type]
+                node_helper.info.deliverable_type]
             cmd = None
             cmd_debug = None
             if "curl" in cmd_master:
                 cmd = cmd_master.format(build_url, filepath,
                                         install_constants.WAIT_TIMES[
-                                            node.info.deliverable_type]
+                                            node_helper.info.deliverable_type]
                                         ["download_binary"])
-                if node.build.debug_build_present:
+                if node_helper.build.debug_build_present:
                     cmd_debug = cmd_master.format(debug_url, filepath_debug,
                                                   install_constants.WAIT_TIMES[
-                                                      node.info.deliverable_type]
+                                                      node_helper.info.deliverable_type]
                                                   ["download_binary"])
                 else:
                     cmd_debug = None
-
-
             elif "wget" in cmd_master:
-
-                cmd = cmd_master.format(__get_download_dir(node),
-                                        node.build.name,
+                cmd = cmd_master.format(__get_download_dir(node_helper),
+                                        node_helper.build.name,
                                         build_url)
-                if node.build.debug_build_present:
-                    cmd_debug = cmd_master.format(__get_download_dir(node),
-                                                  node.build.debug_name,
+                if node_helper.build.debug_build_present:
+                    cmd_debug = cmd_master.format(__get_download_dir(node_helper),
+                                                  node_helper.build.debug_name,
                                                   debug_url)
                 else:
                     cmd_debug = None
             if cmd:
-                check_and_retry_download_binary(cmd, node,
-                                                node.build.path)
-            if cmd_debug and node.build.debug_build_present:
-                check_and_retry_download_binary(cmd_debug, node,
-                                                node.build.debug_path
+                check_and_retry_download_binary(cmd, node_helper,
+                                                node_helper.build.path)
+            if cmd_debug and node_helper.build.debug_build_present:
+                check_and_retry_download_binary(cmd_debug, node_helper,
+                                                node_helper.build.debug_path
                                                 , debug_build=True)
     log.debug("Done downloading build binary")
-    for node_helper in NodeHelpers:
+    for node_helper in node_helpers:
         if node_helper.shell.nonroot:
             download_cb_non_package_installer(node_helper)
 
@@ -1012,31 +1025,37 @@ def download_cb_non_package_installer(node_helper):
     node_helper.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
                                                          cb_non_package_installer_name))
 
-def install_tools():
-    log.debug("Downloading the tools package now")
-    for node in NodeHelpers:
-        cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
-        download_dir = __get_download_dir(node)
-        if "curl" in cmd_master:
-            cmd = cmd_master.format(node.tools_url, download_dir)
-        elif "wget" in cmd_master:
-            cmd = cmd_master.format(download_dir, node.tools_name, node.tools_url)
-        if cmd:
-            node.shell.execute_command(cmd, debug=True)
 
-        if "windows" in node.get_os():
+def install_tools(node_helpers):
+    log.debug("Downloading the tools package now")
+    cmd = ""
+    for node_helper in node_helpers:
+        cmd_master = install_constants.DOWNLOAD_CMD[node_helper.info.deliverable_type]
+        download_dir = __get_download_dir(node_helper)
+        if "curl" in cmd_master:
+            cmd = cmd_master.format(node_helper.tools_url, download_dir)
+        elif "wget" in cmd_master:
+            cmd = cmd_master.format(download_dir, node_helper.tools_name,
+                                    node_helper.tools_url)
+        if cmd:
+            node_helper.shell.execute_command(cmd, debug=True)
+
+        if "windows" in node_helper.get_os():
             install_cmd = "unzip {0} -d {1}"
         else:
             install_cmd = "tar -xzf {0} -C {1}"
 
         install_dir = "/tmp/tools_package"
-        if "windows" in node.get_os():
+        if "windows" in node_helper.get_os():
             install_dir = f"/cygdrive/c{install_dir}"
-        node.shell.execute_command(f"mkdir -p {install_dir}", debug=True)
+        node_helper.shell.execute_command(f"mkdir -p {install_dir}",
+                                          debug=True)
 
-        cmd = install_cmd.format(f"{download_dir}/{node.tools_name}", install_dir)
-        node.shell.execute_command(cmd, debug=True)
-        node.shell.execute_command(f"rm {download_dir}/{node.tools_name}")
+        cmd = install_cmd.format(f"{download_dir}/{node_helper.tools_name}",
+                                 install_dir)
+        node_helper.shell.execute_command(cmd, debug=True)
+        node_helper.shell.execute_command(f"rm {download_dir}/{node_helper.tools_name}")
+
 
 def check_and_retry_download_binary_local(node):
     log.info("Downloading build binary to {0}..".format(node.build.path))
@@ -1091,7 +1110,8 @@ def check_and_retry_download_binary_local(node):
 
 
 def check_file_exists(node, filepath):
-    output, _ = node.shell.execute_command("ls -lh {0}".format(filepath), debug=params["debug_logs"])
+    output, _ = node.shell.execute_command("ls -lh {0}".format(filepath),
+                                           debug=params["debug_logs"])
     for line in output:
         if line.find('No such file or directory') == -1:
             return True

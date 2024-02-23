@@ -118,6 +118,7 @@ def validate_install(params):
                                                                                     node['services']))
     install_utils.print_result_and_exit()
 
+
 def do_install(params):
     # Per node, spawn one thread, which will process a queue of install tasks
     for server in params["servers"]:
@@ -150,11 +151,10 @@ def do_install(params):
         validate_install(params)
 
 
-def do_uninstall(params):
+def do_uninstall(params, node_helpers):
     # Per node, spawn one thread, which will process a queue of
     # uninstall tasks
-    for server in params["servers"]:
-        node_helper = install_utils.get_node_helper(server.ip)
+    for node_helper in node_helpers:
         q = queue.Queue()
         q.put('uninstall')
         t = threading.Thread(target=node_installer, args=(node_helper, q))
@@ -163,9 +163,9 @@ def do_uninstall(params):
         node_helper.queue = q
         node_helper.thread = t
     force_stop = start_time + params["timeout"]
-    for node in install_utils.NodeHelpers:
+    for node_helper in node_helpers:
         try:
-            while node.queue.unfinished_tasks and time.time() < \
+            while node_helper.queue.unfinished_tasks and time.time() < \
                     force_stop:
                 time.sleep(install_constants.INSTALL_POLL_INTERVAL)
             else:
@@ -179,20 +179,20 @@ def do_uninstall(params):
 
 def main():
     params = install_utils.process_user_input()
-    install_utils.pre_install_steps()
+
+    node_helpers_to_install = install_utils.NodeHelpers
+    install_utils.pre_install_steps(node_helpers_to_install)
     if 'uninstall' in params['install_tasks']:
         # Do uninstallation of products first before downloading the
         # builds.
-        do_uninstall(params)
+        do_uninstall(params, node_helpers_to_install)
         params['install_tasks'].remove('uninstall')
 
     if 'install' in params['install_tasks']:
-        install_utils.download_build()
+        install_utils.download_build(node_helpers_to_install)
     if 'tools' in params['install_tasks']:
-        install_utils.install_tools()
+        install_utils.install_tools(node_helpers_to_install)
     do_install(params)
-
-
 
 
 if __name__ == "__main__":
