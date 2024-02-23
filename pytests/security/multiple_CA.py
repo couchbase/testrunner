@@ -403,7 +403,7 @@ class MultipleCA(BaseTestCase):
             shell = RemoteMachineShellConnection(node)
             shell.restart_couchbase()
             shell.disconnect()
-            self.sleep(10, "Wait after restart")
+            self.sleep(120, "Wait after restart")
             self.cluster.async_failover(nodes_in_cluster,
                                         [node],
                                         graceful=False)
@@ -411,6 +411,7 @@ class MultipleCA(BaseTestCase):
             rest.set_recovery_type("ns_1@" + node.ip, recoveryType="delta")
             https_val = CbServer.use_https  # so that add_node uses https
             CbServer.use_https = True
+            self.sleep(120, "Wait after restart")
             task = self.cluster.async_rebalance(nodes_in_cluster, [], [])
             CbServer.use_https = https_val
             self.wait_for_rebalance_to_complete(task)
@@ -419,6 +420,7 @@ class MultipleCA(BaseTestCase):
             shell.disconnect()
             https_val = CbServer.use_https  # so that add_node uses https
             CbServer.use_https = True
+            self.sleep(120, "Wait after restart")
             task = self.cluster.async_rebalance(nodes_in_cluster,
                                                 [], [node])
             self.wait_for_rebalance_to_complete(task)
