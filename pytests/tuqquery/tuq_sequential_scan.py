@@ -277,8 +277,10 @@ class QuerySeqScanTests(QueryTests):
     def test_rbac_bucket(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
         self.run_cbq_query(f'CREATE SCOPE {self.bucket}.scope1 IF not exists')
+        self.sleep(3)
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
+        self.sleep(3)
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection2 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
 
