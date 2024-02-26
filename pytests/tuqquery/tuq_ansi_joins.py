@@ -142,8 +142,8 @@ class QueryANSIJOINSTests(QueryTests):
     def test_join_expression(self):
         queries_to_run = []
 
-        query_1 = "select * from ([{'name' : 'employee-9'}, {'name': 'employee-10'}]) d INNER JOIN" \
-                  " ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 ON (d.name = d2.name)"
+        query_1 = "select * from ([{'name' : 'employee-9'}, {'name': 'employee-10'}, {'name': 'employee-11'}, {'name': 'employee-12'}]) d INNER JOIN" \
+                  " ([{'name' : 'employee-9'},{'name' : 'employee-10'}, {'name': 'employee-11'}, {'name': 'employee-12'}]) d2 ON (d.name = d2.name)"
         # With subquery support this join should be a hash join
         explain_query = "EXPLAIN " + query_1
         explain_plan = self.run_cbq_query(explain_query)
@@ -161,7 +161,7 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run = []
 
         query_1 = "select * from (select * from {0} d1 where d1.name == 'employee-9') d INNER JOIN " \
-                  "([{{'name' : 'employee-9'}},{{'name' : 'employee-10'}}]) d2 ON " \
+                  "([{{'name' : 'employee-9'}},{{'name' : 'employee-10'}},{{'name' : 'employee-11'}},{{'name' : 'employee-12'}}]) d2 ON " \
                   "(d.d1.name = d2.name)".format(self.default_query_bucket)
         # With subquery support this join should be a hash join
         explain_query = "EXPLAIN " + query_1
