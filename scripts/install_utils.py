@@ -984,30 +984,33 @@ def download_build():
                                                 node.build.debug_path
                                                 , debug_build=True)
     log.debug("Done downloading build binary")
-    for node in NodeHelpers:
-        if node.shell.nonroot:
-            download_cb_non_package_installer()
+    for node_helper in NodeHelpers:
+        if node_helper.shell.nonroot:
+            download_cb_non_package_installer(node_helper)
 
-def download_cb_non_package_installer():
+
+def download_cb_non_package_installer(node_helper):
     log.debug("Downloading install script now")
-    for node in NodeHelpers:
-        cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
-        download_dir =  __get_download_dir(node, disregard_skip_local_download=True)
-        url = params["cb_non_package_installer_url"] if params["cb_non_package_installer_url"] else install_constants.CB_NON_PACKAGE_INSTALLER_URL
-        cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
-            if params["cb_non_package_installer_url"] \
-                else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
-        if "curl" in cmd_master:
-            cmd = cmd_master.format(url,
-                                    download_dir)
-        elif "wget" in cmd_master:
-            cmd = cmd_master.format(download_dir,
-                                    cb_non_package_installer_name,
-                                    url)
-        if cmd:
-            node.shell.execute_command(cmd, debug=True)
-        node.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
-                                                             cb_non_package_installer_name))
+    cmd_master = install_constants.DOWNLOAD_CMD[node_helper.info.deliverable_type]
+    download_dir = __get_download_dir(node_helper,
+                                      disregard_skip_local_download=True)
+    url = params["cb_non_package_installer_url"] \
+        if params["cb_non_package_installer_url"] \
+        else install_constants.CB_NON_PACKAGE_INSTALLER_URL
+    cb_non_package_installer_name = params["cb_non_package_installer_url"].split("/")[-1] \
+        if params["cb_non_package_installer_url"] \
+        else install_constants.CB_NON_PACKAGE_INSTALLER_NAME
+    if "curl" in cmd_master:
+        cmd = cmd_master.format(url,
+                                download_dir)
+    elif "wget" in cmd_master:
+        cmd = cmd_master.format(download_dir,
+                                cb_non_package_installer_name,
+                                url)
+    if cmd:
+        node_helper.shell.execute_command(cmd, debug=True)
+    node_helper.shell.execute_command("chmod a+x {0}{1}".format(download_dir,
+                                                         cb_non_package_installer_name))
 
 def install_tools():
     log.debug("Downloading the tools package now")
