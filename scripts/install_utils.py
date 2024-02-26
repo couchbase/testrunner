@@ -10,6 +10,7 @@ from couchbase_helper.cluster import Cluster
 sys.path = [".", "lib"] + sys.path
 import testconstants
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from membase.api.on_prem_rest_client import RestHelper
 from membase.api.rest_client import RestConnection
 import install_constants
 import TestInput
