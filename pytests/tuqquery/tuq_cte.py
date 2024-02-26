@@ -274,8 +274,7 @@ class QueryCTETests(QueryTests):
         queries["e"] = {"indexes": [primary_index, index_1], "queries": [query_5], "asserts": [self.verifier(verify_5)]}
         queries["f"] = {"indexes": [primary_index, index_1], "queries": [query_6], "asserts": [self.plan_verifier("HashJoin")]}
         queries["g"] = {"indexes": [primary_index, index_1], "queries": [query_7], "asserts": [self.verifier(verify_7)]}
-        queries["h"] = {"indexes": [primary_index, index_1], "queries": [query_8], "asserts": [self.plan_verifier("NestedLoopJoin")]}
-
+        queries["h"] = {"indexes": [primary_index, index_1], "queries": [query_8], "asserts": [self.plan_verifier("HashJoin")]}
         self.query_runner(queries)
 
     def test_cte_index_scan(self):
