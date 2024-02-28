@@ -170,10 +170,9 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
 
         if oso_mode:
             for cluster in self.get_cluster_objects_for_input(oso_mode):
-                if True in cluster.get_xdcr_param("collectionsOSOMode"):
-                    self.log.info("collectionsOSOMode is true as expected")
-                else:
-                    self.fail("collectionsOSOMode is false, expected to be true by default")
+                if False in cluster.get_xdcr_param("collectionsOSOMode"):
+                    self.fail("collectionsOSOMode is false, expected to be true by default")                    
+                self.log.info("collectionsOSOMode is true as expected")
             skip_verify = True
 
         if consistent_metadata:
