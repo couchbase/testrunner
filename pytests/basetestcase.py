@@ -641,7 +641,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
         path = path or "."
-        runner = cbcollectRunner(servers, path, log=self.log)
+        runner = cbcollectRunner(servers, path)
         runner.run()
         if len(runner.succ) > 0:
             TestInputSingleton.input.test_params[
@@ -893,12 +893,11 @@ class OnPremBaseTestCase(unittest.TestCase):
             pass
 
     def is_test_failed(self):
-        return (hasattr(self, '_resultForDoCleanups')
-                and len(self._resultForDoCleanups.failures
-                or self._resultForDoCleanups.errors)) \
-            or (
-                hasattr(self, '_exc_info')
-                and self._exc_info()[1] is not None)
+        if hasattr(self, "_outcome") and len(self._outcome.errors) > 0:
+            for i in self._outcome.errors:
+                if i[1] is not None:
+                    return True
+        return False
 
     def sleep(self, timeout=15, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
