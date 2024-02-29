@@ -40,12 +40,6 @@ class EphemeralGSI(BaseSecondaryIndexingTests):
         super(EphemeralGSI, self).tearDown()
         self.log.info("==============  EphemeralGSI tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_gsi_on_ephemeral_bucket(self):
         self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]

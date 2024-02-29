@@ -41,12 +41,6 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
         super(GSIFreeTier, self).tearDown()
         self.log.info("==============  GSIFreeTier tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_free_tier_limit(self):
         index_gen_list = []
         prev_scope = None

@@ -4,13 +4,9 @@ from membase.api.rest_client import RestConnection, RestHelper
 import time
 
 class UpgradeBackwardsCollections(UpgradeSecondaryIndex):
-    def suite_setUp(self):
-        pass
     def setUp(self):
         super(UpgradeBackwardsCollections, self).setUp()
 
-    def suite_tearDown(self):
-        pass
     def tearDown(self):
         super(UpgradeBackwardsCollections, self).tearDown()
 

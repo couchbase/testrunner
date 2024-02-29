@@ -13,12 +13,6 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexingScanTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_create_query_explain_drop_index(self):
         self.use_primary_index= self.input.param("use_primary_index", False)
         self.indexes= self.input.param("indexes", "").split(":")

@@ -54,12 +54,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def tearDown(self):
         super(SecondaryIndexingRebalanceTests, self).tearDown()
 
-    # def suite_setUp(self):
-    #     pass
-    #
-    # def suite_tearDown(self):
-    #     pass
-
     def test_gsi_rebalance_out_indexer_node(self):
         self.run_operation(phase="before")
         expected_result = None

@@ -163,12 +163,6 @@ class IndexerStatsTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(IndexerStatsTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_redundant_keys(self):
         """
         Every key in the JSON response of /stats, /stats with instance filter,

@@ -84,12 +84,6 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         super(CollectionsSecondaryIndexingRecoveryTests, self).tearDown()
         self.log.info("==============  PlasmaCollectionsTests tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_recovery_disk_snapshot(self):
 
         if self.enable_oso:

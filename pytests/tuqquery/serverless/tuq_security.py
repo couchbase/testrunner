@@ -16,12 +16,6 @@ class QuerySecurityTests(ServerlessBaseTestCase):
     def tearDown(self):
         return super().tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_query_authorization(self):
         self.provision_databases(2)
         keys = self.databases.keys()

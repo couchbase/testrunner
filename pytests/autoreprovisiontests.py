@@ -185,9 +185,6 @@ class AutoReprovisionTests(unittest.TestCase):
         self.assertEqual(settings.max_nodes, 1)
         self.assertEqual(settings.count, 0)
 
-    def suite_setUp(self):
-        pass
-
     def test_enable(self):
         status = self.rest.update_autoreprovision_settings(True, 2)
         if not status:

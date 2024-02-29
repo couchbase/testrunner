@@ -38,12 +38,6 @@ class FTSPauseResume(ServerlessBaseTestCase):
     def tearDown(self):
         return super().tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     @staticmethod
     def define_index_parameters_collection_related(container_type="bucket", scope=None, collection=None):
         if container_type == 'bucket':

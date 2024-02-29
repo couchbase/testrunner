@@ -13,13 +13,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.flush_bucket = self.input.param('flush_bucket', False)
         self.move_index = self.input.param('move_index', False)
 
-    def suite_setUp(self):
-        pass
     def tearDown(self):
         super(SecondaryIndexingStatsConfigTests, self).tearDown()
-
-    def suite_tearDown(self):
-        pass
 
     def test_key_size_distribution(self):
         index_node = self.get_nodes_from_services_map(service_type="index",

@@ -22,15 +22,6 @@ class RbacFTS(FTSBaseTest):
         self.delete_role()
         super(RbacFTS, self).tearDown()
 
-    def suite_setUp(self):
-        self.log.info("==============   RbacFTS suite_setup has started ==============")
-        self.log.info("==============   RbacFTS suite_setup has finished ==============")
-
-    def suite_tearDown(self):
-        self.log.info("==============   RbacFTS suite_tearDown has started ==============")
-        self.log.info("==============   RbacFTS suite_tearDown has finished ==============")
-
-
     def create_users(self, users=None):
         """
         :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
@@ -681,4 +672,3 @@ class RbacFTS(FTSBaseTest):
                     self.fail(f"The user successfully queried fts index {user['id']}")
                 except Exception as e:
                     pass
-

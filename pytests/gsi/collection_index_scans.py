@@ -23,12 +23,6 @@ class Collection_index_scans(BaseSecondaryIndexingTests):
         super(Collection_index_scans, self).tearDown()
         self.log.info("==============  CollectionsIndexScans tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_index_scans_balance(self):
         self.prepare_tenants(index_creations=False)
         self.buckets = self.rest.get_buckets()
@@ -71,6 +65,3 @@ class Collection_index_scans(BaseSecondaryIndexingTests):
             num_requests_2 = index_stats[1][self.buckets[1].name]['idx_2']['num_requests']
         num_requests_difference = (abs(num_requests_2-num_requests_1)//(self.num_scans//2))*100
         self.assertLessEqual(num_requests_difference, 20, 'Too much difference in the scans served by each node')
-
-
-

@@ -25,12 +25,6 @@ class GSIThrottle(ServerlessBaseTestCase):
     def tearDown(self):
         return super().tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_throttle_create_index(self):
         self.provision_databases()
         for database in self.databases.values():

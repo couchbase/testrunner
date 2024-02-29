@@ -11,12 +11,6 @@ class MultiNodeAutoFailoverTests(AutoFailoverBaseTest):
     def tearDown(self):
         super(MultiNodeAutoFailoverTests, self).tearDown()
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def _is_failover_expected(self, failure_node_number):
         failover_not_expected = (self.max_count == 1 and failure_node_number > 1 and
                                  self.pause_between_failover_action <

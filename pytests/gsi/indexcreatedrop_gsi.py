@@ -15,12 +15,6 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexingCreateDropTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_multi_create_drop_index(self):
         if self.run_async:
             tasks = self.async_run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = False)

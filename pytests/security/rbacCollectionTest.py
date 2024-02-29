@@ -39,13 +39,6 @@ class ServerInfo():
 
 
 class rbacCollectionTest(BaseTestCase):
-
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def wait(self):
         self.sleep(2)
 

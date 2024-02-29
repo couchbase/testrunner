@@ -39,12 +39,6 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexDatasizeTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_sorted_items_indexed(self):
         if self.plasma_dgm:
             self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])

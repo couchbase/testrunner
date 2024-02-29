@@ -69,12 +69,6 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         super(ConcurrentIndexes, self).tearDown()
         self.log.info("==============  ConcurrentIndexes tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_create_concurrent_indexes(self):
         num_of_docs = 10 ** 4
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)

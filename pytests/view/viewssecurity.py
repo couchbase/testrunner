@@ -31,15 +31,8 @@ class ViewsSecurity(createdeleteview.CreateDeleteViewTests,BaseTestCase):
             self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
             self.fail(ex)
 
-    def suite_setUp(self):
-        self.log.info("---------------Suite Setup---------------")
-
-    def suite_tearDown(self):
-        self.log.info("---------------Suite Teardown---------------")
-
     def tearDown(self):
         super(ViewsSecurity, self).tearDown()
-
 
     def test_view_ops_n2n_encryption_enabled(self):
 

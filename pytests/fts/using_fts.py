@@ -20,11 +20,6 @@ class USINGFTS(FTSBaseTest):
     def tearDown(self):
         super(USINGFTS, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-    def suite_tearDown(self):
-        pass
-
     def test_using_fts_txns(self):
         self.load_data()
         self.n1ql_helper.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.test.collection1", server=self.master)

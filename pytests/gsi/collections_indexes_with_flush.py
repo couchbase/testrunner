@@ -32,12 +32,6 @@ class CollectionsIndexesWithFlush(BaseSecondaryIndexingTests):
         super(CollectionsIndexesWithFlush, self).tearDown()
         self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_index_status_with_bucket_flush(self):
         num_of_docs_per_collection = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs_per_collection)

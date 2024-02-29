@@ -29,12 +29,6 @@ class TLSSecondaryIndexing(BaseSecondaryIndexingTests):
         super(TLSSecondaryIndexing, self).tearDown()
         self.log.info("==============  TLSSecondaryIndexing tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_create_and_alter_index_with_nodeinfo_on_all_encryption_mode(self):
         '''
         Enable node to node encryption and set encryption level to all.
@@ -107,4 +101,3 @@ class TLSSecondaryIndexing(BaseSecondaryIndexingTests):
                     if host1 not in index_info[idx]['hosts']:
                         self.fail(f"Index idx2  not on expected host after alter statement"
                                   f". Expected host {host1} Actual host {index_info[idx]['hosts']}")
-

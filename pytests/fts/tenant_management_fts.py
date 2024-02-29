@@ -8,12 +8,6 @@ class TenantManagementFTS(FTSBaseTest):
     def tearDown(self):
         super(TenantManagementFTS, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def create_simple_default_index(self, data_loader_output=False):
         plan_params = self.construct_plan_params()
         self.load_data(generator=None, data_loader_output=data_loader_output, num_items=self._num_items)

@@ -33,12 +33,6 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         super(GSIAutofailover, self).tearDown()
         self.log.info("==============  GSIAutofailover tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def _create_indexes(self):
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         for collection_namespace in self.namespaces:

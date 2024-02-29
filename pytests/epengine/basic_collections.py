@@ -16,9 +16,6 @@ from TestInput import TestInputSingleton
 
 class BasicCollections(QueryTests):
 
-    def suite_setUp(self):
-        pass
-
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
@@ -48,9 +45,6 @@ class BasicCollections(QueryTests):
 
     def tearDown(self):
          self.conn.delete_all_buckets()
-
-    def suite_tearDown(self):
-        pass
 
     def test_valid_scope_name(self):
         # epengine.basic_collections.BasicCollections.test_valid_scope_name

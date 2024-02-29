@@ -22,12 +22,6 @@ class GSI_Security(BaseGSIServerless):
         super(GSI_Security, self).tearDown()
         self.log.info("==============  GSI_Security serverless tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_run_queries_against_different_tenants(self):
         self.provision_databases(count=self.num_of_tenants)
         index_fields = ['age', 'country']
@@ -119,8 +113,3 @@ class GSI_Security(BaseGSIServerless):
             if not testpass:
                 self.fail(
                     f"User {database_obj.access_key} with password {database_obj.secret_key} able to access internal endpoints on {database_obj.id} which are not supposed to be exposed")
-
-
-
-
-

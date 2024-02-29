@@ -11,12 +11,6 @@ class AutoFailoverTests(AutoFailoverBaseTest):
     def tearDown(self):
         super(AutoFailoverTests, self).tearDown()
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_autofailover(self):
         """
         Test the basic autofailover for different failure scenarios.

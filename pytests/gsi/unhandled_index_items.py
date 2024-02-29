@@ -31,14 +31,8 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
             rolelist.append({'id': bucket.name, 'name': bucket.name, 'roles': 'admin'})
             self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
 
-    def suite_setUp(self):
-        pass
-
     def tearDown(self):
         super(GSIUnhandledIndexItems, self).tearDown()
-
-    def suite_tearDown(self):
-        pass
 
     def test_set_invalid_limits(self):
         index_settings = self.rest.get_index_settings()

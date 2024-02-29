@@ -32,15 +32,8 @@ class ViewsSystemEventLog(createdeleteview.CreateDeleteViewTests,BaseTestCase):
             self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
             self.fail(ex)
 
-    def suite_setUp(self):
-        self.log.info("---------------Suite Setup---------------")
-
-    def suite_tearDown(self):
-        self.log.info("---------------Suite Teardown---------------")
-
     def tearDown(self):
         super(ViewsSystemEventLog, self).tearDown()
-
 
     def test_view_system_events_create_doc(self):
 
@@ -124,4 +117,3 @@ class ViewsSystemEventLog(createdeleteview.CreateDeleteViewTests,BaseTestCase):
             global_vars.system_event_logs.add_event(
                 ViewsServiceEvents.DDoc_Settings_change(self.master))
             self.system_events.validate(server=self.master)
-

@@ -47,12 +47,6 @@ class SmartBatching(BaseSecondaryIndexingTests):
         super(SmartBatching, self).tearDown()
         self.log.info("==============  SmartBatching tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_batching_for_rebalance_in_indexer_node(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 2:

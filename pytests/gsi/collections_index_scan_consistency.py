@@ -36,12 +36,6 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         super(CollectionsIndexScanConsistency, self).tearDown()
         self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_request_plus_index_consistency(self):
         """
         Summary: This test validate request_plus scan consistency with flooding high data load to cluster and

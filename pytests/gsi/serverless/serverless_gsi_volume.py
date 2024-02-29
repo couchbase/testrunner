@@ -89,12 +89,6 @@ class ServerlessGSIVolume(BaseGSIServerless):
         super(ServerlessGSIVolume, self).tearDown()
         self.log.info("==============  ServerlessGSIVolume serverless tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def create_indexes_for_tenant(self, database, db_id, weightage, skip_primary=False):
         """
         @summary: Create Indexes for a given tenant according to weightage passed

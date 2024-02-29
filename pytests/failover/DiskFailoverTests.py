@@ -15,12 +15,6 @@ class DiskAutofailoverTests(DiskAutoFailoverBasetest):
     def tearDown(self):
         super(DiskAutofailoverTests, self).tearDown()
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def _loadgen(self):
         tasks = []
         tasks.extend(self._async_load_all_buckets(self.master, self.run_time_create_load_gen, "create", 0))

@@ -6,8 +6,6 @@ import time
 UPGRADE_VERS = ["5.0.0", "5.0.1", "5.1.0"]
 
 class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
-    def suite_setUp(self):
-        pass
     def setUp(self):
         super(UpgradePartialParititionedIndex, self).setUp()
         self.partial_partitioned = self.input.param("partial_partitioned", False)
@@ -16,8 +14,6 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
         self.mixed_mode_index = self.input.param("mixed_mode_index", False)
         self.mixed_mode_kv = self.input.param("mixed_mode_kv", False)
 
-    def suite_tearDown(self):
-        pass
     def tearDown(self):
         super(UpgradePartialParititionedIndex, self).tearDown()
 
@@ -235,11 +231,3 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             'SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "ERROR" order by meta().id'.format(self.bucket_name))
 
         self.assertEqual(error_results['metrics']['resultCount'], 0)
-
-
-
-
-
-
-
-

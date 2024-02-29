@@ -14,12 +14,6 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexingClusterOpsTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_remove_bucket_and_query(self):
         # Initialization operation
         self.run_multi_operations(buckets=self.buckets,

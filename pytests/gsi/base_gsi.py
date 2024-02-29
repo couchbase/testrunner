@@ -190,8 +190,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(f"{data} set")
             self.log.info(response.text)
 
-
-
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
 

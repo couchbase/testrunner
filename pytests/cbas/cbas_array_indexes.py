@@ -1,14 +1,6 @@
 from .cbas_base import *
 
 
-def suite_setUp():
-    pass
-
-
-def suite_tearDown():
-    pass
-
-
 class CBASArrayIndexes(CBASBaseTest):
     ARRAY_OPT_ENABLED = "SET `compiler.arrayindex` \"true\";"
     ARRAY_OPT_DISABLED = "SET `compiler.arrayindex` \"false\";"

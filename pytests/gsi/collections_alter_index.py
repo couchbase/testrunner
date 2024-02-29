@@ -36,12 +36,6 @@ class CollectionsAlterIndex(BaseSecondaryIndexingTests):
         super(CollectionsAlterIndex, self).tearDown()
         self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_alter_index_for_collections(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 3:

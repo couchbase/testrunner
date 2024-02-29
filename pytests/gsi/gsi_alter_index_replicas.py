@@ -29,17 +29,12 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         # No need for this step as data has already been loaded into the bucket
         # self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, 400000, 100, "default", 1024, '-j')
 
-    def suite_setUp(self):
-        pass
-
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         # Adding sleep due to MB-37067, once resolved, remove this sleep and delete_all_buckets
         self.sleep(120)
         super(GSIAlterIndexesTests, self).tearDown()
 
-    def suite_tearDown(self):
-        pass
     # Create an index and verify the replicas
     def _create_index_query(self, index_statement='', index_name='', defer_build=False):
         try:

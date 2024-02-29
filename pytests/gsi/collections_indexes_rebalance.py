@@ -58,12 +58,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         super(CollectionIndexesRebalance, self).tearDown()
         self.log.info("==============  ConcurrentIndexes tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_multiple_type_indexes_with_rebalance(self):
         unique_index_type_per_collection = 8
         num_of_docs = self.num_of_docs_per_collection

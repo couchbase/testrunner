@@ -29,12 +29,6 @@ class TenantManagement(BaseGSIServerless):
         super(TenantManagement, self).tearDown()
         self.log.info("==============  TenantManagement serverless tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_cluster_affinity(self):
         self.provision_databases(count=self.num_of_tenants)
         self.create_scopes_collections(databases=self.databases.values())

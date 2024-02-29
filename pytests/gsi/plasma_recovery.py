@@ -41,12 +41,6 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
                 log.info(ex)
         super(SecondaryIndexingPlasmaDGMRecoveryTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_rebalance_in(self):
         pre_recovery_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_recovery_tasks])

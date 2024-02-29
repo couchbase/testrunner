@@ -24,12 +24,6 @@ class Pause_Resume_GSI(BaseSecondaryIndexingTests):
         super(Pause_Resume_GSI, self).tearDown()
         self.log.info("==============  CollectionsIndexBasics tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def get_sub_cluster_list(self):
         idx_host_list_dict = self.get_host_list()
         sub_cluster_list = list()

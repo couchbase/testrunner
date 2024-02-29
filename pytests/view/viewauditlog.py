@@ -38,12 +38,6 @@ class ViewAuditLog(createdeleteview.CreateDeleteViewTests):
             self.log.error("SETUP WAS FAILED. ALL TESTS WILL BE SKIPPED")
             self.fail(ex)
 
-    def suite_setUp(self):
-        self.log.info("---------------Suite Setup---------------")
-
-    def suite_tearDown(self):
-        self.log.info("---------------Suite Teardown---------------")
-
     def tearDown(self):
         super(ViewAuditLog, self).tearDown()
 

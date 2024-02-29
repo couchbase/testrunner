@@ -43,13 +43,6 @@ class ntonencryptionTest(BaseTestCase):
         ntonencryptionBase().disable_nton_cluster(self.servers)
         self._reset_original()
 
-    def suite_setUp(self):
-        self.log.info("---------------Suite Setup---------------")
-
-    def suite_tearDown(self):
-        self.log.info("---------------Suite Teardown---------------")
-
-
     def _reset_original(self, servers=None):
         if servers is None:
             servers = self.servers

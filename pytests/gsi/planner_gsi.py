@@ -47,12 +47,6 @@ class PlannerGSI(BaseSecondaryIndexingTests):
         super(PlannerGSI, self).tearDown()
         self.log.info("==============  PlannerGSI tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def _find_least_loaded_index_node(self, count=1):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         remote = RemoteMachineShellConnection(index_node)

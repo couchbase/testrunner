@@ -21,12 +21,6 @@ class Pause_Resume_GSI_Serverless(BaseGSIServerless):
         super(Pause_Resume_GSI_Serverless, self).tearDown()
         self.log.info("==============  TenantManagement serverless tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def non_hibernated_bucket_validation(self):
         #Skip the first few buckets which have been hibernated and run some scans on non hibernted buckets
         for counter, database in enumerate(self.databases.values()):

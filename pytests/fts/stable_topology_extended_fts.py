@@ -30,12 +30,6 @@ class StableTopExtendedFTS(StableTopFTS):
     def tearDown(self):
         super(StableTopExtendedFTS, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def is_valid_ip_address(self, ip_address_str):
         try:
             ipaddress.ip_address(ip_address_str)

@@ -3,8 +3,6 @@ import time
 from membase.helper.bucket_helper import BucketOperationHelper
 
 class GSIPartialPartitioningTests(GSIIndexPartitioningTests):
-    def suite_setup(self):
-        pass
     def setUp(self):
         super(GSIPartialPartitioningTests, self).setUp()
         self.partitoned_index = self.input.param("partitoned_index", False)
@@ -39,9 +37,6 @@ class GSIPartialPartitioningTests(GSIIndexPartitioningTests):
                     continue
                 else:
                     self.n1ql_helper.run_cbq_query(query="drop index `travel-sample`.`%s`" % index)
-
-    def suite_tearDown(self):
-        pass
 
     def tearDown(self):
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)

@@ -56,12 +56,6 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
     def tearDown(self):
         super(AutoFailoverAbortsRebalance, self).tearDown()
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_failure_scenarios_during_rebalance_in_of_node_A(self):
         # enable auto failover
         self.enable_autofailover_and_validate()

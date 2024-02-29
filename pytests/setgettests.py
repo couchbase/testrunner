@@ -122,12 +122,6 @@ class SimpleSetGetTestBase(object):
 class MembaseBucket(unittest.TestCase):
 
     simpleSetGetTestBase = None
-    def suite_setUp(self):
-        print("suite_setUp...")
-     
-    def suite_tearDown(self):
-        print("suite_tearDown...")
-
     def setUp(self):
         self.simpleSetGetTestBase = SimpleSetGetTestBase()
         self.simpleSetGetTestBase.setUp_bucket(self)

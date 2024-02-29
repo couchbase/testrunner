@@ -34,12 +34,6 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         super(CollectionsIndexesWithMissingKeys, self).tearDown()
         self.log.info("==============  CollectionsIndexesWithMissingKeys tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_create_index_with_missing(self):
         collection_namespace = self.namespaces[0]
         index_gen_1 = QueryDefinition(index_name='idx1', index_fields=['age', 'city', 'country'])

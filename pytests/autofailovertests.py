@@ -134,12 +134,6 @@ class AutoFailoverTests(unittest.TestCase):
     def tearDown(self):
         AutoFailoverBaseTest.common_tearDown(self.servers, self)
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)

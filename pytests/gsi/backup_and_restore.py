@@ -108,12 +108,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(BackupRestoreTests, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def _create_bucket_structure(self):
         self.collection_rest.create_buckets_scopes_collections(
             self.num_buckets, self.num_scopes, self.num_collections,

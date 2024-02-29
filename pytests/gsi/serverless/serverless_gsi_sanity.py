@@ -24,12 +24,6 @@ class ServerlessGSISanity(BaseGSIServerless):
         super(ServerlessGSISanity, self).tearDown()
         self.log.info("==============  ServerlessGSISanity  tearDown has completed ==============")
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_create_primary_index(self):
         """
         tests creation/drop of primary and named primary indexes. Also tests build/defer functionality

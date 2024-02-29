@@ -43,12 +43,6 @@ class TenantManagement(BaseSecondaryIndexingTests):
         super(TenantManagement, self).tearDown()
         self.log.info("==============  TenantManagement tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def is_lwm_reached(self, node):
         return (self.get_gsi_memory_ratio(node=node) > GSI_MEMORY_LWM) or \
                (self.get_gsi_usage_ratio(node=node) > GSI_UNITS_LWM)

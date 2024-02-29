@@ -46,12 +46,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp']:
             super(FileBasedRebalance, self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_gsi_rebalance_out_indexer_node(self):
         self.install_tools()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,

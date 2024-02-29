@@ -24,13 +24,6 @@ log = logging.getLogger()
 
 
 class EventingBaseTest(QueryHelperTests):
-
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def setUp(self):
         log.info("==============  EventingBaseTest setup has started ==============")
         super(EventingBaseTest, self).setUp()

@@ -50,12 +50,6 @@ class SecretsMgmtTests(BaseTestCase):
             shell.disconnect()
         super(SecretsMgmtTests, self).tearDown()
 
-    def suite_setUp(self):
-        self.log.info("---------------Suite Setup---------------")
-
-    def suite_tearDown(self):
-        self.log.info("---------------Suite Teardown---------------")
-
     def print_memcached_ip(self):
         shell = RemoteMachineShellConnection(self.master)
         o, _ = shell.execute_command("ps aux | grep 'memcached'  | awk '{print $2}'")
@@ -610,5 +604,3 @@ class SecretsMgmtUpgrade(NewUpgradeBaseTest):
                 self.sleep(5)
                 temp = rest.cluster_status()
             self.log.info("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
-
-

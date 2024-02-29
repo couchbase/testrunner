@@ -16,12 +16,6 @@ class QuerySanity(ServerlessBaseTestCase):
     def tearDown(self):
         return super().tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def check_index_online(self, database, name, timeout = 30, desired_state='online'):
         current_state = 'offline'
         stop = time.time() + timeout

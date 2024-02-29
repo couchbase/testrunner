@@ -272,12 +272,6 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             self.log.info(str(err))
         self.log.info("==============  PlasmaCollectionsTests tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1):
         self.keyspace = []
         self.cli_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,

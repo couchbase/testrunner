@@ -52,12 +52,6 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         super(GSISystemEvents, self).tearDown()
         self.log.info("==============  GSIFreeTier tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_gsi_update_settings_system_events(self):
         query = f'CREATE PRIMARY index on {self.namespaces[0]}'
         self.run_cbq_query(query)

@@ -40,12 +40,6 @@ class GSIAuditEvent(BaseSecondaryIndexingTests, auditTest):
         super(GSIAuditEvent, self).tearDown()
         self.log.info("==============  GSIAuditEvent tearDown has completed ==============")
 
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
-
     def test_audit_of_forbidden_access_denied_event(self):
         # create a cluster admin user
         user = [{'id': 'test', 'password': 'password', 'name': 'test'}]

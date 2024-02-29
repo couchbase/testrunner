@@ -321,12 +321,6 @@ class IPv4_IPv6_only(BaseTestCase):
     def tearDown(self):
         super(IPv4_IPv6_only,self).tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     def test_opposite_address_family_is_blocked(self):
         services_in = []
         for service in self.services_in.split("-"):
@@ -385,4 +379,3 @@ class IPv4_IPv6_only(BaseTestCase):
             self.check_ip_family_enforcement(ip_family="ipv4_only")
         elif self.ipv6_only:
             self.check_ip_family_enforcement(ip_family="ipv6_only")
-

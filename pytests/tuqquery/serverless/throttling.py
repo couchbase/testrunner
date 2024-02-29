@@ -15,12 +15,6 @@ class QueryThrottleSanity(ServerlessBaseTestCase):
     def tearDown(self):
         return super().tearDown()
 
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
-
     @staticmethod
     def __get_execution_time(time):
         if time[-2:] == 'ms':
