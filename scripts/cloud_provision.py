@@ -70,6 +70,23 @@ def create_non_root_user(host, username="root", password="couchbase"):
         ssh.exec_command("sudo shutdown")
         time.sleep(10)
 
+def install_elastic_search(host, username="root", password="couchbase"):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host,
+                username=username,
+                password=password)
+    commands = ["yum install -y wget",
+                "yum install -y java",
+                "wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.7.3.tar.gz",
+                "tar -zxvf elasticsearch-1.7.3.tar.gz",
+                "mv elasticsearch-1.7.3 /usr/share/elasticsearch",
+                "/usr/share/elasticsearch/bin/elasticsearch -d"]
+    for command in commands:
+        stdin, stdout, stderr = ssh.exec_command(command)
+        if stdout.channel.recv_exit_status() != 0:
+            break
+
 def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -180,6 +197,8 @@ AWS_AMI_MAP = {
             "x86_64" : "ami-0599a9ff8a4ca809c"
         }
     },
+    # The following AMIs are faulty and not working
+    # TODO - Investigate and create new AMI for the same
     "elastic-fts": "ami-0c48f8b3129e57beb",
     "localstack": "ami-0702052d7d7f58aad"
 }
@@ -213,6 +232,20 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
         image_id = AWS_AMI_MAP["couchbase"][os][architecture]
         if architecture in ["aarch64", "arm64"]:
             instance_type = "t4g.xlarge"
+
+    if type == "elastic-fts":
+        '''
+        The elastic-fts Instances are created with the following config
+        OS - Centos7
+        Architecture - x86
+        Instance Type - t2.large
+        Elastic Search Version - 1.7.3
+        '''
+        instance_type = "t2.large"
+        os = "centos7"
+        architecture = "x86_64"
+        ssh_username = AWS_OS_USERNAME_MAP[os]
+        image_id = AWS_AMI_MAP["couchbase"][os][architecture]
 
     ec2_resource = boto3.resource('ec2', region_name='us-east-1')
     ec2_client = boto3.client('ec2', region_name='us-east-1')
@@ -255,6 +288,8 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     print("EC2 Instances : ", ips)
     for ip in ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
+        if type == "elastic-fts":
+            install_elastic_search(ip)
         if "suse" not in os:
             install_iptables(ip)
         if "nonroot" in os:
