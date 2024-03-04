@@ -23,6 +23,29 @@ def check_root_login(host, username ="root", password="couchbase"):
     except :
         return False
 
+def install_zip_unzip(host, username="root", password="couchbase"):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host,
+                username=username,
+                password=password)
+    commands = []
+    stdin, stdout, stderr = ssh.exec_command("yum --help")
+    if stdout.channel.recv_exit_status() != 0:
+        commands.append("apt-get install -y zip unzip")
+    else:
+        commands.append("yum install -y zip unzip")
+
+    for command in commands:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            if stdout.channel.recv_exit_status() != 0:
+                ssh.exec_command("sudo shutdown")
+                time.sleep(10)
+                ssh.close()
+                raise Exception("iptables could not be installed on {}".format(host))
+
+    ssh.close()
+
 def install_iptables(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -308,6 +331,7 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     print("EC2 Instances : ", ips)
     for ip in ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
+        install_zip_unzip(ip)
         if type == "elastic-fts":
             install_elastic_search(ip)
         if "suse" not in os:
