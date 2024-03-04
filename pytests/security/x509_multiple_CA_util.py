@@ -122,8 +122,8 @@ class x509main:
         elif os_type == 'Mac':
             install_path = x509main.MACINSTALLPATH
         else:
-            # install_path = x509main.LININSTALLPATH
-            install_path = str(self.get_data_path(host)) + "/"
+            install_path = x509main.LININSTALLPATH
+            # install_path = str(self.get_data_path(host)) + "/"
         return install_path
 
     @staticmethod
