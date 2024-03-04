@@ -17,7 +17,7 @@ def seed_email(email):
 
 def invite_user(api_url, user, password, tenant):
     user_email = seed_email(user)
-    user_name = user_email.split("@")
+    user_name = user_email.split("@")[0]
     # 1+ lowercase 1+ uppercase 1+ symbols 1+ numbers
     user_password = str(uuid4()) + "!1Aa"
 
