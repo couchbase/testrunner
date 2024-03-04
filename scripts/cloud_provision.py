@@ -110,6 +110,20 @@ def install_elastic_search(host, username="root", password="couchbase"):
         if stdout.channel.recv_exit_status() != 0:
             break
 
+def restart_elastic_search(ips, username="root", password="couchbase"):
+    for ip in ips:
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.connect(ip,
+                    username=username,
+                    password=password)
+
+        start_elastic_search_command = "/usr/share/elasticsearch/bin/elasticsearch -d"
+        stdin, stdout, stderr = ssh.exec_command(start_elastic_search_command)
+        if stdout.channel.recv_exit_status() == 0:
+            raise Exception("Unable to start Elastic Search")
+        ssh.close()
+
 def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -301,9 +315,7 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     )
 
     instance_ids = [instance.id for instance in instances]
-
     print("Waiting for instances: ", instance_ids)
-
     ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
 
     instances = ec2_client.describe_instances(InstanceIds=instance_ids)
@@ -319,6 +331,22 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
         if "nonroot" in os:
             create_non_root_user(ip)
             check_root_login(ip,username="nonroot",password="couchbase")
+
+    # Rebooting due to CBQE-8153
+    # It was observed that all the ports were reachable when the instances were stopped and started
+    # It was observed that all the ports were reachable on reboot
+    # The temporary fix now is to reboot instances before passing onto tests
+    # TODO - Investigate the reason for failures and fix it
+    print("Rebooting instances : ", instance_ids)
+    ec2_client.reboot_instances(InstanceIds=instance_ids)
+    ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
+    time.sleep(180)
+
+    instances = ec2_client.describe_instances(InstanceIds=instance_ids)
+    ips = [instance['PublicDnsName'] for instance in instances['Reservations'][0]['Instances']]
+
+    if type == "elastic-fts":
+        restart_elastic_search(ips)
     return ips
 
 ZONE = "us-central1-a"
