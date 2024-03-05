@@ -23,6 +23,38 @@ def check_root_login(host, username ="root", password="couchbase"):
     except :
         return False
 
+def increase_suse_linux_default_tasks_max(host, username="root", password="couchbase"):
+    '''
+    According to MB-58559, the default number of threads in SUSE Linux should be increased
+    for analytics to function properly. This function increases the number of threads
+    and reload the daemon
+    '''
+    # Desired number of TasksMax is 65535
+    desired_value="65535"
+    # Path to the systemd configuration file
+    systemd_conf="/etc/systemd/system.conf"
+    # Uncomment the line and set the value to 65535
+    command_to_change_thread = "sed -i 's/^#\?DefaultTasksMax=.*/DefaultTasksMax='\"{}\"'/' \"{}\"".format(desired_value,
+                                                                                                           systemd_conf)
+    command_to_reload_daemon = "systemctl daemon-reload"
+    commands = [command_to_change_thread, command_to_reload_daemon]
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host,
+                username=username,
+                password=password)
+
+    for command in commands:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            if stdout.channel.recv_exit_status() != 0:
+                ssh.exec_command("sudo shutdown")
+                time.sleep(10)
+                ssh.close()
+                raise Exception("The DefaultTasksMax could not be changed to on {}".format(host))
+
+    ssh.close()
+
 def install_zip_unzip(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -328,6 +360,8 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
         if "suse" not in os:
             install_zip_unzip(ip)
             install_iptables(ip)
+        else:
+            increase_suse_linux_default_tasks_max(ip)
         if "nonroot" in os:
             create_non_root_user(ip)
             check_root_login(ip,username="nonroot",password="couchbase")
