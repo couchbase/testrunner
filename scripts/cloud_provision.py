@@ -42,7 +42,7 @@ def install_zip_unzip(host, username="root", password="couchbase"):
                 ssh.exec_command("sudo shutdown")
                 time.sleep(10)
                 ssh.close()
-                raise Exception("iptables could not be installed on {}".format(host))
+                raise Exception("zip and unzip could not be installed on {}".format(host))
 
     ssh.close()
 
@@ -120,7 +120,7 @@ def restart_elastic_search(ips, username="root", password="couchbase"):
 
         start_elastic_search_command = "/usr/share/elasticsearch/bin/elasticsearch -d"
         stdin, stdout, stderr = ssh.exec_command(start_elastic_search_command)
-        if stdout.channel.recv_exit_status() == 0:
+        if stdout.channel.recv_exit_status() != 0:
             raise Exception("Unable to start Elastic Search")
         ssh.close()
 
