@@ -323,10 +323,10 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     print("EC2 Instances : ", ips)
     for ip in ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
-        install_zip_unzip(ip)
         if type == "elastic-fts":
             install_elastic_search(ip)
         if "suse" not in os:
+            install_zip_unzip(ip)
             install_iptables(ip)
         if "nonroot" in os:
             create_non_root_user(ip)
