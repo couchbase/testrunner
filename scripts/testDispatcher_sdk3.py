@@ -48,8 +48,10 @@ SERVERLESS_ONCLOUD = "SERVERLESS_ONCLOUD"
 PROVISIONED_ONCLOUD = "PROVISIONED_ONCLOUD"
 ELIXIR_ONPREM = "ELIXIR_ONPREM"
 ON_PREM_PROVISIONED = "ON_PREM_PROVISIONED"
+SERVERLESS_COLUMNAR = "SERVERLESS_COLUMNAR"
 
-CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]
+CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD,
+                      PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]
 
 DEFAULT_ARCHITECTURE = "x86_64"
 DEFAULT_SERVER_TYPE = VM
@@ -149,6 +151,8 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         return [], []
     elif options.serverType == PROVISIONED_ONCLOUD:
         return [], []
+    elif options.serverType == SERVERLESS_COLUMNAR:
+        return [], []
 
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
@@ -245,7 +249,10 @@ def main():
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', type="choice",
                       default=DEFAULT_SERVER_TYPE,
-                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL, ELIXIR_ONPREM, SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD, ON_PREM_PROVISIONED])  # or could be Docker
+                      choices=[VM, AWS, DOCKER, GCP, AZURE, CAPELLA_LOCAL,
+                               ELIXIR_ONPREM, SERVERLESS_ONCLOUD,
+                               PROVISIONED_ONCLOUD, ON_PREM_PROVISIONED,
+                               SERVERLESS_COLUMNAR])  # or could be Docker
     # override server type passed to executor job e.g. CAPELLA_LOCAL
     parser.add_option('--server_type_name', dest='server_type_name', default=None)
     parser.add_option('-u', '--url', dest='url', default=None)
@@ -509,6 +516,8 @@ def main():
     for i in testsToLaunch:
         # Reset server count request to 0 for provisioned
         if options.serverType == "PROVISIONED_ONCLOUD":
+            i['serverCount'] = 0
+        if options.serverType == "SERVERLESS_COLUMNAR":
             i['serverCount'] = 0
         total_req_servercount = total_req_servercount + i['serverCount']
         total_req_addservercount = total_req_addservercount + i['addPoolServerCount']
@@ -850,15 +859,23 @@ def main():
                 url = launchStringBaseF + url
 
                 # For capella, invite new user for each test job to launch
-                if options.serverType in [SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD]:
-                    print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
-                    invited_user, invited_password = capella.invite_user( options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
-                    if invited_user is None or invited_password is None:
-                        print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
-                        job_index += 1
-                        testsToLaunch.pop(i)
-                        continue
-                    url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
+                if options.serverType in [
+                    SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]:
+                    if "cloud.couchbase.com" in options.capella_url:
+                        print(
+                            f'CAPELLA: Skipping Inviting new user to capella production'
+                            f'tenant {options.capella_tenant} on {options.capella_url}')
+                        url = update_url_with_job_params(
+                            url,f"capella_user={options.capella_user}&capella_password={options.capella_password}")
+                    else:
+                        print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
+                        invited_user, invited_password = capella.invite_user( options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
+                        if invited_user is None or invited_password is None:
+                            print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
+                            job_index += 1
+                            testsToLaunch.pop(i)
+                            continue
+                        url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
 
                 if options.job_params:
                     url = update_url_with_job_params(url, options.job_params)
@@ -988,6 +1005,8 @@ def release_servers_cloud(options, descriptor):
         print("SERVERLESS: nothing to release")
     elif options.serverType == PROVISIONED_ONCLOUD:
         print("PROVISIONED: nothing to release")
+    elif options.serverType == SERVERLESS_COLUMNAR:
+        print("COLUMNAR: nothing to release")
 
 
 def release_servers(options, descriptor):
