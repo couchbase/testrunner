@@ -224,6 +224,9 @@ class QueryUpdateStatsTests(QueryTests):
             f"{self.UPDATE_STATISTICS} {self.keyspace} INDEX ({index_list})",
             f"{self.UPDATE_STATISTICS} {self.FOR} {self.keyspace} INDEX ((SELECT RAW name FROM system:indexes WHERE state = 'online' AND `using` = 'gsi' AND keyspace_id = 'travel-sample' and name in {index_list.split(',')}))"
         ]
+        
+        self.run_cbq_query(query="UPDATE STATISTICS `travel-sample` DELETE ALL")
+        
         for update_stats in update_stats_indexes:
             try:
                 stats = self.run_cbq_query(query=update_stats)
