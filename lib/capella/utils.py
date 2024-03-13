@@ -16,6 +16,7 @@ import json
 import subprocess
 import time
 import re
+from table_view import TableView
 
 class CapellaCredentials:
     def __init__(self, config):
@@ -319,6 +320,47 @@ class CapellaAPI:
         self.log.info(f"Updating cluster specs to: {specs}")
         resp = self.api.update_specs(self.tenant_id, self.project_id, cluster_id, specs)
         resp.raise_for_status()
+
+    def get_cluster_logs_collection_status(self, cluster_id):
+        resp = self.api.get_cluster_tasks(cluster_id=cluster_id)
+        if resp.status_code == 200:
+            tmp = json.loads(resp.content)
+            for k in tmp:
+                if k["type"] == "clusterLogsCollection":
+                    content = k
+                    break
+            if content:
+                 return content['status'], content['perNode']
+            else:
+                return None
+
+    def trigger_log_collection(self, cluster_id, timeout=1200):
+        resp = self.api.trigger_log_collection(cluster_id=cluster_id)
+        self.log.info(f'Log collection in progress for cluster {cluster_id}')
+        resp.raise_for_status()
+        status, perNode = self.get_cluster_logs_collection_status(cluster_id=cluster_id)
+        if status is None and perNode is None:
+            self.log.error("Status not returned for log collection")
+        count = 0
+        while status != 'completed':
+            self.log.info(f'sleeping for 60 secs...')
+            time.sleep(60)
+            status, perNode = self.get_cluster_logs_collection_status(cluster_id=cluster_id)
+            if status == 'completed':
+                break
+            else:
+                count += 60
+            if count > timeout:
+                self.log.error('Not able to get log collection')
+                break
+
+        if count < timeout:
+            table = TableView(self.log.info)
+            table.set_headers(['Node', 'Log collect link'])
+            for node in perNode:
+                table_data = [node, perNode[node]['url']]
+                table.add_row(table_data)
+            table.display('Logs collected')
 
     def get_cluster_specs(self, cluster_id):
         resp = self.api.get_cluster_specs(self.tenant_id, self.project_id, cluster_id)

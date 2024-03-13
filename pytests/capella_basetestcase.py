@@ -10,7 +10,6 @@ from TestInput import TestInputServer, TestInputSingleton
 from lib.couchbase_helper.cluster import Cluster
 from lib import logger
 from scripts.java_sdk_setup import JavaSdkSetup
-
 class BaseTestCase(OnPremBaseTestCase):
     def setUp(self):
         try:
@@ -88,11 +87,23 @@ class BaseTestCase(OnPremBaseTestCase):
 
     def tearDown(self):
         # cluster was created during setup so destroy it
+        test_failed = self.is_test_failed()
+        if test_failed:
+            if TestInputSingleton.input.param("get-cbcollect-info", False):
+                self.log.info('log collection started')
+                self.capella_api.trigger_log_collection(cluster_id=self.cluster_id)
         if self.input.param("skip_cluster_teardown", False):
             return
         if hasattr(self, 'cluster_id'):
             CbServer.capella_cluster_id = None
             self.capella_api.delete_cluster(self.cluster_id)
+
+    def is_test_failed(self):
+        if hasattr(self, "_outcome") and len(self._outcome.errors) > 0:
+            for i in self._outcome.errors:
+                if i[1] is not None:
+                    return True
+        return False
 
     def create_capella_config(self):
         services_count = {}
