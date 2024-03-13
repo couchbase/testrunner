@@ -78,30 +78,6 @@ def install_zip_unzip(host, username="root", password="couchbase"):
 
     ssh.close()
 
-def install_iptables(host, username="root", password="couchbase"):
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(host,
-                username=username,
-                password=password)
-    commands = []
-    stdin, stdout, stderr = ssh.exec_command("yum --help")
-    if stdout.channel.recv_exit_status() != 0:
-        commands.append("apt-get install iptables")
-    else:
-        commands.append("yum install -y iptables-services",)
-        commands.append("systemctl start iptables")
-
-    for command in commands:
-            stdin, stdout, stderr = ssh.exec_command(command)
-            if stdout.channel.recv_exit_status() != 0:
-                ssh.exec_command("sudo shutdown")
-                time.sleep(10)
-                ssh.close()
-                raise Exception("iptables could not be installed on {}".format(host))
-
-    ssh.close()
-
 def create_non_root_user(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -367,7 +343,6 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
             install_elastic_search(ip)
         if "suse" not in os:
             install_zip_unzip(ip)
-            install_iptables(ip)
         else:
             increase_suse_linux_default_tasks_max(ip)
         if "nonroot" in os:
