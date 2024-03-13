@@ -18,7 +18,7 @@ import argparse
 import get_jenkins_params as jenkins_api
 
 
-host = '172.23.121.84'
+host = '172.23.97.153'
 bucket_name = 'rerun_jobs'
 
 
@@ -78,11 +78,14 @@ def build_args(build_version, executor_jenkins_job=False,
 def get_cluster():
     try:
         cluster = Cluster('couchbase://{}'.format(host))
-        authenticator = PasswordAuthenticator('Administrator', 'password')
+        authenticator = PasswordAuthenticator('Administrator',
+                                              'esabhcuoc')
         cluster.authenticate(authenticator)
         return cluster
     except Exception:
-        cluster = Cluster('couchbase://{}'.format(host), ClusterOptions(PasswordAuthenticator('Administrator', 'password')))
+        cluster = Cluster('couchbase://{}'.format(host),
+                          ClusterOptions(PasswordAuthenticator(
+                              'Administrator', 'esabhcuoc')))
         return cluster
 
 def get_bucket(cluster, name):
