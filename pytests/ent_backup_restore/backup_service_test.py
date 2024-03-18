@@ -517,6 +517,41 @@ class BackupServiceTest(BackupServiceBase):
         # Check if the expected buckets were backed up
         self.assertEqual(buckets_backed_up, buckets, f"The selected buckets '{buckets.difference(buckets_backed_up)}' were not backed up")
 
+    def test_scheduled_merge(self):
+        """ Test a scheduled merge is successful
+
+        Params:
+            offset (bool): If True, an offset is added to the Merge task. Otherwise no offset is used.
+
+        *** scheduled merges using offsets always fail in 7.6.0-2176. see MB-61076 ***
+        *** fixed in 7.6.0-2181 ***
+
+        1.  Create Backup & Merge schedules with 1 & 2 minute intervals respectively.
+        2.  Add schedules to respective tasks + add offset if necessary.
+        3.  Create a plan with both tasks.
+        4.  Create a repository using that plan.
+        5.  Wait for the first merge to complete.
+        6.  Fail if this merge doesn't have the 'done' status.
+
+        """
+        offset = self.input.param("offset", False)
+
+        backup_schedule = TaskTemplateSchedule(job_type="BACKUP", frequency=1, period="MINUTES", start_now=True)
+        merge_schedule = TaskTemplateSchedule(job_type="MERGE", frequency=2, period="MINUTES", start_now=False)
+
+        backup_task = TaskTemplate(name="backup_task", task_type="BACKUP", schedule=backup_schedule)
+        merge_task = TaskTemplate(name="merge_task", task_type="MERGE", schedule=merge_schedule)
+
+        if offset:
+            merge_task.merge_options = TaskTemplateOptions(offset_start=0, offset_end=0)
+
+        self.create_plan(plan_name="test_plan", body=Plan(tasks=[backup_task, merge_task]))
+
+        self.create_repository(repo_name="test_repo", body=Body2(plan="test_plan", archive=self.backupset.directory))
+
+        mergeTaskDone = self.wait_for_task("test_repo", merge_task.name, one_off=False)
+        self.assertEqual(mergeTaskDone, True, "Scheduled merge not successful")
+
     def test_invalid_repository(self):
         """ Test a user cannot add an invalid repository.
 
