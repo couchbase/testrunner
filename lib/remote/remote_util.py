@@ -1007,7 +1007,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     break
             except Exception as e:
                 self.sleep(timeout, "Waiting for {0} seconds to try to reach url once again. "
-                           "Build server might be too busy.  Error msg: {{1}}".format(timeout, str(e)))
+                           "Build server might be too busy.  Error msg: {1}".format(timeout, str(e)))
                 num_retries = num_retries - 1
 
         if not live_url:
