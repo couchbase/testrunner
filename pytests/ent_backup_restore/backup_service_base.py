@@ -737,7 +737,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
                     backup_name=backup_name, skip_stats_check=True, filter_keys=filter_keys)
 
     def wait_for_task(self, repo_name, task_name, timeout=200, task_scheduled_time=None, one_off=True):
-        self.log.info(f"Waiting for running one off {task_name}")
+        self.log.info(f"Waiting for running {task_name}")
 
         timeout = timeout + time.time()
 
