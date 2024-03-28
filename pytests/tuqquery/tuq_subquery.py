@@ -454,6 +454,7 @@ class QuerySubqueryTests(QueryTests):
         self.assertEqual(result['results'], [{"a": 1, "b": [[1]]}, {"a": 2, "b": [[2]]}, {"a": 3,"b": [[3]]}])
 
     def test_MB60011(self):
+        self.run_cbq_query(f'delete from {self.query_bucket}')
         self.run_cbq_query(f'CREATE PRIMARY INDEX if not exists ON {self.query_bucket}')
         self.run_cbq_query(f'INSERT INTO {self.query_bucket} VALUES("k01", {{"c1": 1, "c2": 1}})')
 
