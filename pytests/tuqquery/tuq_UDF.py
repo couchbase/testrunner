@@ -1664,8 +1664,9 @@ class QueryUDFTests(QueryTests):
         url = "http://{0}:{1}/evaluator/v1/libraries/{2}".format(self.master.ip, self.n1ql_port, library_name)
         curl_output = self.shell.execute_command("{0} -X DELETE {1} -u Administrator:password ".format(self.curl_path, url))
         self.log.info(curl_output[0])
+        self.sleep(1)
         libraries = self.shell.execute_command("{0} {1} -u Administrator:password".format(self.curl_path, url))
-        if f"Library {library_name} not found" in str(libraries):
+        if f"Library [{library_name}] not found" in str(libraries):
             deleted = True
         return deleted
 
