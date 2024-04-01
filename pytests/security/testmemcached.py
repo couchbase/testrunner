@@ -1,27 +1,25 @@
 from mc_bin_client import MemcachedClient
 import logger
+
 log = logger.Logger.get_logger()
-from couchbase.bucket import Bucket
 import couchbase.subdocument as SD
-from couchbase.cluster import Cluster, ClusterOptions
-from couchbase.cluster import _N1QLQuery
-from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-from couchbase_core.cluster import PasswordAuthenticator
 import time
+from couchbase.bucket import Bucket
 
 
 class TestMemcachedClient():
 
-    def connection(self, client_ip, bucket_name, user,password, port=11210):
-        log.info("Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user, \
-                                                                                                         password))
+    def connection(self, client_ip, bucket_name, user, password, port=11210):
+        log.info(
+            "Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user,
+                                                                                                    password))
         try:
             mc = MemcachedClient(host=client_ip, port=port)
             mc.sasl_auth_plain(user, password)
             mc.bucket_select(bucket_name)
             return mc, True
         except Exception as e:
-            log.info( "Exception is from connection function {0}".format(e))
+            log.info("Exception is from connection function {0}".format(e))
             return False, False
 
     def write_data(self, mc):
@@ -33,7 +31,7 @@ class TestMemcachedClient():
                 mc.set(k, 0, 0, str(k + "body"))
             return True
         except Exception as e:
-            log.info( "Exception is from write_data function {0}".format(e))
+            log.info("Exception is from write_data function {0}".format(e))
             return False
 
     def read_data(self, client_ip, mc, bucket_name):
@@ -43,7 +41,7 @@ class TestMemcachedClient():
             test = mc.get("test--0")
             return True
         except Exception as e:
-            log.info( "Exception is from read_data function {0}".format(e))
+            log.info("Exception is from read_data function {0}".format(e))
             return False
 
     def read_stats(self, mc):
@@ -51,7 +49,7 @@ class TestMemcachedClient():
             test = mc.stats('warmup')
             return True
         except Exception as e:
-            log.info( "Exception is {0}".format(e))
+            log.info("Exception is {0}".format(e))
             return False
 
     def get_meta(self, client_ip, mc, bucket_name):
@@ -61,9 +59,8 @@ class TestMemcachedClient():
             test = mc.getMeta("test--0")
             return True
         except Exception as e:
-            log.info( "Exception is from get_meata function {0}".format(e))
+            log.info("Exception is from get_meata function {0}".format(e))
             return False
-
 
     def set_meta(self, client_ip, mc, bucket_name):
         try:
@@ -75,29 +72,27 @@ class TestMemcachedClient():
             set_with_meta_resp = mc.setWithMeta("test--0", '123456789', 0, 0, 123, cas)
             return True
         except Exception as e:
-            log.info( "Exception is from set_meta function {0}".format(e))
+            log.info("Exception is from set_meta function {0}".format(e))
             return False
 
 
-class TestSDK():
+class TestSDK:
     def connection(self, client_ip, bucket_name, user, password):
         log.info(
-            "Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user, \
+            "Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user,
                                                                                                     password))
         result = False
         connection_string = 'couchbase://' + client_ip + '/' + bucket_name + '?username=' + user + '&select_bucket=true'
-        log.info (" Value of connection string is - {0}".format(connection_string))
+        log.info("Value of connection string is - {0}".format(connection_string))
         time.sleep(2)
         try:
-            cluster = Cluster('couchbase://' + client_ip,
-                                       ClusterOptions(PasswordAuthenticator(user, password)))
-            cb = cluster.bucket(bucket_name)
-            default_collection = cb.default_collection()
-            if cb is not None:
+            url = 'couchbase://{ip}/{name}'.format(ip=client_ip, name=bucket_name)
+            bucket = Bucket(url, username=user, password=password)
+            if bucket is not None:
                 result = True
-                return default_collection, result
+                return bucket, result
         except Exception as ex:
-            log.info ("Exception in creating an SDK connection {0}".format(ex))
+            log.info("Exception in creating an SDK connection {0}".format(ex))
             return result
 
     def set_xattr(self, sdk_conn):
