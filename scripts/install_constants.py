@@ -133,7 +133,7 @@ CMDS = {
             "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
             "&& service procps restart) ; "
 
-            "rm -rf" + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
