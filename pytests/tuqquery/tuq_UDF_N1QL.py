@@ -675,7 +675,6 @@ class QueryUDFN1QLTests(QueryTests):
             return acc;}}'
         self.create_library("n1ql", functions, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "n1ql"')
-        self.create_n1ql_function(function_name, query)
 
         # Create function that executes a function that will loop back and call it
         function_name = 'call_func1'
