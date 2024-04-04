@@ -487,27 +487,21 @@ class QueryAdviseTests(QueryTests):
             self.log.info("Advised index is {0}".format(results_fake_field))
             for field in field_list1:
                 self.assertTrue(field in
-                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'],
-                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement']))
+                                str(results_fake_field),
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field))
             for field in field_list2:
                 self.assertTrue(field in
-                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][0]['index_statement'],
-                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][0]['index_statement']))
+                                str(results_fake_field),
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field))
             for field in field_list3:
                 self.assertTrue(field in
-                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][1]['index_statement'],
-                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][1]['index_statement']))
+                                str(results_fake_field),
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field))
 
             for field in field_list4:
                 self.assertTrue(field in
-                                results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][1]['index_statement'],
-                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field['results'][0]['advice']['adviseinfo']['recommended_indexes'][
-                                    'indexes'][1]['index_statement']))
+                                str(results_fake_field),
+                                "The field is missing from the recommended index: {0}, Index Advised {1}".format(field, results_fake_field))
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
