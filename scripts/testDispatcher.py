@@ -879,21 +879,14 @@ def main():
                 # For capella, invite new user for each test job to launch
                 if options.serverType in [
                     SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD, SERVERLESS_COLUMNAR]:
-                    if "cloud.couchbase.com" in options.capella_url:
-                        print(
-                            f'CAPELLA: Skipping Inviting new user to capella production'
-                            f'tenant {options.capella_tenant} on {options.capella_url}')
-                        url = update_url_with_job_params(
-                            url,f"capella_user={options.capella_user}&capella_password={options.capella_password}")
-                    else:
-                        print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
-                        invited_user, invited_password = capella.invite_user( options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
-                        if invited_user is None or invited_password is None:
-                            print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
-                            job_index += 1
-                            testsToLaunch.pop(i)
-                            continue
-                        url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
+                    print(f'CAPELLA: Inviting new user to capella tenant {options.capella_tenant} on {options.capella_url}')
+                    invited_user, invited_password = capella.invite_user( options.capella_url, options.capella_user, options.capella_password, options.capella_tenant)
+                    if invited_user is None or invited_password is None:
+                        print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
+                        job_index += 1
+                        testsToLaunch.pop(i)
+                        continue
+                    url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
 
                 if options.job_params:
                     url = update_url_with_job_params(url, options.job_params)

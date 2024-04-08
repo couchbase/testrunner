@@ -15,29 +15,44 @@ def seed_email(email):
         prefix = name
     return "{}+{}@{}".format(prefix, uuid, domain)
 
-def invite_user(api_url, user, password, tenant):
+def invite_user(token, api_url, user, password, tenant):
     user_email = seed_email(user)
     user_name = user_email.split("@")[0]
     # 1+ lowercase 1+ uppercase 1+ symbols 1+ numbers
     user_password = str(uuid4()) + "!1Aa"
-
     # invite user
     try:
         api = CapellaAPI(api_url, None, None, user, password)
-        resp = api.create_user(
-            tenant, user_name, user_email, user_password)
-        if resp.status_code != 200:
-            print("Creating capella User {0} failed: {1}".format(
-                user_name, resp.content))
-            return None, None
-        result = json.loads(resp.content).get("data")
-        # Verify whether the user is marked as verified.
-        if not result.get("addresses")[0].get("status") == "verified":
-            print("User {0} was not verified. Verification bypass flag might "
-                  "not be active.".format(user_email))
-            return None, None
-        return user_email, user_password
-    except Exception as err:
+        resp = api.signup_user(
+            user_name, user_email, user_password, tenant, token)
+        resp.raise_for_status()
+        verify_token = resp.headers["Vnd-project-Avengers-com-e2e-token"]
+        user_id = resp.json()["userId"]
+    except:
         print("ERROR: failed to invite user")
-        print(str(err))
         return None, None
+        # verify user
+    try:
+        resp = api.verify_email(verify_token)
+        resp.raise_for_status()
+        jwt = resp.json()["jwt"]
+    except:
+        print("ERROR: failed to verify user")
+        return None, None
+        # update user password
+    headers = {
+        "Authorization": "Bearer {}".format(jwt),
+        "Content-Type": "application/json"
+    }
+    body = {
+        "password": user_password
+    }
+    internal_url = api_url.replace("https://cloud", "https://", 1)
+    try:
+        resp = requests.patch("{}/users/{}".format(internal_url, user_id),
+                              data=json.dumps(body), headers=headers)
+        resp.raise_for_status()
+    except:
+        print("ERROR: failed to set password")
+        return None, None
+    return user_email, user_password
