@@ -123,6 +123,8 @@ class NodeHelper:
             os = "amzn2"
         if self.info.distribution_type == "Amazon Linux 2023":
             os = "al2023"
+        if self.info.distribution_type == "CBL-Mariner/Linux":
+            os = "mariner2"
         return os
 
     def uninstall_cb(self):
@@ -135,6 +137,8 @@ class NodeHelper:
             cmd = self.actions_dict[self.info.deliverable_type]["uninstall"]
             if "suse" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["suse_uninstall"]
+            if "mariner" in self.get_os():
+                cmd = self.actions_dict[self.info.deliverable_type]["mariner_uninstall"]
             if "msi" in cmd:
                 '''WINDOWS UNINSTALL'''
                 self.shell.terminate_processes(self.info, [s for s in testconstants.WIN_PROCESSES_KILLED])
@@ -213,6 +217,11 @@ class NodeHelper:
                 cmd = self.actions_dict[self.info.deliverable_type]["suse_install"]
                 cmd_d = self.actions_dict[self.info.deliverable_type][
                     "suse_install"]
+                cmd_debug = None
+            elif "mariner" in self.get_os():
+                cmd = self.actions_dict[self.info.deliverable_type]["mariner_install"]
+                cmd_d = self.actions_dict[self.info.deliverable_type][
+                    "mariner_install"]
                 cmd_debug = None
             else:
                 cmd = self.actions_dict[self.info.deliverable_type]["install"]
