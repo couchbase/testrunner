@@ -3491,18 +3491,19 @@ class RemoteMachineShellConnection(KeepRefs):
                                 ' ').rstrip('\\n').rstrip(' ')
                             is_version_id = True
                         elif line.startswith('PRETTY_NAME'):
-                            os_pretty_name = line.split('=')[1].replace('"','')
+                            os_pretty_name = line.split('=')[1].strip("\n").replace('"','')
                             is_pretty_name = True
                         line = file.readline()
 
                     os_distro_dict = {'ubuntu': 'Ubuntu', 'debian': 'Ubuntu', 'mint': 'Ubuntu',
                         'amazon linux 2023': 'CentOS', 'amazon linux 2': 'CentOS', 'centos': 'CentOS',
                         'opensuse': 'openSUSE', 'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux',
-                        'openshift' : 'CentOS', 'almalinux': 'AlmaLinux OS', 'rocky': 'Rocky Linux'}
+                        'openshift' : 'CentOS', 'almalinux': 'AlmaLinux OS', 'rocky': 'Rocky Linux',
+                        'cbl-mariner/linux' : 'CBL-Mariner/Linux'}
                     os_shortname_dict = {'ubuntu': 'ubuntu', 'debian': 'debian', 'mint': 'ubuntu',
                         'amazon linux 2023': 'al2023', 'amazon linux 2': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
                         'red': 'rhel', 'suse': 'suse', 'oracle': 'oel', 'openshift' : 'centos',
-                        'almalinux': 'alma', 'rocky': 'rocky'}
+                        'almalinux': 'alma', 'rocky': 'rocky', 'cbl-mariner/linux': 'CBL-Mariner/Linux'}
                     if os_pretty_name and "Amazon Linux" not in os_pretty_name:
                         os_name = os_pretty_name.split(' ')[0].lower()
                         os_distro = os_distro_dict[os_name]
@@ -3661,7 +3662,8 @@ class RemoteMachineShellConnection(KeepRefs):
                    'Amazon Linux 2023'  : 'rpm',
                    'Amazon Linux 2'     : 'rpm',
                    'AlmaLinux OS'       : 'rpm',
-                   'Rocky Linux'        : 'rpm'}.get(os_distro, '')
+                   'Rocky Linux'        : 'rpm',
+                   'CBL-Mariner/Linux'  : 'rpm'}.get(os_distro, '')
             arch = {'i686': "x86",
                     'i386': "x86"}.get(os_arch, os_arch)
 
