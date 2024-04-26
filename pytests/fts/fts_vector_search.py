@@ -1,16 +1,20 @@
-import ast
+import copy
 import json
+<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
+=======
+import logging
+import os
+>>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
 import random
 import sys
 import threading
 
-from TestInput import TestInputSingleton
-from .fts_base import FTSBaseTest
-from .fts_backup_restore import FTSIndexBackupClient
-from lib.membase.api.rest_client import RestConnection
-import copy
 import logger
-import logging
+
+from TestInput import TestInputSingleton
+from lib.membase.api.rest_client import RestConnection
+from .fts_backup_restore import FTSIndexBackupClient
+from .fts_base import FTSBaseTest
 
 
 class VectorSearch(FTSBaseTest):
@@ -27,9 +31,15 @@ class VectorSearch(FTSBaseTest):
         self.similarity = self.input.param("similarity", "l2_norm")
         self.max_threads = 1000
         self.count = 0
-        self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
-                      "knn": [{"field": "vector_data", "k": self.k,
-                               "vector": []}]}
+        self.store_in_xattr = self.input.param("store_in_xattr", False)
+        if self.store_in_xattr:
+            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                          "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
+                                   "vector": []}]}
+        else:
+            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                          "knn": [{"field": "vector_data", "k": self.k,
+                                   "vector": []}]}
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 85)
         super(VectorSearch, self).setUp()
 
@@ -56,6 +66,23 @@ class VectorSearch(FTSBaseTest):
                                 "log_level",
                                 None)))
 
+<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
+=======
+    def get_host_ip(self):
+        ip = None
+
+        # could be "linux", "linux2", "linux3", ...
+        if sys.platform.startswith("linux"):
+            ip = os.popen(
+                'ifconfig eth0 | grep "inet " | xargs | cut -d" " -f 2') \
+                .read().strip()
+        else:
+            ip = '127.0.0.1'
+
+        self.log.info("Host_ip = %s" % ip)
+        return ip
+
+>>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
     def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
         common_elements = set(listA) & set(listB)
 
@@ -81,7 +108,6 @@ class VectorSearch(FTSBaseTest):
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
             faiss_doc_ids = [i for i in ann[0]]
             fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
-
             self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
             self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
 
@@ -110,7 +136,7 @@ class VectorSearch(FTSBaseTest):
         except Exception as e:
             self.log.info(f"Error {str(e)}")
 
-    def get_docs(self, num_items, source_bucket_idx=0):
+    def get_docs(self, num_items):
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
         bucket = buckets[0]
         split_namespace = bucket.split('.')
@@ -192,7 +218,7 @@ class VectorSearch(FTSBaseTest):
         self.log.info("FTS Hits for Search query: %s" % hits)
         # compare fts and n1ql results if required
         if self.run_n1ql_search_function:
-            if n1ql_hits == hits:
+            if n1ql_hits == hits:#
                 self.log.info(
                     f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
             else:
@@ -213,7 +239,7 @@ class VectorSearch(FTSBaseTest):
             self.log.info(f"FAISS MATCHES: {faiss_results}")
 
             fts_faiss_accuracy, fts_faiss_recall = self.compare_results(faiss_results, fts_matches, "faiss",
-                                                                    "fts")
+                                                                        "fts")
             recall_and_accuracy['fts_faiss_accuracy'] = fts_faiss_accuracy
             recall_and_accuracy['fts_faiss_recall'] = fts_faiss_recall
 
@@ -251,9 +277,43 @@ class VectorSearch(FTSBaseTest):
             if validate_result_count:
                 if len(matches) != self.k and n1ql_hits != self.k:
                     self.fail(
-                        f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || FTS hits = {hits}")
+                        f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || "
+                        f"FTS hits = {hits}")
 
         return n1ql_hits, hits, matches, recall_and_accuracy
+
+    def validate_similarity(self, index_obj, type_name, new_similarity):
+        status, index_def = index_obj.get_index_defn()
+        index_definition = index_def["indexDef"]
+        if self.store_in_xattr:
+            updated_similarity = \
+                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                    'vector_data'][
+                    'fields'][0]['similarity']
+        else:
+            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
+                'fields'][0]['similarity']
+
+        self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
+                                                              "Expected: {}, Actual: {}".format(new_similarity,
+                                                                                                updated_similarity))
+
+    def validate_dimension(self, index_obj, type_name, new_dimension, index_definition=None):
+        if index_definition is None:
+            status, index_def = index_obj.get_index_defn()
+            index_definition = index_def["indexDef"]
+        if self.store_in_xattr:
+            updated_dimension = \
+                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                    'vector_data'][
+                    'fields'][0]['dims']
+        else:
+            updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
+                'fields'][0]['dims']
+
+        self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
+                                                            "Expected: {}, Actual: {}".format(new_dimension,
+                                                                                              updated_dimension))
 
     # Indexing
     def test_basic_vector_search(self):
@@ -392,7 +452,8 @@ class VectorSearch(FTSBaseTest):
             for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'], validate_result_count=False)
+                                                                    dataset=index['dataset'],
+                                                                    validate_result_count=False)
                 if n1ql_hits != -1 and hits != -1:
                     self.fail("Able to get query results even though index is created with different dimension")
 
@@ -499,7 +560,7 @@ class VectorSearch(FTSBaseTest):
             for q in regular_query:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'])
+                                                                    dataset=index['dataset'])
                 regular_query_hits.append([n1ql_hits, hits])
             # run invalid queries
             for iv in invalid_vecs:
@@ -508,7 +569,8 @@ class VectorSearch(FTSBaseTest):
                 self.query['knn'][0]['vector'] = iv
                 self.run_n1ql_search_function = False
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'], validate_result_count=False)
+                                                                    dataset=index['dataset'],
+                                                                    validate_result_count=False)
                 if n1ql_hits != -1 and hits != -1:
                     self.fail(f"Able to index invalid vector - {iv}")
                 self.run_n1ql_search_function = True
@@ -516,7 +578,7 @@ class VectorSearch(FTSBaseTest):
             for count, q in enumerate(regular_query):
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'])
+                                                                    dataset=index['dataset'])
                 if regular_query_hits[count][0] != n1ql_hits or regular_query_hits[count][1] != hits:
                     self.fail("Hits before running invalid queries are different from hits after running invalid "
                               "queries")
@@ -592,14 +654,7 @@ class VectorSearch(FTSBaseTest):
         index_obj.update_vector_index_dim(new_dimension, type_name, "vector_data")
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
-        status, index_def = index_obj.get_index_defn()
-        index_definition = index_def["indexDef"]
-        updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['dims']
-
-        self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
-                                                            "Expected: {}, Actual: {}".format(new_dimension,
-                                                                                              updated_dimension))
+        self.validate_dimension(index_obj, type_name, new_dimension)
 
         # create a second index with dot_product similarity
         idx = [("i2", "b1.s1.c1")]
@@ -622,17 +677,7 @@ class VectorSearch(FTSBaseTest):
         index_obj.update_vector_index_dim(new_dimension, type_name, "vector_data")
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
-        status, index_def = index_obj.get_index_defn()
-        index_definition = index_def["indexDef"]
-        updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['dims']
-
-        self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
-                                                            "Expected: {}, Actual: {}".format(new_dimension,
-                                                                                              updated_dimension))
-
-        query = {"query": {"match_none": {}}, "explain": True, "knn": [{"field": "vector_data", "k": self.k,
-                                                                        "vector": []}]}
+        self.validate_dimension(index_obj, type_name, new_dimension)
 
         self.sleep(60, "Wait before querying index")
         for index in indexes:
@@ -641,8 +686,8 @@ class VectorSearch(FTSBaseTest):
             for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'],
-                                                                 validate_result_count=False)
+                                                                    dataset=index['dataset'],
+                                                                    validate_result_count=False)
                 if n1ql_hits != -1 and hits != -1:
                     self.fail("Able to get query results even though index is created with different dimension")
 
@@ -676,7 +721,7 @@ class VectorSearch(FTSBaseTest):
         for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                   dataset=index['dataset'])
+                                                                      dataset=index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -689,19 +734,12 @@ class VectorSearch(FTSBaseTest):
         index_obj.update_vector_index_similariy(new_similarity, type_name, "vector_data")
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
-        status, index_def = index_obj.get_index_defn()
-        index_definition = index_def["indexDef"]
-        updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['similarity']
-
-        self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
-                                                              "Expected: {}, Actual: {}".format(new_similarity,
-                                                                                                updated_similarity))
+        self.validate_similarity(index_obj, type_name, new_similarity)
         self.sleep(60, "Wait before querying index")
         for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                     dataset=index['dataset'])
+                                                                        dataset=index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with dot similarity, N1QL hits: {}, Search Hits: {}, " \
                           " Expected: {}".format(n1ql_hits_dot, hits_dot, self.k))
@@ -727,7 +765,7 @@ class VectorSearch(FTSBaseTest):
         for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                   dataset=index['dataset'])
+                                                                      dataset=index['dataset'])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with dot similarity, N1QL hits: {}, Search Hits: {}," \
                           " Expected: {}".format(n1ql_hits_l2, hits_l2, self.k))
@@ -740,19 +778,12 @@ class VectorSearch(FTSBaseTest):
         index_obj.update_vector_index_similariy(new_similarity, type_name, "vector_data")
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
-        status, index_def = index_obj.get_index_defn()
-        index_definition = index_def["indexDef"]
-        updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['similarity']
-
-        self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
-                                                              "Expected: {}, Actual: {}".format(new_similarity,
-                                                                                                updated_similarity))
+        self.validate_similarity(index_obj, type_name, new_similarity)
         self.sleep(60, "Wait before querying index")
         for q in queries[:self.num_queries]:
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                     dataset=index['dataset'])
+                                                                        dataset=index['dataset'])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_dot, hits_dot, self.k))
@@ -790,8 +821,8 @@ class VectorSearch(FTSBaseTest):
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                   dataset=query_index['dataset'],
-                                                                   neighbours=neighbours[count])
+                                                                      dataset=query_index['dataset'],
+                                                                      neighbours=neighbours[count])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -817,8 +848,8 @@ class VectorSearch(FTSBaseTest):
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                   dataset=query_index['dataset'],
-                                                                   neighbours=neighbours[count])
+                                                                      dataset=query_index['dataset'],
+                                                                      neighbours=neighbours[count])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -849,9 +880,10 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                     dataset=query_index['dataset'],
-                                                                     neighbours=neighbours[count])
+            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query,
+                                                                        index=query_index['index_obj'],
+                                                                        dataset=query_index['dataset'],
+                                                                        neighbours=neighbours[count])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail(
                     "Could not get expected hits for index with dot product, N1QL hits: {}, Search Hits: {}, Expected: {}".
@@ -876,9 +908,10 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                     dataset=query_index['dataset'],
-                                                                     neighbours=neighbours[count])
+            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query,
+                                                                        index=query_index['index_obj'],
+                                                                        dataset=query_index['dataset'],
+                                                                        neighbours=neighbours[count])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -918,8 +951,8 @@ class VectorSearch(FTSBaseTest):
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                   dataset=query_index['dataset'],
-                                                                   neighbours=neighbours[count])
+                                                                      dataset=query_index['dataset'],
+                                                                      neighbours=neighbours[count])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -944,8 +977,8 @@ class VectorSearch(FTSBaseTest):
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
             n1ql_hits_l2, hits_l2, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                   dataset=query_index['dataset'],
-                                                                   neighbours=neighbours[count])
+                                                                      dataset=query_index['dataset'],
+                                                                      neighbours=neighbours[count])
             if n1ql_hits_l2 != self.k or hits_l2 != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -976,9 +1009,10 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                     dataset=query_index['dataset'],
-                                                                     neighbours=neighbours[count])
+            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query,
+                                                                        index=query_index['index_obj'],
+                                                                        dataset=query_index['dataset'],
+                                                                        neighbours=neighbours[count])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail(
                     "Could not get expected hits for index with dot product, N1QL hits: {}, Search Hits: {}, Expected: {}".
@@ -1004,9 +1038,10 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Executing queries on index: {}".format(query_index))
         for count, q in enumerate(queries[:self.num_queries]):
             self.query['knn'][0]['vector'] = q.tolist()
-            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query, index=query_index['index_obj'],
-                                                                     dataset=query_index['dataset'],
-                                                                     neighbours=neighbours[count])
+            n1ql_hits_dot, hits_dot, matches, _ = self.run_vector_query(query=self.query,
+                                                                        index=query_index['index_obj'],
+                                                                        dataset=query_index['dataset'],
+                                                                        neighbours=neighbours[count])
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_l2, hits_l2, self.k))
@@ -1081,11 +1116,7 @@ class VectorSearch(FTSBaseTest):
         status, index_def = index_obj_l2_norm.get_index_defn()
         index_definition = index_def["indexDef"]
 
-        updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['dims']
-        self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
-                                                            "Expected: {}, Actual: {}".format(new_dimension,
-                                                                                              updated_dimension))
+        self.validate_dimension(index_obj_l2_norm, type_name, new_dimension, index_definition)
 
         updated_replicas = index_definition['planParams']['numReplicas']
         self.assertTrue(new_replica == updated_replicas, "Replicas for index i1 did not " \
@@ -1097,24 +1128,12 @@ class VectorSearch(FTSBaseTest):
                                                              "change, Expected: {}, Actual: {}".format(new_partitions,
                                                                                                        updated_paritions))
 
-        updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['similarity']
-        self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
-                                                              "Expected: {}, Actual: {}".format(new_similarity,
-                                                                                                updated_similarity))
-
+        self.validate_similarity(index_obj_l2_norm, type_name, new_similarity)
         new_dimension = self.dimension
         index_obj_l2_norm.update_vector_index_dim(new_dimension, type_name, "vector_data")
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
-        status, index_def = index_obj_l2_norm.get_index_defn()
-        index_definition = index_def["indexDef"]
-
-        updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['dims']
-        self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
-                                                            "Expected: {}, Actual: {}".format(new_dimension,
-                                                                                              updated_dimension))
+        self.validate_dimension(index_obj_l2_norm, type_name, new_dimension)
         self.sleep(60, "Wait before executing queries")
         for index in indexes:
             index['dataset'] = bucketvsdataset['bucket_name']
@@ -1122,7 +1141,7 @@ class VectorSearch(FTSBaseTest):
             for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'])
+                                                                    dataset=index['dataset'])
                 if n1ql_hits != self.k and hits != self.k:
                     self.fail("Could not get expected number of hits for index i1, Expected: {}, N1QL hits: {}, " \
                               " FTS query hits: {}".format(self.k, n1ql_hits, hits))
@@ -1133,7 +1152,7 @@ class VectorSearch(FTSBaseTest):
             for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index_obj_alias,
-                                                                 dataset=index['dataset'])
+                                                                    dataset=index['dataset'])
                 if n1ql_hits != self.k and hits != self.k:
                     self.fail("Could not get expected number of hits for alias index, Expected: {}, N1QL hits: {}, " \
                               " FTS query hits: {}".format(self.k, n1ql_hits, hits))
@@ -1168,14 +1187,7 @@ class VectorSearch(FTSBaseTest):
         index_obj.update_vector_index_dim(new_dimension, type_name, "vector_data")
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
-        status, index_def = index_obj.get_index_defn()
-        index_definition = index_def["indexDef"]
-        updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['vector_data'][
-            'fields'][0]['dims']
-
-        self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
-                                                            "Expected: {}, Actual: {}".format(new_dimension,
-                                                                                              updated_dimension))
+        self.validate_dimension(index_obj, type_name, new_dimension)
 
         docs_to_update = self.get_docs(update_doc_no)
         self.update_doc_vectors(docs_to_update, new_dimension)
@@ -1187,12 +1199,126 @@ class VectorSearch(FTSBaseTest):
             for q in queries[:self.num_queries]:
                 self.query['knn'][0]['vector'] = q.tolist()
                 n1ql_hits, hits, matches, _ = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                 dataset=index['dataset'])
+                                                                    dataset=index['dataset'])
                 if n1ql_hits != update_doc_no and hits != update_doc_no:
                     self.fail(
                         "Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                         format(n1ql_hits, hits, update_doc_no))
 
+<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
+=======
+    def test_vector_search_update_doc_dimension(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        per_to_resize = eval(TestInputSingleton.input.param("per_to_resize", "[]"))
+        dims_to_resize = eval(TestInputSingleton.input.param("dims_to_resize", "[]"))
+        faiss_indexes = eval(TestInputSingleton.input.param("faiss_indexes", "[]"))
+        perform_faiss_validation = self.input.param("perform_faiss_validation", False)
+        faiss_index_node = self.get_host_ip()
+
+        self.log.info(f"Percentage of docs to resize: {per_to_resize}")
+        self.log.info(f"Dimensions to resize {dims_to_resize}")
+        self.log.info(f"Faiss indexes: {faiss_indexes}")
+
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
+
+        indexes = []
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+
+        index_name = "i0"
+        idx = [(index_name, "b1.s1.c1")]
+        index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        if len(dims_to_resize) == 0:
+            index[0]['perc_docs'] = 1
+        else:
+            total_per = sum(per_to_resize)
+            index[0]['perc_docs'] = 1 - total_per
+        indexes.append(index[0])
+
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset,
+                                                percentages_to_resize=per_to_resize,
+                                                dims_to_resize=dims_to_resize,
+                                                update=True,
+                                                faiss_indexes=faiss_indexes,
+                                                faiss_index_node=faiss_index_node)
+
+        for i, dim in enumerate(dims_to_resize):
+            vector_fields = {"dims": dim, "similarity": self.similarity}
+
+            index_name = "i{}".format(i + 1)
+            idx = [(index_name, "b1.s1.c1")]
+            index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
+                                                         test_indexes=idx,
+                                                         vector_fields=vector_fields,
+                                                         create_vector_index=True,
+                                                         extra_fields=[{"sno": "number"}])
+
+            index[0]['perc_docs'] = per_to_resize[i]
+            indexes.append(index[0])
+            if perform_faiss_validation:
+                index[0]['dataset'] = bucketvsdataset['bucket_name']
+                index_obj = index[0]['index_obj']
+                index_obj.faiss_index = self.get_faiss_index_from_file(faiss_indexes[i])
+
+        if perform_faiss_validation:
+            if len(faiss_indexes) > len(dims_to_resize):
+                index = indexes[0]
+                index['dataset'] = bucketvsdataset['bucket_name']
+                index_obj = index['index_obj']
+                index_obj.faiss_index = self.get_faiss_index_from_file(faiss_indexes[-1])
+
+        self.wait_for_indexing_complete()
+        self.sleep(60, "Wait before running queries")
+
+        for idx, index in enumerate(indexes):
+            index['dataset'] = bucketvsdataset['bucket_name']
+            if index['perc_docs'] == 0:
+                continue
+
+            self.log.info("Running queries for index: {}".format(index['name']))
+            faiss_accuracy = []
+            faiss_recall = []
+
+            if idx == 0:
+                queries = self.get_query_vectors(index['dataset'])
+            else:
+                queries = self.get_query_vectors(index['dataset'], dimension=dims_to_resize[idx - 1])
+
+            for q in queries[:self.num_queries]:
+                index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                               'faiss_recall': 0, 'fts_faiss_accuracy': 0, 'fts_faiss_recall': 0}
+                self.query['knn'][0]['vector'] = q.tolist()
+
+                n1ql_hits, hits, matches, recall_and_accuracy = self.run_vector_query(query=self.query,
+                                                                                      index=index['index_obj'],
+                                                                                      dataset=index['dataset'],
+                                                                                      validate_fts_with_faiss=perform_faiss_validation)
+                if n1ql_hits != self.k or hits != self.k:
+                    self.sleep(3000, "Wait before failing")
+                    self.fail("Could not get expected number of hits, Expected: {}, N1QL hits: {}, " \
+                              " FTS query hits: {}".format(self.k, n1ql_hits, hits))
+
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['fts_faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['fts_faiss_recall'])
+
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            if perform_faiss_validation:
+                index_stats['fts_faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['fts_faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+                self.log.info("Index Stats: {}".format(index_stats))
+
+        for faiss_index in faiss_indexes:
+            if perform_faiss_validation:
+                self.delete_faiss_index_files(faiss_index)
+
+>>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
     def test_vector_search_different_dimensions(self):
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1213,10 +1339,11 @@ class VectorSearch(FTSBaseTest):
 
             index_name = "i{}".format(index)
             idx = [(index_name, "b1.s1.c1")]
-            index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector", test_indexes=idx,
-                                                        vector_fields=vector_fields,
-                                                        create_vector_index=True,
-                                                        extra_fields=[{"sno": "number"}])
+            index = self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
+                                                         test_indexes=idx,
+                                                         vector_fields=vector_fields,
+                                                         create_vector_index=True,
+                                                         extra_fields=[{"sno": "number"}])
 
             indexes.append(index[0])
             if perform_faiss_validation:
@@ -1234,12 +1361,13 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'], dimension=dims_to_resize[idx])
             for q in queries[:self.num_queries]:
                 index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
-                           'faiss_recall': 0, 'fts_faiss_accuracy': 0, 'fts_faiss_recall': 0}
+                               'faiss_recall': 0, 'fts_faiss_accuracy': 0, 'fts_faiss_recall': 0}
                 self.query['knn'][0]['vector'] = q.tolist()
 
-                n1ql_hits, hits, matches, recall_and_accuracy = self.run_vector_query(query=self.query, index=index['index_obj'],
-                                                                                    dataset=index['dataset'],
-                                                                                    validate_fts_with_faiss=perform_faiss_validation)
+                n1ql_hits, hits, matches, recall_and_accuracy = self.run_vector_query(query=self.query,
+                                                                                      index=index['index_obj'],
+                                                                                      dataset=index['dataset'],
+                                                                                      validate_fts_with_faiss=perform_faiss_validation)
                 if n1ql_hits != self.k or hits != self.k:
                     self.fail("Could not get expected number of hits, Expected: {}, N1QL hits: {}, " \
                               " FTS query hits: {}".format(self.k, n1ql_hits, hits))
@@ -1247,7 +1375,6 @@ class VectorSearch(FTSBaseTest):
                 if perform_faiss_validation:
                     faiss_accuracy.append(recall_and_accuracy['fts_faiss_accuracy'])
                     faiss_recall.append(recall_and_accuracy['fts_faiss_recall'])
-
 
             if perform_faiss_validation:
                 self.log.info(f"faiss_accuracy: {faiss_accuracy}")
@@ -1258,8 +1385,6 @@ class VectorSearch(FTSBaseTest):
                 index_stats['fts_faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
 
                 self.log.info("Index Stats: {}".format(index_stats))
-
-
 
     def test_vector_search_knn_combination_queries(self):
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()

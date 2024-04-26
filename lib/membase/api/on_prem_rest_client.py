@@ -3988,8 +3988,7 @@ class RestConnection(object):
             timeout=timeout)
         content = json.loads(content)
         if status:
-            return content['total_hits'], content['hits'], content['took'], \
-                   content['status']
+            return content['total_hits'], content['hits'], content['took'], content['status']
         else:
             return -1, content['error'], -1, content['status']
 

@@ -70,7 +70,7 @@ from lib.capella.utils import CapellaAPI, CapellaCredentials
 import lib.capella.utils as capella_utils
 
 from .vector_dataset_generator.vector_dataset_generator import VectorDataset
-from .vector_dataset_generator.vector_dataset_loader import VectorLoader
+from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVectorLoader
 
 
 class RenameNodeException(FTSException):
@@ -828,6 +828,7 @@ class FTSIndex:
             self.index_storage_type = TestInputSingleton.input.param("index_type", None)
         else:
             self.index_storage_type = index_storage_type
+        self.store_in_xattr = TestInputSingleton.input.param("store_in_xattr", False)
         self.num_pindexes = 0
         self.index_definition = {
             "type": "fulltext-index",
@@ -1086,7 +1087,7 @@ class FTSIndex:
 
     def add_child_field_to_default_collection_mapping(self, field_name, field_type,
                                                       field_alias=None, analyzer=None, scope=None, collection=None,
-                                                      vector_fields=None):
+                                                      vector_fields=None, xattr=True):
         """
         This method will add a field mapping to a default mapping
         """
@@ -1133,8 +1134,16 @@ class FTSIndex:
         map = {}
         if 'properties' not in self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'] = {}
-        self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][
-            fields.pop()] = field_maps.pop()
+        if self.store_in_xattr and xattr:
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'] = {}
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['enabled'] = True
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['dynamic'] = True
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['properties'] = {}
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['properties'][
+                fields.pop()] = field_maps.pop()
+        else:
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][
+                fields.pop()] = field_maps.pop()
 
     def add_analyzer_to_existing_field_map(self, field_name, field_type,
                                            field_alias=None, analyzer=None):
@@ -1355,8 +1364,12 @@ class FTSIndex:
     def update_vector_index_dim(self, new, type, field_name, verify_concurrent_err=False):
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
-        self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
-            'fields'][0]['dims'] = new
+        if self.store_in_xattr:
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name][
+                'fields'][0]['dims'] = new
+        else:
+            self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
+                'fields'][0]['dims'] = new
         self.index_definition['uuid'] = self.get_uuid()
         try:
             self.update()
@@ -1370,8 +1383,12 @@ class FTSIndex:
     def update_vector_index_similariy(self, new, type, field_name, verify_concurrent_err=False):
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
-        self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
-            'fields'][0]['similarity'] = new
+        if self.store_in_xattr:
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name][
+                'fields'][0]['similarity'] = new
+        else:
+            self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
+                'fields'][0]['similarity'] = new
         self.index_definition['uuid'] = self.get_uuid()
         try:
             self.update()
@@ -4094,6 +4111,7 @@ class FTSBaseTest(unittest.TestCase):
                                         aws_secret_access_key=self.aws_secret_access_key,
                                         s3_bucket=self.s3_bucket, region=self.region)
         self.storage_prefix = self._input.param("storage_prefix", None)
+        self.store_in_xattr = self._input.param("store_in_xattr", False)
         self.docker_containers = []
 
     def create_capella_config(self):
@@ -5721,7 +5739,6 @@ class FTSBaseTest(unittest.TestCase):
 
                             if 'store' not in vector_fields:
                                 vector_fields['store'] = False
-
                             fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
                                                                                     field_type=field_type,
                                                                                     field_alias=field_name,
@@ -5743,7 +5760,8 @@ class FTSBaseTest(unittest.TestCase):
                                                                                         field_type=value,
                                                                                         field_alias=key,
                                                                                         scope=index_scope,
-                                                                                        collection=collection)
+                                                                                        collection=collection,
+                                                                                        xattr=False)
                     if index_replica > 1:
                         fts_index.update_num_replicas(index_replica)
             else:
@@ -6518,6 +6536,17 @@ class FTSBaseTest(unittest.TestCase):
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
+                    if self.store_in_xattr:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], True, "vect", 1, ei, percentages_to_resize, dims_to_resize)
+                        govl.load_data(container_name)
 
         return bucketvsdataset
 
