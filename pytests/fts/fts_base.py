@@ -6548,7 +6548,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 1, ei, percentages_to_resize, dims_to_resize)
+                                              collection_name, dataset[0], True, "vect", 0, ei, percentages_to_resize, dims_to_resize)
                         govl.load_data(container_name)
 
         return bucketvsdataset
