@@ -29,6 +29,9 @@ class VectorSearch(FTSBaseTest):
         self.max_threads = 1000
         self.count = 0
         self.store_in_xattr = self.input.param("store_in_xattr", False)
+        self.encode_base64_vector = self.input.param("encode_base64_vector", False)
+        self.index_mismatch_flag = self.store_in_xattr or self.encode_base64_vector
+
         if self.store_in_xattr:
             self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
                           "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
@@ -101,7 +104,10 @@ class VectorSearch(FTSBaseTest):
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
             faiss_doc_ids = [i for i in ann[0]]
-            fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
+            if self.index_mismatch_flag:
+                fts_doc_ids = [matches[i]['fields']['sno'] for i in range(self.k)]
+            else:
+                fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
             self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
             self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
 
@@ -212,7 +218,7 @@ class VectorSearch(FTSBaseTest):
         self.log.info("FTS Hits for Search query: %s" % hits)
         # compare fts and n1ql results if required
         if self.run_n1ql_search_function:
-            if n1ql_hits == hits:#
+            if n1ql_hits == hits:  #
                 self.log.info(
                     f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
             else:
@@ -223,8 +229,12 @@ class VectorSearch(FTSBaseTest):
         if validate_fts_with_faiss:
             query_vector = query['knn'][0]['vector']
             fts_matches = []
-            for i in range(self.k):
-                fts_matches.append(matches[i]['fields']['sno'] - 1)
+            if self.index_mismatch_flag:
+                for i in range(self.k):
+                    fts_matches.append(matches[i]['fields']['sno'])
+            else:
+                for i in range(self.k):
+                    fts_matches.append(matches[i]['fields']['sno'] - 1)
 
             faiss_results = self.perform_validations_from_faiss(matches, index, query_vector, neighbours)
 
@@ -242,8 +252,13 @@ class VectorSearch(FTSBaseTest):
         if neighbours is not None:
             query_vector = query['knn'][0]['vector']
             fts_matches = []
-            for i in range(self.k):
-                fts_matches.append(matches[i]['fields']['sno'] - 1)
+
+            if self.index_mismatch_flag:
+                for i in range(self.k):
+                    fts_matches.append(matches[i]['fields']['sno'])
+            else:
+                for i in range(self.k):
+                    fts_matches.append(matches[i]['fields']['sno'] - 1)
 
             if perform_faiss_validation:
                 faiss_results = self.perform_validations_from_faiss(matches, index, query_vector, neighbours)

@@ -48,7 +48,7 @@ class VectorLoader:
                     total_percentage += per
 
                 if total_percentage > 1:
-                    raise ValueError("Total percentage of docs to update should be less than 1")
+                    raise ValueError("Total percentage of docs to update should be less than 1.")
 
                 per_arg = "-per"
                 for per in self.percentages_to_resize:
