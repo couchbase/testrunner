@@ -1380,7 +1380,7 @@ class FTSIndex:
                     return
                 self.fail("Did not get error message for concurrent index definition updated")
 
-    def update_vector_index_similariy(self, new, type, field_name, verify_concurrent_err=False):
+    def update_vector_index_similarity(self, new, type, field_name, verify_concurrent_err=False):
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
@@ -4112,6 +4112,7 @@ class FTSBaseTest(unittest.TestCase):
                                         s3_bucket=self.s3_bucket, region=self.region)
         self.storage_prefix = self._input.param("storage_prefix", None)
         self.store_in_xattr = self._input.param("store_in_xattr", False)
+        self.encode_base64_vector = self._input.param("encode_base64_vector", False)
         self.docker_containers = []
 
     def create_capella_config(self):
@@ -6549,6 +6550,20 @@ class FTSBaseTest(unittest.TestCase):
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
                                               collection_name, dataset[0], True, "vect", 0, ei, percentages_to_resize, dims_to_resize)
+                        govl.load_data(container_name)
+
+                    if self.encode_base64_vector:
+                        print("self.encode_base64_vector", self.encode_base64_vector)
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], False, "vect", 0, ei, True,
+                                              percentages_to_resize, dims_to_resize)
                         govl.load_data(container_name)
 
         return bucketvsdataset
