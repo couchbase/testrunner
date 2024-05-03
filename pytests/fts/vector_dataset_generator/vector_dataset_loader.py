@@ -109,7 +109,7 @@ class VectorLoader:
 
 
 class GoVectorLoader:
-    def __init__(self, node, username, password, bucket, scope, collection, dataset, xattr, prefix, si, ei,
+    def __init__(self, node, username, password, bucket, scope, collection, dataset, xattr, prefix, si, ei, base64,
                  percentage_to_resize=[], dimension_to_resize=[]):
         self.node = node
         self.username = username
@@ -122,20 +122,20 @@ class GoVectorLoader:
         self.xattr = xattr
         self.si = si
         self.ei = ei
+        self.base64 = base64
         self.percentage_to_resize = percentage_to_resize
         self.dimension_to_resize = dimension_to_resize
-
         self.docker_client = docker.from_env()
 
     def load_data(self, container_name=None):
         try:
             docker_image = "sequoiatools/govectorloader"
             if len(self.percentage_to_resize) == 0 or len(self.dimension_to_resize) == 0:
-                docker_run_params = f"-nodeAddress {self.node.ip} -bucketName {self.bucket} -scopeName {self.scope} -collectionName {self.collection} -documentIdPrefix {self.prefix} -username {self.username} -password {self.password} -datasetName {self.dataset} -startIndex {self.si} -endIndex {self.ei} -xattrFlag {self.xattr} "
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr} "
             else:
                 pr = ','.join(map(str, self.percentage_to_resize))
                 dr = ','.join(map(str, self.dimension_to_resize))
-                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -xattrFlag={self.xattr}  -percentagesToResize={pr} -dimensionsForResize={dr}"
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -base64Flag={self.base64} -xattrFlag={self.xattr} -percentagesToResize={pr} -dimensionsForResize={dr}"
             print("docker run params: {}".format(docker_run_params))
 
             # Run the Docker pull command
