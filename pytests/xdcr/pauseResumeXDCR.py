@@ -1,4 +1,5 @@
 from .xdcrnewbasetests import XDCRNewBaseTest, Utility, OPS
+from membase.api.rest_client import RestConnection
 from threading import Thread
 
 class PauseResumeTest(XDCRNewBaseTest):
@@ -26,6 +27,17 @@ class PauseResumeTest(XDCRNewBaseTest):
         super(PauseResumeTest, self).tearDown()
 
     def __async_load_xdcr(self):
+        if self._enable_cross_cluster_versioning != None or self._version_pruning_window_hrs != None:
+            for cb_cluster in self.get_cb_clusters():
+                rest1 = RestConnection(cb_cluster.get_master_node())
+                for bucket in cb_cluster.get_buckets():
+                    self.log.info("Mobile settings: Enable cross cluster versioning: {0}, Version pruning window hours: {1}".format(self._enable_cross_cluster_versioning, self._version_pruning_window_hrs))
+                    if self._enable_cross_cluster_versioning != None:
+                        test = rest1.change_bucket_props(bucket, enableCrossClusterVersioning=str(self._enable_cross_cluster_versioning).lower())
+                        self.log.info("{0}".format(test))
+                    if self._version_pruning_window_hrs != None and self._version_pruning_window_hrs >= 24:
+                        test = rest1.change_bucket_props(bucket, versionPruningWindowHrs=self._version_pruning_window_hrs)
+                        self.log.info("{0}".format(test))
         self.set_xdcr_topology()
         self.setup_all_replications()
         load_tasks = self.src_cluster.async_load_all_buckets(self._num_items)

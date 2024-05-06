@@ -152,6 +152,7 @@ class REPL_PARAM:
     MAPPING_RULES = "colMappingRules"
     MIGRATION_MODE = "collectionsMigrationMode"
     MIRRORING_MODE = "collectionsMirroringMode"
+    MOBILE = "mobile"
 
 
 class TEST_XDCR_PARAM:
@@ -175,6 +176,7 @@ class TEST_XDCR_PARAM:
     MAPPING_RULES = "colmapping_rules"
     MIGRATION_MODE = "migration_mode"
     MIRRORING_MODE = "mirroring_mode"
+    MOBILE = "mobile"
 
     @staticmethod
     def get_test_to_create_repl_param_map():
@@ -198,7 +200,8 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.EXPLICIT_MAPPING: REPL_PARAM.EXPLICIT_MAPPING,
             TEST_XDCR_PARAM.MAPPING_RULES: REPL_PARAM.MAPPING_RULES,
             TEST_XDCR_PARAM.MIGRATION_MODE: REPL_PARAM.MIGRATION_MODE,
-            TEST_XDCR_PARAM.MIRRORING_MODE: REPL_PARAM.MIRRORING_MODE
+            TEST_XDCR_PARAM.MIRRORING_MODE: REPL_PARAM.MIRRORING_MODE,
+            TEST_XDCR_PARAM.MOBILE: REPL_PARAM.MOBILE
         }
 
 
@@ -684,7 +687,7 @@ class XDCRRemoteClusterRef:
         for ca_dict in raw_content:
             certs += ca_dict["pem"]
         return certs
-    
+
     def connection_pre_check(self, rest_conn_src, dest_master, certificate):
         log = logger.Logger.get_logger()
         log.info("Pre check flow started")
@@ -708,8 +711,8 @@ class XDCRRemoteClusterRef:
                 log.info("connection pre check completed")
                 status = str(res["result"])
                 log.info(status)
-                break                    
-            time.sleep(30)       
+                break
+            time.sleep(30)
         if res["done"] == False:
             log.error("connection pre check status failed after 10 attempts")
 
@@ -732,10 +735,10 @@ class XDCRRemoteClusterRef:
         else:
             self.dest_user = dest_master.rest_username
             self.dest_pass = dest_master.rest_password
-        
+
         logger.Logger.get_logger().info(self.__pre_check)
-        if self.__pre_check:                
-            self.connection_pre_check(rest_conn_src, dest_master, certificate)                    
+        if self.__pre_check:
+            self.connection_pre_check(rest_conn_src, dest_master, certificate)
 
         if not self.__use_scramsha:
             self.__rest_info = rest_conn_src.add_remote_cluster(
@@ -3624,7 +3627,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             for cb_cluster in self.__cb_clusters:
                 rest1 = RestConnection(cb_cluster.get_master_node())
                 for bucket in cb_cluster.get_buckets():
-                    self.log.info("Mobile settings: Enable cross cluster versioning: {0}, Version pruning window hours: {1}".format(self._enable_cross_cluster_versioning, self._version_pruning_window_hrs))               
+                    self.log.info("Mobile settings: Enable cross cluster versioning: {0}, Version pruning window hours: {1}".format(self._enable_cross_cluster_versioning, self._version_pruning_window_hrs))
                     if self._enable_cross_cluster_versioning != None:
                         test = rest1.change_bucket_props(bucket, enableCrossClusterVersioning=str(self._enable_cross_cluster_versioning).lower())
                         self.log.info("{0}".format(test))
@@ -3848,7 +3851,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         if repl_restart_fail and restarted:
             self.fail("Replication restarted on one of the nodes, scroll above"
                       "for reason")
-            
+
     def get_collection_info(self, bucket, master):
         shell = RemoteMachineShellConnection(master)
         nameOutput, error = shell.execute_cbstats(bucket, "collections",
@@ -3883,7 +3886,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     while time.time() < end_time :
                         try:
                             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
-                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]                                                    
+                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                         except Exception as e:
                             self.log.warning(e)
                             self.log.info("Trying other method to fetch bucket current items")
@@ -3897,15 +3900,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                             nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
-                                _count2 += node["interestingStats"]["curr_items"]  
+                                _count2 += node["interestingStats"]["curr_items"]
                         self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
-                                   format(bucket.name, _count1, _count2))                        
+                                   format(bucket.name, _count1, _count2))
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-                            break                                                  
+                            break
                     else:
-                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated                            
+                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated
                         collections_info = self.get_collection_info(bucket, cb_cluster.get_master_node())[0]
                         dest_collections_info = self.get_collection_info(bucket, remote_cluster.get_dest_cluster().get_master_node())[0]
 
@@ -3914,15 +3917,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 collections_info = self.get_collection_info(bucket, node)[0]
                                 self.log.info(collections_info)
                                 _count1 -= collections_info["_query"]
-                                _count1 -= collections_info["_mobile"] 
+                                _count1 -= collections_info["_mobile"]
                             for node in remote_cluster.get_dest_cluster().get_nodes():
                                 dest_collections_info = self.get_collection_info(bucket, node)[0]
                                 self.log.info(dest_collections_info)
                                 _count2 -= dest_collections_info["_query"]
-                                _count2 -= dest_collections_info["_mobile"]                                              
+                                _count2 -= dest_collections_info["_mobile"]
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-                            break                        
+                            break
                         self.fail("Not all items replicated in {0} sec for {1} "
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
