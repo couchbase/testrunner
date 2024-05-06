@@ -81,6 +81,7 @@ CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
+CB_COLUMNAR =  "couchbase-columnar-enterprise"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
 CB_DOWNLOAD_SERVER = "172.23.126.166"
 

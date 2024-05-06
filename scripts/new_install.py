@@ -73,6 +73,10 @@ def validate_install(params):
                     if version in item['version'] and item['status'] == "healthy":
                         node.install_success = True
 
+                    # Cleanup next few lines post resolution of MB-60871
+                    if params["columnar"] and "7.6.100" in item["version"] and item['status'] == "healthy":
+                        node.install_success = True
+
                     if node.enable_ipv6 and not item["addressFamily"] == "inet6":
                         node.install_success = False
 
