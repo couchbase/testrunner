@@ -4264,6 +4264,15 @@ class RestConnection(object):
         else:
             return None
 
+    def get_nodes_status_from_self(self):
+        api = self.baseUrl + "nodes/self"
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            return json_parsed
+        else:
+            return None
+
     def get_nodes_data_from_cluster(self, param="nodes"):
         api = self.baseUrl + "pools/default/"
         status, content, header = self._http_request(api)

@@ -696,6 +696,7 @@ def _parse_user_input():
                 if value.lower() == "true" else False
             params["cluster_profile"] = "columnar"
             params["cb_edition"] = install_constants.CB_COLUMNAR
+            params["install_tasks"] = install_constants.DEFAULT_INSTALL_COLUMNAR_TASKS
 
         if key == "type" or key == "edition":
             if "community" in value.lower():

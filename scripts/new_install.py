@@ -11,6 +11,7 @@ import install_utils, install_constants
 import logging.config
 import os
 from membase.api.exception import InstallException
+from membase.api.rest_client import RestConnection
 import traceback
 
 logging.config.fileConfig("scripts.logging.conf")
@@ -48,6 +49,53 @@ def do_install_task(task, node):
         on_install_error(task, node, e)
         traceback.print_exc()
 
+def validate_columnar_install(params):
+    log.info("-" * 100)
+    cluster_nodes = []
+    for node in install_utils.NodeHelpers:
+        version = params["version"]
+        if node.install_success is None:
+            node.install_success = False
+            node.rest = RestConnection(node.node, check_connectivity=False)
+            try:
+                pools_status = node.rest.get_pools_info()
+                node_status = node.rest.get_nodes_status_from_self()
+            except:
+                continue
+
+            if pools_status is None and node_status is None:
+                continue
+
+            node.install_success = True
+            if not pools_status["isEnterprise"]:
+                node.install_success = False
+            if pools_status["configProfile"] != "columnar":
+                node.install_success = False
+            # Cleanup next few lines post resolution of MB-60871
+            if "7.6.100" not in pools_status["implementationVersion"] and version not in pools_status["implementationVersion"]:
+                node.install_success = False
+            # Cleanup next few lines post resolution of MB-60871
+            if "7.6.100" not in node_status["version"] and version not in node_status["version"]:
+                node.install_success = False
+            if node_status["status"] != "healthy":
+                node.install_success = False
+
+            cluster_nodes.append({
+                "ipaddr" : node.ip,
+                "status" : node_status["status"],
+                "version" : node_status["version"],
+                "implementedVersion" : pools_status["implementationVersion"],
+                "profile" : pools_status["configProfile"],
+                "isEnterprise" : pools_status["isEnterprise"]
+            })
+
+    for [i, node] in enumerate(cluster_nodes):
+        log.info("cluster:C{0}\tnode:{1}\tversion:{2}\tprofile:{3}\tstatus:{4}".format(i + 1,
+                                                                                     node['ipaddr'],
+                                                                                     node['version'],
+                                                                                     node['profile'],
+                                                                                     node['status']))
+    install_utils.print_result_and_exit()
 
 def validate_install(params):
     log.info("-" * 100)
@@ -71,10 +119,6 @@ def validate_install(params):
                     if node.ip not in hostname:
                         continue
                     if version in item['version'] and item['status'] == "healthy":
-                        node.install_success = True
-
-                    # Cleanup next few lines post resolution of MB-60871
-                    if params["columnar"] and "7.6.100" in item["version"] and item['status'] == "healthy":
                         node.install_success = True
 
                     if node.enable_ipv6 and not item["addressFamily"] == "inet6":
@@ -152,6 +196,8 @@ def do_install(params, install_tasks):
             timeout = force_stop - time.time()
             install_utils.init_clusters(timeout)
         validate_install(params)
+    if params["columnar"]:
+        validate_columnar_install(params)
 
 
 def do_uninstall(params, node_helpers):

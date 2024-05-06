@@ -21,6 +21,7 @@ USAGE = """\
              new_install.py -i /tmp/test.ini -p version=6.5.0-1234,enable_ipv6=True
             """
 DEFAULT_INSTALL_TASKS = ["uninstall", "install", "init", "cleanup"]
+DEFAULT_INSTALL_COLUMNAR_TASKS = ["uninstall", "install", "cleanup"]
 REINIT_NODE_TASKS = ["init", "cleanup"]
 SUPPORTED_PRODUCTS = ["couchbase", "couchbase-server", "cb"]
 AMAZON = ["amzn2","al2023"]
