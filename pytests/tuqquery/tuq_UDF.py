@@ -2147,3 +2147,17 @@ class QueryUDFTests(QueryTests):
         expected_result = [[4,3,2,1,0]]
         result = self.run_cbq_query('EXECUTE FUNCTION i2()', query_params={'$dir': '"desc"', '$nullsPos': '"last"'})
         self.assertEqual(expected_result, result['results'])
+
+    def test_order_pos_param(self):
+        self.run_cbq_query('CREATE INDEX ix1_id IF NOT EXISTS ON default(id)')
+        self.run_cbq_query('upsert into default (key k, value v) select "key_" || tostr(d) as k , {"name": "San Francisco", "id": d} as v from array_range(0,5) d')
+        udf = 'create or replace function i3() { ( select raw id from default where id is not missing order by id $1 nulls $2 ) }'
+        self.run_cbq_query(udf)
+
+        expected_result = [[0,1,2,3,4]]
+        result = self.run_cbq_query('EXECUTE FUNCTION i3()', query_params={'args': '["asc", "last"]'})
+        self.assertEqual(expected_result, result['results'])
+
+        expected_result = [[4,3,2,1,0]]
+        result = self.run_cbq_query('EXECUTE FUNCTION i3()', query_params={'args': '["desc", "last"]'})
+        self.assertEqual(expected_result, result['results'])
