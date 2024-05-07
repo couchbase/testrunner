@@ -3119,6 +3119,14 @@ class QuerySanityTests(QueryTests):
                                                                        doc['join_day']))
             self._verify_results(actual_result, expected_result)
 
+    def test_complex_where(self):
+        self.fail_if_no_buckets()
+        for query_bucket in self.query_buckets:
+            self.run_cbq_query(query=f"CREATE INDEX ishix3 ON {query_bucket}(c5, c6, c7, c8, c9);")
+            self.run_cbq_query(query=f"CREATE INDEX ishix4 ON {query_bucket}(c5, c8, c10) WHERE c6 != 1 AND c7 NOT IN [1,2] AND c11 != 0;")
+            explain_plan = self.run_cbq_query(query=f"explain SELECT 1 FROM {query_bucket} WHERE c5 = 10 AND c8 >= 11 AND c8 <= 20 AND c6 != 1 AND c7 NOT IN [1,2] AND c11 != 0;")
+            self.assertTrue("ishix4" in str(explain_plan), f"The wrong index is being picked up please check {explain_plan}")
+
     def test_prepared_date_where(self):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
