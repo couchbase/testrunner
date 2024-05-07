@@ -734,6 +734,17 @@ class QueryArrayFlatteningTests(QueryTests):
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                             explain_results))
 
+    def test_flatten_multiple_any(self):
+        self.run_cbq_query(query='UPSERT INTO default VALUES("doc2", {"contacts":[{"type":"mobile", "phone":"123-45-6789"},'
+                                 '{"type":"email","id":"abc@gmail.com"}]});')
+        self.run_cbq_query(query='CREATE INDEX flatten1 ON default(DISTINCT ARRAY FLATTEN_KEYS(v1.type,v1.phone) FOR v1 IN contacts END);')
+        actual_results = self.run_cbq_query('SELECT META(d).id FROM default AS d WHERE ANY v1 IN contacts '
+                                            'SATISFIES v1.type ="mobile" AND v1.phone = "123-45-6789" END '
+                                            'AND ANY v2 IN contacts SATISFIES v2.type ="email" AND v2.id = "abc@gmail.com" END;')
+        expected_results = [{"id": "doc2"}]
+        diffs = DeepDiff(actual_results['results'], expected_results)
+        if diffs:
+            self.assertTrue(False, diffs)
     ##############################################################################################
     #
     #   Query Context
