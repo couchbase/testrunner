@@ -6540,6 +6540,7 @@ class FTSBaseTest(unittest.TestCase):
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
+                    
                     if self.store_in_xattr:
                         container_name = self.generate_random_container_name()
                         self.docker_containers.append(container_name)
@@ -6549,9 +6550,9 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 0, ei, percentages_to_resize, dims_to_resize)
+                                              collection_name, dataset[0], True, "vect", 0, ei, self.encode_base64_vector, percentages_to_resize, dims_to_resize)
                         govl.load_data(container_name)
-
+                        
                     if self.encode_base64_vector:
                         print("self.encode_base64_vector", self.encode_base64_vector)
                         container_name = self.generate_random_container_name()
