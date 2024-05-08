@@ -1,7 +1,12 @@
+<<<<<<< HEAD   (394dfe base64 debugging {loader})
 <<<<<<< HEAD   (188dcf fixed field name in vector search)
 =======
 
 >>>>>>> CHANGE (89a601 base64 debugging {loader})
+=======
+
+
+>>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
 try:
     import docker
 except ImportError:
@@ -135,7 +140,7 @@ class GoVectorLoader:
         try:
             docker_image = "sequoiatools/govectorloader"
             if len(self.percentage_to_resize) == 0 or len(self.dimension_to_resize) == 0:
-                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr} "
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr}"
             else:
                 pr = ','.join(map(str, self.percentage_to_resize))
                 dr = ','.join(map(str, self.dimension_to_resize))

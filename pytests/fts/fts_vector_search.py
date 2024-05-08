@@ -10,7 +10,6 @@ import sys
 import threading
 import struct
 import base64
-
 import logger
 
 from TestInput import TestInputSingleton
@@ -71,7 +70,6 @@ class VectorSearch(FTSBaseTest):
         else:
             self.vector_field_name = "vector_data"
 
-        self.index_mismatch_flag = self.store_in_xattr or self.encode_base64_vector
         super(VectorSearch, self).setUp()
 
     def tearDown(self):
@@ -154,6 +152,7 @@ class VectorSearch(FTSBaseTest):
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
             faiss_doc_ids = [i for i in ann[0]]
+<<<<<<< HEAD   (394dfe base64 debugging {loader})
 <<<<<<< HEAD   (1003ac index correction)
             fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
 =======
@@ -168,6 +167,11 @@ class VectorSearch(FTSBaseTest):
                 except:
                     fts_doc_ids = [-1 for i in range(self.k)]
 >>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
+=======
+            
+            fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
+                
+>>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
             self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
             self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
 
@@ -274,6 +278,8 @@ class VectorSearch(FTSBaseTest):
         hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
                                                                 explain=self.query['explain'], return_raw_hits=True,
                                                                 fields=self.query['fields'])
+        
+        
         if hits == 0:
             hits = -1
 
@@ -291,6 +297,7 @@ class VectorSearch(FTSBaseTest):
         if validate_fts_with_faiss:
             query_vector = vector
             fts_matches = []
+<<<<<<< HEAD   (394dfe base64 debugging {loader})
 <<<<<<< HEAD   (1003ac index correction)
             for i in range(self.k):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
@@ -308,6 +315,10 @@ class VectorSearch(FTSBaseTest):
                     else:
                         fts_matches.append(matches[i]['fields']['sno'] - 1)
 >>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
+=======
+            for i in range(self.k):
+                fts_matches.append(matches[i]['fields']['sno'] - 1)
+>>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
 
             faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
@@ -330,6 +341,7 @@ class VectorSearch(FTSBaseTest):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
 =======
 
+<<<<<<< HEAD   (394dfe base64 debugging {loader})
             if self.index_mismatch_flag:
                 for i in range(self.k):
                     if hits == -1:
@@ -343,6 +355,11 @@ class VectorSearch(FTSBaseTest):
                     else:
                         fts_matches.append(matches[i]['fields']['sno'] - 1)
 >>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
+=======
+            for i in range(self.k):
+                fts_matches.append(matches[i]['fields']['sno'] - 1)
+
+>>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
 
             if perform_faiss_validation:
                 faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
@@ -379,13 +396,9 @@ class VectorSearch(FTSBaseTest):
         status, index_def = index_obj.get_index_defn()
         index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            updated_similarity = \
-                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
-                    'vector_data'][
-                    'fields'][0]['similarity']
+            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties']['vector_data']['fields'][0]['similarity']
         else:
-            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
-                'fields'][0]['similarity']
+            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type]['fields'][0]['similarity']
 
         self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
                                                               "Expected: {}, Actual: {}".format(new_similarity,
@@ -396,8 +409,7 @@ class VectorSearch(FTSBaseTest):
             status, index_def = index_obj.get_index_defn()
             index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            updated_dimension = \
-                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+            updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
                     'vector_data'][
                     'fields'][0]['dims']
         else:
@@ -441,6 +453,8 @@ class VectorSearch(FTSBaseTest):
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
+
+
 
         all_stats = []
         bad_indexes = []
