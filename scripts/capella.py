@@ -28,31 +28,15 @@ def invite_user(token, api_url, user, password, tenant):
         resp.raise_for_status()
         verify_token = resp.headers["Vnd-project-Avengers-com-e2e-token"]
         user_id = resp.json()["userId"]
-    except:
+    except Exception as e:
         print("ERROR: failed to invite user")
         return None, None
         # verify user
     try:
         resp = api.verify_email(verify_token)
         resp.raise_for_status()
-        jwt = resp.json()["jwt"]
+        return user_email, user_password
     except:
         print("ERROR: failed to verify user")
         return None, None
         # update user password
-    headers = {
-        "Authorization": "Bearer {}".format(jwt),
-        "Content-Type": "application/json"
-    }
-    body = {
-        "password": user_password
-    }
-    internal_url = api_url.replace("https://cloud", "https://", 1)
-    try:
-        resp = requests.patch("{}/users/{}".format(internal_url, user_id),
-                              data=json.dumps(body), headers=headers)
-        resp.raise_for_status()
-    except:
-        print("ERROR: failed to set password")
-        return None, None
-    return user_email, user_password
