@@ -303,7 +303,7 @@ class BucketCreateTask(Task):
         else:
             self.compressionMode = 'passive'
         self.flush_enabled = bucket_params['flush_enabled']
-        if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() is 'low':
+        if bucket_params['bucket_priority'] is None or bucket_params['bucket_priority'].lower() == 'low':
             self.bucket_priority = 3
         else:
             self.bucket_priority = 8

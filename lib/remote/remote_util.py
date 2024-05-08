@@ -4278,7 +4278,7 @@ class RemoteMachineShellConnection(KeepRefs):
             backup_command = "{0}cbbackup".format(MAC_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
-        if command_options is not '':
+        if command_options != '':
             if "-b" not in command_options:
                 command_options_string = ' '.join(command_options)
             else:

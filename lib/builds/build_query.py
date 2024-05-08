@@ -711,7 +711,7 @@ class BuildQuery(object):
             os_name = "debian7_"
         joint_char = "_"
         version_join_char = "_"
-        if toy is not "":
+        if toy != "":
             joint_char = "-"
         if "exe" in deliverable_type:
             joint_char = "-"
@@ -829,7 +829,7 @@ class BuildQuery(object):
                    joint_char + os_name + "_" +  build.architecture_type + \
                    "." + build.deliverable_type
             build.url = repo + build_number + "/" + build.name
-        elif toy is not "":
+        elif toy != "":
             centos_version = "centos6"
             build_info = version.split("-")
             build_number = build_info[1]
