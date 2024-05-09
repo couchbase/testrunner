@@ -141,6 +141,9 @@ class AdvanceBucketOp(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        self.assertTrue(self.check_lcb_exception,"LCB Exception occured during operation") 
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         self.undeploy_and_delete_function(body)
+    
+    
