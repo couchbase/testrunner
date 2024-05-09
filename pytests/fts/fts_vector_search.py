@@ -52,7 +52,7 @@ class VectorSearch(FTSBaseTest):
                                    "vector": []}]}
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 85)
         self.vector_field_type = self.input.param("vector_field_type", "vector")
-        self.vector_field_name = list(self.query["knn"][0].items())[2][0]
+        self.vector_field_name = "vector_data_base64" if self.encode_base64_vector else "vector_data"
 
         self.index_mismatch_flag = self.store_in_xattr or self.encode_base64_vector
         super(VectorSearch, self).setUp()
@@ -400,7 +400,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with l2_norm similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -414,7 +414,7 @@ class VectorSearch(FTSBaseTest):
         # create index i2 with dot product similarity
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -480,7 +480,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm", "store": True}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -509,7 +509,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -520,7 +520,7 @@ class VectorSearch(FTSBaseTest):
         # create index i2 with dot product similarity
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -546,7 +546,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -557,7 +557,7 @@ class VectorSearch(FTSBaseTest):
         # create index i2 with dot product similarity
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -578,7 +578,7 @@ class VectorSearch(FTSBaseTest):
             idx = [(f"i{i + 10}", "b1.s1.c1")]
             similarity = random.choice(['dot_product', 'l2_norm'])
             vector_fields = {"dims": self.dimension, "similarity": similarity}
-            index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+            index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                          field_type=self.vector_field_type,
                                                          test_indexes=idx,
                                                          vector_fields=vector_fields,
@@ -620,7 +620,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -631,7 +631,7 @@ class VectorSearch(FTSBaseTest):
         # create index i2 with dot product similarity
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -674,7 +674,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -685,7 +685,7 @@ class VectorSearch(FTSBaseTest):
         # create index i2 with dot product similarity
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -723,7 +723,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
 
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -747,7 +747,7 @@ class VectorSearch(FTSBaseTest):
         # create a second index with dot_product similarity
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -792,7 +792,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
 
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -835,7 +835,7 @@ class VectorSearch(FTSBaseTest):
         # Create second index with dot_product similarity and change it to l2_norm
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -889,7 +889,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
 
-        index_l2_norm = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index_l2_norm = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                              field_type=self.vector_field_type,
                                                              test_indexes=idx,
                                                              vector_fields=vector_fields,
@@ -948,7 +948,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
 
-        index_dot_product = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index_dot_product = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                                  field_type=self.vector_field_type,
                                                                  test_indexes=idx,
                                                                  vector_fields=vector_fields,
@@ -1018,7 +1018,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
 
-        index_l2_norm = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index_l2_norm = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                              field_type=self.vector_field_type,
                                                              test_indexes=idx,
                                                              vector_fields=vector_fields,
@@ -1077,7 +1077,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i2", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
 
-        index_dot_product = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index_dot_product = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                                  field_type=self.vector_field_type,
                                                                  test_indexes=idx,
                                                                  vector_fields=vector_fields,
@@ -1146,7 +1146,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": "l2_norm"}
 
-        index_l2_norm = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index_l2_norm = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                              field_type=self.vector_field_type,
                                                              test_indexes=idx,
                                                              vector_fields=vector_fields,
@@ -1256,7 +1256,7 @@ class VectorSearch(FTSBaseTest):
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
 
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -1312,7 +1312,7 @@ class VectorSearch(FTSBaseTest):
 
         index_name = "i0"
         idx = [(index_name, "b1.s1.c1")]
-        index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
                                                      vector_fields=vector_fields,
@@ -1337,7 +1337,7 @@ class VectorSearch(FTSBaseTest):
 
             index_name = "i{}".format(i + 1)
             idx = [(index_name, "b1.s1.c1")]
-            index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+            index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                          field_type=self.vector_field_type,
                                                          test_indexes=idx,
                                                          vector_fields=vector_fields,
@@ -1427,7 +1427,7 @@ class VectorSearch(FTSBaseTest):
 
             index_name = "i{}".format(index)
             idx = [(index_name, "b1.s1.c1")]
-            index = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+            index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                          field_type=self.vector_field_type,
                                                          test_indexes=idx,
                                                          vector_fields=vector_fields,
@@ -1576,7 +1576,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with l2_norm similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
-        indexes = self._create_fts_index_parameterized(field_name=self.vector_field_type,
+        indexes = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                        field_type=self.vector_field_type,
                                                        test_indexes=idx,
                                                        vector_fields=vector_fields,
