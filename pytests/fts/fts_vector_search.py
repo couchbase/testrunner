@@ -37,8 +37,16 @@ class VectorSearch(FTSBaseTest):
 <<<<<<< HEAD   (1003ac index correction)
 =======
         self.encode_base64_vector = self.input.param("encode_base64_vector", False)
+<<<<<<< HEAD   (188dcf fixed field name in vector search)
 >>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
         if self.store_in_xattr:
+=======
+        if self.store_in_xattr and self.encode_base64_vector:
+            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                          "knn": [{"field": "_$xattrs.vector_encoded", "k": self.k,
+                                   "vector_base64": ""}]}
+        elif self.store_in_xattr:
+>>>>>>> CHANGE (89a601 base64 debugging {loader})
             self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
                           "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
                                    "vector": []}]}
@@ -51,8 +59,17 @@ class VectorSearch(FTSBaseTest):
                           "knn": [{"field": "vector_data", "k": self.k,
                                    "vector": []}]}
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 85)
-        self.vector_field_type = self.input.param("vector_field_type", "vector")
-        self.vector_field_name = "vector_data_base64" if self.encode_base64_vector else "vector_data"
+        # self.vector_field_type = self.input.param("vector_field_type", "vector")
+        self.vector_field_type = "vector_base64" if self.encode_base64_vector else "vector"
+        # self.vector_field_name = "vector_data_base64" if self.encode_base64_vector else "vector_data"
+
+        if self.encode_base64_vector:
+            if self.store_in_xattr:
+                self.vector_field_name = "vector_encoded"
+            else:
+                self.vector_field_name = "vector_data_base64"
+        else:
+            self.vector_field_name = "vector_data"
 
         self.index_mismatch_flag = self.store_in_xattr or self.encode_base64_vector
         super(VectorSearch, self).setUp()

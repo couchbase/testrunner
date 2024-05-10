@@ -1,3 +1,7 @@
+<<<<<<< HEAD   (188dcf fixed field name in vector search)
+=======
+
+>>>>>>> CHANGE (89a601 base64 debugging {loader})
 try:
     import docker
 except ImportError:
