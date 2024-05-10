@@ -727,6 +727,10 @@ class OnPremBaseTestCase(unittest.TestCase):
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False) \
                     or self.input.param("skip_cleanup", False):
                 self.log.warning("CLEANUP WAS SKIPPED")
+                if TestInputSingleton.input.param("get-cbcollect-info", False) or collect_logs:
+                    self.get_cbcollect_info(self.servers)
+                    # collected logs so turn it off so it is not done later
+                    TestInputSingleton.input.test_params["get-cbcollect-info"] = False
             else:
                 if test_failed or collect_logs:
                     # collect logs here instead of in test runner because we have not shut things down

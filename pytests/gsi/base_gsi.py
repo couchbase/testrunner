@@ -102,6 +102,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.cancel_rebalance = self.input.param("cancel_rebalance", False)
         self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", False)
         self.use_cbo = self.input.param("use_cbo", False)
+        self.create_query_node_pattern = r"create .*?index (.*?) on .*?nodes':.*?\[(.*?)].*?$"
         # current value of n1ql_feat_ctrl disables sequential scan. To enable it set value to 0x4c
         self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "16460")
         if self.aws_access_key_id:
@@ -2126,6 +2127,29 @@ class BaseSecondaryIndexingTests(QueryTests):
                     server_set.append(server)
         return server_set
 
+    def validate_node_placement_with_nodes_clause(self, create_queries):
+        indexer_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(indexer_node)
+        indexer_metadata = rest.get_indexer_metadata()['status']
+
+        index_map = {}
+        for index_query in create_queries:
+            out = re.search(self.create_query_node_pattern, index_query, re.IGNORECASE)
+
+
+            index_name, nodes = out.groups()
+            nodes = [node.strip("' ") for node in nodes.split(',')]
+            index_map[index_name.strip('`')] = nodes
+
+        for idx in indexer_metadata:
+            if idx['scope'] == '_system':
+                continue
+            idx_name = idx["indexName"]
+            if idx_name not in index_map:
+                continue
+            host = idx['hosts'][0]
+            self.assertTrue(host in index_map[idx_name], "Index is not hosted on specified Node")
+
 
     def validate_shard_affinity(self, specific_indexes=None, node_in=None, provisioned=True):
         if not self.capella_run:
@@ -2143,7 +2167,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         node_versions_set = set()
         for node in self.get_nodes_in_cluster_after_upgrade():
             rest = RestConnection(node)
-            node_versions_set.add(rest.get_major_version())
+            node_versions_set.add(rest.get_complete_version())
         if len(list(node_versions_set)) > 1:
             mixed_mode = True
         if 'status' not in index_resp:
@@ -2157,14 +2181,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                 raise Exception(f"Alternate shard ID seen for MOI type indexes. Shard ID list {shard_id_list}")
         else:
             for index_metadata in indexer_metadata:
-                if not specific_indexes:
-                    if not index_metadata['alternateShardIds'] and not mixed_mode:
-                        raise Exception(
-                            f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
-                else:
-                    if not index_metadata['alternateShardIds'] and not mixed_mode and index_metadata['name'] in specific_indexes:
-                        raise Exception(
-                            f"Alternate shard ID value None for index {index_metadata['name']} with definition {index_metadata['definition']}")
                 if not specific_indexes:
                     if not index_metadata['alternateShardIds'] and not mixed_mode:
                         self.log.error(f"Indexer metadata {indexer_metadata}")
@@ -2527,6 +2543,31 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": interval})
 
+    def find_unique_slot_id_per_node(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        data=rest.get_indexer_metadata()['status']
+
+        ip_to_slot_id = {}
+
+        # Iterate over each dictionary in the list
+        for entry in data:
+            # Iterate over the nested alternateShardIds dictionary
+            for ip, shard_ids in entry["alternateShardIds"].items():
+                # Check if the IP address already exists in the mapping
+                if ip in ip_to_slot_id:
+                    # Extend the list of shard IDs for the existing IP address
+                    ip_to_slot_id[ip].extend(shard_ids.values())
+                else:
+                    # Create a new entry in the mapping for the IP address
+                    ip_to_slot_id[ip] = list(shard_ids.values())
+        for key, value in ip_to_slot_id.items():
+            ip_to_slot_id[key] = [str(item).split("-")[0] for sublist in value for item in sublist]
+            ip_to_slot_id[key] = list(set(ip_to_slot_id[key]))
+
+        return ip_to_slot_id
+
+
     def fetch_total_shards_limit(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
@@ -2640,6 +2681,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         shards = set()
         for each_item in json_resp['result']['metadata']:
             for item in each_item['topologies']:
+                if item["scope"] == '_system':
+                    continue
                 for defn in item['definitions']:
                     for instance in defn['instances']:
                         for partition in instance['partitions']:

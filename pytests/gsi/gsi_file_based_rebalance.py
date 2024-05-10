@@ -36,6 +36,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.disk_full = self.input.param("disk_full", False)
         self.rand = random.randint(1, 1000000000)
         self.alter_index = self.input.param("alter_index", None)
+        self.use_nodes_clause = self.input.param("use_nodes_clause", False)
         if self.ansi_join:
             self.rest.load_sample("travel-sample")
             self.sleep(10)
@@ -76,18 +77,30 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     scan_results_check = False
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                create_queries = []
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
+                    deploy_nodes = None
+                    if self.use_nodes_clause:
+                        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
+                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
+                        create_queries.extend(queries)
+
                 self.wait_until_indexes_online()
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 nodes_out_list = nodes_out[:2]
@@ -141,18 +154,30 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     scan_results_check = False
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                create_queries = []
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
+                    deploy_nodes = None
+                    if self.use_nodes_clause:
+                        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
+                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
+                        create_queries.extend(queries)
+
                 self.wait_until_indexes_online()
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 nodes_in_list = self.servers[self.nodes_init:]
                 if self.topology_change:
@@ -216,9 +241,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     skip_array_index_item_count = True
                     scan_results_check = False
                 select_queries = set()
+                create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
+                    deploy_nodes = None
+                    if self.use_nodes_clause:
+                        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -226,9 +257,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
+                        create_queries.extend(queries)
                 self.wait_until_indexes_online()
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 to_remove_nodes = nodes_out_list[:2]
@@ -252,7 +288,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     swap_rebalance=True,
                                                     skip_array_index_item_count=skip_array_index_item_count,
                                                     services_in=services_in, select_queries=select_queries,
-                                                scan_results_check=scan_results_check)
+                                                    scan_results_check=scan_results_check)
                 map_after_rebalance, stats_map_after_rebalance = self._return_maps()
                 self.run_post_rebalance_operations(map_after_rebalance=map_after_rebalance,
                                                    stats_map_after_rebalance=stats_map_after_rebalance)
@@ -283,9 +319,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     skip_array_index_item_count = True
                     scan_results_check = False
                 select_queries = set()
+                create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
+                    deploy_nodes = None
+                    if self.use_nodes_clause:
+                        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -293,9 +335,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
+                        create_queries.extend(queries)
                 self.wait_until_indexes_online()
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 nodes_out_list = nodes_out[:2]
@@ -348,9 +395,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     skip_array_index_item_count = True
                     scan_results_check = False
                 select_queries = set()
+                create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
+                    deploy_nodes = None
+                    if self.use_nodes_clause:
+                        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                        deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                     for namespace in self.namespaces:
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -358,9 +411,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
-                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes)
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                             query_node=query_node)
+                        create_queries.extend(queries)
                 self.wait_until_indexes_online()
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 nodes_out_list = nodes_out[:2]
                 if self.rebalance_all_at_once:
@@ -444,19 +502,30 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     scan_results_check = False
                 select_queries = set()
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                create_queries = []
                 for _ in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
+                    deploy_nodes = None
+                    if self.use_nodes_clause:
+                        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
                         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
+                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
+                        create_queries.extend(queries)
+
                 self.wait_until_indexes_online()
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 nodes_out_list = nodes_out[:2]
@@ -499,26 +568,37 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                              num_of_docs_per_collection=self.num_of_docs_per_collection,
                                              json_template=self.json_template, load_default_coll=True)
         self.set_flush_buffer_quota(0.5)
-        # 26 MB
-        self.set_maximum_disk_usage_per_shard(26843545)
+        # 100 MB
+        self.set_maximum_disk_usage_per_shard(109715200)
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         allowed_num_shards = self.fetch_total_shards_limit() * len(indexer_nodes)
         time.sleep(10)
         select_queries = set()
+        create_queries = []
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for _ in range(3):
+            replica_count = 0
+            deploy_nodes = None
+            if self.use_nodes_clause:
+                nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
             for namespace in self.namespaces:
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                  namespace=namespace)
+                                                                  namespace=namespace, deploy_node_info=deploy_nodes)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
+                create_queries.extend(queries)
                 shards_list = self.fetch_plasma_shards_list()
                 if len(shards_list) > allowed_num_shards:
-                    raise Exception(f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
+                    raise Exception(
+                        f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
         self.wait_until_indexes_online()
+        if self.use_nodes_clause:
+            self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
         self.validate_shard_affinity()
         if self.disable_shard_affinity:
             shards_list_before = self.fetch_plasma_shards_list()
@@ -528,8 +608,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
                 shards_list_after = self.fetch_plasma_shards_list()
                 if sorted(shards_list_before) == sorted(shards_list_after):
-                    raise Exception("Indexes with alternate shard ID share shards with indexes with no alternate shard ID")
-
+                    raise Exception(
+                        "Indexes with alternate shard ID share shards with indexes with no alternate shard ID")
 
     def test_recovery_from_disk_snapshot(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
@@ -540,15 +620,21 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
         snapshot_interval = 180
-        self.set_persisted_snapshot_interval(interval=snapshot_interval*1000)
+        self.set_persisted_snapshot_interval(interval=snapshot_interval * 1000)
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
                                              num_of_docs_per_collection=self.num_of_docs_per_collection,
                                              json_template=self.json_template, load_default_coll=True)
         time.sleep(10)
         select_queries = set()
+        create_queries = []
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for _ in range(self.initial_index_batches):
             replica_count = random.randint(1, 2)
+            deploy_nodes = None
+            if self.use_nodes_clause:
+                nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
             for namespace in self.namespaces:
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -556,9 +642,12 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
                                                                   num_replica=replica_count,
-                                                                  randomise_replica_count=True)
+                                                                  randomise_replica_count=True,deploy_node_info=deploy_nodes)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                create_queries.extend(queries)
         self.wait_until_indexes_online()
+        if self.use_nodes_clause:
+            self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
         self.validate_shard_affinity()
         time.sleep(60)
         to_add_nodes, to_remove_nodes, services_in = [], [], None
@@ -585,11 +674,12 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         for item in self.namespaces:
             s_item, c_item = item.split(":")[1].split(".")[1], item.split(":")[1].split(".")[2]
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection*2, percent_create=100,
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection * 2, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=s_item,
                                             collection=c_item, json_template=self.json_template,
                                             output=True, username=self.username, password=self.password,
-                                            start=self.num_of_docs_per_collection+1, end=2*self.num_of_docs_per_collection)
+                                            start=self.num_of_docs_per_collection + 1,
+                                            end=2 * self.num_of_docs_per_collection)
             tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                             batch_size=self.num_of_docs_per_collection,
                                                             dataset=self.json_template)
@@ -620,7 +710,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                             if "partitioned" not in index:
                                 raise AssertionError(f"Mismatch in item count and num_docs_indexed for index {index}. "
                                                      f"Before restart {snapshots_created_indexes[index]['items_count']}"
-                                                     f"After restart {stats_map_after_restart[host][bucket][index]['items_count'] }")
+                                                     f"After restart {stats_map_after_restart[host][bucket][index]['items_count']}")
 
     def test_gsi_rebalance_with_memory_cpu_stress(self):
         self.install_tools()
@@ -629,7 +719,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             try:
                 event, future = Event(), None
                 self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                                replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                                replicas=self.num_replicas,
+                                                                bucket_type=self.bucket_type,
                                                                 enable_replica_index=self.enable_replica_index,
                                                                 eviction_policy=self.eviction_policy, lww=self.lww)
                 self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
@@ -640,8 +731,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                      json_template=self.json_template, load_default_coll=True)
                 time.sleep(10)
                 select_queries = set()
+                create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 replica_count = random.randint(1, 2)
+                deploy_nodes = None
+                if self.use_nodes_clause:
+                    nodes_list = random.sample(index_nodes, k=replica_count + 1)
+                    deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                 for namespace in self.namespaces:
                     query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                     select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -649,10 +746,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                       namespace=namespace,
                                                                       num_replica=replica_count,
-                                                                      randomise_replica_count=True)
-                    self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                                                                      randomise_replica_count=True,deploy_node_info=deploy_nodes)
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                         query_node=query_node)
+                    create_queries.extend(queries)
                 self.wait_until_indexes_online()
                 time.sleep(30)
+                if self.use_nodes_clause:
+                    self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 to_add_nodes, to_remove_nodes, services_in = [], [], None
                 if self.rebalance_type in ['rebalance_in', 'rebalance_swap']:
@@ -717,9 +818,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         namespace = self.namespaces[0]
-        queries = [f'create index idx on {namespace}(name)']
+        nodes = random.choice(indexer_nodes)
+        if self.use_nodes_clause:
+            queries = [
+                f'create index idx on {namespace}(name) USING GSI WITH {{\'nodes\':[\'{nodes.ip}:{nodes.port}\'], \'defer_build\': False}}']
+        else:
+            queries = [f'create index idx on {namespace}(name)']
         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         self.wait_until_indexes_online()
+        if self.use_nodes_clause:
+            self.validate_node_placement_with_nodes_clause(create_queries=queries)
         self.validate_shard_affinity()
         time.sleep(60)
         rest = RestConnection(indexer_nodes[0])
@@ -754,7 +862,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info(f"Running add back task for node {node_obj.ip}")
         rest.add_back_node(node_obj.id)
         time.sleep(10)
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [], cluster_config=self.cluster_config)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [],
+                                                 cluster_config=self.cluster_config)
         time.sleep(1)
         status, _ = self.rest._rebalance_status_and_progress()
         while status != 'running':
@@ -797,10 +906,19 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         time.sleep(10)
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        deploy_nodes = ",".join([f"\'{node.ip}:{node.port}\'" for node in indexer_nodes])
         namespace = self.namespaces[0]
-        queries = [f'create index idx on {namespace}(name) PARTITION BY HASH (meta().id)']
+        if self.use_nodes_clause:
+            queries = [
+                f'create index idx on {namespace}(name) PARTITION BY HASH (meta().id) WITH {{\'nodes\':[{deploy_nodes}], \'defer_build\': False}}']
+        else:
+            queries = [
+                f'create index idx on {namespace}(name) PARTITION BY HASH (meta().id)']
+
         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         self.wait_until_indexes_online()
+        if self.use_nodes_clause:
+            self.validate_node_placement_with_nodes_clause(create_queries=queries)
         self.validate_shard_affinity()
         time.sleep(60)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -849,6 +967,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             index_list_after.append(index['name'])
         self.log.info(f"Index list after rebalance {index_list_after}")
         self.wait_until_indexes_online()
+        self.validate_node_placement_with_nodes_clause(create_queries=queries)
         self.validate_shard_affinity()
         if len(index_list_after) != 1:
             raise Exception("Duplicate indexes not dropped after rebalance")
@@ -886,12 +1005,21 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         time.sleep(10)
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        num_replica = 2
+        random_index_nodes = random.sample(indexer_nodes, num_replica+1)
+        deploy_nodes = ",".join([f"\'{node.ip}:{node.port}\'" for node in random_index_nodes])
         namespace = self.namespaces[0]
-        queries = [f'create index idx on {namespace}(name) with {{"num_replica": 2}}',
-                   f'create index idx2 on {namespace}(country) with {{"num_replica": 2}}']
+        if self.use_nodes_clause:
+            queries = [f'create index idx on {namespace}(name) with {{\'nodes\':[{deploy_nodes}], \'num_replica\': {num_replica}}}',
+                       f'create index idx2 on {namespace}(country) with {{\'nodes\':[{deploy_nodes}], \'num_replica\': {num_replica}]}}']
+        else:
+            queries = [f'create index idx on {namespace}(name) with {{\'num_replica\': {num_replica}}}',
+                       f'create index idx2 on {namespace}(country) with {{\'num_replica\': {num_replica}]}}']
         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         time.sleep(60)
         self.wait_until_indexes_online()
+        if self.use_nodes_clause:
+            self.validate_node_placement_with_nodes_clause(create_queries=queries)
         self.validate_shard_affinity()
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         query_drop_replica = f'ALTER INDEX {namespace}.idx WITH {{"action":"drop_replica","replicaId": {0}}}'
@@ -922,7 +1050,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     graceful=False)
         failover_task.result()
         time.sleep(10)
-        to_add_nodes = self.servers[self.nodes_init:self.nodes_init+1]
+        to_add_nodes = self.servers[self.nodes_init:self.nodes_init + 1]
         rebalance = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=to_add_nodes,
                                                  to_remove=[], services=['index'], cluster_config=self.cluster_config)
         time.sleep(1)
@@ -961,6 +1089,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         Create idx3, idx4, idx5.... with queryport.client.usePlanner disabled. Indexes should not be placed in
         round-robin fashion.
         """
+        if self.cb_version[:4] < "7.6.2":
+            self.skipTest("Not applicable in 7.6.2")
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -1011,7 +1141,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             if message_alter_idx in str(err):
                 self.log.info(f"Error raised {str(err)} as expected while running a query with nodes clause")
             else:
-                raise Exception(f"Message not seen as expected. Message seen {message_alter_idx}. Message expected {str(err)}")
+                raise Exception(
+                    f"Message not seen as expected. Message seen {message_alter_idx}. Message expected {str(err)}")
         self.disable_planner()
         time.sleep(3)
         query = f'create index idx3 on {namespace}(name)'
@@ -1029,6 +1160,122 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         query = f'create index idx3 on {namespace}(name)'
         self.run_cbq_query(query=query, server=query_node)
         self.wait_until_indexes_online()
+
+    def test_with_nodes_full_capacity(self):
+        if self.cb_version[:4] < "7.6.2":
+            self.skipTest("Not applicable in 7.6.2")
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=True)
+        select_queries = set()
+        self.set_flush_buffer_quota(0.5)
+        # 100 MB
+        self.set_maximum_disk_usage_per_shard(109715200)
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        allowed_num_shards = self.fetch_total_shards_limit() * len(indexer_nodes)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        nodes_in = self.servers[self.nodes_init]
+        create_queries = []
+        replica_count = 1
+        for _ in range(2):
+            for namespace in self.namespaces:
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                           namespace=namespace))
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=replica_count,
+                                                                  randomise_replica_count=True)
+                create_queries = queries[:]
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=query_node)
+                create_queries.extend(queries)
+
+        shards_list = self.fetch_plasma_shards_list()
+        if len(shards_list) > allowed_num_shards:
+            raise Exception(
+                f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
+        if len(shards_list) < allowed_num_shards:
+            for namespace in self.namespaces:
+                queries = [f'create index idx on {namespace}(name)']
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
+                shards_list = self.fetch_plasma_shards_list()
+                if len(shards_list) == allowed_num_shards:
+                    break
+
+
+        self.wait_until_indexes_online()
+        self.validate_shard_affinity()
+        self.sleep(10)
+        slot_id_map_before_with_query = self.find_unique_slot_id_per_node()
+
+        services_in = ["index"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [nodes_in], [],
+                                                 cluster_config=self.cluster_config, services=services_in)
+
+        time.sleep(3)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        indexer_nodes_post_rebalance = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        num_replica = 2
+        random_index_nodes = random.sample(indexer_nodes_post_rebalance, num_replica + 1)
+        deploy_nodes = ",".join([f"\'{node.ip}:{node.port}\'" for node in random_index_nodes])
+        if self.use_nodes_clause:
+            index_query_on_all_three_nodes = f"create index idx1 on {self.namespaces[0]}(name) with {{\"nodes\":[{deploy_nodes}], \"num_replica\":{num_replica}}}"
+            self.run_cbq_query(query=index_query_on_all_three_nodes)
+            self.wait_until_indexes_online()
+
+        else:
+
+            query = f"create index idx1 on {self.namespaces[0]}(name) with {{\"num_replica\":{num_replica}}}"
+            self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+
+        slot_id_map_post_with_query = self.find_unique_slot_id_per_node()
+        new_slot_id = slot_id_map_post_with_query[f'{nodes_in.ip}:{self.node_port}']
+        for node in slot_id_map_before_with_query:
+            if new_slot_id in slot_id_map_before_with_query[node]:
+                raise Exception(
+                    f"The new index is sharing existing shard id shard list before {slot_id_map_before_with_query}, after {slot_id_map_post_with_query}")
+
+        shard_list_before = self.fetch_plasma_shards_list()
+        index_query_on_all_three_nodes = f"create index idx2 on {self.namespaces[0]}(name) with {{\"nodes\":[{deploy_nodes}], \"num_replica\":{num_replica}}}"
+        self.run_cbq_query(query=index_query_on_all_three_nodes)
+        self.wait_until_indexes_online()
+        shard_list_after = self.fetch_plasma_shards_list()
+        self.assertEqual(len(shard_list_before), len(shard_list_after),
+                         f"new shards created before : {shard_list_before}  after {shard_list_after}")
+
+        shard_list_before = self.fetch_plasma_shards_list()
+        query = f"create index idx3 on {self.namespaces[0]}(name) with {{\"num_replica\":{num_replica}}}"
+        self.run_cbq_query(query=query)
+        self.wait_until_indexes_online()
+        shard_list_after = self.fetch_plasma_shards_list()
+        self.assertEqual(len(shard_list_before), len(shard_list_after),
+                         f"new shards created before : {shard_list_before}  after {shard_list_after}")
+
+        slot_id_map_post_all_queries = self.find_unique_slot_id_per_node()
+        counter = 0
+        for shard in slot_id_map_post_all_queries[f'{nodes_in.ip}:{self.node_port}']:
+            if shard in slot_id_map_post_all_queries[
+                f'{indexer_nodes_post_rebalance[0].ip}:{self.node_port}'] and shard in slot_id_map_post_all_queries[
+                f'{indexer_nodes_post_rebalance[1].ip}:{self.node_port}']:
+                counter += 1
+        self.assertEqual(counter, 1,
+                         f"new slot id not created for the new node for with clause stats : {slot_id_map_post_with_query}")
 
     # common methods
     def _return_maps(self):
@@ -1059,50 +1306,50 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         elif phase == "after":
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             country, address, city, email = f"test_country{random.randint(0, 100)}", f"test_add{random.randint(0, 100)}", \
-                                            f"test_city{random.randint(0, 100)}", f"test_email{random.randint(0, 100)}"
+                f"test_city{random.randint(0, 100)}", f"test_email{random.randint(0, 100)}"
             doc_body = {
-              "country": country,
-              "address": address,
-              "free_parking": False,
-              "city": city,
-              "type": "Hotel",
-              "url": "www.henrietta-hegmann.co",
-              "reviews": [
-                {
-                  "date": "2023-09-15 08:57:48",
-                  "author": "Ms. Selma Schaden",
-                  "ratings": {
-                    "Value": 1,
-                    "Cleanliness": 1,
-                    "Overall": 4,
-                    "Check in / front desk": 2,
-                    "Rooms": 2
-                  }
-                },
-                {
-                  "date": "2023-09-29 08:57:48",
-                  "author": "test_author",
-                  "ratings": {
-                    "Value": 3,
-                    "Cleanliness": 1,
-                    "Overall": 1,
-                    "Check in / front desk": 1,
-                    "Rooms": 2
-                  }
-                }
-              ],
-              "phone": "364-389-9784",
-              "price": 1134,
-              "avg_rating": 3,
-              "free_breakfast": True,
-              "name": "Jame Cummings Hotel",
-              "public_likes": [
-                "Mr. Brian Grimes",
-                "Linwood Hermann",
-                "Micah Funk",
-                "Micheal Hansen"
-              ],
-              "email": email
+                "country": country,
+                "address": address,
+                "free_parking": False,
+                "city": city,
+                "type": "Hotel",
+                "url": "www.henrietta-hegmann.co",
+                "reviews": [
+                    {
+                        "date": "2023-09-15 08:57:48",
+                        "author": "Ms. Selma Schaden",
+                        "ratings": {
+                            "Value": 1,
+                            "Cleanliness": 1,
+                            "Overall": 4,
+                            "Check in / front desk": 2,
+                            "Rooms": 2
+                        }
+                    },
+                    {
+                        "date": "2023-09-29 08:57:48",
+                        "author": "test_author",
+                        "ratings": {
+                            "Value": 3,
+                            "Cleanliness": 1,
+                            "Overall": 1,
+                            "Check in / front desk": 1,
+                            "Rooms": 2
+                        }
+                    }
+                ],
+                "phone": "364-389-9784",
+                "price": 1134,
+                "avg_rating": 3,
+                "free_breakfast": True,
+                "name": "Jame Cummings Hotel",
+                "public_likes": [
+                    "Mr. Brian Grimes",
+                    "Linwood Hermann",
+                    "Micah Funk",
+                    "Micheal Hansen"
+                ],
+                "email": email
             }
             collection_namespace = self.namespaces[0]
             _, keyspace = collection_namespace.split(':')
@@ -1183,9 +1430,11 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         # rebalance operation
         if self.capella_run:
             if capella_rebalance == 'rebalance_in':
-                self.capella_api.add_nodes_to_capella_cluster(services=['index'], cluster_id=self.cluster_id, nodes_count=len(nodes_out_list))
+                self.capella_api.add_nodes_to_capella_cluster(services=['index'], cluster_id=self.cluster_id,
+                                                              nodes_count=len(nodes_out_list))
             elif capella_rebalance == 'rebalance_out':
-                self.capella_api.remove_nodes_from_capella_cluster(services=['index'], cluster_id=self.cluster_id, nodes_count=len(nodes_out_list))
+                self.capella_api.remove_nodes_from_capella_cluster(services=['index'], cluster_id=self.cluster_id,
+                                                                   nodes_count=len(nodes_out_list))
             elif capella_rebalance == 'swap_rebalance':
                 self.capella_api.scale_up_capella_nodes(services=['index'], cluster_id=self.cluster_id)
         else:
@@ -1202,7 +1451,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         except:
             self.log.info(f"Rebalance status/progress failure because of chaos action {self.chaos_action}")
         if self.chaos_action and self.chaos_action not in ['kill_projector', 'ddl_during_rebalance',
-                                                               'rebalance_during_ddl']:
+                                                           'rebalance_during_ddl']:
             self.run_operation(phase="during", action=self.chaos_action)
             time.sleep(3)
             if self.chaos_action != 'stop_rebalance':
@@ -1234,7 +1483,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 nodes_in_list = []
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, nodes_out_list,
                                                      services=services_in, cluster_config=self.cluster_config)
-            self.log.info(f"Rebalance task re-triggered after chaos action. Wait for 20 seconds until the rebalance starts")
+            self.log.info(
+                f"Rebalance task re-triggered after chaos action. Wait for 20 seconds until the rebalance starts")
             time.sleep(20)
         self.sleep(10)
         if not self.capella_run:
@@ -1279,7 +1529,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             self.log.info("Compare shard list before and after rebalance.")
             # uncomment after MB-58776 is fixed
             if shard_list_before_rebalance:
-                if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in ['rebalance_during_ddl', 'ddl_during_rebalance']:
+                if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in [
+                    'rebalance_during_ddl', 'ddl_during_rebalance']:
                     self.log.error(
                         f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
                     raise AssertionError("Shards missing after rebalance")
@@ -1300,7 +1551,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             for query in select_queries:
                 post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
-                                                         server=n1ql_server)['results']
+                                                           server=n1ql_server)['results']
                 diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
                 if diffs:
                     self.log.error(f"Mismatch in query result before and after rebalance. Select query {query}\n\n. "
@@ -1366,10 +1617,13 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         nodes = self.servers
         for node in nodes:
             shell = RemoteMachineShellConnection(node)
-            shell.execute_command(command='apt-get install -qq -y stress-ng > /dev/null && echo 1 || echo 0', get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y stress-ng > /dev/null && echo 1 || echo 0',
+                                  get_pty=True)
             shell.execute_command(command='apt-get install -qq -y stress > /dev/null && echo 1 || echo 0', get_pty=True)
-            shell.execute_command(command='apt-get install -qq -y sysstat > /dev/null && echo 1 || echo 0', get_pty=True)
-            shell.execute_command(command='apt-get install -qq -y iptables > /dev/null && echo 1 || echo 0', get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y sysstat > /dev/null && echo 1 || echo 0',
+                                  get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y iptables > /dev/null && echo 1 || echo 0',
+                                  get_pty=True)
 
     def run_stress_tool(self, stress_factor=0.25, timeout=1800):
         nodes_all = self.servers
@@ -1471,7 +1725,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=self.json_template,
                                                     output=True, username=self.username, password=self.password,
-                                                    end=end_num, start_seq_num=end_num-batch_size+1)
+                                                    end=end_num, start_seq_num=end_num - batch_size + 1)
                     tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
                                                                     batch_size=batch_size,
                                                                     dataset=self.json_template)

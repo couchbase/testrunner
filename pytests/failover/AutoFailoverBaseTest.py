@@ -97,7 +97,8 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.rest = RestConnection(self.orchestrator)
         self.rest.reset_autofailover()
         self.disable_autofailover()
-        self._cleanup_cluster()
+        if not self.input.param("get-cbcollect-info", False):
+            self._cleanup_cluster()
         super(AutoFailoverBaseTest, self).tearDown()
         if hasattr(self, "node_monitor_task"):
             if self.node_monitor_task._exception:

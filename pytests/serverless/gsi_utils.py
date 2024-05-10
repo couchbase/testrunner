@@ -288,14 +288,17 @@ class GSIUtils(object):
                               defer_build=False, num_replica=None, deploy_node_info=None, randomise_replica_count=False):
         create_index_list = []
         for index_gen in definition_list:
+            nodes_list = None
             if defer_build_mix:
                 defer_build = random.choice([True, False])
-            if randomise_replica_count and num_replica > 1:
+            if randomise_replica_count and num_replica >= 1:
                 num_replicas = random.randint(1, num_replica)
+                if deploy_node_info is not None:
+                    nodes_list = random.sample(deploy_node_info, k=num_replicas+1)
             else:
                 num_replicas = num_replica
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build,
-                                                          num_replica=num_replicas, deploy_node_info=deploy_node_info)
+                                                          num_replica=num_replicas, deploy_node_info=nodes_list)
             create_index_list.append(query)
         return create_index_list
 

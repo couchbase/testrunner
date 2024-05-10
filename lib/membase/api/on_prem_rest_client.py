@@ -2897,6 +2897,10 @@ class RestConnection(object):
         """ Returns the major version of the node (e.g. 6.5) """
         return self.get_nodes_self().major_version
 
+    def get_complete_version(self):
+        """Returns the complete version of the node (e.g. 7.6.2) """
+        return self.get_nodes_self().complete_version
+
     def check_cluster_compatibility(self, version):
         """
         Check if all nodes in cluster are of versions equal or above the version required.
