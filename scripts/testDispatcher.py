@@ -427,6 +427,11 @@ def main():
                         else:
                             framework = 'testrunner'
 
+                        if 'jenkins_server_url' in data:
+                            jenkins_server_url = data['jenkins_server_url']
+                        else:
+                            jenkins_server_url = options.jenkins_server_url
+
                         # checkout the ini file at the specified branch
                         # raises an exception if the ini file does not exist on that branch
                         if options.branch != "master":
@@ -472,6 +477,7 @@ def main():
                             'mode': mode,
                             'framework': framework,
                             'addPoolId': addPoolId,
+                            'target_jenkins': str(jenkins_server_url),
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -501,7 +507,6 @@ def main():
                                   i['addPoolServerCount'], i['framework']))
     print('\n\n')
 
-    launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
     # this are VM/Docker dependent - or maybe not
     launchString = '/buildWithParameters?token=test_dispatcher&' + \
                    'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
@@ -580,6 +585,7 @@ def main():
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": currentExecutorParams})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
+                launchStringBase = testsToLaunch[i]['target_jenkins'] + '/job/' + str(options.launch_job)
                 launchStringBaseF = launchStringBase
                 if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
@@ -826,6 +832,7 @@ def main():
                         print(s)
 
                 # optional add [-docker] [-Jenkins extension]
+                launchStringBase = testsToLaunch[i]['target_jenkins'] + '/job/' + str(options.launch_job)
                 launchStringBaseF = launchStringBase
                 if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
@@ -920,7 +927,7 @@ def main():
         except Exception as e:
             print('have an exception')
             print((traceback.format_exc()))
-            if descriptor:
+            if 'descriptor' in locals():
                 try:
                     print('Releasing servers for {} ...'.format(descriptor))
                     release_servers(options, descriptor)
