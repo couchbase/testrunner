@@ -1,11 +1,9 @@
 import base64
-import sys
 import urllib.request, urllib.error, urllib.parse
 import urllib.request, urllib.parse, urllib.error
 from uuid import uuid4
 import httplib2
 import json
-import string
 import time
 from optparse import OptionParser
 import traceback
@@ -17,8 +15,6 @@ import configparser
 
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
-from couchbase.exceptions import CouchbaseError
-from couchbase.n1ql import N1QLQuery
 import get_jenkins_params
 import find_rerun_job
 
@@ -59,44 +55,33 @@ CLOUD_SERVER_TYPES = [AWS, AZURE, GCP, SERVERLESS_ONCLOUD,
 DEFAULT_ARCHITECTURE = "x86_64"
 DEFAULT_SERVER_TYPE = VM
 
-def getNumberOfServers(iniFile):
-    f = open(iniFile)
-    contents = f.read()
-    f.close()
-    return contents.count('dynamic')
+
+def get_num_servers(ini_file):
+    with open(ini_file) as f:
+        return f.read().count('dynamic')
 
 
-def getNumberOfAddpoolServers(iniFile, addPoolId):
-    f = open(iniFile)
-    contents = f.read()
-    f.close()
+def get_num_add_pool_servers(ini_file, add_pool_id):
     try:
-        return contents.count(addPoolId)
+        with open(ini_file) as f:
+            return f.read().count(add_pool_id)
     except:
         return 0
 
-def get_ssh_username(iniFile):
-    f = open(iniFile)
-    contents = f.readlines()
+
+def get_ssh_username_password(ini_file, search_str):
+    with open(ini_file) as f:
+        contents = f.readlines()
     for line in contents:
-        if "username:" in line:
+        if search_str in line:
             arr = line.split(":")[1:]
-            username = arr[0].rstrip()
-            return username
+            return arr[0].rstrip()
     return ""
 
-def get_ssh_password(iniFile):
-    f = open(iniFile)
-    contents = f.readlines()
-    for line in contents:
-        if "password:" in line:
-            arr = line.split(":")[1:]
-            password = arr[0].rstrip()
-            return password
-    return ""
 
 def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
+
 
 def get_available_servers_count(options=None, is_addl_pool=False, os_version="", pool_id=None):
     # this bit is Docker/VM dependent
@@ -106,7 +91,7 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
         # may want to add OS at some point
         getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(os_version, pool_id)
     else:
-        if is_addl_pool == True:
+        if is_addl_pool is True:
             SM = ADDL_SERVER_MANAGER
         else:
             SM = SERVER_MANAGER
@@ -125,6 +110,7 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="",
     else:
         count = int(content)
     return count
+
 
 def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, pool_id):
     descriptor = urllib.parse.unquote(descriptor)
@@ -177,6 +163,7 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     else:
         return json.loads(content1), None
 
+
 def check_servers_via_ssh(servers=[], test=None):
     alive_servers = []
     bad_servers = []
@@ -187,12 +174,13 @@ def check_servers_via_ssh(servers=[], test=None):
             bad_servers.append(server)
     return alive_servers, bad_servers
 
+
 def is_vm_alive(server="", ssh_username="", ssh_password=""):
     try:
         if '[' in server or ']' in server:
             server = server.replace('[', '')
             server = server.replace(']','')
-        ip_version = ipaddress.ip_address(server).version
+        _ = ipaddress.ip_address(server).version
     except ValueError as e:
         print("{0} is not recognized as valid IPv4 or IPv6 address.".format(server))
         return False
@@ -201,7 +189,6 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            #ssh.auth_password()
             ssh.connect(hostname=server, username=ssh_username,
                         password=ssh_password, timeout=20)
             print("Successfully established test ssh connection to {0}. VM is recognized as valid.".format(server))
@@ -214,6 +201,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
 
     print("{0} is unreachable. Tried to establish ssh connection {1} times".format(server, num_retries-1))
     return False
+
 
 def main():
     global SERVER_MANAGER
@@ -283,7 +271,7 @@ def main():
 
     options, args = parser.parse_args()
 
-    #Fix the OS for addPoolServers. See CBQE-5609 for details
+    # Fix the OS for addPoolServers. See CBQE-5609 for details
     addPoolServer_os = "centos"
     print(('the run is', options.run))
     print(('the  version is', options.version))
@@ -292,7 +280,6 @@ def main():
 
     print(('nolaunch', options.noLaunch))
     print(('os', options.os))
-    # print('url', options.url)
 
     print(('url is', options.url))
     print(('cherrypick command is', options.cherrypick))
@@ -333,16 +320,7 @@ def main():
         if options.dashboardReportedParameters is not None:
             runTimeTestRunnerParameters = options.extraParameters + ',' + options.dashboardReportedParameters
 
-    # f = open(options.suiteFile)
-    # data = f.readlines()
-
     testsToLaunch = []
-
-    # for d in data:
-    #  fields = d.split()
-    #  testsToLaunch.append( {'descriptor':fields[0],'confFile':fields[1],'iniFile':fields[2],
-    #                         'serverCount':int(fields[3]), 'timeLimit':int(fields[4]),
-    #                          'parameters':fields[5]})
     cluster = Cluster('couchbase://{}'.format(TEST_SUITE_DB))
     authenticator = PasswordAuthenticator(SERVER_MANAGER_USER_NAME,
                                           SERVER_MANAGER_PASSWORD)
@@ -369,7 +347,8 @@ def main():
             queryString = "select * from `QE-Test-Suites` where {0} and component in [{1}] order by component;".format(
                 suiteString, componentString)
 
-        elif options.subcomponent_regex is None or options.subcomponent_regex == "None":
+        elif options.subcomponent_regex is None \
+                or options.subcomponent_regex is "None":
             # have a subcomponent, assume only 1 component
 
             splitSubcomponents = options.subcomponent.split(',')
@@ -395,10 +374,8 @@ def main():
                 format(suiteString, componentString, options.subcomponent_regex)
 
     print(('the query is', queryString))  # .format(options.run, componentString)
-    query = N1QLQuery(queryString)
     results = cb.n1ql_query(queryString)
 
-    framework = None
     for row in results:
         try:
             data = row['QE-Test-Suites']
@@ -411,8 +388,7 @@ def main():
 
                 # and also check for which release it is implemented in
                 if 'implementedIn' not in data or releaseVersion >= float(data['implementedIn']):
-                    # and check if there is a max version the tests
-                    # can run in
+                    # and check if there is a max version the tests can run in
                     if 'maxVersion' in data and releaseVersion > \
                             float(data['maxVersion']):
                         print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -463,7 +439,7 @@ def main():
 
                         # if there's an additional pool, get the number
                         # of additional servers needed from the ini
-                        addPoolServerCount = getNumberOfAddpoolServers(
+                        addPoolServerCount = get_num_add_pool_servers(
                             data['config'],
                             addPoolId)
 
@@ -482,9 +458,9 @@ def main():
                             'subcomponent': data['subcomponent'],
                             'confFile': data['confFile'],
                             'iniFile': data['config'],
-                            'serverCount': getNumberOfServers(data['config']),
-                            'ssh_username': get_ssh_username(data['config']),
-                            'ssh_password': get_ssh_password(data['config']),
+                            'serverCount': get_num_servers(data['config']),
+                            'ssh_username': get_ssh_username_password(data['config'], search_str="username:"),
+                            'ssh_password': get_ssh_username_password(data['config'], search_str="password:"),
                             'addPoolServerCount': addPoolServerCount,
                             'timeLimit': data['timeOut'],
                             'parameters': data['parameters'],
@@ -507,14 +483,12 @@ def main():
             print((traceback.format_exc()))
             print(data)
 
-
     total_req_servercount = 0
     total_req_addservercount = 0
     for i in testsToLaunch:
         # Reset server count request to 0 for provisioned
-        if options.serverType == "PROVISIONED_ONCLOUD":
-            i['serverCount'] = 0
-        if options.serverType == "SERVERLESS_COLUMNAR":
+        if options.serverType in ["PROVISIONED_ONCLOUD",
+                                  "SERVERLESS_COLUMNAR"]:
             i['serverCount'] = 0
         total_req_servercount = total_req_servercount + i['serverCount']
         total_req_addservercount = total_req_addservercount + i['addPoolServerCount']
@@ -528,20 +502,16 @@ def main():
     print('\n\n')
 
     launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
-
-
-
-
     # this are VM/Docker dependent - or maybe not
-    launchString =  '/buildWithParameters?token=test_dispatcher&' + \
-                        'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&parameters={6}&os={7}&initNodes={' \
-                         '8}&installParameters={9}&branch={10}&slave={' \
-                         '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
+    launchString = '/buildWithParameters?token=test_dispatcher&' + \
+                   'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
+                   'iniFile={5}&parameters={6}&os={7}&initNodes={' \
+                   '8}&installParameters={9}&branch={10}&slave={' \
+                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
-            "rerun_params" : rerun_params})
+            "rerun_params": rerun_params})
     launchString = launchString + '&retries=' + options.retries
     if options.include_tests:
         launchString = launchString + '&include_tests='+urllib.parse.quote(options.include_tests.replace("'", " ").strip())
@@ -566,7 +536,6 @@ def main():
     currentExecutorParams = json.dumps(currentExecutorParams)
     print(currentExecutorParams)
     summary = []
-    servers = []
     total_jobs_count = len(testsToLaunch)
     job_index = 1
     total_servers_being_used = 0
@@ -616,7 +585,6 @@ def main():
                     launchStringBaseF = launchStringBase + '-docker'
                 if options.test:
                     launchStringBaseF = launchStringBase + '-test'
-                #     if options.framework.lower() == "jython":
                 framework = testsToLaunch[i]['framework']
                 if framework != 'testrunner':
                     launchStringBaseF = launchStringBaseF + "-" + framework
@@ -641,7 +609,6 @@ def main():
             pool_to_use = options.poolId[0]
 
             for pool_id in options.poolId:
-
                 if options.serverType in CLOUD_SERVER_TYPES:
                     haveTestToLaunch = True
                     break
@@ -694,7 +661,6 @@ def main():
                                                                         'subcomponent'],
                                                                     testsToLaunch[i][
                                                                         'framework'], ))
-
                 if options.noLaunch:
                     job_index += 1
                     testsToLaunch.pop(i)
@@ -779,7 +745,6 @@ def main():
                 else:
                     servers, internal_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
                                             how_many=how_many, os_version=options.os, pool_id=pool_to_use)
-                    how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
                 if options.serverType != DOCKER:
                     # sometimes there could be a race, before a dispatcher process acquires vms,
@@ -797,7 +762,6 @@ def main():
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     addPoolId = testsToLaunch[i]['addPoolId']
                     addl_servers, _ = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
-                    how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
                         print(
                             "Received additional servers count does not match the expected "
@@ -808,7 +772,7 @@ def main():
                 # and send the request to the test executor
 
                 # figure out the parameters, there are test suite specific, and added at dispatch time
-                if  runTimeTestRunnerParameters is None:
+                if runTimeTestRunnerParameters is None:
                     parameters = testsToLaunch[i]['parameters']
                 else:
                     if testsToLaunch[i]['parameters'] == 'None':
@@ -837,19 +801,18 @@ def main():
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})
 
-
                 if options.serverType != DOCKER:
-                    servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
+                    servers_str = json.dumps(servers).replace(' ', '').replace('[','', 1)
                     servers_str = rreplace(servers_str, ']', 1)
                     url = url + '&servers=' + urllib.parse.quote(servers_str)
 
                     if internal_servers:
-                        internal_servers_str = json.dumps(internal_servers).replace(' ','').replace('[','', 1)
+                        internal_servers_str = json.dumps(internal_servers).replace(' ', '').replace('[', '', 1)
                         internal_servers_str = rreplace(internal_servers_str, ']', 1)
                         url = url + '&internal_servers=' + urllib.parse.quote(internal_servers_str)
 
                     if testsToLaunch[i]['addPoolServerCount']:
-                        addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
+                        addPoolServers = json.dumps(addl_servers).replace(' ', '').replace('[', '', 1)
                         addPoolServers = rreplace(addPoolServers, ']', 1)
                         url = url + '&addPoolServerId=' +\
                                 testsToLaunch[i]['addPoolId'] +\
@@ -859,7 +822,7 @@ def main():
                 if len(unreachable_servers) > 0:
                     print("The following VM(s) are unreachable for ssh connection:")
                     for s in unreachable_servers:
-                        response, content = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
+                        _, _ = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
                         print(s)
 
                 # optional add [-docker] [-Jenkins extension]
@@ -868,7 +831,6 @@ def main():
                     launchStringBaseF = launchStringBase + '-docker'
                 if options.test:
                     launchStringBaseF = launchStringBase + '-test'
-                #     if options.framework.lower() == "jython":
                 framework = testsToLaunch[i]['framework']
                 if framework != 'testrunner':
                     launchStringBaseF = launchStringBaseF + "-" + framework
@@ -937,7 +899,7 @@ def main():
                         .request(url, 'GET', headers=header)
                     print("Response is: {0}".format(str(response)))
                     print("Content is: {0}".format(str(content)))
-                    if int(response['status'])>=400:
+                    if int(response['status']) >= 400:
                         raise Exception("Unexpected response while dispatching the request!")
 
                 total_servers_being_used += testsToLaunch[0]['serverCount']
@@ -946,16 +908,15 @@ def main():
                 testsToLaunch.pop(i)
                 summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
                 if options.noLaunch:
-                    pass # no sleeping necessary
+                    pass  # no sleeping necessary
                 elif options.serverType == DOCKER:
-                    time.sleep(240)     # this is due to the docker port allocation race
+                    # Due to the docker port allocation race
+                    time.sleep(240)
                 else:
                     time.sleep(30)
-
             else:
                 print('not enough servers at this time')
                 time.sleep(POLL_INTERVAL)
-
         except Exception as e:
             print('have an exception')
             print((traceback.format_exc()))
@@ -966,7 +927,7 @@ def main():
                 except Exception:
                     pass
             time.sleep(POLL_INTERVAL)
-    # endwhile
+    # end while
 
     if not options.noLaunch:
         print('\n\n\ndone, everything is launched')
@@ -980,11 +941,10 @@ def main():
     else:
         print("\n Done!")
 
-    return
 
 def update_url_with_job_params(url, job_params):
     dict = {}
-    newurl=''
+    newurl = ''
     url_keys_values = url.split('&')
     for param_key in url_keys_values:
         param_index = param_key.find('=', 1)
@@ -1007,13 +967,14 @@ def update_url_with_job_params(url, job_params):
 
     print(dict)
     for key in dict:
-        if newurl=='':
+        if newurl == '':
             newurl = key + "=" + dict[key]
         elif dict[key].startswith(key+"="):
             newurl += '&' + dict[key]
         else:
             newurl += '&' + key + "=" + dict[key]
     return newurl
+
 
 def release_servers_cloud(options, descriptor):
     if options.serverType == AWS:
@@ -1022,12 +983,10 @@ def release_servers_cloud(options, descriptor):
         cloud_provision.gcp_terminate(descriptor)
     elif options.serverType == AZURE:
         cloud_provision.az_terminate(descriptor)
-    elif options.serverType == SERVERLESS_ONCLOUD:
-        print("SERVERLESS: nothing to release")
-    elif options.serverType == PROVISIONED_ONCLOUD:
-        print("PROVISIONED: nothing to release")
-    elif options.serverType == SERVERLESS_COLUMNAR:
-        print("COLUMNAR: nothing to release")
+    elif options.serverType == [SERVERLESS_ONCLOUD, PROVISIONED_ONCLOUD,
+                                SERVERLESS_COLUMNAR]:
+        print("Nothing to release")
+
 
 def release_servers(options, descriptor):
     if options.serverType in CLOUD_SERVER_TYPES:
@@ -1038,6 +997,7 @@ def release_servers(options, descriptor):
         print('Release URL: {} '.format(release_url))
         response, content = httplib2.Http(timeout=TIMEOUT).request(release_url, 'GET')
         print('the release response', response, content)
+
 
 if __name__ == "__main__":
     main()
