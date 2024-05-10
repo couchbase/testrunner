@@ -482,10 +482,6 @@ def main():
                                     addPoolId = "localstack"
                                     break
 
-                        jenkins_server_url = options.jenkins_server_url
-                        if 'jenkins_server_url' in data:
-                            jenkins_server_url = data['jenkins_server_url']
-
                         testsToLaunch.append({
                             'component': data['component'],
                             'subcomponent': data['subcomponent'],
@@ -505,7 +501,6 @@ def main():
                             'mode': mode,
                             'framework': framework,
                             'addPoolId': addPoolId,
-                            'target_jenkins': str(jenkins_server_url),
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -541,6 +536,8 @@ def main():
                             i['framework']])
     table_view.display("Tests to launch:")
     print('\n')
+
+    launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
 
     # this are VM/Docker dependent - or maybe not
     launchString = '/buildWithParameters?token=test_dispatcher&' + \
@@ -593,7 +590,6 @@ def main():
                 print("\n\n *** Before dispatch, checking for the servers to run a  test suite\n")
             else:
                 i = 0
-                launchStringBase = testsToLaunch[i]['target_jenkins'] + '/job/' + str(options.launch_job)
                 print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
                       "additional "
                       "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
@@ -611,8 +607,7 @@ def main():
                 descriptor = "descriptor"
                 dashboardDescriptor = "dashboardDescriptor"
                 parameters = "parameters"
-                url = launchString.format(testsToLaunch[i]['target_jenkins'],
-                                          options.version, testsToLaunch[i]['confFile'], descriptor,
+                url = launchString.format(options.version, testsToLaunch[i]['confFile'], descriptor,
                                           testsToLaunch[i]['component'], dashboardDescriptor,
                                           testsToLaunch[i]['iniFile'],
                                           urllib.parse.quote(parameters), options.os,
@@ -691,7 +686,6 @@ def main():
                 if haveTestToLaunch:
                     break
 
-            launchStringBase = testsToLaunch[i]['target_jenkins'] + '/job/' + str(options.launch_job)
             if haveTestToLaunch:
                 print("\n\n *** Dispatching job#{} of {} with {} servers "
                       "(total={}) and {} additional servers(total={}):  {}-{} with {}\n"
@@ -806,22 +800,22 @@ def main():
                         parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
                 url = launchString.format(options.version,
-                                          testsToLaunch[i]['confFile'],
-                                          descriptor,
-                                          testsToLaunch[i]['component'],
-                                          dashboardDescriptor,
-                                          testsToLaunch[i]['iniFile'],
-                                          urllib.parse.quote(parameters),
-                                          options.os,
-                                          testsToLaunch[i]['initNodes'],
-                                          testsToLaunch[i]['installParameters'],
-                                          options.branch,
-                                          testsToLaunch[i]['slave'],
-                                          urllib.parse.quote(testsToLaunch[i]['owner']),
-                                          urllib.parse.quote(
-                                              testsToLaunch[i]['mailing_list']),
-                                          testsToLaunch[i]['mode'],
-                                          testsToLaunch[i]['timeLimit'])
+                                            testsToLaunch[i]['confFile'],
+                                            descriptor,
+                                            testsToLaunch[i]['component'],
+                                            dashboardDescriptor,
+                                            testsToLaunch[i]['iniFile'],
+                                            urllib.parse.quote(parameters),
+                                            options.os,
+                                            testsToLaunch[i]['initNodes'],
+                                            testsToLaunch[i]['installParameters'],
+                                            options.branch,
+                                            testsToLaunch[i]['slave'],
+                                            urllib.parse.quote(testsToLaunch[i]['owner']),
+                                            urllib.parse.quote(
+                                                testsToLaunch[i]['mailing_list']),
+                                            testsToLaunch[i]['mode'],
+                                            testsToLaunch[i]['timeLimit'])
                 url = url + '&dispatcher_params=' + \
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})

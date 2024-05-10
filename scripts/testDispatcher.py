@@ -477,10 +477,6 @@ def main():
                                     addPoolId = "localstack"
                                     break
 
-                        jenkins_server_url = options.jenkins_server_url
-                        if 'jenkins_server_url' in data:
-                            jenkins_server_url = data['jenkins_server_url']
-
                         testsToLaunch.append({
                             'component': data['component'],
                             'subcomponent': data['subcomponent'],
@@ -500,7 +496,6 @@ def main():
                             'mode': mode,
                             'framework': framework,
                             'addPoolId': addPoolId,
-                            'target_jenkins': str(jenkins_server_url),
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -511,6 +506,7 @@ def main():
             print('exception in querying tests, possible bad record')
             print((traceback.format_exc()))
             print(data)
+
 
     total_req_servercount = 0
     total_req_addservercount = 0
@@ -531,12 +527,17 @@ def main():
                                   i['addPoolServerCount'], i['framework']))
     print('\n\n')
 
+    launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
+
+
+
+
     # this are VM/Docker dependent - or maybe not
-    launchString = '/buildWithParameters?token=test_dispatcher&' + \
-                   'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                   'iniFile={5}&parameters={6}&os={7}&initNodes={' \
-                   '8}&installParameters={9}&branch={10}&slave={' \
-                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
+    launchString =  '/buildWithParameters?token=test_dispatcher&' + \
+                        'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
+                         'iniFile={5}&parameters={6}&os={7}&initNodes={' \
+                         '8}&installParameters={9}&branch={10}&slave={' \
+                         '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
@@ -565,6 +566,7 @@ def main():
     currentExecutorParams = json.dumps(currentExecutorParams)
     print(currentExecutorParams)
     summary = []
+    servers = []
     total_jobs_count = len(testsToLaunch)
     job_index = 1
     total_servers_being_used = 0
@@ -579,7 +581,6 @@ def main():
                 print("\n\n *** Before dispatch, checking for the servers to run a  test suite\n")
             else:
                 i = 0
-                launchStringBase = testsToLaunch[i]['target_jenkins'] + '/job/' + str(options.launch_job)
                 print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
                       "additional "
                       "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
@@ -640,6 +641,7 @@ def main():
             pool_to_use = options.poolId[0]
 
             for pool_id in options.poolId:
+
                 if options.serverType in CLOUD_SERVER_TYPES:
                     haveTestToLaunch = True
                     break
@@ -676,7 +678,6 @@ def main():
                 if haveTestToLaunch:
                     break
 
-            launchStringBase = testsToLaunch[i]['target_jenkins'] + '/job/' + str(options.launch_job)
             if haveTestToLaunch:
                 print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
                         "additional "
@@ -816,25 +817,26 @@ def main():
                         parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
                 url = launchString.format(options.version,
-                                          testsToLaunch[i]['confFile'],
-                                          descriptor,
-                                          testsToLaunch[i]['component'],
-                                          dashboardDescriptor,
-                                          testsToLaunch[i]['iniFile'],
-                                          urllib.parse.quote(parameters),
-                                          options.os,
-                                          testsToLaunch[i]['initNodes'],
-                                          testsToLaunch[i]['installParameters'],
-                                          options.branch,
-                                          testsToLaunch[i]['slave'],
-                                          urllib.parse.quote(testsToLaunch[i]['owner']),
-                                          urllib.parse.quote(
-                                              testsToLaunch[i]['mailing_list']),
-                                          testsToLaunch[i]['mode'],
-                                          testsToLaunch[i]['timeLimit'])
+                                            testsToLaunch[i]['confFile'],
+                                            descriptor,
+                                            testsToLaunch[i]['component'],
+                                            dashboardDescriptor,
+                                            testsToLaunch[i]['iniFile'],
+                                            urllib.parse.quote(parameters),
+                                            options.os,
+                                            testsToLaunch[i]['initNodes'],
+                                            testsToLaunch[i]['installParameters'],
+                                            options.branch,
+                                            testsToLaunch[i]['slave'],
+                                            urllib.parse.quote(testsToLaunch[i]['owner']),
+                                            urllib.parse.quote(
+                                                testsToLaunch[i]['mailing_list']),
+                                            testsToLaunch[i]['mode'],
+                                            testsToLaunch[i]['timeLimit'])
                 url = url + '&dispatcher_params=' + \
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})
+
 
                 if options.serverType != DOCKER:
                     servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
