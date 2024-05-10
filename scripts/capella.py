@@ -1,10 +1,10 @@
 from uuid import uuid4
 import urllib3
 import sys
-from lib.capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 sys.path.extend(('.', 'lib'))
+from lib.capellaAPI.capella.dedicated.CapellaAPI import CapellaAPI
 
 
 def seed_email(email):
