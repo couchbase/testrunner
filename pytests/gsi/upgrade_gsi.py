@@ -1391,8 +1391,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                             indexes_created_post_upgrade.append(name)
                     self.log.info(f'new indexes created after upgrade {indexes_created_post_upgrade}')
                     self.validate_shard_affinity(specific_indexes=indexes_created_post_upgrade)
+                    self.post_upgrade_with_nodes_clause(indexes_after_upgrade=index_names_after_upgrade)
                 else:
                     self.validate_shard_affinity()
+                    self.post_upgrade_with_nodes_clause()
+
                 #Will uncomment the below code post MB-59107
                 # if not self.check_gsi_logs_for_shard_transfer():
                 #     raise Exception("Shard based rebalance not triggered")
@@ -1430,6 +1433,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 node_to_upgrade = node_to_downgrade = self.servers[node_position]
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_upgrade, select_queries=select_queries)
                 self.sleep(10)
+                self.post_upgrade_with_nodes_clause(node_in=node_to_upgrade)
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_downgrade, select_queries=select_queries, downgrade=True)
                 self.create_index_in_batches(num_batches=1, replica_count=2)
                 self.wait_until_indexes_online()
@@ -1528,6 +1532,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.log.info(f'indexes created only after upgrade {indexes_created_post_upgrade}')
                 self.log.info(f'server remianing 1 {self.servers}')
                 self.validate_shard_affinity(specific_indexes=indexes_created_post_upgrade, provisioned=False)
+                self.post_upgrade_with_nodes_clause(num_replica=1, indexes_after_upgrade=index_names_after_upgrade,
+                                                    provisioned=False)
+                self.sleep(30)
                 node_in, node_out = self.servers[0], self.servers[random.randint(self.nodes_init, len(self.servers)-1)]
                 self._install([node_in], version=self.upgrade_to, community_to_enterprise=True)
                 self.sleep(30)
@@ -1546,6 +1553,48 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future.result()
 
+
+    def post_upgrade_with_nodes_clause(self, num_replica=1, random_replica=False, indexes_after_upgrade=None, node_in=None, provisioned=True):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        if random_replica:
+            replica_count = random.randint(1, num_replica)
+        else:
+            replica_count = num_replica
+
+        create_queries = []
+
+        self.log.info("index create going to start")
+
+
+        nodes_list = random.sample(index_nodes, k=replica_count + 1)
+        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
+        for namespace in self.namespaces:
+            query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                              namespace=namespace,
+                                                              num_replica=replica_count,
+                                                              randomise_replica_count=True,
+                                                              deploy_node_info=deploy_nodes)
+            self.log.info(f"create queries are {queries}")
+            self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                 query_node=query_node)
+            create_queries.extend(queries)
+
+        self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
+        self.sleep(10)
+        self.wait_until_indexes_online()
+        if self.upgrade_mode == 'offline' or indexes_after_upgrade is not None:
+            indexes_with_node_clause = []
+            indexes_post_with_nodes_clause = self.get_all_indexes_in_the_cluster()
+            for index in indexes_post_with_nodes_clause:
+                if index not in indexes_after_upgrade:
+                    indexes_with_node_clause.append(index)
+
+            self.validate_shard_affinity(specific_indexes=indexes_with_node_clause, provisioned=provisioned)
+
+        else:
+            self.validate_shard_affinity(node_in=node_in, provisioned=provisioned)
 
     def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True):
         select_queries = set()
@@ -1743,7 +1792,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 node_to_upgrade = None
                 for node in nodes:
                     node_rest = RestConnection(node)
-                    if node_rest.get_major_version() != self.upgrade_to.split("-")[0][:3]:
+                    if node_rest.get_complete_version() != self.upgrade_to.split("-")[0][:5]:
                         node_to_upgrade = node
                         break
                 if node_to_upgrade is None:
