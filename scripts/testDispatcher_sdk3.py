@@ -452,6 +452,11 @@ def main():
                         else:
                             framework = 'testrunner'
 
+                        if 'jenkins_server_url' in data:
+                            jenkins_server_url = data['jenkins_server_url']
+                        else:
+                            jenkins_server_url = options.jenkins_server_url
+
                         if not repo_pulled:
                             if options.branch != "master":
                                 try:
@@ -501,6 +506,7 @@ def main():
                             'mode': mode,
                             'framework': framework,
                             'addPoolId': addPoolId,
+                            'target_jenkins': str(jenkins_server_url),
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -537,8 +543,6 @@ def main():
     table_view.display("Tests to launch:")
     print('\n')
 
-    launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
-
     # this are VM/Docker dependent - or maybe not
     launchString = '/buildWithParameters?token=test_dispatcher&' + \
                    'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
@@ -548,7 +552,7 @@ def main():
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
-            "rerun_params" : rerun_params})
+            "rerun_params": rerun_params})
     launchString = launchString + '&retries=' + options.retries
     if options.include_tests:
         launchString = launchString + '&include_tests='+urllib.parse.quote(options.include_tests.replace("'", " ").strip())
@@ -620,6 +624,8 @@ def main():
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": currentExecutorParams})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
+                launchStringBase = testsToLaunch[i]['target_jenkins'] \
+                    + '/job/' + str(options.launch_job)
                 launchStringBaseF = launchStringBase
                 if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
@@ -762,7 +768,6 @@ def main():
                 else:
                     servers, internal_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
                                             how_many=how_many, os_version=options.os, pool_id=pool_to_use)
-                    how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
                 if options.serverType != DOCKER:
                     # sometimes there could be a race, before a dispatcher process acquires vms,
@@ -780,7 +785,6 @@ def main():
                     how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     addPoolId = testsToLaunch[i]['addPoolId']
                     addl_servers, _ = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
-                    how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                     if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
                         print(
                             "Received additional servers count does not match the expected "
@@ -791,7 +795,7 @@ def main():
                 # and send the request to the test executor
 
                 # figure out the parameters, there are test suite specific, and added at dispatch time
-                if  runTimeTestRunnerParameters is None:
+                if runTimeTestRunnerParameters is None:
                     parameters = testsToLaunch[i]['parameters']
                 else:
                     if testsToLaunch[i]['parameters'] == 'None':
@@ -841,10 +845,12 @@ def main():
                 if len(unreachable_servers) > 0:
                     print("The following VM(s) are unreachable for ssh connection:")
                     for s in unreachable_servers:
-                        response, content = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
+                        _, _ = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
                         print(s)
 
                 # optional add [-docker] [-Jenkins extension]
+                launchStringBase = testsToLaunch[i]['target_jenkins'] \
+                                   + '/job/' + str(options.launch_job)
                 launchStringBaseF = launchStringBase
                 if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
