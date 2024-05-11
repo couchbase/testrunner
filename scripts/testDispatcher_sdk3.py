@@ -947,7 +947,7 @@ def main():
         except Exception as e:
             print('have an exception')
             print((traceback.format_exc()))
-            if descriptor:
+            if 'descriptor' in locals():
                 try:
                     print('Releasing servers for {} ...'.format(descriptor))
                     release_servers(options, descriptor)
