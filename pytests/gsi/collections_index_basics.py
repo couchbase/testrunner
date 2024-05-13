@@ -16,6 +16,7 @@ from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection
 from membase.api.capella_rest_client import RestConnection as RestConnectionCapella
+from .random_query_generator import RandomQueryGenerator
 class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def setUp(self):
         super(CollectionsIndexBasics, self).setUp()
@@ -36,6 +37,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
+        self.num_rqg_queries = self.input.param("num_rqg_queries", 45)
+        self.rqg_debug_logs = self.input.param("rqg_debug_logs", False)
+        self.rqg = RandomQueryGenerator(self.username, self.password, debug=self.rqg_debug_logs)
         if not self.capella_run and 'community' not in self.cb_version:
             self._create_server_groups()
             self.cb_version = float(self.cb_version.split('-')[0][0:3])
@@ -103,7 +107,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         pre_load_idx_pri, pre_load_idx_gsi = self.prepare_collection_for_indexing(indexes_before_load=True)
         collection_namespace = self.namespaces[0]
 
-        query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
+        query_gen = QueryDefinition(index_name='idx', index_fields=['age', 'firstName', 'city'])
         indx_gen = QueryDefinition(index_name='meta_idx', index_fields=['meta().expiration'])
         primary_gen = QueryDefinition(index_name='#primary')
         try:
@@ -116,6 +120,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
             self.sleep(5)
+
+            self.rqg.random_query_generator(create_query=query_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build), node=self.n1ql_node.ip, dataset="person", num_queries=self.num_rqg_queries)
 
             query = indx_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
@@ -247,8 +253,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection)
         collection_namespace = self.namespaces[0]
         primary_gen = QueryDefinition(index_name='#primary')
-        query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
-        query_gen_copy = QueryDefinition(index_name='idx_copy', index_fields=['age'])
+        query_gen = QueryDefinition(index_name='idx', index_fields=['age', 'firstName', 'city'])
+        query_gen_copy = QueryDefinition(index_name='idx_copy', index_fields=['age', 'firstName', 'city'])
         # preparing index
         try:
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
@@ -272,6 +278,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = query_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online(defer_build=self.defer_build)
+            self.rqg.random_query_generator(create_query=query_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build), node=self.n1ql_node.ip, dataset="person",
+                                            num_queries=self.num_rqg_queries)
 
             query = query_gen_copy.generate_index_create_query(namespace=collection_namespace,
                                                                defer_build=self.defer_build)
@@ -280,6 +288,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = query_gen_copy.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
                 self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            self.rqg.random_query_generator(create_query=query_gen_copy.generate_index_create_query(namespace=collection_namespace,
+                                                               defer_build=self.defer_build), node=self.n1ql_node.ip, dataset="person", num_queries=self.num_rqg_queries)
+            self.sleep(5)
 
             # Running query against GSI index idx and idx_copy
             query = f'select count(*) from {collection_namespace} where age is not null;'
@@ -307,7 +319,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         # index creation with num replica
-        index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
+        index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'firstName', 'city'])
         try:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           num_replica=1)
@@ -317,6 +329,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             self.sleep(10)
+            self.rqg.random_query_generator(create_query=index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          num_replica=1), node=self.n1ql_node.ip, dataset="person",
+                                            num_queries=self.num_rqg_queries)
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
             result = self.run_cbq_query(query=query)['results'][0]['$1']
@@ -344,6 +359,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             self.sleep(5)
+
+            self.rqg.random_query_generator(create_query=index_gen.generate_index_create_query(namespace=collection_namespace,
+                                                          deploy_node_info=replica_nodes, defer_build=self.defer_build), node=self.n1ql_node.ip, dataset="person",
+                                            num_queries=self.num_rqg_queries)
 
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
@@ -458,12 +477,17 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
             # Creating Partitioned index
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
+
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             self.sleep(60)
+
+            self.rqg.random_query_generator(create_query=index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build), node=self.n1ql_node.ip, dataset="employee",
+                                            num_queries=self.num_rqg_queries)
+            self.sleep(5)
 
             # Validating index partition
             index_metadata = self.rest.get_indexer_metadata()['status']
@@ -479,10 +503,12 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=query)['results'][0]['$1']
             self.assertNotEqual(result, 0)
 
+
             query = f'explain {query}'
             result = self.run_cbq_query(query=query)['results']
             self.assertEqual(result[0]['plan']['~children'][0]['index'], 'arr_index',
                              f"index arr_index is not used. Index used is {result[0]['plan']['~children'][0]['index']}")
+
             # Dropping the indexer
             query = index_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
@@ -496,6 +522,11 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online(defer_build=self.defer_build)
             self.sleep(60)
+
+            self.rqg.random_query_generator(create_query=index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          index_where_clause="test_rate > 5"), node=self.n1ql_node.ip, dataset="employee",
+                                            num_queries=self.num_rqg_queries)
+            self.sleep(5)
 
             # Validating index partition
             index_metadata = self.rest.get_indexer_metadata()['status']
@@ -516,6 +547,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=query)['results']
             self.assertEqual(result[0]['plan']['~children'][0]['index'], 'arr_index',
                              f"index arr_index is not used. Index used is {result[0]['plan']['~children'][0]['index']}")
+            self.sleep(5)
             # Dropping the indexer
             query = index_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
@@ -546,6 +578,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.wait_until_indexes_online()
             self.sleep(10)
 
+
             # Creating Partial index
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
                                                           index_where_clause="join_yr > 2010")
@@ -555,6 +588,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             self.sleep(10)
+            self.rqg.random_query_generator(create_query=index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          index_where_clause="join_yr > 2010"), node=self.n1ql_node.ip, dataset="employee",
+                                            num_queries=self.num_rqg_queries)
+            self.sleep(5)
 
             query = f"select count(*) from {collection_namespace} where join_mo > 8 and join_day > 15 and" \
                     f" join_yr > 2010"
@@ -584,7 +621,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         scope_prefix = 'test_scope'
         collection_namespaces = []
         arr_index = 'arr_index'
-        index_gen = QueryDefinition(index_name=arr_index, index_fields=['age'])
+        index_gen = QueryDefinition(index_name=arr_index, index_fields=['age', 'firstName', 'city'])
         for item in range(num_combo):
             scope = f"{scope_prefix}_{item}"
             collection = f"{collection_prefix}_{item}"
@@ -597,6 +634,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = index_gen.generate_index_create_query(namespace=col_namespace)
             self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
+            self.sleep(10)
+            self.rqg.random_query_generator(create_query=query, node=self.n1ql_node.ip, dataset="person",
+                                            num_queries=self.num_rqg_queries)
+            self.sleep(5)
 
         for col_namespace in collection_namespaces:
             _, keyspace = col_namespace.split(':')
@@ -637,6 +678,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = index_gen.generate_index_create_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
                 self.wait_until_indexes_online()
+                self.sleep(10)
+                self.rqg.random_query_generator(create_query=query, node=self.n1ql_node.ip, dataset="person",
+                                                num_queries=self.num_rqg_queries)
+                self.sleep(5)
 
                 # running a query that would use above index
                 query = f"Select count(*) from {col_namespace} where age > 40"
@@ -674,6 +719,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 query = index_gen.generate_index_create_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
                 self.wait_until_indexes_online()
+                self.sleep(10)
+                self.rqg.random_query_generator(create_query=query, node=self.n1ql_node.ip, dataset="person",
+                                                num_queries=self.num_rqg_queries)
+                self.sleep(5)
 
                 # running a query that would use above index
                 query = f"Select count(*) from {col_namespace} where age > 40"
