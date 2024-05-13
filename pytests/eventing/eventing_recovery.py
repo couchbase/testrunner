@@ -1264,7 +1264,7 @@ class EventingRecovery(EventingBaseTest):
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         if len(nodes_out_list)<2:
             self.fail("Need two or more eventing nodes")
-        body = self.create_save_function_body(self.function_name, self.handler_code, dcp_stream_boundary="from_now")
+        body = self.create_save_function_body(self.function_name,self.handler_code)
         # load some data
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
@@ -1276,10 +1276,6 @@ class EventingRecovery(EventingBaseTest):
             self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
         else:
             self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out_list)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
         for node in nodes_out_list:
             self.stop_server(node,True)
         self.log.info("Couchbase stopped on all eventing nodes")
