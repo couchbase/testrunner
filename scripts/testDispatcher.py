@@ -348,7 +348,7 @@ def main():
                 suiteString, componentString)
 
         elif options.subcomponent_regex is None \
-                or options.subcomponent_regex is "None":
+                or options.subcomponent_regex == "None":
             # have a subcomponent, assume only 1 component
 
             splitSubcomponents = options.subcomponent.split(',')
