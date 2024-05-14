@@ -1,10 +1,7 @@
 import copy
 import json
-<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
-=======
 import logging
 import os
->>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
 import random
 import sys
 import threading
@@ -33,19 +30,12 @@ class VectorSearch(FTSBaseTest):
         self.max_threads = 1000
         self.count = 0
         self.store_in_xattr = self.input.param("store_in_xattr", False)
-<<<<<<< HEAD   (1003ac index correction)
-=======
         self.encode_base64_vector = self.input.param("encode_base64_vector", False)
-<<<<<<< HEAD   (188dcf fixed field name in vector search)
->>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
-        if self.store_in_xattr:
-=======
         if self.store_in_xattr and self.encode_base64_vector:
             self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
                           "knn": [{"field": "_$xattrs.vector_encoded", "k": self.k,
                                    "vector_base64": ""}]}
         elif self.store_in_xattr:
->>>>>>> CHANGE (89a601 base64 debugging {loader})
             self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
                           "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
                                    "vector": []}]}
@@ -95,8 +85,6 @@ class VectorSearch(FTSBaseTest):
                                 "log_level",
                                 None)))
 
-<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
-=======
     def get_host_ip(self):
         ip = None
 
@@ -111,9 +99,6 @@ class VectorSearch(FTSBaseTest):
         self.log.info("Host_ip = %s" % ip)
         return ip
 
-<<<<<<< HEAD   (1003ac index correction)
->>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
-=======
     def floats_to_little_endian_bytes(self, floats):
         byte_array = bytearray()
         for num in floats:
@@ -127,7 +112,6 @@ class VectorSearch(FTSBaseTest):
         base64_string = base64.b64encode(byte_array).decode('ascii')
         return base64_string
 
->>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
     def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
         common_elements = set(listA) & set(listB)
 
@@ -152,26 +136,9 @@ class VectorSearch(FTSBaseTest):
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
             faiss_doc_ids = [i for i in ann[0]]
-<<<<<<< HEAD   (394dfe base64 debugging {loader})
-<<<<<<< HEAD   (1003ac index correction)
+
             fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
-=======
-            if self.index_mismatch_flag:
-                try:
-                    fts_doc_ids = [matches[i]['fields']['sno'] for i in range(self.k)]
-                except:
-                    fts_doc_ids = [-1 for i in range(self.k)]
-            else:
-                try:
-                    fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
-                except:
-                    fts_doc_ids = [-1 for i in range(self.k)]
->>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
-=======
-            
-            fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
-                
->>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
+
             self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
             self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
 
@@ -278,15 +245,14 @@ class VectorSearch(FTSBaseTest):
         hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
                                                                 explain=self.query['explain'], return_raw_hits=True,
                                                                 fields=self.query['fields'])
-        
-        
+
         if hits == 0:
             hits = -1
 
         self.log.info("FTS Hits for Search query: %s" % hits)
         # compare fts and n1ql results if required
         if self.run_n1ql_search_function:
-            if n1ql_hits == hits:#
+            if n1ql_hits == hits:  #
                 self.log.info(
                     f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
             else:
@@ -297,28 +263,8 @@ class VectorSearch(FTSBaseTest):
         if validate_fts_with_faiss:
             query_vector = vector
             fts_matches = []
-<<<<<<< HEAD   (394dfe base64 debugging {loader})
-<<<<<<< HEAD   (1003ac index correction)
             for i in range(self.k):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
-=======
-            if self.index_mismatch_flag:
-                for i in range(self.k):
-                    if hits == -1:
-                        fts_matches.append(-1)
-                    else:
-                        fts_matches.append(matches[i]['fields']['sno'])
-            else:
-                for i in range(self.k):
-                    if hits == -1:
-                        fts_matches.append(-1)
-                    else:
-                        fts_matches.append(matches[i]['fields']['sno'] - 1)
->>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
-=======
-            for i in range(self.k):
-                fts_matches.append(matches[i]['fields']['sno'] - 1)
->>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
 
             faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
@@ -336,30 +282,9 @@ class VectorSearch(FTSBaseTest):
         if neighbours is not None:
             query_vector = vector
             fts_matches = []
-<<<<<<< HEAD   (1003ac index correction)
+
             for i in range(self.k):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
-=======
-
-<<<<<<< HEAD   (394dfe base64 debugging {loader})
-            if self.index_mismatch_flag:
-                for i in range(self.k):
-                    if hits == -1:
-                        fts_matches.append(-1)
-                    else:
-                        fts_matches.append(matches[i]['fields']['sno'])
-            else:
-                for i in range(self.k):
-                    if hits == -1:
-                        fts_matches.append(-1)
-                    else:
-                        fts_matches.append(matches[i]['fields']['sno'] - 1)
->>>>>>> CHANGE (85ef1d added support for base64 encoding in vector search)
-=======
-            for i in range(self.k):
-                fts_matches.append(matches[i]['fields']['sno'] - 1)
-
->>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
 
             if perform_faiss_validation:
                 faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
@@ -396,9 +321,13 @@ class VectorSearch(FTSBaseTest):
         status, index_def = index_obj.get_index_defn()
         index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties']['vector_data']['fields'][0]['similarity']
+            updated_similarity = \
+            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                'vector_data']['fields'][0]['similarity']
         else:
-            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type]['fields'][0]['similarity']
+            updated_similarity = \
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type]['fields'][
+                0]['similarity']
 
         self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
                                                               "Expected: {}, Actual: {}".format(new_similarity,
@@ -409,11 +338,13 @@ class VectorSearch(FTSBaseTest):
             status, index_def = index_obj.get_index_defn()
             index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
-                    'vector_data'][
-                    'fields'][0]['dims']
+            updated_dimension = \
+            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                'vector_data'][
+                'fields'][0]['dims']
         else:
-            updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+            updated_dimension = \
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
                 'fields'][0]['dims']
 
         self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
@@ -453,8 +384,6 @@ class VectorSearch(FTSBaseTest):
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
-
-
 
         all_stats = []
         bad_indexes = []
@@ -526,7 +455,8 @@ class VectorSearch(FTSBaseTest):
 
         if status:
             index_definition = index_def["indexDef"]
-            store_value = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+            store_value = \
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
                 'fields'][0]['store']
             if store_value:
                 self.fail("Index got created with store value of vector field set to True")
@@ -1322,8 +1252,6 @@ class VectorSearch(FTSBaseTest):
                         "Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                         format(n1ql_hits, hits, update_doc_no))
 
-<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
-=======
     def test_vector_search_update_doc_dimension(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         per_to_resize = eval(TestInputSingleton.input.param("per_to_resize", "[]"))
@@ -1437,7 +1365,6 @@ class VectorSearch(FTSBaseTest):
             if perform_faiss_validation:
                 self.delete_faiss_index_files(faiss_index)
 
->>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
     def test_vector_search_different_dimensions(self):
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1453,10 +1380,10 @@ class VectorSearch(FTSBaseTest):
                                                 dims_to_resize=dims_to_resize)
 
         indexes = []
-        for index, dim in enumerate(dims_to_resize):
+        for i, dim in enumerate(dims_to_resize):
             vector_fields = {"dims": dim, "similarity": self.similarity}
 
-            index_name = "i{}".format(index)
+            index_name = "i{}".format(i)
             idx = [(index_name, "b1.s1.c1")]
             index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                          field_type=self.vector_field_type,
@@ -1471,7 +1398,8 @@ class VectorSearch(FTSBaseTest):
                 index_obj = index[0]['index_obj']
                 index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], dimension=dim)
 
-        self.sleep(120, "Wait before running queries")
+        self.wait_for_indexing_complete()
+        self.sleep(60, "Wait before running queries")
 
         for idx, index in enumerate(indexes):
             index['dataset'] = bucketvsdataset['bucket_name']

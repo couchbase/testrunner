@@ -18,6 +18,7 @@ import random
 import subprocess
 import string
 import boto3
+
 try:
     import docker
 except ImportError:
@@ -1136,10 +1137,14 @@ class FTSIndex:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'] = {}
         if self.store_in_xattr and xattr:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'] = {}
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['enabled'] = True
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['dynamic'] = True
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['properties'] = {}
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['properties'][
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'enabled'] = True
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'dynamic'] = True
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'properties'] = {}
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'properties'][
                 fields.pop()] = field_maps.pop()
         else:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][
@@ -1365,7 +1370,8 @@ class FTSIndex:
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name][
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][
+                field_name][
                 'fields'][0]['dims'] = new
         else:
             self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
@@ -1384,7 +1390,8 @@ class FTSIndex:
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name][
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][
+                field_name][
                 'fields'][0]['similarity'] = new
         else:
             self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
@@ -2632,7 +2639,7 @@ class CouchbaseCluster:
                         collections = scope["collections"]
                         for collection in collections:
                             result = self.create_collection_using_rest(bucket=bucket["name"], scope=scope["name"],
-                                                             collection=collection["name"])
+                                                                       collection=collection["name"])
                             if not result:
                                 return False, f"Collection {collection['name']} creation is failed."
         except Exception as err:
@@ -5497,7 +5504,7 @@ class FTSBaseTest(unittest.TestCase):
 
         return knn_combination_queries
 
-    def generate_random_geoshape_queries(self,index,num_queries=1,sort=False):
+    def generate_random_geoshape_queries(self, index, num_queries=1, sort=False):
         gen_queries = 0
         if self.query_shape != "":
             while gen_queries < num_queries:
@@ -6515,9 +6522,8 @@ class FTSBaseTest(unittest.TestCase):
 
         return container_name
 
-
     def load_vector_data(self, containers, dataset, use_cbimport=True, percentages_to_resize=[], dims_to_resize=[],
-                         iterations=1):
+                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1'):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
@@ -6533,11 +6539,14 @@ class FTSBaseTest(unittest.TestCase):
                                       use_cbimport=use_cbimport,
                                       dims_for_resize=dims_to_resize,
                                       percentages_to_resize=percentages_to_resize,
-                                      iterations=iterations)
+                                      iterations=iterations,
+                                      update=update,
+                                      faiss_indexes=faiss_indexes,
+                                      faiss_index_node=faiss_index_node)
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
-                    
+
                     if self.store_in_xattr:
                         container_name = self.generate_random_container_name()
                         self.docker_containers.append(container_name)
@@ -6547,9 +6556,10 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 0, ei, self.encode_base64_vector, percentages_to_resize, dims_to_resize)
+                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              self.encode_base64_vector, percentages_to_resize, dims_to_resize)
                         govl.load_data(container_name)
-                        
+
                     if self.encode_base64_vector:
                         print("self.encode_base64_vector", self.encode_base64_vector)
                         container_name = self.generate_random_container_name()
@@ -6652,3 +6662,23 @@ class FTSBaseTest(unittest.TestCase):
             # faiss.write_index(faiss_index, file_path)
 
         return faiss_index
+
+    def get_faiss_index_from_file(self, faiss_index_name):
+        import faiss
+        import numpy as np
+
+        INDEX_FILE = "/tmp/" + faiss_index_name + ".index"
+
+        faiss_index = faiss.read_index(INDEX_FILE)
+
+        return faiss_index
+
+    def delete_faiss_index_files(self, faiss_index_name):
+        INDEX_FILE = "/tmp/" + faiss_index_name + ".index"
+
+        if os.path.exists(INDEX_FILE):
+            self.log.info(f"File '{INDEX_FILE}' exists. Deleting...")
+            os.remove(INDEX_FILE)
+            self.log.info(f"File '{INDEX_FILE}' has been deleted.")
+        else:
+            self.log.info(f"File '{INDEX_FILE}' does not exist.")

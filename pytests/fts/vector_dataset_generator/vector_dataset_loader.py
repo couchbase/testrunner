@@ -1,12 +1,4 @@
-<<<<<<< HEAD   (394dfe base64 debugging {loader})
-<<<<<<< HEAD   (188dcf fixed field name in vector search)
-=======
 
->>>>>>> CHANGE (89a601 base64 debugging {loader})
-=======
-
-
->>>>>>> CHANGE (a0baa7 Resolved index mismatch issue within loader.)
 try:
     import docker
 except ImportError:
@@ -17,11 +9,7 @@ class VectorLoader:
 
     def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False,
                  create_bucket_struct=False, use_cbimport=False, dims_for_resize=[], percentages_to_resize=[],
-<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
-                 iterations=1):
-=======
                  iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1'):
->>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
 
         self.node = node
         self.username = username
@@ -40,6 +28,11 @@ class VectorLoader:
         self.docker_client = docker.from_env()
         self.percentages_to_resize = percentages_to_resize
         self.dims_for_resize = dims_for_resize
+        self.update = update
+        if self.update:
+            self.use_cbimport = False
+        self.faiss_indexes = faiss_indexes
+        self.faiss_index_node = faiss_index_node
 
     def load_data(self, container_name=None):
         try:
@@ -51,30 +44,19 @@ class VectorLoader:
                                 f"-iter {self.iterations}"
 
             if len(self.percentages_to_resize) > 0:
-<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
-                if len(self.percentages_to_resize) != len(self.dims_for_resize):
-                    raise ValueError("percentages and dims lists must have the same length")
-
-=======
->>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
                 total_percentage = 0
                 for per in self.percentages_to_resize:
                     total_percentage += per
 
                 if total_percentage > 1:
-                    raise ValueError("Total percentage of docs to update should be less than 1")
+                    raise ValueError("Total percentage of docs to update should be less than 1.")
 
                 per_arg = "-per"
                 for per in self.percentages_to_resize:
                     per_arg += " " + str(per)
 
-                dims_arg = "-dims"
-                for dim in self.dims_for_resize:
-                    dims_arg += " " + str(dim)
+                docker_run_params += " " + per_arg
 
-<<<<<<< HEAD   (79eed5 Added new test suite for XDCR mobile convergence)
-                docker_run_params += " " + per_arg + " " + dims_arg
-=======
                 if len(self.dims_for_resize) > 0:
                     dims_arg = "-dims"
                     for dim in self.dims_for_resize:
@@ -93,7 +75,6 @@ class VectorLoader:
                     docker_run_params += " " + faiss_index_arg
 
                     docker_run_params += " -fn" + " " + self.faiss_index_node
->>>>>>> CHANGE (a9efd2 Added support for xattr feature in vector search)
 
                 print("docker run params: {}".format(docker_run_params))
 
