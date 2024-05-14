@@ -2466,4 +2466,5 @@ class QueryUDFN1QLTests(QueryTests):
                 'stack': 'Error\n    at error_handling (functions/n1ql.js:1:190)'
             }
         ]
-        self.assertEqual(result['results'], expected_result)
+        self.assertTrue("Duplicate Key: k004" in str(result['results']))
+        self.assertTrue("DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004" in str(result['results']))

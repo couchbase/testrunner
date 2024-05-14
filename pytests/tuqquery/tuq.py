@@ -991,14 +991,6 @@ class QueryTests(BaseTestCase):
                                     i['indexes']['using']) for i in query_response['results']]
             else:
                 field_list = list(fields_set)
-                i = 0
-                for field in field_list:
-                    temp_list = list(field)
-                    if "INCLUDE MISSING" in temp_list[0]:
-                        temp_list[0] = temp_list[0].replace("INCLUDE MISSING", "MISSING")
-                        new_tuple = (temp_list[0], temp_list[1])
-                        field_list[i] = new_tuple
-                    i += 1
                 desired_index = (index_name, bucket_name, frozenset([field for field in field_list]), status, using)
                 current_indexes = [(i['indexes']['name'],
                                     i['indexes']['keyspace_id'],

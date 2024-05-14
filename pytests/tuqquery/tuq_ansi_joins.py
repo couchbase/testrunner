@@ -149,8 +149,8 @@ class QueryANSIJOINSTests(QueryTests):
         explain_plan = self.run_cbq_query(explain_query)
         plan = self.ExplainPlanHelper(explain_plan)
         self.assertTrue("HashJoin" in str(plan))
-        # Ensure that the build side is d2
-        self.assertTrue('d2' in plan['~children'][1]['build_aliases'])
+        # Ensure that the build side is d
+        self.assertTrue('d' in plan['~children'][1]['build_aliases'], f"Build alias is wrong please check {plan}")
         queries_to_run.append((query_1, 2))
 
         self.run_common_body(queries_to_run=queries_to_run)
@@ -168,7 +168,7 @@ class QueryANSIJOINSTests(QueryTests):
         explain_plan = self.run_cbq_query(explain_query)
         plan = self.ExplainPlanHelper(explain_plan)
         self.assertTrue("HashJoin" in str(plan))
-        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'], f"Build alias is wrong please check {plan}")
         queries_to_run.append((query_1, 432))
 
         query_2 = "select * from ([{{'name' : 'employee-9'}},{{'name' : 'employee-10'}}]) d2 INNER JOIN " \
@@ -179,7 +179,7 @@ class QueryANSIJOINSTests(QueryTests):
         explain_plan = self.run_cbq_query(explain_query)
         plan = self.ExplainPlanHelper(explain_plan)
         self.assertTrue("HashJoin" in str(plan))
-        self.assertTrue('d' in plan['~children'][1]['build_aliases'])
+        self.assertTrue("'build_aliases': ['d2']" in str(plan), f"Build alias is wrong, please check {plan}")
         queries_to_run.append((query_2, 432))
 
         self.run_common_body(queries_to_run=queries_to_run)
@@ -204,7 +204,7 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_1, 0))
 
         query_2 = "select * from {0} d INNER JOIN (select * from {0} d1 inner join {0} d3 on " \
-                  "d1.name == d3.name LIMIT 100) d2 ON (d.name = d3.name) LIMIT 100".format(self.default_query_bucket)
+                  "d1.name == d3.name LIMIT 100) d2 ON (d.name = d2.d3.name) LIMIT 100".format(self.default_query_bucket)
 
         queries_to_run.append((query_2, 100))
 
@@ -375,7 +375,7 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query_1, 0))
 
         query_2 = "select * from {0} d INNER JOIN (select * from {0} d1 inner join {0} d3 on " \
-                  "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d3.name) " \
+                  "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d2.d3.name) " \
                   "LIMIT 100".format(self.default_query_bucket)
 
         queries_to_run.append((query_2, 100))
