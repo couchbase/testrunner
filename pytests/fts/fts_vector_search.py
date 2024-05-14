@@ -528,7 +528,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
                 thread = threading.Thread(target=self.run_vector_query,
-                                          kwargs={'query': self.query, 'index': index['index_obj'],
+                                          kwargs={'index': index['index_obj'],
                                                   })
                 thread.start()
 
@@ -656,7 +656,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
                 thread = threading.Thread(target=self.run_vector_query,
-                                          kwargs={'query': self.query, 'index': index['index_obj']
+                                          kwargs={'index': index['index_obj']
                                                   })
                 thread.start()
 
