@@ -1370,12 +1370,15 @@ class FTSIndex:
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
+<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
             self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][
                 field_name][
                 'fields'][0]['dims'] = new
+=======
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name]['fields'][0]['dims'] = new
+>>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
         else:
-            self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
-                'fields'][0]['dims'] = new
+            self.index_definition['params']['mapping']['types'][type]['properties'][field_name]['fields'][0]['dims'] = new
         self.index_definition['uuid'] = self.get_uuid()
         try:
             self.update()

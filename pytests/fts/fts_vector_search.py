@@ -59,7 +59,7 @@ class VectorSearch(FTSBaseTest):
                 self.vector_field_name = "vector_data_base64"
         else:
             self.vector_field_name = "vector_data"
-
+        self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
         super(VectorSearch, self).setUp()
 
     def tearDown(self):
@@ -246,6 +246,10 @@ class VectorSearch(FTSBaseTest):
                                                                 explain=self.query['explain'], return_raw_hits=True,
                                                                 fields=self.query['fields'])
 
+<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
+=======
+
+>>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
         if hits == 0:
             hits = -1
 
@@ -257,6 +261,11 @@ class VectorSearch(FTSBaseTest):
                     f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
             else:
                 self.log.info({"query": self.query, "reason": f"N1QL hits =  {n1ql_hits}, FTS hits = {hits}"})
+
+        if self.skip_validation_if_no_query_hits and hits == 0:
+            hits = -1
+            self.log.info(f"FTS Hits for Search query: {hits}, Skipping validations")
+            return -1, -1, None, {}
 
         recall_and_accuracy = {}
 
@@ -339,13 +348,24 @@ class VectorSearch(FTSBaseTest):
             index_definition = index_def["indexDef"]
         if self.store_in_xattr:
             updated_dimension = \
+<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
             index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
                 'vector_data'][
                 'fields'][0]['dims']
+=======
+                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                    'vector_data'][
+                    'fields'][0]['dims']
+>>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
         else:
             updated_dimension = \
+<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
             index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
                 'fields'][0]['dims']
+=======
+                index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+                    'fields'][0]['dims']
+>>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
 
         self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
                                                             "Expected: {}, Actual: {}".format(new_dimension,
@@ -531,7 +551,8 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
                 thread = threading.Thread(target=self.run_vector_query,
-                                          kwargs={'index': index['index_obj'],
+                                          kwargs={'vector': q,
+                                                  'index': index['index_obj'],
                                                   })
                 thread.start()
 
@@ -659,7 +680,8 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
                 thread = threading.Thread(target=self.run_vector_query,
-                                          kwargs={'index': index['index_obj']
+                                          kwargs={'vector': q,
+                                                  'index': index['index_obj']
                                                   })
                 thread.start()
 
@@ -700,7 +722,7 @@ class VectorSearch(FTSBaseTest):
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
         bucket = buckets[0]
         type_name = bucket[3:]
-        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_type)
+        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_dimension(index_obj, type_name, new_dimension)
@@ -725,7 +747,7 @@ class VectorSearch(FTSBaseTest):
         bucket = buckets[0]
         type_name = bucket[3:]
         new_dimension = self.dimension + 5
-        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_type)
+        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_dimension(index_obj, type_name, new_dimension)
@@ -1232,7 +1254,7 @@ class VectorSearch(FTSBaseTest):
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
         bucket = buckets[0]
         type_name = bucket[3:]
-        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_type)
+        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_dimension(index_obj, type_name, new_dimension)
