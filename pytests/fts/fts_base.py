@@ -1365,11 +1365,9 @@ class FTSIndex:
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name][
-                'fields'][0]['dims'] = new
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name]['fields'][0]['dims'] = new
         else:
-            self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
-                'fields'][0]['dims'] = new
+            self.index_definition['params']['mapping']['types'][type]['properties'][field_name]['fields'][0]['dims'] = new
         self.index_definition['uuid'] = self.get_uuid()
         try:
             self.update()
@@ -6540,7 +6538,7 @@ class FTSBaseTest(unittest.TestCase):
                     container_name = self.generate_random_container_name()
                     self.docker_containers.append(container_name)
                     vl.load_data(container_name)
-                    
+
                     if self.store_in_xattr:
                         container_name = self.generate_random_container_name()
                         self.docker_containers.append(container_name)
@@ -6552,7 +6550,7 @@ class FTSBaseTest(unittest.TestCase):
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
                                               collection_name, dataset[0], True, "vect", 0, ei, self.encode_base64_vector, percentages_to_resize, dims_to_resize)
                         govl.load_data(container_name)
-                        
+
                     if self.encode_base64_vector:
                         print("self.encode_base64_vector", self.encode_base64_vector)
                         container_name = self.generate_random_container_name()

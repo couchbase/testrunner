@@ -59,7 +59,7 @@ class VectorSearch(FTSBaseTest):
                 self.vector_field_name = "vector_data_base64"
         else:
             self.vector_field_name = "vector_data"
-
+        self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
         super(VectorSearch, self).setUp()
 
     def tearDown(self):
@@ -136,9 +136,9 @@ class VectorSearch(FTSBaseTest):
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
             faiss_doc_ids = [i for i in ann[0]]
-            
+
             fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
-                
+
             self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
             self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
 
@@ -245,8 +245,8 @@ class VectorSearch(FTSBaseTest):
         hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
                                                                 explain=self.query['explain'], return_raw_hits=True,
                                                                 fields=self.query['fields'])
-        
-        
+
+
         if hits == 0:
             hits = -1
 
@@ -258,6 +258,11 @@ class VectorSearch(FTSBaseTest):
                     f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
             else:
                 self.log.info({"query": self.query, "reason": f"N1QL hits =  {n1ql_hits}, FTS hits = {hits}"})
+
+        if self.skip_validation_if_no_query_hits and hits == 0:
+            hits = -1
+            self.log.info(f"FTS Hits for Search query: {hits}, Skipping validations")
+            return -1, -1, None, {}
 
         recall_and_accuracy = {}
 
@@ -336,12 +341,14 @@ class VectorSearch(FTSBaseTest):
             status, index_def = index_obj.get_index_defn()
             index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+            updated_dimension = \
+                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
                     'vector_data'][
                     'fields'][0]['dims']
         else:
-            updated_dimension = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
-                'fields'][0]['dims']
+            updated_dimension = \
+                index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+                    'fields'][0]['dims']
 
         self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
                                                             "Expected: {}, Actual: {}".format(new_dimension,
@@ -528,7 +535,8 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
                 thread = threading.Thread(target=self.run_vector_query,
-                                          kwargs={'index': index['index_obj'],
+                                          kwargs={'vector': q,
+                                                  'index': index['index_obj'],
                                                   })
                 thread.start()
 
@@ -656,7 +664,8 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
                 thread = threading.Thread(target=self.run_vector_query,
-                                          kwargs={'index': index['index_obj']
+                                          kwargs={'vector': q,
+                                                  'index': index['index_obj']
                                                   })
                 thread.start()
 
@@ -697,7 +706,7 @@ class VectorSearch(FTSBaseTest):
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
         bucket = buckets[0]
         type_name = bucket[3:]
-        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_type)
+        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_dimension(index_obj, type_name, new_dimension)
@@ -722,7 +731,7 @@ class VectorSearch(FTSBaseTest):
         bucket = buckets[0]
         type_name = bucket[3:]
         new_dimension = self.dimension + 5
-        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_type)
+        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_dimension(index_obj, type_name, new_dimension)
@@ -1229,7 +1238,7 @@ class VectorSearch(FTSBaseTest):
         buckets = eval(TestInputSingleton.input.param("kv", "{}"))
         bucket = buckets[0]
         type_name = bucket[3:]
-        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_type)
+        index_obj.update_vector_index_dim(new_dimension, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_dimension(index_obj, type_name, new_dimension)
