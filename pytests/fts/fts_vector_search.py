@@ -435,7 +435,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info(f"faiss_accuracy: {faiss_accuracy}")
                 self.log.info(f"faiss_recall: {faiss_recall}")
 
-            index_stats['name'] = index['index_obj'].name
+            index_stats['index_name'] = index['index_obj'].name
             index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
             index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
 
