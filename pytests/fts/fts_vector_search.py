@@ -246,7 +246,6 @@ class VectorSearch(FTSBaseTest):
                                                                 explain=self.query['explain'], return_raw_hits=True,
                                                                 fields=self.query['fields'])
 
-
         if hits == 0:
             hits = -1
 
@@ -292,7 +291,6 @@ class VectorSearch(FTSBaseTest):
             for i in range(self.k):
                 fts_matches.append(matches[i]['fields']['sno'] - 1)
 
-
             if perform_faiss_validation:
                 faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
@@ -328,9 +326,13 @@ class VectorSearch(FTSBaseTest):
         status, index_def = index_obj.get_index_defn()
         index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties']['vector_data']['fields'][0]['similarity']
+            updated_similarity = \
+            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                'vector_data']['fields'][0]['similarity']
         else:
-            updated_similarity = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type]['fields'][0]['similarity']
+            updated_similarity = \
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type]['fields'][
+                0]['similarity']
 
         self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
                                                               "Expected: {}, Actual: {}".format(new_similarity,
@@ -388,8 +390,6 @@ class VectorSearch(FTSBaseTest):
         index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
         index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
 
-
-
         all_stats = []
         bad_indexes = []
         for index in indexes:
@@ -420,7 +420,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info(f"faiss_accuracy: {faiss_accuracy}")
                 self.log.info(f"faiss_recall: {faiss_recall}")
 
-            index_stats['name'] = index['index_obj'].name
+            index_stats['index_name'] = index['index_obj'].name
             index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
             index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
 
@@ -460,7 +460,8 @@ class VectorSearch(FTSBaseTest):
 
         if status:
             index_definition = index_def["indexDef"]
-            store_value = index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+            store_value = \
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
                 'fields'][0]['store']
             if store_value:
                 self.fail("Index got created with store value of vector field set to True")
