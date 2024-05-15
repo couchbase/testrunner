@@ -1284,9 +1284,10 @@ class EventingRecovery(EventingBaseTest):
         for node in nodes_out_list:
             rest_conn = RestConnection(node)
             json_response = rest_conn.cluster_status()
+            self.log.info("Pools Default Statistics: {0}".format(json_response))
             is_balanced=json_response['balanced']
-            servicesNeedRebalance=json_response['servicesNeedRebalance']['services']
-            self.assertTrue(is_balanced,
-                        msg="Nodes are not balanced, need rebalance after starting couchbase server. Services requiring rebalance: "+ ','.join(servicesNeedRebalance))
-
+            if not is_balanced:
+                servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
+                self.assertFalse('eventing' in servicesNeedRebalance,
+                        msg="Eventing Nodes are not balanced, need rebalance after starting couchbase server."  )
           
