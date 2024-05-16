@@ -246,10 +246,6 @@ class VectorSearch(FTSBaseTest):
                                                                 explain=self.query['explain'], return_raw_hits=True,
                                                                 fields=self.query['fields'])
 
-<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
-=======
-
->>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
         if hits == 0:
             hits = -1
 
@@ -348,24 +344,13 @@ class VectorSearch(FTSBaseTest):
             index_definition = index_def["indexDef"]
         if self.store_in_xattr:
             updated_dimension = \
-<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
-            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
-                'vector_data'][
-                'fields'][0]['dims']
-=======
                 index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
                     'vector_data'][
                     'fields'][0]['dims']
->>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
         else:
             updated_dimension = \
-<<<<<<< HEAD   (7fb644 CBQE-8184 : Adding a conf file for vector search os certify)
-            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
-                'fields'][0]['dims']
-=======
                 index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
                     'fields'][0]['dims']
->>>>>>> CHANGE (279e18 fixed test vector search regressions Change-Id: I101f936e784)
 
         self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
                                                             "Expected: {}, Actual: {}".format(new_dimension,
