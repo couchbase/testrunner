@@ -220,12 +220,15 @@ class VectorSearch(FTSBaseTest):
 
     def run_vector_query(self, vector, index, neighbours=None,
                          validate_result_count=True, perform_faiss_validation=False,
-                         validate_fts_with_faiss=False):
+                         validate_fts_with_faiss=False,load_invalid_base64_string = False):
         if isinstance(self.query, str):
             self.query = json.loads(self.query)
 
         if self.encode_base64_vector:
-            self.query['knn'][0]['vector_base64'] = self.get_base64_encoding(vector)
+            if load_invalid_base64_string :
+                self.query['knn'][0]['vector_base64'] = "Q291Y2hiYXNlIGlzIGdyZWF0ICB3c2txY21lcW9qZmNlcXcgZGZlIGpkbmZldyBmamUgd2Zob3VyIGwgZnJ3OWZmIGdmaXJ3ZnJ3IGhmaXJoIGZlcmYgcmYgZXJpamZoZXJ1OWdlcmcgb2ogZmhlcm9hZiBmZTlmdSBnZXJnIHJlOWd1cmZyZWZlcmcgaHJlIG8gZXJmZ2Vyb2ZyZmdvdQ=="
+            else:
+                self.query['knn'][0]['vector_base64'] = self.get_base64_encoding(vector)
         else:
             self.query['knn'][0]['vector'] = vector
         self.log.info("*" * 20 + f" Running Query # {self.count} - on index {index.name} " + "*" * 20)
@@ -327,11 +330,10 @@ class VectorSearch(FTSBaseTest):
         index_definition = index_def["indexDef"]
         if self.store_in_xattr:
             updated_similarity = \
-            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
-                'vector_data']['fields'][0]['similarity']
+            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][self.vector_field_name]['fields'][0]['similarity']
         else:
             updated_similarity = \
-            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type]['fields'][
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name]['fields'][
                 0]['similarity']
 
         self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
@@ -345,11 +347,11 @@ class VectorSearch(FTSBaseTest):
         if self.store_in_xattr:
             updated_dimension = \
                 index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
-                    'vector_data'][
+                    self.vector_field_name][
                     'fields'][0]['dims']
         else:
             updated_dimension = \
-                index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+                index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name][
                     'fields'][0]['dims']
 
         self.assertTrue(updated_dimension == new_dimension, "Dimensions for vector index are not updated, " \
@@ -461,7 +463,7 @@ class VectorSearch(FTSBaseTest):
         if status:
             index_definition = index_def["indexDef"]
             store_value = \
-            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_type][
+            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name][
                 'fields'][0]['store']
             if store_value:
                 self.fail("Index got created with store value of vector field set to True")
@@ -567,6 +569,7 @@ class VectorSearch(FTSBaseTest):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
 
+        invalid_base64_string = "Q291Y2hiYXNlIGlzIGdyZWF0ICB3c2txY21lcW9qZmNlcXcgZGZlIGpkbmZldyBmamUgd2Zob3VyIGwgZnJ3OWZmIGdmaXJ3ZnJ3IGhmaXJoIGZlcmYgcmYgZXJpamZoZXJ1OWdlcmcgb2ogZmhlcm9hZiBmZTlmdSBnZXJnIHJlOWd1cmZyZWZlcmcgaHJlIG8gZXJmZ2Vyb2ZyZmdvdQ=="
         # generate invalid vectors
         invalid_vecs = []
         for i in range(4):
@@ -580,9 +583,11 @@ class VectorSearch(FTSBaseTest):
             else:
                 x = x[:50]
             invalid_vecs.append(x)
+
         invalid_vecs.append(set(self.generate_random_float_array(self.dimension)))
-        query = f"INSERT INTO `b1`.`s1`.`c1` (KEY, VALUE) VALUES ('vector_data', {invalid_vecs[0]}), ('vector_data', {invalid_vecs[1]}), ('vector_data', {invalid_vecs[2]}), ('vector_data', {invalid_vecs[3]}), ('vector_data', {invalid_vecs[4]});"
-        self._cb_cluster.run_n1ql_query(query)
+        invalid_vecs.append(invalid_base64_string)
+
+        self.load_vector_data(containers, dataset=self.vector_dataset,dim = self.dimension,load_invalid_vecs = True, invalid_vecs_dims =self.dimension)
         indexes = []
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
@@ -622,7 +627,7 @@ class VectorSearch(FTSBaseTest):
                 self.run_n1ql_search_function = False
                 n1ql_hits, hits, matches, _ = self.run_vector_query(vector=iv, index=index['index_obj'],
 
-                                                                    validate_result_count=False)
+                                                                    validate_result_count=False,load_invalid_base64_string=True)
                 if n1ql_hits != -1 and hits != -1:
                     self.fail(f"Able to index invalid vector - {iv}")
                 self.run_n1ql_search_function = True
@@ -788,7 +793,7 @@ class VectorSearch(FTSBaseTest):
         bucket = buckets[0]
         type_name = bucket[3:]
         new_similarity = "dot_product"
-        index_obj.update_vector_index_similarity(new_similarity, type_name, self.vector_field_type)
+        index_obj.update_vector_index_similarity(new_similarity, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_similarity(index_obj, type_name, new_similarity)
@@ -832,7 +837,7 @@ class VectorSearch(FTSBaseTest):
         bucket = buckets[0]
         type_name = bucket[3:]
         new_similarity = "l2_norm"
-        index_obj.update_vector_index_similarity(new_similarity, type_name, self.vector_field_type)
+        index_obj.update_vector_index_similarity(new_similarity, type_name, self.vector_field_name)
         self.wait_for_indexing_complete()
         self.sleep(30, "Wait for index to get updated")
         self.validate_similarity(index_obj, type_name, new_similarity)

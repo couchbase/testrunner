@@ -4531,8 +4531,13 @@ class RestConnection(object):
         if 'query_context' in query_params and query_params['query_context']:
             log.info(f"Running Query with query_context: {query_params['query_context']}")
         content = None
+
         try:
             status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
+            if header:
+                if int(header['status']) >= 500:
+                    log.debug(f"DEBUG :: status : {status},content: {content}, header: {header} \n")
+
         except Exception as ex:
             print("\nException error: ", str(ex))
             print("\napi: ", api)
