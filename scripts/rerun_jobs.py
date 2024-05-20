@@ -22,7 +22,7 @@ import merge_reports
 import shutil
 import zipfile
 
-host = '172.23.97.153'
+host = 'greenboard.sc.couchbase.com'
 bucket_name = 'rerun_jobs'
 AWS_LINK = 'http://cb-logs-qe.s3-website-us-west-2.amazonaws.com'
 TIMEOUT = 60

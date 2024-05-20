@@ -19,7 +19,7 @@ import get_jenkins_params as jenkins_api
 import traceback
 
 
-host = '172.23.97.153'
+host = 'greenboard.sc.couchbase.com'
 bucket_name = 'rerun_jobs'
 
 
