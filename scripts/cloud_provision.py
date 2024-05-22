@@ -146,13 +146,17 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                     "sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config",
                     "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config",
                     "sudo rm -rf /etc/ssh/sshd_config.d/*",
+                    "sudo systemctl restart sshd.service",
                     "sudo service sshd restart",
+                    "sudo systemctl restart sshd",
+                    "sudo systemctl restart ssh",
                     "sudo shutdown -P +800"]
 
         for command in commands:
             stdin, stdout, stderr = ssh.exec_command(command)
-            if stdout.channel.recv_exit_status() != 0:
-                break
+            exit_status = stdout.channel.recv_exit_status()
+            if exit_status != 0:
+                print("The command {} failed and gave a exit staus {}".format(command, exit_status))
 
         if check_root_login(host):
             print("root login to host {} successful.".format(host))
@@ -213,40 +217,44 @@ AWS_AMI_MAP = {
             "x86_64": "ami-037d1d9dfa436c7c6"
         },
         "ubuntu20": {
-            "x86_64" : "ami-09168ff916a2e8ed3",
+            "x86_64": "ami-09168ff916a2e8ed3",
             "aarch64": "ami-0d70a59d7191a8079"
         },
         "ubuntu22": {
-            "x86_64" : "ami-09c0393bac9d9b6ed",
+            "x86_64": "ami-09c0393bac9d9b6ed",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
-        "ubuntu22nonroot" : {
-            "x86_64" : "ami-09c0393bac9d9b6ed",
+        "ubuntu22nonroot": {
+            "x86_64": "ami-09c0393bac9d9b6ed",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
-        "oel8" : {
-            "x86_64" : "ami-0b5aaeac901e41860"
+        "ubuntu24": {
+            "x86_64": "ami-067e3046d94c5f19f",
+            "aarch64": "ami-04bc6fa168e83352d"
         },
-        "rhel8" : {
-            "x86_64" : "ami-07f5ef252bd61130b"
+        "oel8": {
+            "x86_64": "ami-0b5aaeac901e41860"
         },
-        "rhel9" : {
-            "x86_64" : "ami-0859d5937ea3b22db"
+        "rhel8": {
+            "x86_64": "ami-07f5ef252bd61130b"
         },
-        "suse15" : {
-            "x86_64" : "ami-059c3ca86322facbe"
+        "rhel9": {
+            "x86_64": "ami-0859d5937ea3b22db"
+        },
+        "suse15": {
+            "x86_64": "ami-059c3ca86322facbe"
         },
         "suse12": {
-            "x86_64" : "ami-023f4e041769c362b"
+            "x86_64": "ami-023f4e041769c362b"
         },
         "alma9": {
-            "x86_64" : "ami-0ec549aa7bb28072e"
+            "x86_64": "ami-0ec549aa7bb28072e"
         },
         "centos7": {
-            "x86_64" : "ami-0599a9ff8a4ca809c"
+            "x86_64": "ami-0599a9ff8a4ca809c"
         },
         "rocky9": {
-            "x86_64" : "ami-0441302605ba7fdb4"
+            "x86_64": "ami-0441302605ba7fdb4"
         }
     },
     # The following AMIs are faulty and not working
@@ -263,6 +271,7 @@ AWS_OS_USERNAME_MAP = {
     "al2023": "ec2-user",
     "ubuntu22": "ubuntu",
     "ubuntu22nonroot": "ubuntu",
+    "ubuntu24": "ubuntu",
     "oel8": "ec2-user",
     "rhel8": "ec2-user",
     "rhel9": "ec2-user",
