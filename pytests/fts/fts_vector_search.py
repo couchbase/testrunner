@@ -16,7 +16,9 @@ from .fts_base import FTSBaseTest
 
 
 class VectorSearch(FTSBaseTest):
+
     def setUp(self):
+        super(VectorSearch, self).setUp()
         self.input = TestInputSingleton.input
         self.log = logger.Logger.get_logger()
         self.__init_logger()
@@ -60,16 +62,24 @@ class VectorSearch(FTSBaseTest):
         else:
             self.vector_field_name = "vector_data"
         self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
-        super(VectorSearch, self).setUp()
+        self.validate_memory_leak = self.input.param("validate_memory_leak", False)
+        if self.validate_memory_leak:
+            self.memory_validator_thread = threading.Thread(target=self.start_memory_stat_collector_and_validator, kwargs={
+                'fts_nodes': self._cb_cluster.get_fts_nodes()
+            })
+            self.memory_validator_thread.start()
 
     def tearDown(self):
+        if self.validate_memory_leak:
+            self.stop_memory_collector_and_validator = True
+            self.memory_validator_thread.join()
         super(VectorSearch, self).tearDown()
 
     def suite_setUp(self):
         pass
 
     def suite_tearDown(self):
-        super(VectorSearch, self).suite_tearDown()
+        pass
 
     def __init_logger(self):
         if self.input.param("log_level", None):
@@ -220,13 +230,14 @@ class VectorSearch(FTSBaseTest):
 
     def run_vector_query(self, vector, index, neighbours=None,
                          validate_result_count=True, perform_faiss_validation=False,
-                         validate_fts_with_faiss=False,load_invalid_base64_string = False):
+                         validate_fts_with_faiss=False, load_invalid_base64_string=False):
         if isinstance(self.query, str):
             self.query = json.loads(self.query)
 
         if self.encode_base64_vector:
-            if load_invalid_base64_string :
-                self.query['knn'][0]['vector_base64'] = "Q291Y2hiYXNlIGlzIGdyZWF0ICB3c2txY21lcW9qZmNlcXcgZGZlIGpkbmZldyBmamUgd2Zob3VyIGwgZnJ3OWZmIGdmaXJ3ZnJ3IGhmaXJoIGZlcmYgcmYgZXJpamZoZXJ1OWdlcmcgb2ogZmhlcm9hZiBmZTlmdSBnZXJnIHJlOWd1cmZyZWZlcmcgaHJlIG8gZXJmZ2Vyb2ZyZmdvdQ=="
+            if load_invalid_base64_string:
+                self.query['knn'][0][
+                    'vector_base64'] = "Q291Y2hiYXNlIGlzIGdyZWF0ICB3c2txY21lcW9qZmNlcXcgZGZlIGpkbmZldyBmamUgd2Zob3VyIGwgZnJ3OWZmIGdmaXJ3ZnJ3IGhmaXJoIGZlcmYgcmYgZXJpamZoZXJ1OWdlcmcgb2ogZmhlcm9hZiBmZTlmdSBnZXJnIHJlOWd1cmZyZWZlcmcgaHJlIG8gZXJmZ2Vyb2ZyZmdvdQ=="
             else:
                 self.query['knn'][0]['vector_base64'] = self.get_base64_encoding(vector)
         else:
@@ -330,11 +341,13 @@ class VectorSearch(FTSBaseTest):
         index_definition = index_def["indexDef"]
         if self.store_in_xattr:
             updated_similarity = \
-            index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][self.vector_field_name]['fields'][0]['similarity']
+                index_definition['params']['mapping']['types'][type_name]['properties']['_$xattrs']['properties'][
+                    self.vector_field_name]['fields'][0]['similarity']
         else:
             updated_similarity = \
-            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name]['fields'][
-                0]['similarity']
+                index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name][
+                    'fields'][
+                    0]['similarity']
 
         self.assertTrue(updated_similarity == new_similarity, "Similarity for vector index is not updated, " \
                                                               "Expected: {}, Actual: {}".format(new_similarity,
@@ -463,8 +476,8 @@ class VectorSearch(FTSBaseTest):
         if status:
             index_definition = index_def["indexDef"]
             store_value = \
-            index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name][
-                'fields'][0]['store']
+                index_definition['params']['mapping']['types'][type_name]['properties'][self.vector_field_name][
+                    'fields'][0]['store']
             if store_value:
                 self.fail("Index got created with store value of vector field set to True")
 
@@ -587,7 +600,8 @@ class VectorSearch(FTSBaseTest):
         invalid_vecs.append(set(self.generate_random_float_array(self.dimension)))
         invalid_vecs.append(invalid_base64_string)
 
-        self.load_vector_data(containers, dataset=self.vector_dataset,dim = self.dimension,load_invalid_vecs = True, invalid_vecs_dims =self.dimension)
+        self.load_vector_data(containers, dataset=self.vector_dataset, load_invalid_vecs=True,
+                              invalid_vecs_dims=self.dimension)
         indexes = []
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
@@ -627,7 +641,8 @@ class VectorSearch(FTSBaseTest):
                 self.run_n1ql_search_function = False
                 n1ql_hits, hits, matches, _ = self.run_vector_query(vector=iv, index=index['index_obj'],
 
-                                                                    validate_result_count=False,load_invalid_base64_string=True)
+                                                                    validate_result_count=False,
+                                                                    load_invalid_base64_string=True)
                 if n1ql_hits != -1 and hits != -1:
                     self.fail(f"Able to index invalid vector - {iv}")
                 self.run_n1ql_search_function = True

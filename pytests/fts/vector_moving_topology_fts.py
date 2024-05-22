@@ -11,6 +11,7 @@ from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 import json
 import time
+import threading
 
 
 class VectorSearchMovingTopFTS(FTSBaseTest):
@@ -40,8 +41,17 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             if self.index_path == "/data":
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
         self.type_of_load = TestInputSingleton.input.param("type_of_load", "separate")
+        self.validate_memory_leak = self.input.param("validate_memory_leak", False)
+        if self.validate_memory_leak:
+            self.memory_validator_thread = threading.Thread(target=self.start_memory_stat_collector_and_validator, kwargs={
+                'fts_nodes': self._cb_cluster.get_fts_nodes()
+            })
+            self.memory_validator_thread.start()
 
     def tearDown(self):
+        if self.validate_memory_leak:
+            self.stop_memory_collector_and_validator = True
+            self.memory_validator_thread.join()
         super(VectorSearchMovingTopFTS, self).tearDown()
         if not self.capella_run and self.index_path == "/data":
             try:
