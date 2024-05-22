@@ -2,22 +2,22 @@
 Base class for FTS/CBFT/Couchbase Full Text Search
 """
 import ast
-import os, datetime
-import unittest
-import time
 import copy
-
-from boto3 import s3
-
-import logger
-import logging
-import re
+import datetime
 import json
-import math
+import logging
+import os
 import random
-import subprocess
 import string
+import subprocess
+import time
+import unittest
+from statistics import mean
+
 import boto3
+import logger
+from prettytable import PrettyTable
+
 try:
     import docker
 except ImportError:
@@ -28,8 +28,7 @@ from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, \
-    MAC_COUCHBASE_BIN_PATH
+from testconstants import STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -49,6 +48,8 @@ from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
+import sys
+import re
 
 try:
     from lib.couchbase_helper.tuq_helper import N1QLHelper
@@ -99,7 +100,7 @@ def raise_if(cond, ex):
 def download_from_s3(source, dest):
     print("Downloading from {0}...".
           format(source))
-    import urllib.request, urllib.parse, urllib.error
+    import urllib.request, urllib.error
     urllib.request.URLopener().retrieve(
         source,
         dest)
@@ -1136,10 +1137,14 @@ class FTSIndex:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'] = {}
         if self.store_in_xattr and xattr:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'] = {}
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['enabled'] = True
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['dynamic'] = True
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['properties'] = {}
-            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs']['properties'][
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'enabled'] = True
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'dynamic'] = True
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'properties'] = {}
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties']['_$xattrs'][
+                'properties'][
                 fields.pop()] = field_maps.pop()
         else:
             self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][
@@ -1365,9 +1370,11 @@ class FTSIndex:
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name]['fields'][0]['dims'] = new
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][
+                field_name]['fields'][0]['dims'] = new
         else:
-            self.index_definition['params']['mapping']['types'][type]['properties'][field_name]['fields'][0]['dims'] = new
+            self.index_definition['params']['mapping']['types'][type]['properties'][field_name]['fields'][0][
+                'dims'] = new
         self.index_definition['uuid'] = self.get_uuid()
         try:
             self.update()
@@ -1382,7 +1389,8 @@ class FTSIndex:
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
         if self.store_in_xattr:
-            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][field_name][
+            self.index_definition['params']['mapping']['types'][type]['properties']['_$xattrs']['properties'][
+                field_name][
                 'fields'][0]['similarity'] = new
         else:
             self.index_definition['params']['mapping']['types'][type]['properties'][field_name][
@@ -2630,7 +2638,7 @@ class CouchbaseCluster:
                         collections = scope["collections"]
                         for collection in collections:
                             result = self.create_collection_using_rest(bucket=bucket["name"], scope=scope["name"],
-                                                             collection=collection["name"])
+                                                                       collection=collection["name"])
                             if not result:
                                 return False, f"Collection {collection['name']} creation is failed."
         except Exception as err:
@@ -4027,6 +4035,7 @@ class FTSBaseTest(unittest.TestCase):
                                             self.log,
                                             use_hostanames,
                                             sdk_compression=sdk_compression)
+        self.stop_memory_collector_and_validator = self._input.param("stop_memory_collector_and_validator", False)
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
@@ -5495,7 +5504,7 @@ class FTSBaseTest(unittest.TestCase):
 
         return knn_combination_queries
 
-    def generate_random_geoshape_queries(self,index,num_queries=1,sort=False):
+    def generate_random_geoshape_queries(self, index, num_queries=1, sort=False):
         gen_queries = 0
         if self.query_shape != "":
             while gen_queries < num_queries:
@@ -6513,8 +6522,8 @@ class FTSBaseTest(unittest.TestCase):
 
         return container_name
 
-
-    def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims = 128, use_cbimport=True, percentages_to_resize=[], dims_to_resize=[],
+    def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims=128, use_cbimport=True,
+                         percentages_to_resize=[], dims_to_resize=[],
                          iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1'):
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6530,22 +6539,23 @@ class FTSBaseTest(unittest.TestCase):
                         container_name = self.generate_random_container_name()
                         self.docker_containers.append(container_name)
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                collection_name, "siftsmall", self.store_in_xattr,"pp", 0, 1, self.encode_base64_vector,
-                                                load_invalid_vecs=load_invalid_vecs, invalid_vecs_dims=invalid_vecs_dims)
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, "siftsmall", self.store_in_xattr, "pp", 0, 1,
+                                              self.encode_base64_vector,
+                                              load_invalid_vecs=load_invalid_vecs, invalid_vecs_dims=invalid_vecs_dims)
                         govl.load_data(container_name)
                     else:
 
                         vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
-                                        self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                        collection_name, dataset, self.capella_run, False,
-                                        use_cbimport=use_cbimport,
-                                        dims_for_resize=dims_to_resize,
-                                        percentages_to_resize=percentages_to_resize,
-                                        iterations=iterations,
-                                        update=update,
-                                        faiss_indexes=faiss_indexes,
-                                        faiss_index_node=faiss_index_node)
+                                          self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                          collection_name, dataset, self.capella_run, False,
+                                          use_cbimport=use_cbimport,
+                                          dims_for_resize=dims_to_resize,
+                                          percentages_to_resize=percentages_to_resize,
+                                          iterations=iterations,
+                                          update=update,
+                                          faiss_indexes=faiss_indexes,
+                                          faiss_index_node=faiss_index_node)
                         container_name = self.generate_random_container_name()
                         self.docker_containers.append(container_name)
                         vl.load_data(container_name)
@@ -6558,8 +6568,9 @@ class FTSBaseTest(unittest.TestCase):
                             else:
                                 ei = 10000
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                collection_name, dataset[0], True, "vect", 0, ei, self.encode_base64_vector, percentages_to_resize, dims_to_resize)
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], True, "vect", 0, ei,
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize)
                             govl.load_data(container_name)
 
 
@@ -6571,8 +6582,9 @@ class FTSBaseTest(unittest.TestCase):
                             else:
                                 ei = 10000
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                collection_name, dataset[0], True, "vect", 0, ei, self.encode_base64_vector, percentages_to_resize, dims_to_resize)
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], True, "vect", 0, ei,
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize)
                             govl.load_data(container_name)
 
                         else:
@@ -6584,13 +6596,12 @@ class FTSBaseTest(unittest.TestCase):
                             else:
                                 ei = 10000
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                collection_name, dataset[0], False, "vect", 0, ei, True,
-                                                percentages_to_resize, dims_to_resize)
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], False, "vect", 0, ei, True,
+                                                  percentages_to_resize, dims_to_resize)
                             govl.load_data(container_name)
 
         return bucketvsdataset
-    
 
     def get_query_vectors(self, dataset_name, dimension=None):
         ds = VectorDataset(dataset_name)
@@ -6681,7 +6692,6 @@ class FTSBaseTest(unittest.TestCase):
 
     def get_faiss_index_from_file(self, faiss_index_name):
         import faiss
-        import numpy as np
 
         INDEX_FILE = "/tmp/" + faiss_index_name + ".index"
 
@@ -6698,3 +6708,59 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info(f"File '{INDEX_FILE}' has been deleted.")
         else:
             self.log.info(f"File '{INDEX_FILE}' does not exist.")
+
+    def start_memory_stat_collector_and_validator(self, fts_nodes, poll_time=5, average_interval=5, sleep_time=300):
+        rest = RestConnection(self.master)
+        table = PrettyTable()
+        table.field_names = ["Time (s)"] + [f"{node.ip}_sysproc_mem_resident" for node in fts_nodes]
+
+        sysproc_mem_resident_all = {node.ip: [] for node in fts_nodes}
+        start_time = time.time()
+
+        while not self.stop_memory_collector_and_validator:
+            current_time = int(time.time() - start_time)
+            row = [current_time]
+            for node in fts_nodes:
+                node = node.ip
+                sysproc_mem_resident_current = rest.get_nsserver_stats(node).text
+                pattern = r'sysproc_mem_resident\{proc="cbft",category="system-processes"\} (\d+)'
+                match = re.search(pattern, sysproc_mem_resident_current)
+                if match:
+                    sysproc_mem_resident_current = int(match.group(1))
+                else:
+                    sysproc_mem_resident_current = int(sys.maxsize)
+                row.append(sysproc_mem_resident_current)
+                sysproc_mem_resident_all[node].append(sysproc_mem_resident_current)
+
+            table.add_row(row)
+            time.sleep(poll_time)
+
+        print("######### MEMORY STATISTICS #########")
+        print(table)
+        print("#####################################")
+
+        for node in fts_nodes:
+            node = node.ip
+            stats = sysproc_mem_resident_all[node]
+            if len(stats) < 5:
+                self.log.info(f"Not enough data points to calculate averages for {node}.")
+                return
+
+        # Wait for sleep_time seconds for the memory to get down.
+        time.sleep(sleep_time)
+
+        for node in fts_nodes:
+            # Calculate final average (initial 5 polls)
+            initial_average = mean(sysproc_mem_resident_all[node.ip][:average_interval])
+            self.log.info(f"Initial average (first 5 polls): {initial_average:.2f} Bytes")
+
+            # Calculate final average (last 5 polls)
+            final_average = mean(sysproc_mem_resident_all[node.ip][-average_interval:])
+            self.log.info(f"Final average (last 5 polls): {final_average:.2f} Bytes")
+
+            # Validation: Check if final average is similar to initial average
+            if abs(final_average - initial_average) / initial_average < 0.1:  # within 10%
+                self.log.info("Validation: The final average is similar to the initial average.")
+            else:
+                self.fail(
+                    f"Validation: The final average {final_average} is not similar to the initial average {initial_average}. Memory isn't coming down")
