@@ -145,6 +145,7 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                     "sudo sed -i '/PermitRootLogin prohibit-password/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config",
                     "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config",
+                    "sudo rm -rf /etc/ssh/sshd_config.d/*",
                     "sudo service sshd restart",
                     "sudo shutdown -P +800"]
 
