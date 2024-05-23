@@ -587,7 +587,7 @@ class VectorSearch(FTSBaseTest):
         invalid_vecs.append(set(self.generate_random_float_array(self.dimension)))
         invalid_vecs.append(invalid_base64_string)
 
-        self.load_vector_data(containers, dataset=self.vector_dataset,dim = self.dimension,load_invalid_vecs = True, invalid_vecs_dims =self.dimension)
+        self.load_vector_data(containers, dataset=self.vector_dataset,load_invalid_vecs = True, invalid_vecs_dims =self.dimension)
         indexes = []
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]

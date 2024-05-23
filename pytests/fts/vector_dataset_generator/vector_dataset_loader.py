@@ -123,11 +123,11 @@ class GoVectorLoader:
         try:
             docker_image = "sequoiatools/govectorloader"
             if len(self.percentage_to_resize) == 0 or len(self.dimension_to_resize) == 0:
-                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr} -incorrectLoader={self.load_invalid_vecs} -externalDim={self.invalid_vecs_dims}"
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims}"
             else:
                 pr = ','.join(map(str, self.percentage_to_resize))
                 dr = ','.join(map(str, self.dimension_to_resize))
-                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -base64Flag={self.base64} -xattrFlag={self.xattr} -percentagesToResize={pr} -dimensionsForResize={dr} -incorrectLoader={self.load_invalid_vecs} -externalDim={self.invalid_vecs_dims}"
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -base64Flag={self.base64} -xattrFlag={self.xattr} -percentagesToResize={pr} -dimensionsForResize={dr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims}"
             print("docker run params: {}".format(docker_run_params))
 
             # Run the Docker pull command
