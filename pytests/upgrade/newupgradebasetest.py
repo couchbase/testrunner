@@ -1,12 +1,18 @@
 import os
 import re
 import shutil
-
 import testconstants
 import gc
 import sys, json
 import traceback
 import queue
+import struct
+import base64
+import time
+import copy
+import json
+
+
 from threading import Thread
 from basetestcase import BaseTestCase
 from mc_bin_client import MemcachedError
@@ -27,7 +33,7 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_generators import JsonGenerator
-from fts.fts_base import FTSIndex
+from fts.fts_base import FTSIndex, FTSBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from pprint import pprint
 from testconstants import CB_REPO, CB_RELEASE_BUILDS
@@ -38,15 +44,45 @@ from pytests.fts.fts_backup_restore import FTSIndexBackupClient
 from pytests.security.rbac_base import RbacBase
 from pytests.tuqquery.n1ql_callable import N1QLCallable
 
+from pytests.fts.vector_dataset_generator.vector_dataset_loader import GoVectorLoader, VectorLoader
+from pytests.fts.vector_dataset_generator.vector_dataset_generator import VectorDataset
+from lib.membase.api.exception import FTSException
+from lib.membase.api.on_prem_rest_client import RestConnection
+
 try:
     from lib.sdk_client import SDKClient
 except:
     from lib.sdk_client3 import SDKClient
 
 
+
+
 class NewUpgradeBaseTest(BaseTestCase):
     def setUp(self):
         super(NewUpgradeBaseTest, self).setUp()
+
+        self.start_version = self.input.param('initial_version', '2.5.1-1083')
+        self.vector_flag = self.input.param("vector_search_test", False)
+        self.fts_quota = self.input.param("fts_quota", 600)
+        self.passed = True
+        self.inbetween_active = False
+        self.inbetween_tests = 0
+        self.vector_queries_count = self.input.param("vector_queries_count", 5)
+        self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
+        self.k = self.input.param("k", 2)
+
+        self.upgrade_type = self.input.param("upgrade_type", "online")
+        self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                      "knn": [{"field": "vector_data", "k": self.k,
+                               "vector": []}]}
+        self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 70)
+
+        self.fts_indexes_store = None
+
+        self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
+        self.validate_memory_leak = self.input.param("validate_memory_leak", False)
+
+
         self.log.info("==============  NewUpgradeBaseTest setup has started ==============")
         self.released_versions = ["2.0.0-1976-rel", "2.0.1", "2.5.0", "2.5.1",
                                   "2.5.2", "3.0.0", "3.0.1",
@@ -215,6 +251,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.validate_system_event_logs:
             self.system_events.set_test_start_time()
         self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
+
 
     def tearDown(self):
         self.product = self.input.param('product', 'couchbase-server')
@@ -1068,6 +1105,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             return obj
 
     def create_fts_index_query_compare(self, queue=None):
+
         """
         Call before upgrade
         1. creates a default index, one per bucket
@@ -1091,6 +1129,283 @@ class NewUpgradeBaseTest(BaseTestCase):
                 queue.put(False)
         if queue is not None:
             queue.put(True)
+
+
+    def create_fts_vector_index_query_compare(self, queue=None):
+
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, servers=self.servers)
+        is_passed = True
+        RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+        for bucket in self.buckets:
+            self.fts_obj.create_default_index(
+                index_name="index_{0}".format(bucket.name),
+                bucket_name=bucket.name)
+        self.fts_obj.load_data(self.num_items)
+        self.fts_obj.wait_for_indexing_complete()
+        for index in self.fts_obj.fts_indexes:
+            self.fts_obj.run_query_and_compare(index=index, num_queries=20)
+
+        for bucket in self.buckets:
+            self.fts_obj.create_default_index(
+                index_name="index_{0}_persist".format(bucket.name),
+                bucket_name=bucket.name)
+
+        self.fts_indexes_store = self.fts_obj.fts_indexes[1]
+
+        try:
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password),xattr=True,base64Flag=True)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                  str(self.rest_settings.rest_password), xattr=True, base64Flag=False)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                  str(self.rest_settings.rest_password), xattr=False, base64Flag=False)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                  str(self.rest_settings.rest_password), xattr=False, base64Flag=True)
+
+        except Exception as e:
+            print(e)
+
+        if "7.6.0" in str(self.start_version) or "7.6.1" in str(self.start_version):
+            self.fts_obj.create_vector_index(False, False, "index_default_vector")
+            is_passed = self.fts_obj.run_vector_queries()
+
+        if not is_passed:
+            self.fail("Vector queries failed. Terminating the test")
+
+        return self.fts_obj
+
+    def error_validation(self,result):
+        possible_error_strings = [
+            "xattr fields and properties not supported in this cluster",
+            "unknown field type: 'vector_base64'",
+            "vector_base64 typed fields not supported in this cluster",
+            "field mapping contains invalid keys",
+            "vector typed fields not supported in this cluster",
+            "concurrent",
+            "4096"
+        ]
+        for i in possible_error_strings:
+            if i in result:
+                return True
+        return False
+
+    def run_inbetween_tests(self):
+        if self.inbetween_tests == 0:
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False,variable_node=self.servers[0],servers=self.servers)
+            self.inbetween_tests = 1
+            self.fts_obj.inbetween_tests = 1
+            self.fts_obj.inbetween_active = True
+
+            RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+
+            if ("7.6.0" in str(self.start_version) or "7.6.1" in str(self.start_version)) and "7.6.2" in str(self.upgrade_versions):
+
+                """
+                try to create and update the index to support vector search via base64.
+                expected case : the index update/create should fail.
+                But at the same time, the normal vector search queries should work. (without base64)
+                Pre: at the start of the tests, 2 indices are created. One to perform all these operations and
+                one to check whether we can delete an index in mixed cluster state
+                So we will perform a delete index operation on the index suffixed with delete
+                If all these conditions returns true then we proceed further.
+                """
+
+                self.log.info("Update Index phase")
+
+                try:
+                    self.log.info("updating index to support vectors in xattr")
+                    result, status_code = self.fts_obj.update_vector_index(True,False,"index_default_vector")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot update index to xattr vector index in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [updated index to xattr vector index]")
+
+                    self.log.info("updating index to support base64 in xattr")
+                    result, status_code = self.fts_obj.update_vector_index(True,True,"index_default_vector")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot update index to xattr vector base64 index in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [updated index to xattr vector base64 index]")
+
+                    self.log.info("updating index to support base64")
+                    result, status_code = self.fts_obj.update_vector_index(False, True, "index_default_vector")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot update index to vector base64 index in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [updated index to vector base64 index] ")
+
+                    self.log.info("updating index to support 4096 dimensions")
+                    result, status_code = self.fts_obj.update_vector_index(False, False, "index_default_vector",dimensions=4096)
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot update index to support 4096 dimensions in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [updated index to support 4096 dimensions in 7.6.0 mode]")
+
+                except Exception as e:
+                    self.fail(e)
+
+                self.log.info("Create Index phase")
+
+                try:
+                    self.log.info("creating index to support vectors in xattr")
+                    result, status_code = self.fts_obj.create_vector_index(True,False,"index_default_vector_new_1")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot create index to xattr vector index in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [created index to xattr vector index]")
+
+                    self.log.info("creating index to support base64 in xattr")
+                    result, status_code = self.fts_obj.create_vector_index(True, True, "index_default_vector_new_2")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot create index to xattr vector base64 index in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [create index to xattr vector base64 index]")
+
+                    self.log.info("creating index to support base64")
+                    result, status_code = self.fts_obj.create_vector_index(False, True, "index_default_vector_new_3")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot create index to base64 index in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [create index to base64 index]")
+
+                    self.log.info("creating index to support 4096 dimensions")
+                    result, status_code = self.fts_obj.create_vector_index(False, True, "index_default_vector_new_4",dimensions=4096)
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot create index to support 4096 dimensions in 7.6.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [updated index to support 4096 dimensions in 7.6.0 mode]")
+
+                except Exception as e:
+                    print(e)
+
+
+                try:
+                    self.log.info("Running vector queries")
+                    if not self.fts_obj.run_vector_queries():
+                        self.fail("Error running Vector queries. Terminating the test")
+                except Exception as e:
+                    print(e)
+
+            else:
+                try:
+                    self.log.info("Update Index phase")
+                    self.log.info("updating index to support vector search")
+                    result, status_code = self.fts_obj.update_vector_index(False, False, "index_default")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot update index to support vector search in 7.2.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [updated index to support vector search in 7.2.0 mode]")
+
+                    self.log.info("Create Index phase")
+                    self.log.info("creating index to support vector search")
+                    result, status_code = self.fts_obj.create_vector_index(False, True, "index_default_vector_1")
+
+                    if status_code != 200 and self.error_validation(result):
+                        self.log.info("SUCCESS. Cannot create index to support vector search in 7.2.0 mode")
+                    else:
+                        self.log.info(result)
+                        self.fail("FAILURE [created index to support vector search in 7.2.0 mode]")
+
+                except Exception as e:
+                    print(e)
+
+            try:
+                self.log.info("Running FTS queries")
+                self.fts_obj.run_query_and_compare(index=self.fts_indexes_store, num_queries=20)
+            except Exception as e:
+                print(e)
+
+
+            self.inbetween_active = False
+
+    def run_fts_vector_query_and_compare(self, queue=None):
+
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, variable_node=self.servers[0], servers=self.servers)
+        RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+
+        try:
+            self.log.info("Running FTS queries")
+            self.fts_obj.run_query_and_compare(index=self.fts_indexes_store, num_queries=20)
+        except Exception as e:
+            print(e)
+
+        if "7.6.2" in str(self.upgrade_versions):
+            try:
+                self.fts_obj.update_vector_index(False, False, "index_default")
+                ok1 = self.fts_obj.run_vector_queries(index_name="index_default")
+
+                self.fts_obj.update_vector_index(True, True, "index_default")
+                ok2 = self.fts_obj.run_vector_queries(True, True, "vector_encoded", "vector_base64", index_name="index_default")
+
+                self.fts_obj.update_vector_index(True, False, "index_default")
+                ok3 =self.fts_obj.run_vector_queries(True, False, "vector_data", "vector", index_name="index_default")
+
+                self.fts_obj.update_vector_index(False, True, "index_default")
+                ok4 =self.fts_obj.run_vector_queries(False, True, "vector_data_base64", "vector_base64",
+                                        index_name="index_default")
+
+                self.fts_obj.update_vector_index(True, True, "index_default_vector")
+                ok5 =self.fts_obj.run_vector_queries(True, True, "vector_encoded", "vector_base64")
+
+                self.fts_obj.update_vector_index(True, False, "index_default_vector")
+                ok6 =self.fts_obj.run_vector_queries(True, False, "vector_data", "vector")
+
+                self.fts_obj.update_vector_index(False, True, "index_default_vector")
+                ok7 =self.fts_obj.run_vector_queries(False, True, "vector_data_base64", "vector_base64")
+
+                if not (ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7):
+                    self.fail("Vector queries failed. Terminating the test")
+
+
+
+                result, status_code = self.fts_obj.create_vector_index(False,False,"index_4096_check",dimensions=4096)
+                if status_code == 200:
+                    self.log.info("Index updated to 4096 dimensions successfully")
+                else:
+                    self.fail(f"Failure. Cannot create a 4096 dimensions vector index. Result : {result}")
+
+            except Exception as e:
+                print(e)
+        else:
+            try:
+                result, status_code = self.fts_obj.create_vector_index(False, False, "index_default_vector")
+                if status_code == 200:
+                    if not self.fts_obj.run_vector_queries(index_name="index_default_vector"):
+                        self.fail("Vector queries failed. Terminating the test")
+                else:
+                    self.fail(f"Failure. Cannot create index to a vector index. Result : {result}")
+
+                result, status_code = self.fts_obj.update_vector_index(False, False, "index_default")
+                if status_code == 200:
+                    if not self.fts_obj.run_vector_queries(index_name="index_default"):
+                        self.fail("Vector queries failed. Terminating the test")
+                else:
+                    self.fail(f"Failure. Cannot update index to a vector index. Result : {result}")
+
+            except Exception as e:
+                print(e)
 
     def setup_for_test(self, queue=None):
         self.set_bleve_max_result_window()
@@ -1179,7 +1494,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         """
         try:
             if not self.fts_obj:
-                self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+                self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
             self.fts_obj.async_perform_update_delete()
             self.fts_obj.wait_for_indexing_complete()
             for index in self.fts_obj.fts_indexes:
@@ -1536,7 +1851,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
                 rest_client.create_scope(bucket=bucket_name, scope=scope_name,
-                                              params=None)
+                                         params=None)
             else:
                 cli_client.create_scope(bucket=bucket_name, scope=scope_name)
 
@@ -1570,10 +1885,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                         continue
                     if self.use_rest:
                         rest_client.create_collection(bucket=bucket_name, scope=scope,
-                                                   collection="mycollection_{0}_{1}".format(scope, x))
+                                                      collection="mycollection_{0}_{1}".format(scope, x))
                     else:
                         cli_client.create_collection(bucket=bucket_name, scope=scope,
-                                                   collection="mycollection_{0}_{1}".format(scope, x))
+                                                     collection="mycollection_{0}_{1}".format(scope, x))
         self.sleep(10, "time needs for stats up completely")
 
     def delete_collection(self, num_collection=1):
@@ -1581,16 +1896,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         for x in range(num_collection):
             if self.use_rest:
                 self.rest_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
-                                                   collection="_{0}".format(bucket_name))
+                                                collection="_{0}".format(bucket_name))
             else:
                 self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
-                                                  collection="_{0}".format(bucket_name))
+                                               collection="_{0}".format(bucket_name))
 
     def get_col_item_count(self, server=None, bucket=None, scope=None, collection=None, cluster_stats=None):
         if not server:
-            raise("Need to pass which server to get item count")
+            raise ("Need to pass which server to get item count")
         if not cluster_stats:
-            raise("Need to pass cluster stats to get item count")
+            raise ("Need to pass cluster stats to get item count")
         if not scope:
             scope = "_default"
         if not collection:
@@ -1614,10 +1929,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                 scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
                 self.rest_col.create_scope_collection(bucket_name, scope_name,
-                                                     "mycollection_{0}".format(scope_name))
+                                                      "mycollection_{0}".format(scope_name))
             else:
                 self.cli_col.create_scope_collection(bucket_name, scope_name,
-                                                    "mycollection_{0}".format(scope_name))
+                                                     "mycollection_{0}".format(scope_name))
 
     def get_bucket_scope(self, rest=None, cli=None):
         bucket_name = self.buckets[0].name
@@ -1635,7 +1950,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             scopes = cli_client.get_bucket_scopes(bucket_name)[0]
         return scopes
 
-    def get_bucket_collection(self,):
+    def get_bucket_collection(self, ):
         bucket_name = self.buckets[0].name
         collections = None
         if self.use_rest:
@@ -1707,8 +2022,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 continue
             if self.load_scope not in collection:
                 continue
-            collection_id = self.get_collections_id(self.load_scope,collection)
-            collections_id.append(self.get_collections_id(self.load_scope,collection))
+            collection_id = self.get_collections_id(self.load_scope, collection)
+            collections_id.append(self.get_collections_id(self.load_scope, collection))
 
         collections_id = list(filter(None, collections_id))
         if collections_id:
@@ -1734,13 +2049,13 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.load_collection_id = self.get_collection_load_id()
         option = " -c {0} ".format(self.load_collection_id)
         self.sleep(10)
-        self.load_collection_all_buckets(command_options=option )
+        self.load_collection_all_buckets(command_options=option)
 
     def _verify_collection_data(self):
         items_match = False
         self.sleep(10)
         upgrade_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True,
-                                                           master=self.upgrade_master_node)
+                                                         master=self.upgrade_master_node)
         items = self.stat_col.get_scope_item_count(self.buckets[0], self.load_scope,
                                                    node=upgrade_nodes)
         if int(self.num_items) == int(items):
@@ -1760,9 +2075,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                 verify_data = True
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.load(self.gens_load, flag=self.item_flag,
-                  verify_data=verify_data, batch_size=self.batch_size)
+                      verify_data=verify_data, batch_size=self.batch_size)
         rest = RestConnection(servers[0])
-        output, rq_content, header = rest.set_auto_compaction(dbFragmentThresholdPercentage=20, viewFragmntThresholdPercentage=20)
+        output, rq_content, header = rest.set_auto_compaction(dbFragmentThresholdPercentage=20,
+                                                              viewFragmntThresholdPercentage=20)
         self.assertTrue(output, "Error in set_auto_compaction... {0}".format(rq_content))
         status, content, header = rest.set_indexer_compaction(mode="full", fragmentation=20)
         self.assertTrue(status, "Error in setting Append Only Compaction... {0}".format(content))
@@ -1811,7 +2127,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         server_id = RestConnection(server).get_nodes_self().id
         ram_size = RestConnection(server).get_nodes_self().memoryQuota
         bucket_size = self._get_bucket_size(ram_size, self.bucket_size +
-                                                      num_ephemeral_bucket)
+                                            num_ephemeral_bucket)
         self.log.info("Creating ephemeral buckets")
         self.log.info("Changing the existing buckets size to accomodate new "
                       "buckets")
@@ -1860,7 +2176,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                               self.expire_time)
 
     def _test_create_single_collection_index(self):
-        self.log.info("="*20 + " _test_create_single_collection_index")
+        self.log.info("=" * 20 + " _test_create_single_collection_index")
 
         errors = []
         self._create_collections(scope="scope1", collection="collection1")
@@ -1896,7 +2212,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         return errors
 
     def _test_create_multicollection_index(self):
-        self.log.info("="*20 + " _test_create_multicollection_index")
+        self.log.info("=" * 20 + " _test_create_multicollection_index")
         errors = []
         self._create_collections(scope="scope1", collection=["collection2", "collection3", "collection4"])
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
@@ -1904,13 +2220,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         fts_callable.load_data(100)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
-                                                                  collection=["collection2", "collection3", "collection4"])
+                                                                  collection=["collection2", "collection3",
+                                                                              "collection4"])
 
         fts_idx = fts_callable.create_fts_index("idx", source_type='couchbase',
-                         source_name="default", index_type='fulltext-index',
-                         index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, collection_index=True, _type=_type, analyzer="standard",
-                                                scope="scope1", collections=["collection2", "collection3", "collection4"],
+                                                source_name="default", index_type='fulltext-index',
+                                                index_params=None, plan_params=None,
+                                                source_params=None, source_uuid=None, collection_index=True,
+                                                _type=_type, analyzer="standard",
+                                                scope="scope1",
+                                                collections=["collection2", "collection3", "collection4"],
                                                 no_check=False)
         fts_callable.wait_for_indexing_complete(300)
 
@@ -1929,7 +2248,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         return errors
 
     def _test_create_bucket_index(self):
-        self.log.info("="*20 + " _test_create_bucket_index")
+        self.log.info("=" * 20 + " _test_create_bucket_index")
         errors = []
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
         fts_callable.load_data(100)
@@ -1960,9 +2279,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         return errors
 
     def _test_scope_limit_num_fts_indexes(self):
-        self.log.info("="*20 + " _test_scope_limit_num_fts_indexes")
+        self.log.info("=" * 20 + " _test_scope_limit_num_fts_indexes")
         limit_scope = "inventory"
-        limit_value=3
+        limit_value = 3
         errors = []
         self.sample_bucket_name = "travel-sample"
         self.sample_index_name = "travel-sample-index"
@@ -1981,7 +2300,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                                           collections=self.collection)
         self.sleep(30)
         try:
-            fts_callable.create_fts_index(name=f'{self.sample_index_name}_{i+2}', source_name=self.sample_bucket_name,
+            fts_callable.create_fts_index(name=f'{self.sample_index_name}_{i + 2}', source_name=self.sample_bucket_name,
                                           collection_index=True, _type=_type, scope=limit_scope,
                                           collections=self.collection)
         except Exception as e:
@@ -1993,7 +2312,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         return errors
 
     def _test_backup_restore(self):
-        self.log.info("="*20 + " _test_backup_restore")
+        self.log.info("=" * 20 + " _test_backup_restore")
         test_errors = []
         index_definitions = {}
 
@@ -2039,11 +2358,12 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         # getting restored indexes definitions and storing them in indexes definitions dict
         for ix_name in indexes_for_backup:
-            _,restored_index_def = rest.get_fts_index_definition(ix_name)
+            _, restored_index_def = rest.get_fts_index_definition(ix_name)
             index_definitions[ix_name]['restored_def'] = restored_index_def
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
-        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=indexes_for_backup)
+        errors = self._check_indexes_definitions(index_definitions=index_definitions,
+                                                 indexes_for_backup=indexes_for_backup)
 
         #errors analysis
         if len(errors.keys()) > 0:
@@ -2085,7 +2405,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if not backup_check:
                     if ix_name not in errors.keys():
                         errors[ix_name] = []
-                    errors[ix_name].append(f"Backup fts index signature differs from original signature for index {ix_name}.")
+                    errors[ix_name].append(
+                        f"Backup fts index signature differs from original signature for index {ix_name}.")
 
         #check restored json
         for ix_name in index_definitions.keys():
@@ -2096,7 +2417,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if not restore_check:
                     if ix_name not in errors.keys():
                         errors[ix_name] = []
-                    errors[ix_name].append(f"Restored fts index signature differs from original signature for index {ix_name}")
+                    errors[ix_name].append(
+                        f"Restored fts index signature differs from original signature for index {ix_name}")
 
         return errors
 
@@ -2119,7 +2441,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             return False
         return True
 
-
     def create_users(self, users=None):
         """
         :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
@@ -2141,9 +2462,11 @@ class NewUpgradeBaseTest(BaseTestCase):
         RbacBase().add_user_role(roles, rest, 'builtin')
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
-                          %(user_role['roles'], user_role['id']))
+                          % (user_role['roles'], user_role['id']))
 
-    def create_index_with_credentials(self, username, password, index_name, bucket_name="default", collection_index=False, _type=None, analyzer="standard", scope=None, collections=None):
+    def create_index_with_credentials(self, username, password, index_name, bucket_name="default",
+                                      collection_index=False, _type=None, analyzer="standard", scope=None,
+                                      collections=None):
         from pytests.fts.fts_base import CouchbaseCluster
         cb_cluster = CouchbaseCluster(name="C1", nodes=self.servers, log=self.log)
 
@@ -2222,24 +2545,24 @@ class NewUpgradeBaseTest(BaseTestCase):
         index.index_definition['uuid'] = index.get_uuid()
         index.update(rest)
         _, defn = index.get_index_defn()
-        self.log.info(f"New definition: {defn['indexDef']}" )
+        self.log.info(f"New definition: {defn['indexDef']}")
 
     def query_index_with_credentials(self, index, username, password):
         sample_query = {"match": "Safiya Morgan", "field": "name"}
 
         rest = self.get_rest_handle_for_credentials(username, password)
-        self.log.info("Now querying with credentials %s:%s" %(username,
-                                                              password))
+        self.log.info("Now querying with credentials %s:%s" % (username,
+                                                               password))
         hits, _, _, _ = rest.run_fts_query(index.name,
                                            {"query": sample_query})
-        self.log.info("Hits: %s" %hits)
+        self.log.info("Hits: %s" % hits)
 
     def delete_index_with_credentials(self, index, username, password):
         rest = self.get_rest_handle_for_credentials(username, password)
         index.delete(rest)
 
     def _test_rbac_admin(self):
-        self.log.info("="*20 + " _test_rbac_admin")
+        self.log.info("=" * 20 + " _test_rbac_admin")
         errors = []
         self._create_collections(scope="scope1", collection="collection1")
 
@@ -2251,20 +2574,19 @@ class NewUpgradeBaseTest(BaseTestCase):
         users_list = self.get_user_list(inp_users=users)
         roles_list = self.get_user_role_list(inp_users=users)
 
-
         self.create_users(users=users_list)
         self.assign_role(roles=roles_list)
 
         for user in users_list:
             try:
-                collection_index=True
-                _type='scope1.collection1'
-                index_scope='scope1'
-                index_collections='collection1'
+                collection_index = True
+                _type = 'scope1.collection1'
+                index_scope = 'scope1'
+                index_collections = 'collection1'
                 index = self.create_index_with_credentials(
-                    username= user['id'],
+                    username=user['id'],
                     password=user['password'],
-                    index_name="%s_%s_idx" %(user['id'], "default"),
+                    index_name="%s_%s_idx" % (user['id'], "default"),
                     bucket_name="default",
                     collection_index=collection_index,
                     _type=_type,
@@ -2273,17 +2595,17 @@ class NewUpgradeBaseTest(BaseTestCase):
                 )
 
                 alias = self.create_alias_with_credentials(
-                    username= user['id'],
+                    username=user['id'],
                     password=user['password'],
                     target_indexes=[index],
-                    alias_name="%s_%s_alias" %(user['id'], "default"))
+                    alias_name="%s_%s_alias" % (user['id'], "default"))
                 try:
                     self.edit_index_with_credentials(
                         index=index,
                         username=user['id'],
                         password=user['password'])
                     self.sleep(60, "Waiting for index rebuild after "
-                                    "update...")
+                                   "update...")
                     self.query_index_with_credentials(
                         index=index,
                         username=user['id'],
@@ -2298,18 +2620,19 @@ class NewUpgradeBaseTest(BaseTestCase):
                         password=user['password'])
                 except Exception as e:
                     errors.append("The user failed to edit/query/delete fts "
-                                "index %s : %s" % (user['id'], e))
+                                  "index %s : %s" % (user['id'], e))
             except Exception as e:
-                    errors.append("The user failed to create fts index/alias"
-                                  " %s : %s" % (user['id'], e))
+                errors.append("The user failed to create fts index/alias"
+                              " %s : %s" % (user['id'], e))
             return errors
 
     def _test_rbac_searcher(self):
-        self.log.info("="*20 + " _test_rbac_searcher")
+        self.log.info("=" * 20 + " _test_rbac_searcher")
         errors = []
         self._create_collections(scope="scope1", collection="collection2")
 
-        users = [{"id": "johnDoe", "name": "Jonathan Downing", "password": "password1", "roles": "fts_searcher[default:scope1]"}]
+        users = [{"id": "johnDoe", "name": "Jonathan Downing", "password": "password1",
+                  "roles": "fts_searcher[default:scope1]"}]
         users_list = self.get_user_list(inp_users=users)
         roles_list = self.get_user_role_list(inp_users=users)
 
@@ -2318,14 +2641,14 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         for user in users_list:
             try:
-                collection_index=True
-                _type='scope1.collection2'
-                index_scope='scope1'
-                index_collections='collection2'
+                collection_index = True
+                _type = 'scope1.collection2'
+                index_scope = 'scope1'
+                index_collections = 'collection2'
                 self.create_index_with_credentials(
-                    username= user['id'],
+                    username=user['id'],
                     password=user['password'],
-                    index_name="%s_%s_idx" %(user['id'], "default"),
+                    index_name="%s_%s_idx" % (user['id'], "default"),
                     bucket_name="default",
                     collection_index=collection_index,
                     _type=_type,
@@ -2333,17 +2656,17 @@ class NewUpgradeBaseTest(BaseTestCase):
                     collections=index_collections
                 )
             except Exception as e:
-                self.log.info("Expected exception: %s" %e)
+                self.log.info("Expected exception: %s" % e)
             else:
                 errors.append("An fts_searcher is able to create index!")
 
             # creating an alias
             try:
                 self.log.info("Creating index as administrator...")
-                collection_index=True
-                _type='scope1.collection2'
-                index_scope='scope1'
-                index_collections='collection2'
+                collection_index = True
+                _type = 'scope1.collection2'
+                index_scope = 'scope1'
+                index_collections = 'collection2'
                 index = self.create_index_with_credentials(
                     username='Administrator',
                     password='password',
@@ -2367,7 +2690,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         return errors
 
     def _test_flex_pushdown_in(self):
-        self.log.info("="*20 + " _test_flex_pushdown_in")
+        self.log.info("=" * 20 + " _test_flex_pushdown_in")
         errors = []
         self._create_collections(scope="scope1", collection="collection10")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
@@ -2380,7 +2703,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',
                                                 index_params=None, plan_params=None,
-                                                source_params=None, source_uuid=None, collection_index=True, _type=_type,
+                                                source_params=None, source_uuid=None, collection_index=True,
+                                                _type=_type,
                                                 analyzer="keyword", scope="scope1", collections=["collection10"],
                                                 no_check=False)
         fts_idx.index_definition['params']['mapping']['default_analyzer'] = "keyword"
@@ -2390,10 +2714,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         fts_callable.wait_for_indexing_complete(100)
 
         _data_types = {
-            "text":  {"field": "type", "vals": ["emp", "emp1"]},
+            "text": {"field": "type", "vals": ["emp", "emp1"]},
             "number": {"field": "mutated", "vals": [0, 1]},
             "boolean": {"field": "is_manager", "vals": [True, False]},
-            "datetime":    {"field": "join_date", "vals": ["1970-07-02T11:50:10", "1951-11-16T13:37:10"]}
+            "datetime": {"field": "join_date", "vals": ["1970-07-02T11:50:10", "1951-11-16T13:37:10"]}
         }
         index_configuration = "FTS"
         custom_mapping = False
@@ -2401,9 +2725,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         tests = []
         for _key in _data_types.keys():
-            flex_query = "select count(*) from `default`.scope1.collection10 USE INDEX({0}) where {1} in {2}".\
+            flex_query = "select count(*) from `default`.scope1.collection10 USE INDEX({0}) where {1} in {2}". \
                 format(index_hint, _data_types[_key]['field'], _data_types[_key]['vals'])
-            gsi_query = "select count(*) from `default`.scope1.collection10 where {1} in {2}".\
+            gsi_query = "select count(*) from `default`.scope1.collection10 where {1} in {2}". \
                 format(index_hint, _data_types[_key]['field'], _data_types[_key]['vals'])
             test = {}
             test['flex_query'] = flex_query
@@ -2471,7 +2795,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 errors_found = True
                 self.log.error("The following errors are detected:\n")
                 for error in test['errors']:
-                    self.log.error("="*10)
+                    self.log.error("=" * 10)
                     self.log.error(error['error_message'])
                     self.log.error("query: " + error['query'])
                     self.log.error("indexing config: " + error['indexing_config'])
@@ -2480,13 +2804,15 @@ class NewUpgradeBaseTest(BaseTestCase):
         return errors_found
 
     def _test_flex_pushdown_like(self):
-        self.log.info("="*20 + " _test_flex_pushdown_like")
+        self.log.info("=" * 20 + " _test_flex_pushdown_like")
         errors = []
         self._create_collections(scope="scope1", collection="collection11")
-        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection11", collection_index=True)
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
+                                   collections="collection11", collection_index=True)
         fts_callable.load_data(100)
 
-        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection11")
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
+                                                                  collection="collection11")
 
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',
@@ -2505,7 +2831,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         like_types = ["left", "right", "left_right"]
         like_conditions = ["LIKE"]
         _data_types = {
-            "text":  {"field": "type", "vals": "emp"},
+            "text": {"field": "type", "vals": "emp"},
         }
         index_configuration = "FTS"
         custom_mapping = False
@@ -2516,14 +2842,14 @@ class NewUpgradeBaseTest(BaseTestCase):
             for like_type in like_types:
                 for like_condition in like_conditions:
                     if like_type == "left":
-                        like_expression = "'%"+_data_types[_key]['vals']+"'"
+                        like_expression = "'%" + _data_types[_key]['vals'] + "'"
                     elif like_type == "right":
                         like_expression = "'" + _data_types[_key]['vals'] + "%'"
                     else:
                         like_expression = "'%" + _data_types[_key]['vals'] + "%'"
-                    flex_query = "select count(*) from `default`.scope1.collection11 USE INDEX({0}) where {1} {2} {3}".\
+                    flex_query = "select count(*) from `default`.scope1.collection11 USE INDEX({0}) where {1} {2} {3}". \
                         format(index_hint, _data_types[_key]['field'], like_condition, like_expression)
-                    gsi_query = "select count(*) from `default`.scope1.collection11 where {1} {2} {3}".\
+                    gsi_query = "select count(*) from `default`.scope1.collection11 where {1} {2} {3}". \
                         format(index_hint, _data_types[_key]['field'], like_condition, like_expression)
                     test = {}
                     test['flex_query'] = flex_query
@@ -2560,7 +2886,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                                    es_reset=False, scope="scope1", collections="collection12", collection_index=True)
         fts_callable.load_data(100)
 
-        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection12")
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
+                                                                  collection="collection12")
 
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',
@@ -2584,7 +2911,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             "text": {"field": "type", "flex_condition": "type='emp'"},
             "number": {"field": "mutated", "flex_condition": "mutated=0"},
             "boolean": {"field": "is_manager", "flex_condition": "is_manager=true"},
-            "datetime": {"field": "join_date", "flex_condition": "join_date > '2001-10-09' AND join_date < '2020-10-09'"}
+            "datetime": {"field": "join_date",
+                         "flex_condition": "join_date > '2001-10-09' AND join_date < '2020-10-09'"}
         }
         index_configuration = "FTS"
         index_hint = "USING FTS"
@@ -2594,10 +2922,12 @@ class NewUpgradeBaseTest(BaseTestCase):
             for sort_direction in sort_directions:
                 for limit in limits:
                     for offset in offsets:
-                        flex_query = "select meta().id from `default`.scope1.collection12 USE INDEX({0}) where {1} order by {2} {3} {4} {5}".\
-                            format(index_hint, _data_types[_key]['flex_condition'], "meta().id", sort_direction, limit, offset)
-                        gsi_query = "select meta().id from `default`.scope1.collection12 USE INDEX({0}) where {1} order by {2} {3} {4} {5}".\
-                            format(index_hint, _data_types[_key]['flex_condition'], "meta().id", sort_direction, limit, offset)
+                        flex_query = "select meta().id from `default`.scope1.collection12 USE INDEX({0}) where {1} order by {2} {3} {4} {5}". \
+                            format(index_hint, _data_types[_key]['flex_condition'], "meta().id", sort_direction, limit,
+                                   offset)
+                        gsi_query = "select meta().id from `default`.scope1.collection12 USE INDEX({0}) where {1} order by {2} {3} {4} {5}". \
+                            format(index_hint, _data_types[_key]['flex_condition'], "meta().id", sort_direction, limit,
+                                   offset)
                         test = {}
                         test['flex_query'] = flex_query
                         test['gsi_query'] = gsi_query
@@ -2629,17 +2959,19 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _test_flex_doc_id(self):
         errors = []
         self._create_collections(scope="scope1", collection="collection13")
-        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection13", collection_index=True)
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
+                                   collections="collection13", collection_index=True)
         fts_callable.load_data(100)
 
-        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection13")
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
+                                                                  collection="collection13")
 
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
-                                                 source_name="default", index_type='fulltext-index',
-                                                 index_params=None, plan_params=None,
-                                                 source_params=None, source_uuid=None, collection_index=True,
-                                                 _type=_type, analyzer="keyword", scope="scope1",
-                                                 collections=["collection13"], no_check=False)
+                                                source_name="default", index_type='fulltext-index',
+                                                index_params=None, plan_params=None,
+                                                source_params=None, source_uuid=None, collection_index=True,
+                                                _type=_type, analyzer="keyword", scope="scope1",
+                                                collections=["collection13"], no_check=False)
         fts_idx.index_definition['params']['mapping']['default_analyzer'] = "keyword"
         fts_idx.index_definition['params']['doc_config']['docid_prefix_delim'] = "_"
         fts_idx.index_definition['params']['doc_config']['docid_regexp'] = ""
@@ -2658,10 +2990,10 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         tests = []
         for like_expression in like_expressions:
-            flex_query = "select count(*) from `default`.scope1.collection13 USE INDEX({0}) where meta().id {1} 'emp_%' and type='emp'".\
-                        format(index_hint, like_expression)
-            gsi_query = "select count(*) from `default`.scope1.collection13 where meta().id {1} 'emp_%' and type='emp'".\
-                        format(index_hint, like_expression)
+            flex_query = "select count(*) from `default`.scope1.collection13 USE INDEX({0}) where meta().id {1} 'emp_%' and type='emp'". \
+                format(index_hint, like_expression)
+            gsi_query = "select count(*) from `default`.scope1.collection13 where meta().id {1} 'emp_%' and type='emp'". \
+                format(index_hint, like_expression)
             test = {}
             test['flex_query'] = flex_query
             test['gsi_query'] = gsi_query
@@ -2693,10 +3025,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _test_flex_pushdown_negative_numeric_ranges(self):
         errors = []
         self._create_collections(scope="scope1", collection="collection14")
-        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection14", collection_index=True)
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
+                                   collections="collection14", collection_index=True)
         fts_callable.load_data(100)
 
-        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection14")
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
+                                                                  collection="collection14")
 
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',
@@ -2733,10 +3067,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             elif relation == "=":
                 condition = ' salary = -10 '
 
-            flex_query = "select count(*) from `default`.scope1.collection14 USE INDEX({0}) where {1}" .\
-                    format(index_hint, condition)
-            gsi_query = "select count(*) from `default`.scope1.collection14 USE INDEX({0}) where {1}" .\
-                    format(index_hint, condition)
+            flex_query = "select count(*) from `default`.scope1.collection14 USE INDEX({0}) where {1}". \
+                format(index_hint, condition)
+            gsi_query = "select count(*) from `default`.scope1.collection14 USE INDEX({0}) where {1}". \
+                format(index_hint, condition)
             test = {}
             test['flex_query'] = flex_query
             test['gsi_query'] = gsi_query
@@ -2768,10 +3102,12 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _test_flex_and_search_pushdown(self):
         errors = []
         self._create_collections(scope="scope1", collection="collection15")
-        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection15", collection_index=True)
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
+                                   collections="collection15", collection_index=True)
         fts_callable.load_data(100)
 
-        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection15")
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
+                                                                  collection="collection15")
 
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',
@@ -2787,18 +3123,18 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         check_pushdown = False
         _data_types = {
-            "text":  {"field": "type",
-                        "search_condition": "{'query':{'field': 'type', 'match':'emp'}}",
-                        "flex_condition": "a.`type`='emp'"},
+            "text": {"field": "type",
+                     "search_condition": "{'query':{'field': 'type', 'match':'emp'}}",
+                     "flex_condition": "a.`type`='emp'"},
             "number": {"field": "salary",
-                        "search_condition": "{'query':{'min': 1000, 'max': 100000, 'field': 'salary'}}",
-                        "flex_condition": "a.salary>1000 and a.salary<100000"},
+                       "search_condition": "{'query':{'min': 1000, 'max': 100000, 'field': 'salary'}}",
+                       "flex_condition": "a.salary>1000 and a.salary<100000"},
             "boolean": {"field": "is_manager",
                         "search_condition": "{'query':{'bool': true, 'field': 'is_manager'}}",
                         "flex_condition": "a.is_manager=true"},
-            "datetime":    {"field": "join_date",
-                        "search_condition": "{'start': '2001-10-09', 'end': '2016-10-31', 'field': 'join_date'}",
-                        "flex_condition": "a.join_date > '2001-10-09' and a.join_date < '2016-10-31'"}
+            "datetime": {"field": "join_date",
+                         "search_condition": "{'start': '2001-10-09', 'end': '2016-10-31', 'field': 'join_date'}",
+                         "flex_condition": "a.join_date > '2001-10-09' and a.join_date < '2016-10-31'"}
         }
         index_configuration = "FTS"
         custom_mapping = False
@@ -2807,10 +3143,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         tests = []
         for _key1 in _data_types.keys():
             for _key2 in _data_types.keys():
-                flex_query = "select count(*) from `default`.scope1.collection15 a USE INDEX({0}) where {1} and search(a, {2})".\
-                        format(index_hint, _data_types[_key1]['flex_condition'], _data_types[_key2]['search_condition'])
-                gsi_query = "select count(*) from `default`.scope1.collection15 a where {0} and search(a, {1})".\
-                        format(_data_types[_key1]['flex_condition'], _data_types[_key2]['search_condition'])
+                flex_query = "select count(*) from `default`.scope1.collection15 a USE INDEX({0}) where {1} and search(a, {2})". \
+                    format(index_hint, _data_types[_key1]['flex_condition'], _data_types[_key2]['search_condition'])
+                gsi_query = "select count(*) from `default`.scope1.collection15 a where {0} and search(a, {1})". \
+                    format(_data_types[_key1]['flex_condition'], _data_types[_key2]['search_condition'])
                 test = {}
                 test['flex_query'] = flex_query
                 test['gsi_query'] = gsi_query
@@ -2893,9 +3229,9 @@ class NewUpgradeBaseTest(BaseTestCase):
     def _load_search_before_search_after_test_data(self, bucket, test_data):
         n1ql_obj = N1QLCallable(self.servers)
         for key in test_data:
-            query = "insert into "+bucket+" (KEY, VALUE) VALUES " \
-                                          "('"+str(key)+"', " \
-                                          ""+str(test_data[key])+")"
+            query = "insert into " + bucket + " (KEY, VALUE) VALUES " \
+                                              "('" + str(key) + "', " \
+                                                                "" + str(test_data[key]) + ")"
             n1ql_obj.run_n1ql_query(query=query)
 
     def _test_search_before(self):
@@ -2920,7 +3256,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         cluster = fts_idx.get_cluster()
         self.sleep(10)
-        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                         "query": {"match": "filler", "field": "filler"}, "size": full_size, "sort": sort_mode}
         all_hits, all_matches, _, _ = cluster.run_fts_query(fts_idx.name, all_fts_query)
         if all_hits is None or all_matches is None:
             errors.append(f"test is failed: no results were returned by fts query: {all_fts_query}")
@@ -2931,7 +3268,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             if search_before_param[i] == "_score":
                 search_before_param[i] = str(all_matches[partial_start_index]['score'])
 
-        search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_before": search_before_param}
+        search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                                   "query": {"match": "filler", "field": "filler"}, "size": partial_size,
+                                   "sort": sort_mode, "search_before": search_before_param}
         _, search_before_matches, _, _ = cluster.run_fts_query(fts_idx.name, search_before_fts_query)
 
         all_results_ids = []
@@ -2943,9 +3282,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         for match in search_before_matches:
             search_before_results_ids.append(match['id'])
 
-        for i in range(0, partial_size-1):
+        for i in range(0, partial_size - 1):
             if i in range(0, len(search_before_results_ids) - 1):
-                if search_before_results_ids[i] != all_results_ids[partial_start_index-partial_size+i]:
+                if search_before_results_ids[i] != all_results_ids[partial_start_index - partial_size + i]:
                     errors.append("test is failed")
 
         fts_callable.delete_fts_index("idx1")
@@ -2976,7 +3315,8 @@ class NewUpgradeBaseTest(BaseTestCase):
 
         cluster = index.get_cluster()
 
-        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                         "query": {"match": "filler", "field": "filler"}, "size": full_size, "sort": sort_mode}
         all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query)
 
         search_before_param = all_matches[partial_start_index]['sort']
@@ -2985,7 +3325,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             if search_before_param[i] == "_score":
                 search_before_param[i] = str(all_matches[partial_start_index]['score'])
 
-        search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_after": search_before_param}
+        search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                                   "query": {"match": "filler", "field": "filler"}, "size": partial_size,
+                                   "sort": sort_mode, "search_after": search_before_param}
         _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query)
         all_results_ids = []
         search_before_results_ids = []
@@ -2996,9 +3338,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         for match in search_before_matches:
             search_before_results_ids.append(match['id'])
 
-        for i in range(0, partial_size-1):
-            if i in range(0, len(search_before_results_ids)-1):
-                if search_before_results_ids[i] != all_results_ids[partial_start_index+1+i]:
+        for i in range(0, partial_size - 1):
+            if i in range(0, len(search_before_results_ids) - 1):
+                if search_before_results_ids[i] != all_results_ids[partial_start_index + 1 + i]:
                     errors.append("test is failed")
 
         fts_callable.delete_fts_index("idx1")
@@ -3010,10 +3352,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         fts_node = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=False)
 
         self._create_collections(scope="scope1", collection="collection25")
-        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection25", collection_index=True)
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
+                                   collections="collection25", collection_index=True)
         fts_callable.load_data(100)
 
-        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection25")
+        _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
+                                                                  collection="collection25")
 
         fts_idx = fts_callable.create_fts_index("idx1", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',

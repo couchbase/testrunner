@@ -1335,6 +1335,8 @@ class FTSIndex:
                 self.__log.error("defn['indexDef']['params']['store']['indexType']")
                 raise Exception("Unable to convert index to upside_down")
 
+
+
     def update_index_to_scorch(self):
         if self.is_scorch():
             self.__log.info("The index {0} is already scorch index, conversion not needed!")
@@ -1349,6 +1351,7 @@ class FTSIndex:
             else:
                 self.__log.error("defn['indexDef']['params']['store']['indexType']")
                 raise Exception("Unable to convert index to scorch")
+
 
     def update_num_pindexes(self, new):
         self.index_definition['planParams']['maxPartitionsPerPIndex'] = new
@@ -1612,7 +1615,7 @@ class FTSIndex:
                       highlight_style=None, highlight_fields=None, consistency_level='',
                       consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
                       node=None, knn=None, fields=None,
-                      raise_on_error=False):
+                      raise_on_error=False, variable_node=None):
 
         vector_search = False
         if self.is_vector_query(query):
@@ -1647,7 +1650,7 @@ class FTSIndex:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope,
-                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest)
+                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest, variable_node = variable_node)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2888,7 +2891,7 @@ class CouchbaseCluster:
         self.__indexes.clear()
 
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
-                      rest=None):
+                      rest=None,variable_node = None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2896,7 +2899,9 @@ class CouchbaseCluster:
         @return hit_list : list of docs that match the query
 
         """
-        if not node:
+        if variable_node:
+            node = variable_node
+        elif not node:
             node = self.get_random_fts_node()
         if not rest:
             rest = RestConnection(node)
@@ -3462,7 +3467,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None):
+                                    use_collections=False, dataset=None, variable_node = None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3474,7 +3479,8 @@ class CouchbaseCluster:
                                                             n1ql_executor=n1ql_executor,
                                                             use_collections=use_collections,
                                                             dataset=dataset,
-                                                            reduce_query_logging=self.reduce_query_logging)
+                                                            reduce_query_logging=self.reduce_query_logging,
+                                                            variable_node = variable_node)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4117,6 +4123,7 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
+        time.sleep(50)
         if not self.skip_log_scan and not self.capella_run:
             self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
             _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix + "_BEFORE")
@@ -5825,6 +5832,8 @@ class FTSBaseTest(unittest.TestCase):
             self.sleep(5, "Waiting 5 seconds for index to update..")
             if wait_for_index_complete:
                 self.wait_for_indexing_complete()
+
+        time.sleep(20)
         return indexes
 
     def define_index_parameters_collection_related(self):

@@ -1745,7 +1745,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None,reduce_query_logging=False):
+                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1763,6 +1763,7 @@ class ESRunQueryCompare(Task):
         self.use_collections = use_collections
         self.dataset = dataset
         self.reduce_query_logging = reduce_query_logging
+        self.variable_node = variable_node
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -2024,7 +2025,7 @@ class ESRunQueryCompare(Task):
             self.set_exception(e)
             self.state = FINISHED
     def run_fts_query(self, query, score=''):
-        return self.fts_index.execute_query(query, score=score)
+        return self.fts_index.execute_query(query, score=score,variable_node=self.variable_node)
 
     def run_es_query(self, query,dataset=None):
         return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset)

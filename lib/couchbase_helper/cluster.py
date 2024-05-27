@@ -312,7 +312,7 @@ class Cluster(object):
         return _task
 
     def async_run_fts_query_compare(self, fts_index, es_instance, query_index,
-                                    es_index_name=None, n1ql_executor=None, use_collections=False,dataset=None, reduce_query_logging=False):
+                                    es_index_name=None, n1ql_executor=None, use_collections=False,dataset=None, reduce_query_logging=False,variable_node=None):
         _task = ESRunQueryCompare(fts_index,
                                   es_instance,
                                   query_index=query_index,
@@ -320,7 +320,8 @@ class Cluster(object):
                                   n1ql_executor=n1ql_executor,
                                   use_collections=use_collections,
                                   dataset=dataset,
-                                  reduce_query_logging=reduce_query_logging
+                                  reduce_query_logging=reduce_query_logging,
+                                  variable_node=variable_node
                                   )
         self.task_manager.schedule(_task)
         return _task
