@@ -2485,7 +2485,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self.shell.execute_command("mkdir %sbackup " % self.tmp_path)
 
         """ start backup data and check directory structure """
-        output, error = self.shell.execute_command("date | grep -o '....$'")
+        output, error = self.shell.execute_command("date +%Y")
         dir_start_with = output[0] + "-"
         backup_all_buckets = True
         partial_backup_buckets = []
