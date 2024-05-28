@@ -20,3 +20,4 @@ numpy==1.21.6
 h5py==3.8.0
 wget==3.2
 faiss-cpu==1.7.4
+prettytable==3.10.0
