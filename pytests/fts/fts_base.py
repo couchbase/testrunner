@@ -16,7 +16,10 @@ from statistics import mean
 
 import boto3
 import logger
-from prettytable import PrettyTable
+try:
+    from prettytable import PrettyTable
+except ImportError:
+    print('WARN: fail to import PrettyTable')
 
 try:
     import docker
