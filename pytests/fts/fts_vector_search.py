@@ -7,6 +7,8 @@ import sys
 import threading
 import struct
 import base64
+import time
+
 import logger
 
 from TestInput import TestInputSingleton
@@ -63,6 +65,7 @@ class VectorSearch(FTSBaseTest):
             self.vector_field_name = "vector_data"
         self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
         self.validate_memory_leak = self.input.param("validate_memory_leak", False)
+        self.sleep_time_for_memory_leak_validation = self.input.param("sleep_time_for_memory_leak_validation", 300)
         if self.validate_memory_leak:
             self.memory_validator_thread = threading.Thread(target=self.start_memory_stat_collector_and_validator, kwargs={
                 'fts_nodes': self._cb_cluster.get_fts_nodes()
@@ -71,6 +74,7 @@ class VectorSearch(FTSBaseTest):
 
     def tearDown(self):
         if self.validate_memory_leak:
+            time.sleep(int(self.sleep_time_for_memory_leak_validation))
             self.stop_memory_collector_and_validator = True
             self.memory_validator_thread.join()
         super(VectorSearch, self).tearDown()
