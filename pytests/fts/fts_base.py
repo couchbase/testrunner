@@ -6709,7 +6709,7 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.log.info(f"File '{INDEX_FILE}' does not exist.")
 
-    def start_memory_stat_collector_and_validator(self, fts_nodes, poll_time=5, average_interval=5, sleep_time=300):
+    def start_memory_stat_collector_and_validator(self, fts_nodes, poll_time=5, average_interval=5):
         rest = RestConnection(self.master)
         table = PrettyTable()
         table.field_names = ["Time (s)"] + [f"{node.ip}_sysproc_mem_resident" for node in fts_nodes]
@@ -6745,9 +6745,6 @@ class FTSBaseTest(unittest.TestCase):
             if len(stats) < 5:
                 self.log.info(f"Not enough data points to calculate averages for {node}.")
                 return
-
-        # Wait for sleep_time seconds for the memory to get down.
-        time.sleep(sleep_time)
 
         for node in fts_nodes:
             # Calculate final average (initial 5 polls)
