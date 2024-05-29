@@ -1379,6 +1379,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
                 self.upgrade_and_validate(select_queries, scan_results_check)
                 self.update_master_node()
+                if self.initial_version[:3] == "7.6":
+                    self.enable_shard_based_rebalance()
+                    self.sleep(10)
                 self.create_index_in_batches(num_batches=1, replica_count=1)
                 self.wait_until_indexes_online()
                 if self.upgrade_mode == 'offline':
@@ -1433,7 +1436,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 node_to_upgrade = node_to_downgrade = self.servers[node_position]
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_upgrade, select_queries=select_queries)
                 self.sleep(10)
-                self.post_upgrade_with_nodes_clause(node_in=node_to_upgrade)
+                if self.initial_version[:3] == "7.6":
+                    provisoned = False
+                    self.post_upgrade_with_nodes_clause(provisioned=provisoned)
+                else:
+                    provisoned = True
+                    self.post_upgrade_with_nodes_clause(node_in=node_to_upgrade, provisioned=provisoned)
+
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_downgrade, select_queries=select_queries, downgrade=True)
                 self.create_index_in_batches(num_batches=1, replica_count=2)
                 self.wait_until_indexes_online()
@@ -1646,7 +1655,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                              server=n1ql_server)['results']
 
             cluster_profile = None
-            if not downgrade:
+            if not downgrade and self.initial_version[:3] != "7.6":
                 cluster_profile = "provisioned"
             active_nodes = []
             for active_node in self.servers[:self.nodes_init]:
@@ -1705,9 +1714,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     if shard not in shard_list_after:
                         raise Exception(f"Shard {shard} seems to be missing after rebalance")
             if not downgrade:
-                if len(shard_list_after) <= len(shard_list_before):
-                    raise Exception(
-                        "No new alternate shard IDs have been created during this rebalance. Possible bug")
+                if self.initial_version[:3] != "7.6":
+                    if len(shard_list_after) <= len(shard_list_before):
+                        raise Exception(
+                            "No new alternate shard IDs have been created during this rebalance. Possible bug")
                 # if not self.check_gsi_logs_for_shard_transfer():
                 #     raise Exception("Shard based rebalance not triggered")
             self.sleep(30)
@@ -1822,6 +1832,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                  server=n1ql_server)['results']
 
                 cluster_profile = "provisioned"
+                if self.initial_version[:3] == "7.6":
+                    cluster_profile = None
                 active_nodes = []
                 for active_node in self.get_nodes_in_cluster_after_upgrade():
                     if active_node.ip != node.ip:
@@ -1850,9 +1862,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.sleep(10)
                     if self.toggle_shard_rebalance and 'index' in service:
                         if enable_shard_rebalance:
-                            self.enable_shard_based_rebalance(provisioned=True)
+                            if self.initial_version[:3] == "7.6":
+                                self.enable_shard_based_rebalance()
+                            else:
+                                self.enable_shard_based_rebalance(provisioned=True)
                         else:
-                            self.disable_shard_based_rebalance(provisioned=True)
+                            if self.initial_version[:3] == "7.6":
+                                self.disable_shard_based_rebalance()
+                            else:
+                                self.disable_shard_based_rebalance(provisioned=True)
                         enable_shard_rebalance = not enable_shard_rebalance
 
                 elif self.upgrade_mode == 'offline':
@@ -1917,10 +1935,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                             if shard not in shard_list_after:
                                 raise Exception(f"Shard {shard} seems to be missing after rebalance")
                         if len(shard_list_after) <= len(shard_list_before):
-                            self.log.info(f'shard list before rebalance : {shard_list_before}')
-                            self.log.info(f'shard list after rebalance : {shard_list_after}')
-                            raise Exception(
-                                "No new alternate shard IDs have been created during this rebalance. Possible bug")
+                            if self.initial_version[:3] != "7.6":
+                                self.log.info(f'shard list before rebalance : {shard_list_before}')
+                                self.log.info(f'shard list after rebalance : {shard_list_after}')
+                                raise Exception(
+                                    "No new alternate shard IDs have been created during this rebalance. Possible bug")
                     self.sleep(20)
                     map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                     
