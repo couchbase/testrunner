@@ -41,7 +41,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             if self.index_path == "/data":
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
         self.type_of_load = TestInputSingleton.input.param("type_of_load", "separate")
-        self.validate_memory_leak = self.input.param("validate_memory_leak", False)
+        self.validate_memory_leak = TestInputSingleton.input.param("validate_memory_leak", False)
         if self.validate_memory_leak:
             self.memory_validator_thread = threading.Thread(target=self.start_memory_stat_collector_and_validator, kwargs={
                 'fts_nodes': self._cb_cluster.get_fts_nodes()
