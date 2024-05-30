@@ -2261,11 +2261,13 @@ class BackupServiceTest(BackupServiceBase):
         for role in roles:
             # Set Mallory's role to `role`
             rest_connection.add_set_builtin_user("Mallory", f"name={self.configuration.username}&roles={role}&password={self.configuration.password}")
-
             # Call various backup service endpoints
             for func, arg in actions:
                 status = func(*arg)[1]
-                self.assertIn(status, [403, 400])
+                if role == "ro_admin" and (func == self.get_task_history or func == self.get_backups): # https://issues.couchbase.com/browse/MB-61072
+                    self.assertIn(status, [200], msg="ro_admin should have access to backup service info. Tried: " + str(func))
+                else:
+                    self.assertIn(status, [403, 400], msg="role " + str(role) + " has access to: " + str(func))
 
         # Restore configuration so we can tear the test down correctly
         self.configuration.username, self.configuration.password = self.master.rest_username, self.master.rest_password
