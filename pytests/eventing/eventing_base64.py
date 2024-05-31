@@ -47,8 +47,8 @@ class EventingBase64(EventingBaseTest):
     def test_large_vectors_encoding(self):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         govl = GoVectorLoader(self.master, "Administrator", "password",
-                               "src_bucket", "src_bucket",
-                              "src_bucket", "siftsmall", False, "", 0, self.num_docs*self.docs_per_day, False,
+                               "src_bucket", "_default",
+                              "_default", "siftsmall", False, "", 0, self.num_docs*self.docs_per_day, False,
                               [0.25, 0.25, 0.25, 0.25], [1, 1000, 4096, 20000])
         govl.load_data()
         self.deploy_function(body)
