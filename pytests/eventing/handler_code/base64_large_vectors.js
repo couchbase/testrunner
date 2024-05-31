@@ -14,7 +14,7 @@ function OnUpdate(doc, meta) {
             } else {
                 var x = couchbase.base64Encode(vectArr)
                 var y = couchbase.base64Decode(x)
-                if (JSON.stringify(vectArr) != JSON.stringify(y)) {
+                if (JSON.stringify(vectArr) != y) {
                     success = false;
                 }
             }
