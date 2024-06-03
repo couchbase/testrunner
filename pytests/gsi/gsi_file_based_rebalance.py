@@ -967,7 +967,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             index_list_after.append(index['name'])
         self.log.info(f"Index list after rebalance {index_list_after}")
         self.wait_until_indexes_online()
-        self.validate_node_placement_with_nodes_clause(create_queries=queries)
+        if self.use_nodes_clause:
+            self.validate_node_placement_with_nodes_clause(create_queries=queries)
         self.validate_shard_affinity()
         if len(index_list_after) != 1:
             raise Exception("Duplicate indexes not dropped after rebalance")
