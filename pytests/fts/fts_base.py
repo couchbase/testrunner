@@ -6302,6 +6302,7 @@ class FTSBaseTest(unittest.TestCase):
                 failed_queries.append(task.query_index + 1)
 
         if fail_count:
+            
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))

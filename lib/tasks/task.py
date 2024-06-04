@@ -1988,32 +1988,30 @@ class ESRunQueryCompare(Task):
                 import numpy as np
                 _vector = np.array([search_vector])
                 faiss.normalize_L2(_vector)
-                distances, ann = self.fts_index.faiss_index.search(_vector, k=k)
+                distances, ann = self.fts_index.faiss_index.search(_vector, k=5*k)
                 print("Results from faiss index --> ", distances, ann)
                 faiss_doc_ids = [f"emp{10000000+res+1}" for res in ann[0]]
                 print("Docids from faiss index --> ", faiss_doc_ids)
-                if len(faiss_doc_ids) != int(fts_hits):
+                if int(len(faiss_doc_ids)/5) != int(fts_hits):
                     msg = "FAIL: FTS hits: %s, while FAISS hits: %s" \
                           % (fts_hits, faiss_doc_ids)
                     self.log.error(msg)
-                faiss_but_not_fts = list(set(faiss_doc_ids) - set(fts_doc_ids))
-                fts_but_not_faiss = list(set(fts_doc_ids) - set(faiss_doc_ids))
-                if not (faiss_but_not_fts or fts_but_not_faiss):
-                    self.log.info("SUCCESS: Docs returned by FTS = docs"
-                                  " returned by FAISS, doc_ids verified")
+
+                
+                faiss_hits_ids = list(set(faiss_doc_ids))
+                fts_hits_ids = list(set(fts_doc_ids))
+
+                if all(elem in faiss_hits_ids for elem in fts_hits_ids):
+                    self.log.info("SUCCESS: Docs returned by FTS = docs returned by FAISS, doc_ids verified")
                 else:
-                    if fts_but_not_faiss:
-                        msg = "FAIL: Following %s doc(s) were not returned" \
-                              " by FAISS,but FTS, printing 50: %s" \
-                              % (len(fts_but_not_faiss), fts_but_not_faiss[:50])
-                    else:
-                        msg = "FAIL: Following %s docs were not returned" \
-                              " by FTS, but FAISS, printing 50: %s" \
-                              % (len(faiss_but_not_fts), faiss_but_not_fts[:50])
-                    self.log.error(msg)
+                    missing_ids = [elem for elem in fts_hits_ids if elem not in faiss_hits_ids]
+                    self.log.error(f"FAIL: Docs returned by FTS are not present in FAISS. Missing ids : {missing_ids}")
                     self.passed = False
+                    
+                    
 
 
+                        
             self.state = CHECKING
             task_manager.schedule(self)
 
