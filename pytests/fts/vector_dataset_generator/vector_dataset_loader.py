@@ -100,7 +100,7 @@ class VectorLoader:
 
 class GoVectorLoader:
     def __init__(self, node, username, password, bucket, scope, collection, dataset, xattr, prefix, si, ei, base64,
-                 percentage_to_resize=[], dimension_to_resize=[],load_invalid_vecs=False,invalid_vecs_dims = 128):
+                 percentage_to_resize=[], dimension_to_resize=[],load_invalid_vecs=False,invalid_vecs_dims = 128,provideDefaultDocs=True):
         self.node = node
         self.username = username
         self.password = password
@@ -117,17 +117,18 @@ class GoVectorLoader:
         self.dimension_to_resize = dimension_to_resize
         self.load_invalid_vecs = load_invalid_vecs
         self.invalid_vecs_dims = invalid_vecs_dims
+        self.provideDefaultDocs = provideDefaultDocs
         self.docker_client = docker.from_env()
 
     def load_data(self, container_name=None):
         try:
             docker_image = "sequoiatools/govectorloader"
             if len(self.percentage_to_resize) == 0 or len(self.dimension_to_resize) == 0:
-                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims}"
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei}  -base64Flag={self.base64} -xattrFlag={self.xattr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims} -provideDefaultDocs={self.provideDefaultDocs}"
             else:
                 pr = ','.join(map(str, self.percentage_to_resize))
                 dr = ','.join(map(str, self.dimension_to_resize))
-                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -base64Flag={self.base64} -xattrFlag={self.xattr} -percentagesToResize={pr} -dimensionsForResize={dr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims}"
+                docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -base64Flag={self.base64} -xattrFlag={self.xattr} -percentagesToResize={pr} -dimensionsForResize={dr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims} -provideDefaultDocs={self.provideDefaultDocs}"
             print("docker run params: {}".format(docker_run_params))
 
             # Run the Docker pull command

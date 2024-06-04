@@ -153,9 +153,6 @@ class VectorSearch(FTSBaseTest):
 
             fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
 
-            self.log.info(f"Faiss docs sno -----> {faiss_doc_ids}")
-            self.log.info(f"FTS docs sno -------> {fts_doc_ids}")
-
             fts_hits = len(matches)
             if len(faiss_doc_ids) != int(fts_hits):
                 msg = "FAIL: FTS hits: %s, while FAISS hits: %s" \
@@ -234,7 +231,12 @@ class VectorSearch(FTSBaseTest):
 
     def run_vector_query(self, vector, index, neighbours=None,
                          validate_result_count=True, perform_faiss_validation=False,
-                         validate_fts_with_faiss=False, load_invalid_base64_string=False):
+                         validate_fts_with_faiss=False, load_invalid_base64_string=False,base64Flag = True,store_all_flag = False,continue_on_failure = False):
+
+        if store_all_flag:
+            self.encode_base64_vector = base64Flag
+
+
         if isinstance(self.query, str):
             self.query = json.loads(self.query)
 
@@ -253,7 +255,18 @@ class VectorSearch(FTSBaseTest):
         if self.run_n1ql_search_function:
             n1ql_query = f"SELECT COUNT(*) FROM `{index._source_name}`.{index.scope}.{index.collections[0]} AS t1 WHERE SEARCH(t1, {self.query});"
             self.log.info(f" Running n1ql Query - {n1ql_query}")
-            n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+            if continue_on_failure:
+                try:
+                    n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+                    self.fail("Test failed. Expected: No results. Observed : Valid results received")
+                except Exception as ex:
+                    self.log.info("Expected: No results. Observed : No results. Passed")
+            else:
+                n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+
+
+
+
             if n1ql_hits == 0:
                 n1ql_hits = -1
             self.log.info("FTS Hits for N1QL query: %s" % n1ql_hits)
@@ -283,7 +296,7 @@ class VectorSearch(FTSBaseTest):
 
         recall_and_accuracy = {}
 
-        if validate_fts_with_faiss:
+        if validate_fts_with_faiss and not continue_on_failure:
             query_vector = vector
             fts_matches = []
             for i in range(self.k):
@@ -292,17 +305,20 @@ class VectorSearch(FTSBaseTest):
             faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
             self.log.info("*" * 5 + f"Query RESULT # {self.count - 1}" + "*" * 5)
-            self.log.info(f"FTS MATCHES: {fts_matches}")
-            self.log.info(f"FAISS MATCHES: {faiss_results}")
-
             fts_faiss_accuracy, fts_faiss_recall = self.compare_results(faiss_results, fts_matches, "faiss",
                                                                         "fts")
+
+            if fts_faiss_recall < 85:
+                self.log.info(f"FTS MATCHES: {fts_matches}")
+                self.log.info(f"FAISS MATCHES: {faiss_results}")
+
+
             recall_and_accuracy['fts_faiss_accuracy'] = fts_faiss_accuracy
             recall_and_accuracy['fts_faiss_recall'] = fts_faiss_recall
 
             self.log.info("*" * 30)
 
-        if neighbours is not None:
+        if neighbours is not None and not continue_on_failure:
             query_vector = vector
             fts_matches = []
 
@@ -313,10 +329,9 @@ class VectorSearch(FTSBaseTest):
                 faiss_results = self.perform_validations_from_faiss(matches, index, query_vector)
 
             self.log.info("*" * 5 + f"Query RESULT # {self.count}" + "*" * 5)
-            self.log.info(f"FTS MATCHES: {fts_matches}")
-            if perform_faiss_validation:
-                self.log.info(f"FAISS MATCHES: {faiss_results}")
-            self.log.info(f"GROUNDTRUTH FILE : {neighbours}")
+
+
+
 
             if perform_faiss_validation:
                 faiss_accuracy, faiss_recall = self.compare_results(neighbours[:100], faiss_results, "groundtruth",
@@ -328,10 +343,16 @@ class VectorSearch(FTSBaseTest):
             recall_and_accuracy['fts_accuracy'] = fts_accuracy
             recall_and_accuracy['fts_recall'] = fts_recall
 
+            if fts_recall<85:
+                self.log.info(f"FTS MATCHES: {fts_matches}")
+                if perform_faiss_validation:
+                    self.log.info(f"FAISS MATCHES: {faiss_results}")
+                self.log.info(f"GROUNDTRUTH FILE : {neighbours}")
+
             self.log.info("*" * 30)
 
         # validate no of results are k only
-        if self.run_n1ql_search_function:
+        if self.run_n1ql_search_function and not continue_on_failure:
             if validate_result_count:
                 if len(matches) != self.k and n1ql_hits != self.k:
                     self.fail(
@@ -455,6 +476,207 @@ class VectorSearch(FTSBaseTest):
         self.log.info(f"Accuracy and recall for queries run on each index : {all_stats}")
         if len(bad_indexes) != 0:
             self.fail(f"Indexes have poor accuracy and recall: {bad_indexes}")
+
+    def test_basic_vector_search_store_all(self):
+        indexes = []
+
+        combinations = [['vector_data', 'vector', False, False], ['vector_encoded', 'vector_base64', True, True],
+                        ['vector_data', 'vector', True, False], ['vector_data_base64', 'vector_base64', False, True],
+                        ['vector_data', 'vector_base64', False, True], ['vector_encoded', 'vector', True, False],
+                        ['vector_data', 'vector_base64', True, True], ['vector_data_base64', 'vector', False, False]]
+
+
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+
+        # docs not in xattr as vectors
+        self.store_in_xattr = False
+
+        self.encode_base64_vector = False
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=True,
+                                                provideDefaultDocs=False)
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name="vector_data",
+                                                     field_type="vector",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=False,
+                                                     base64_flag=False,
+                                                     store_all_flag=True)
+
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+
+        self.store_in_xattr = True
+        self.encode_base64_vector = True
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
+                                                provideDefaultDocs=False)
+        idx = [("i2", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name="vector_encoded",
+                                                     field_type="vector_base64",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=True,
+                                                     base64_flag=True,
+                                                     store_all_flag=True)
+
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+
+
+
+
+        self.encode_base64_vector = False
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
+                                                provideDefaultDocs=False)
+
+        idx = [("i3", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name="vector_data",
+                                                     field_type="vector",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=True,
+                                                     base64_flag=False,
+                                                     store_all_flag=True)
+
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i3"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+
+
+
+        self.store_in_xattr = False
+        self.encode_base64_vector = True
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset, python_loader_toggle=False,
+                                                provideDefaultDocs=False)
+
+        idx = [("i4", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name="vector_data_base64",
+                                                     field_type="vector_base64",
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}],
+                                                     xattr_flag=False,
+                                                     base64_flag=True,
+                                                     store_all_flag=True)
+
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i4"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+
+
+
+        for i in range(4):
+            indexes.append(indexes[i])
+
+        time.sleep(200)
+
+        all_stats = []
+        bad_indexes = []
+
+        query_schema = [{"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "vector_data", "k": self.k,
+                                  "vector": []}]},
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "_$xattrs.vector_encoded", "k": self.k,
+                                  "vector_base64": ""}]},
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
+                                  "vector": []}]},
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "vector_data_base64", "k": self.k,
+                                  "vector_base64": ""}]},
+
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "vector_data", "k": self.k,
+                                  "vector_base64": []}]},
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "_$xattrs.vector_encoded", "k": self.k,
+                                  "vector": ""}]},
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
+                                  "vector_base64": []}]},
+                        {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                         "knn": [{"field": "vector_data_base64", "k": self.k,
+                                  "vector": ""}]}
+                        ]
+
+
+        schema_counter = 0
+        for index in indexes:
+            self.query = query_schema[schema_counter]
+
+            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                           'faiss_recall': 0}
+            index['dataset'] = bucketvsdataset['bucket_name']
+            queries = self.get_query_vectors(index['dataset'])
+            neighbours = self.get_groundtruth_file(index['dataset'])
+            fts_accuracy = []
+            fts_recall = []
+            faiss_accuracy = []
+            faiss_recall = []
+            perform_faiss_validation = True
+
+            for count, q in enumerate(queries[:self.num_queries]):
+                self.vector_field_name = combinations[schema_counter][0]
+                self.vector_field_type = combinations[schema_counter][1]
+                self.store_in_xattr = combinations[schema_counter][2]
+                self.encode_base64_vector = combinations[schema_counter][3]
+
+                _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
+                                                                     neighbours=neighbours[count],
+                                                                     perform_faiss_validation=perform_faiss_validation,
+                                                                     base64Flag=self.encode_base64_vector,
+                                                                     store_all_flag=True)
+                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
+                fts_recall.append(recall_and_accuracy['fts_recall'])
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['faiss_recall'])
+
+            self.log.info(f"fts_accuracy: {fts_accuracy}")
+            self.log.info(f"fts_recall: {fts_recall}")
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            index_stats['index_name'] = index['index_obj'].name
+            index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
+            index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+
+            if perform_faiss_validation:
+                index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+            if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
+                'fts_recall'] < self.expected_accuracy_and_recall:
+                bad_indexes.append(index_stats)
+            all_stats.append(index_stats)
+            schema_counter += 1
+
+            time.sleep(30)
+
+
+        self.log.info(f"Accuracy and recall for queries run on each index : {all_stats}")
+        if len(bad_indexes) != 0:
+            self.fail(f"Indexes have poor accuracy and recall: {bad_indexes}")
+
 
     def test_vector_search_wrong_parameters(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)

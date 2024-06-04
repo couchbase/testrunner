@@ -834,6 +834,8 @@ class FTSIndex:
             self.index_storage_type = index_storage_type
         self.store_in_xattr = TestInputSingleton.input.param("store_in_xattr", False)
         self.num_pindexes = 0
+
+
         self.index_definition = {
             "type": "fulltext-index",
             "name": "",
@@ -1091,12 +1093,16 @@ class FTSIndex:
 
     def add_child_field_to_default_collection_mapping(self, field_name, field_type,
                                                       field_alias=None, analyzer=None, scope=None, collection=None,
-                                                      vector_fields=None, xattr=True):
+                                                      vector_fields=None, xattr=True,xattr_flag=False,base64_flag=False,store_all_flag=False):
         """
         This method will add a field mapping to a default mapping
         """
         fields = str.split(field_name, '.')
         nesting_level = len(fields)
+
+        if store_all_flag:
+            self.store_in_xattr = xattr_flag
+            self.encode_base64_vector = base64_flag
 
         child_map = {}
         child_map['dynamic'] = False
@@ -2780,7 +2786,10 @@ class CouchbaseCluster:
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
-                         scope=None, collections=None, no_check=False):
+                         scope=None, collections=None, no_check=False,xattr_flag=False,base64_flag=False,store_all_flag=False):
+
+
+
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -2817,6 +2826,10 @@ class CouchbaseCluster:
             scope=scope,
             collections=collections
         )
+        if store_all_flag:
+            index.store_in_xattr = xattr_flag
+
+
         if collection_index:
             if not index.custom_map:
                 if type(_type) is list:
@@ -5625,10 +5638,14 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None,
-                     collections=None, no_check=False):
+                     collections=None, no_check=False,store_all_flag=False):
         """
         Creates a default index given bucket, index_name and plan_params
         """
+
+
+
+
         if not plan_params:
             plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(
@@ -5641,7 +5658,10 @@ class FTSBaseTest(unittest.TestCase):
             analyzer=analyzer,
             scope=scope,
             collections=collections,
-            no_check=no_check)
+            no_check=no_check,
+            xattr_flag = self.store_in_xattr,
+            base64_flag = self.encode_base64_vector,
+            store_all_flag = store_all_flag)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -5730,7 +5750,13 @@ class FTSBaseTest(unittest.TestCase):
 
     def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False,
                                         vector_fields=None, field_type=None, field_name=None, extra_fields=None,
-                                        wait_for_index_complete=True):
+                                        wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False):
+
+        if store_all_flag:
+            self.store_in_xattr = xattr_flag
+            self.encode_base64_vector = base64_flag
+
+
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
         indexes = []
@@ -5741,7 +5767,7 @@ class FTSBaseTest(unittest.TestCase):
             if collection_index:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
                                               decoded_index["name"], collection_index=True, _type=_type,
-                                              scope=index_scope, collections=index_collections)
+                                              scope=index_scope, collections=index_collections,store_all_flag=store_all_flag)
                 if field_name and field_type:
                     for collection in index_collections:
                         if create_vector_index:
@@ -5755,13 +5781,20 @@ class FTSBaseTest(unittest.TestCase):
                                                                                     field_alias=field_name,
                                                                                     scope=index_scope,
                                                                                     collection=collection,
-                                                                                    vector_fields=vector_fields)
+                                                                                    vector_fields=vector_fields,
+                                                                                    xattr_flag=xattr_flag,
+                                                                                    base64_flag=base64_flag,
+                                                                                    store_all_flag=store_all_flag)
                         else:
                             fts_index.add_child_field_to_default_collection_mapping(field_name=field_name,
                                                                                     field_type=field_type,
                                                                                     field_alias=field_name,
                                                                                     scope=index_scope,
-                                                                                    collection=collection)
+                                                                                    collection=collection,
+                                                                                    xattr_flag=xattr_flag,
+                                                                                    base64_flag=base64_flag,
+                                                                                    store_all_flag=store_all_flag)
+
 
                 if extra_fields:
                     for collection in index_collections:
@@ -5772,7 +5805,11 @@ class FTSBaseTest(unittest.TestCase):
                                                                                         field_alias=key,
                                                                                         scope=index_scope,
                                                                                         collection=collection,
-                                                                                        xattr=False)
+                                                                                        xattr=False,
+                                                                                        xattr_flag=xattr_flag,
+                                                                                        base64_flag=base64_flag,
+                                                                                        store_all_flag=store_all_flag)
+
                     if index_replica > 1:
                         fts_index.update_num_replicas(index_replica)
             else:
@@ -6528,7 +6565,10 @@ class FTSBaseTest(unittest.TestCase):
 
     def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims=128, use_cbimport=True,
                          percentages_to_resize=[], dims_to_resize=[],
-                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1'):
+                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',python_loader_toggle = True,provideDefaultDocs = True):
+
+
+
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
         for count, bucket in enumerate(containers['buckets']):
@@ -6549,20 +6589,20 @@ class FTSBaseTest(unittest.TestCase):
                                               load_invalid_vecs=load_invalid_vecs, invalid_vecs_dims=invalid_vecs_dims)
                         govl.load_data(container_name)
                     else:
-
-                        vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
-                                          self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                          collection_name, dataset, self.capella_run, False,
-                                          use_cbimport=use_cbimport,
-                                          dims_for_resize=dims_to_resize,
-                                          percentages_to_resize=percentages_to_resize,
-                                          iterations=iterations,
-                                          update=update,
-                                          faiss_indexes=faiss_indexes,
-                                          faiss_index_node=faiss_index_node)
-                        container_name = self.generate_random_container_name()
-                        self.docker_containers.append(container_name)
-                        vl.load_data(container_name)
+                        if python_loader_toggle:
+                            vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset, self.capella_run, False,
+                                              use_cbimport=use_cbimport,
+                                              dims_for_resize=dims_to_resize,
+                                              percentages_to_resize=percentages_to_resize,
+                                              iterations=iterations,
+                                              update=update,
+                                              faiss_indexes=faiss_indexes,
+                                              faiss_index_node=faiss_index_node)
+                            container_name = self.generate_random_container_name()
+                            self.docker_containers.append(container_name)
+                            vl.load_data(container_name)
 
                         if self.store_in_xattr and self.encode_base64_vector:
                             container_name = self.generate_random_container_name()
@@ -6574,7 +6614,7 @@ class FTSBaseTest(unittest.TestCase):
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                                   self._input.membase_settings.rest_password, bucket_name, scope_name,
                                                   collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize)
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
                             govl.load_data(container_name)
 
 
@@ -6588,10 +6628,10 @@ class FTSBaseTest(unittest.TestCase):
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                                   self._input.membase_settings.rest_password, bucket_name, scope_name,
                                                   collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize)
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
                             govl.load_data(container_name)
 
-                        else:
+                        elif self.encode_base64_vector:
                             print("self.encode_base64_vector", self.encode_base64_vector)
                             container_name = self.generate_random_container_name()
                             self.docker_containers.append(container_name)
@@ -6602,7 +6642,20 @@ class FTSBaseTest(unittest.TestCase):
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                                   self._input.membase_settings.rest_password, bucket_name, scope_name,
                                                   collection_name, dataset[0], False, "vect", 0, ei, True,
-                                                  percentages_to_resize, dims_to_resize)
+                                                  percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
+                            govl.load_data(container_name)
+                        else:
+                            container_name = self.generate_random_container_name()
+                            self.docker_containers.append(container_name)
+                            if dataset[0] == "sift":
+                                ei = 1000000
+                            else:
+                                ei = 10000
+                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], False, "vect", 0, ei, False,
+                                                  percentages_to_resize, dims_to_resize,
+                                                  provideDefaultDocs=provideDefaultDocs)
                             govl.load_data(container_name)
 
         return bucketvsdataset
