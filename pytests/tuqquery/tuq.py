@@ -161,7 +161,8 @@ class QueryTests(BaseTestCase):
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", 'plasma')
         self.reload_data = self.input.param("reload_data", False)
-        if self.use_server_groups and not CbServer.capella_run:
+        self.get_version = self.rest.get_nodes_versions()
+        if self.use_server_groups and not CbServer.capella_run and "enterprise" in str(self.get_version):
             self._create_server_groups()
         if self.reload_data:
             self.log.info(f"--> reload_data: {self.reload_data}")
