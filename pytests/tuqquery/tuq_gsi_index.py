@@ -1426,7 +1426,7 @@ class QueriesIndexTests(QueryTests):
             self.query = 'select {0},{1} from {1} left outer join {0} on key ("{1}" || {0}.chkey) for {1} ' \
                          'order by meta({0}).id limit 2'.format(query_bucket, std_bucket)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'] == [{'standard_bucket0': {'y': 9, 'x': 1, 'z': 999}},
+            expected_result = [{'standard_bucket0': {'y': 9, 'x': 1, 'z': 999}},
                                                          {'standard_bucket0': {'tasks_points': {'task1': 1, 'task2': 1},
                                                                                'name': 'employee-9',
                                                                                'mutated': 0,
@@ -1441,7 +1441,10 @@ class QueriesIndexTests(QueryTests):
                                                                                         'name': 'vm_10', 'memory': 10},
                                                                                        {'RAM': 10, 'os': 'windows',
                                                                                         'name': 'vm_11', 'memory': 10}],
-                                                                               'job_title': 'Engineer'}}])
+                                                                               'job_title': 'Engineer'}}]
+            diffs = DeepDiff(actual_result['results'], expected_result, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = 'delete from {0} use keys("parent1")'.format(query_bucket)
             self.run_cbq_query()
             self.query = 'delete from {0} use keys("child1")'.format(std_bucket)
