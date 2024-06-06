@@ -1,5 +1,6 @@
 function OnUpdate(doc, meta) {
     var meta = {"id": meta.id};
+    couchbase.insert(dst_bucket, meta, doc);
     var failed=false
     try{
     couchbase.mutateIn(dst_bucket, meta, [couchbase.MutateInSpec.upsert("path",1 , { "xattrs": true })]);
@@ -8,7 +9,7 @@ function OnUpdate(doc, meta) {
         failed=true
     }
     if (!failed){
-        dst_bucket[meta.id]="success"
+        dst_bucket[meta.id+"11111"]="success"
     }
 }
 
