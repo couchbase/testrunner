@@ -138,7 +138,7 @@ class EventingBaseTest(QueryHelperTests):
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
                                   language_compatibility=None,hostpath=None,validate_ssl=False,src_binding=False,
-                                  username="Administrator", password="password"):
+                                  username="Administrator", password="password",cursor_aware=False):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -238,6 +238,7 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['deadline_timeout'] = deadline_timeout
         body['settings']['timer_storage_chan_size'] = self.timer_storage_chan_size
         body['settings']['dcp_gen_chan_size'] = self.dcp_gen_chan_size
+        body['settings']['cursor_aware'] = cursor_aware
         body['depcfg']['curl'] = []
         if self.is_curl:
             if hostpath != None:

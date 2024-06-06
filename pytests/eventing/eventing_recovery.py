@@ -1290,4 +1290,33 @@ class EventingRecovery(EventingBaseTest):
                 servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
                 self.assertFalse('eventing' in servicesNeedRebalance,
                         msg="Eventing Nodes are not balanced, need rebalance after starting couchbase server."  )
-          
+
+    def test_checkpointing_failure_by_cursor_aware_functions(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code, cursor_aware=True)
+        self.deploy_function(body)
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        nodes_kv_list = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        nodes_eventing_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        if len(nodes_kv_list) < 2:
+            self.fail("Need two or more kv nodes")
+        self.stop_server(nodes_kv_list[1], True)
+        self.log.info("Stopping server for KV node for 5 mins")
+        time.sleep(300)
+        self.start_server(nodes_kv_list[1])
+        actual_count = self.stat.get_collection_item_count_cumulative("dst_bucket", "_default",
+                                                                      "_default", self.get_kv_nodes())
+        if actual_count != (self.docs_per_day * self.num_docs):
+            rest_conn = RestConnection(nodes_eventing_list[0])
+            failure_list = rest_conn.get_event_failure_stats(self.function_name)
+            if "dcp_delete_checkpoint_failure" in failure_list and "dcp_mutation_checkpoint_failure" in failure_list:
+                dcp_delete_checkpoint_failure = failure_list["dcp_delete_checkpoint_failure"]
+                dcp_mutation_checkpoint_failure = failure_list["dcp_mutation_checkpoint_failure"]
+                if dcp_delete_checkpoint_failure == 0 and dcp_mutation_checkpoint_failure == 0:
+                    self.fail("DCP Delete Checkpoint failure detected in cursor aware function")
+                else:
+                    self.log.info("Checkpointing Failure reflected on Statistics: dcp_delete_checkpoint_failure:{0}, dcp_mutation_checkpoint_failure:{1}".format(dcp_delete_checkpoint_failure, dcp_mutation_checkpoint_failure))
+            else:
+                self.log.info("Endpoints for dcp_delete_checkpoint_failure and dcp_mutation_checkpoint_failure are not present in the statistics.")
+        else:
+            self.log.info("Document Count Matched: {0} Expected: {1}".format(actual_count,self.docs_per_day * self.num_docs))
+        self.undeploy_and_delete_function(body)
