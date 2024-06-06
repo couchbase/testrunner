@@ -11,6 +11,7 @@ from pytests.security.ntonencryptionBase import ntonencryptionBase
 from lib.Cb_constants.CBServer import CbServer
 import os
 import json
+import time
 
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 
@@ -840,3 +841,65 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.pause_handler_by_name("test")
         self.resume_handler_by_name("test")
         self.undeploy_and_delete_function("test")
+        
+    def test_online_upgrade_with_failover_rebalance_with_eventing_base64_xattrs(self):
+        self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
+        log.info("Deploy the function in the initial version")
+        self.create_handler("pre_upgrade_function", "handler_code/ABO/insert.js",bucket_bindings=["dst_bucket.dst_bucket.rw"])
+        self.deploy_handler_by_name("pre_upgrade_function")
+        self.print_eventing_stats_from_all_eventing_nodes()
+        # online upgrade with failover
+        self.online_upgrade_swap_rebalance(services=["kv", "kv", "eventing", "index", "n1ql"])
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.add_built_in_server_user()
+        self.wait_for_handler_state("pre_upgrade_function", "deployed")
+        # Validate the data
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+        # TODO
+        self.create_collections_on_all_buckets()
+        time.sleep(60)
+        self.create_function_with_collection("xattrs_2", "handler_code/xattrs_handler1.js",src_namespace="src_bucket.event.coll_0",collection_bindings=["dst_bucket.dst_bucket.event.coll_0.rw"])
+        self.create_function_with_collection("base64_2", "handler_code/base64_post_upgrade.js",src_namespace="src_bucket.event.coll_0",collection_bindings=["dst_bucket.dst_bucket1.event.coll_0.rw"])
+        self.deploy_handler_by_name("xattrs_2")
+        self.deploy_handler_by_name("base64_2")
+        self.add_built_in_server_user()
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Load the data in collections
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
+        self.verify_doc_count_collections("dst_bucket.event.coll_0", self.docs_per_day * 2016 * 2)
+        self.verify_doc_count_collections("dst_bucket1.event.coll_0", self.docs_per_day * 2016)
+        # delete data in all collections
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0",is_delete=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,batch_size=self.batch_size, op_type='delete')
+        # Delete the data on SBM bucket
+        self.verify_doc_count_collections("src_bucket.event.coll_0", 0)
+        self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.verify_doc_count_collections("dst_bucket.event.coll_0", 0)
+        self.verify_doc_count_collections("dst_bucket1.event.coll_0", 0)
+        ## pause handler
+        self.pause_handler_by_name("pre_upgrade_function")
+        self.pause_handler_by_name("xattrs_2")
+        self.pause_handler_by_name("base64_2")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket.event.coll_0")
+        self.load_data_to_collection(self.docs_per_day * 2016, namespace="src_bucket._default._default")
+        # resume function
+        self.resume_handler_by_name("pre_upgrade_function")
+        self.resume_handler_by_name("xattrs_2")
+        self.resume_handler_by_name("base64_2")
+        # Validate the data for both the functions
+        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016 )
+        self.verify_doc_count_collections("dst_bucket.event.coll_0", self.docs_per_day * 2016 * 2)
+        self.verify_doc_count_collections("dst_bucket1.event.coll_0", self.docs_per_day * 2016)
+        self.print_eventing_stats_from_all_eventing_nodes()
+        self.skip_metabucket_check = True
