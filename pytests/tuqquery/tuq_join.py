@@ -930,3 +930,8 @@ class JoinTests(QuerySanityTests):
         ]
         result3 = self.run_cbq_query('WITH a AS ([1,2,3]) SELECT l, r FROM default l JOIN default r USE NL ON l.c3 = r.c3 WHERE l.c1 > 0 and r.c1 > 0 AND r.c2 IN a')
         self.assertEqual(expected_result2, result3['results'])
+
+    def test_MB62254(self):
+        query = 'select * from {} a left join {} b on false'
+        result = self.run_cbq_query(query)
+        self.assertEqual(result['results'], [{"a": {}}])
