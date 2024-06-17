@@ -525,3 +525,9 @@ class QuerySubqueryTests(QueryTests):
         result = self.run_cbq_query(f'SELECT RAW (SELECT d.c1 FROM {self.query_bucket} AS d WHERE META(d).id = META(t).id ) FROM {self.query_bucket} t')
         self.log.info(f"result is {result['results']}")
         self.assertEqual(result['results'], [[{'c1': 1}]])
+
+    def test_raw_subquery(self):
+        subquery = 'SELECT RAW event FROM ( SELECT RAW { "date": MILLIS("2024-06-17T03:59:00Z") } ) event ORDER BY event.date'
+        result = self.run_cbq_query(subquery)
+        self.log.info(f"result is {result['results']}")
+        self.assertEqual(result['results'], [{"date": 1718596740000}])
