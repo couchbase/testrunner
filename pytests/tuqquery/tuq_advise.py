@@ -607,3 +607,9 @@ class QueryAdviseTests(QueryTests):
             indexes = self.get_index_statements(results)
             self.assertTrue(indexes[0] == "CREATE INDEX adv_a_b ON `t`(`a`,`b`)" or indexes[0] == "CREATE INDEX adv_b_a ON `t`(`b`,`a`)")
             self.assertTrue(indexes[1] == "CREATE INDEX adv_c_d ON `t`(`c`,`d`)" or indexes[1] == "CREATE INDEX adv_d_c ON `t`(`d`,`c`)")
+
+    def test_advise_in_in(self):
+        query = "SELECT 1 FROM default WHERE ANY a IN a IN aa SATISFIES true END"
+        result = self.run_cbq_query(f'ADVISE {query}')
+        self.log.info(f"Advise result is: {result['results']}")
+        self.assertTrue(result['results'][0]['query'], query)
