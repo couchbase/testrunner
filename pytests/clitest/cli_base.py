@@ -225,6 +225,8 @@ class CliBaseTest(BaseTestCase):
         elif self.path_type == "local":
             self.log.info("Test command at %s dir " % self.cli_command_path)
             self.cli_command_path = "cd %s; ./" % self.cli_command_path
+        if "debian" in self.os_version:
+            shell.execute_command("apt install -y gawk")
         self.cli_command = self.input.param("cli_command", None)
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:
