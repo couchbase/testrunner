@@ -723,7 +723,7 @@ class SDKDataLoader(object):
                  scope="_default", collection="_default", json_template="Person", doc_expiry=0, fields_to_update=None,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
-                 es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False):
+                 es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False, base64=False, model="sentence-transformers/all-MiniLM-L6-v2"):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
@@ -761,6 +761,9 @@ class SDKDataLoader(object):
         self.capella = capella
         self.ops_rate = ops_rate
         self.workers = workers
+        self.base64 = base64
+        self.model = model
+
 
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1

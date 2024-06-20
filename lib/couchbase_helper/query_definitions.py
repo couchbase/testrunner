@@ -4,9 +4,9 @@ import random
 FULL_SCAN_TEMPLATE = "SELECT {0} FROM %s"
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 RANGE_SCAN_USE_INDEX_TEMPLATE = "SELECT {0} FROM %s USE INDEX (%s USING GSI) WHERE {1}"
-FULL_SCAN_GROUP_BY_TEMPLATE = "SELECT {0} FROM %s GROUP by {2}"
+FULL_SCAN_GROUP_BY_TEMPLATE = "SELECT {0} FROM %s GROUP by {1}"
 RANGE_SCAN_GROUP_BY_TEMPLATE = "SELECT {0} FROM %s WHERE {1} GROUP BY {2}"
-FULL_SCAN_ORDER_BY_TEMPLATE = "SELECT {0} FROM %s ORDER by {2}"
+FULL_SCAN_ORDER_BY_TEMPLATE = "SELECT {0} FROM %s ORDER by {1}"
 RANGE_SCAN_ORDER_BY_TEMPLATE = "SELECT {0} FROM %s where {1} ORDER BY {2}"
 FULL_SCAN_COUNT_TEMPLATE = "SELECT count(*) FROM %s"
 RANGE_SCAN_COUNT_TEMPLATE = "SELECT count(*) FROM %s WHERE {1}"
@@ -67,7 +67,7 @@ class QueryDefinition(object):
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
                                     num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
-                                    missing_indexes=False, missing_field_desc=False):
+                                    missing_indexes=False, missing_field_desc=False, dimension=None, train_list=None, description=None, similarity=None, nprobes=None):
 
         if self.is_primary:
             return self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
@@ -124,6 +124,16 @@ class QueryDefinition(object):
             deployment_plan["defer_build"] = defer_build
         if num_replica:
             deployment_plan["num_replica"] = num_replica
+        if dimension:
+            deployment_plan["dimension"] = dimension
+        if train_list:
+            deployment_plan["train_list"] = train_list
+        if description:
+            deployment_plan["description"] = description
+        if similarity:
+            deployment_plan["similarity"] = similarity
+        if nprobes:
+            deployment_plan["nprobes"] = nprobes
         if self.partition_by_fields:
             if not self.capella_run:
                 deployment_plan["num_partition"] = num_partition

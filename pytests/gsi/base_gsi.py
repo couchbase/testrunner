@@ -13,8 +13,12 @@ import json
 from string import ascii_letters, digits
 from concurrent.futures import ThreadPoolExecutor
 
+import faiss
+import numpy as np
+import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
+from sentence_transformers import SentenceTransformer
 
 from Cb_constants import CbServer
 from couchbase_helper.cluster import Cluster
@@ -130,6 +134,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
+        self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
+        self.vector_dim = self.input.param("vector_dim", "384")
+        self.encoder = SentenceTransformer(self.data_model)
+        self.base64 = self.input.param("base64", False)
         self.namespaces = []
 
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
@@ -1943,7 +1951,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
-                                        bucket_name=None, key_prefix='doc_', load_default_coll=False):
+                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False, model=self.data_model):
         if not bucket_name:
             bucket_name = self.test_bucket
         pre_load_idx_pri = None
@@ -1975,7 +1983,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
-                                                    output=True, username=self.username, password=self.password)
+                                                    output=True, username=self.username, password=self.password, base64=base64, model=model)
                     if self.use_magma_loader:
                         task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
                                                                 generator=self.gen_create, pause_secs=1,
@@ -2699,6 +2707,25 @@ class BaseSecondaryIndexingTests(QueryTests):
         max_shards = 5 * plasma_quota * .04
         return min(max_shards, 2000)
 
+    def load_data_into_faiss(self, vectors, dim=None):
+        if dim is None:
+            dim = len(vectors[0])
+        index = faiss.IndexFlatL2(dim)
+        # Might not need it.
+        faiss.normalize_L2(vectors)
+        index.add(vectors)
+        return index
+
+    def search_ann_in_faiss(self, query, faiss_db, n_probe=None):
+        query_vector = self.encoder.encode(query)
+        _vector = np.array([query_vector])
+        # Might not need it.
+        faiss.normalize_L2(_vector)
+        if n_probe is None:
+            n_probe = faiss_db.ntotal
+        dist, ann = faiss_db.search(_vector, k=n_probe)
+        results = pd.DataFrame({'distances': dist[0], 'ann': ann[0]})
+        return results
 
 class ConCurIndexOps():
     def __init__(self):

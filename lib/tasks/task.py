@@ -6664,14 +6664,15 @@ class MagmaDocLoader(Task):
         self.sdk_docloader = sdk_docloader
 
     def execute(self, task_manager):
+
         command = f"java -jar magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
-                  f"-p 11207 -create_s {self.sdk_docloader.start_seq_num} -create_e {self.sdk_docloader.end+2} " \
+                  f"-p 11207 -create_s {self.sdk_docloader.start_seq_num} -create_e {self.sdk_docloader.end + 2} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_delete} -rd 0" \
                   f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
                   f"-valueType {self.sdk_docloader.json_template} " \
-                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -maxTTL 1800"
+                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} -maxTTL 1800"
 
         self.log.info(command)
         try:
