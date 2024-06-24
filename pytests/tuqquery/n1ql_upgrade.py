@@ -996,18 +996,20 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.log.info(f"Error: {actual_curl['errors'][0]}")
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.jira_error_msg))
 
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.log.info(f"Error: {actual_curl['errors'][0]}")
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['reason']['cause']['error'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'], self.google_error_msg))
+                        % (actual_curl['errors'][0]['reason']['cause']['error'], self.google_error_msg))
 
     ###############################
     #
