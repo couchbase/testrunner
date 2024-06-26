@@ -326,8 +326,7 @@ class QueryEarlyFilterTests(QueryTests):
             self.assertTrue("'_index_key ((`landmark`.`name`))'" in str(explain_plan), f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             # we need to make sure the order is being applied in the correct sequence idx -> order -> offset -> fetch
             self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][1]['#operator'] == 'Order', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2]['#operator'] == 'Offset', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][3]['#operator'] == 'Fetch', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2]['#operator'] == 'Fetch', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
 
             actual_results = self.run_cbq_query(select_query, query_context='default:`travel-sample`.inventory')
             expected_results = self.run_cbq_query(primary_query, query_context='default:`travel-sample`.inventory')
@@ -377,8 +376,7 @@ class QueryEarlyFilterTests(QueryTests):
             self.assertTrue("'_index_key ((`landmark`.`name`))'" in str(explain_plan), f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             # we need to make sure the order is being applied in the correct sequence idx -> order -> offset -> fetch
             self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][1]['#operator'] == 'Order', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2]['#operator'] == 'Offset', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][3]['#operator'] == 'Fetch', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2]['#operator'] == 'Fetch', f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
 
             actual_results = self.run_cbq_query(select_query, query_context='default:`travel-sample`.inventory')
             expected_results = self.run_cbq_query(primary_query, query_context='default:`travel-sample`.inventory')
@@ -408,9 +406,7 @@ class QueryEarlyFilterTests(QueryTests):
             # we need to make sure the order is being applied in the correct sequence idx -> order -> offset -> fetch
             self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][1]['#operator'] == 'Order',
                             f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2]['#operator'] == 'Offset',
-                            f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][3]['#operator'] == 'Fetch',
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][2]['#operator'] == 'Fetch',
                             f"Order is not being applied first, it should be. please check explain plan {explain_plan}")
 
             actual_results = self.run_cbq_query(select_query, query_context='default:`travel-sample`.inventory')
@@ -572,7 +568,6 @@ class QueryEarlyFilterTests(QueryTests):
             self.assertTrue("'_index_key ((`landmark`.`city`))'" not in str(explain_plan), f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             self.assertTrue("'_index_key ((`landmark`.`name`))'" not in str(explain_plan), f"The wrong key is being early filtered! please check explain plan {explain_plan}")
             self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Order', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][2]['#operator'] == 'Offset', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
 
             actual_results = self.run_cbq_query(select_query, query_context='default:`travel-sample`.inventory')
             expected_results = self.run_cbq_query(primary_query, query_context='default:`travel-sample`.inventory')
@@ -856,8 +851,8 @@ class QueryEarlyFilterTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
 
-            select_query = "select * from default where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1 desc limit 2 offset 1"
-            primary_query = "select * from default use index(`#primary`) where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1 desc limit 2 offset 1"
+            select_query = "select * from default where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1,meta().id desc limit 2 offset 1"
+            primary_query = "select * from default use index(`#primary`) where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1,meta().id desc limit 2 offset 1"
 
             actual_results = self.run_cbq_query(select_query)
             expected_results = self.run_cbq_query(primary_query)
@@ -903,8 +898,8 @@ class QueryEarlyFilterTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
 
-            select_query = "select * from default where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1 desc limit 2 offset 1"
-            primary_query = "select * from default use index(`#primary`) where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1 desc limit 2 offset 1"
+            select_query = "select * from default where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1 desc,meta().id limit 2 offset 1"
+            primary_query = "select * from default use index(`#primary`) where f1 < 10 and f2 = 2 and lower(`string`) in ['abcd','abcde','cdesf'] order by f1 desc,meta().id limit 2 offset 1"
 
             actual_results = self.run_cbq_query(select_query)
             expected_results = self.run_cbq_query(primary_query)
