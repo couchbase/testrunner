@@ -21,6 +21,7 @@ class VectorSearch(FTSBaseTest):
 
     def setUp(self):
         super(VectorSearch, self).setUp()
+
         self.input = TestInputSingleton.input
         self.log = logger.Logger.get_logger()
         self.__init_logger()
@@ -71,6 +72,13 @@ class VectorSearch(FTSBaseTest):
                 'fts_nodes': self._cb_cluster.get_fts_nodes()
             })
             self.memory_validator_thread.start()
+
+
+        self.log.info("Modifying quotas for each services in the cluster")
+        try:
+            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512,400,2000,1024,256)
+        except Exception as e:
+            print(e)
 
     def tearDown(self):
         if self.validate_memory_leak:
@@ -396,8 +404,12 @@ class VectorSearch(FTSBaseTest):
                                                             "Expected: {}, Actual: {}".format(new_dimension,
                                                                                               updated_dimension))
 
+
+
     # Indexing
     def test_basic_vector_search(self):
+
+
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
@@ -478,6 +490,7 @@ class VectorSearch(FTSBaseTest):
             self.fail(f"Indexes have poor accuracy and recall: {bad_indexes}")
 
     def test_basic_vector_search_store_all(self):
+        
         indexes = []
 
         combinations = [['vector_data', 'vector', False, False], ['vector_encoded', 'vector_base64', True, True],
@@ -679,6 +692,7 @@ class VectorSearch(FTSBaseTest):
 
 
     def test_vector_search_wrong_parameters(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
@@ -708,6 +722,7 @@ class VectorSearch(FTSBaseTest):
                 self.fail("Index got created with store value of vector field set to True")
 
     def test_vector_search_with_wrong_dimensions(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
 
@@ -746,6 +761,7 @@ class VectorSearch(FTSBaseTest):
                     self.fail("Able to get query results even though index is created with different dimension")
 
     def create_vector_with_constant_queries_in_background(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
@@ -805,6 +821,7 @@ class VectorSearch(FTSBaseTest):
         return [random.uniform(min_float_value, max_float_value) for _ in range(n)]
 
     def test_vector_search_with_invalid_values(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
 
@@ -880,6 +897,7 @@ class VectorSearch(FTSBaseTest):
                               "queries")
 
     def delete_vector_with_constant_queries_in_background(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
@@ -926,6 +944,7 @@ class VectorSearch(FTSBaseTest):
         #         self.run_vector_query(vector=q.tolist(), index=index['index_obj'], dataset=index['dataset'])
 
     def test_vector_index_update_dimensions(self):
+        
         new_dimension = self.input.param("new_dim", 130)
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -996,6 +1015,7 @@ class VectorSearch(FTSBaseTest):
                     self.fail("Able to get query results even though index is created with different dimension")
 
     def test_vector_search_update_similarity(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
@@ -1091,6 +1111,7 @@ class VectorSearch(FTSBaseTest):
                           format(n1ql_hits_dot, hits_dot, self.k))
 
     def test_vector_search_update_partitions(self):
+        
         new_partition_number = self.input.param("update_partitions", 2)
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1220,6 +1241,7 @@ class VectorSearch(FTSBaseTest):
         results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
     def test_vector_search_update_replicas(self):
+        
         new_replica_number = self.input.param("update_replicas", 2)
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1349,6 +1371,7 @@ class VectorSearch(FTSBaseTest):
         results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
     def test_vector_search_update_index_concurrently(self):
+        
         create_alias = self.input.param("create_alias", False)
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
@@ -1457,7 +1480,7 @@ class VectorSearch(FTSBaseTest):
                               " FTS query hits: {}".format(self.k, n1ql_hits, hits))
 
     def test_vector_search_update_doc(self):
-
+        
         update_doc_no = self.input.param("update_docs", 10)
         new_dimension = self.input.param("new_dim", 130)
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1506,6 +1529,7 @@ class VectorSearch(FTSBaseTest):
                         format(n1ql_hits, hits, update_doc_no))
 
     def test_vector_search_update_doc_dimension(self):
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         per_to_resize = eval(TestInputSingleton.input.param("per_to_resize", "[]"))
         dims_to_resize = eval(TestInputSingleton.input.param("dims_to_resize", "[]"))
@@ -1619,7 +1643,7 @@ class VectorSearch(FTSBaseTest):
                 self.delete_faiss_index_files(faiss_index)
 
     def test_vector_search_different_dimensions(self):
-
+        
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
         per_to_resize = eval(TestInputSingleton.input.param("per_to_resize", "[]"))
@@ -1687,6 +1711,7 @@ class VectorSearch(FTSBaseTest):
                 self.log.info("Index Stats: {}".format(index_stats))
 
     def test_vector_search_knn_combination_queries(self):
+        
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
@@ -1777,6 +1802,7 @@ class VectorSearch(FTSBaseTest):
         return True
 
     def test_vector_search_backup_restore(self):
+        
         index_definitions = {}
 
         bucket_name = TestInputSingleton.input.param("bucket", None)

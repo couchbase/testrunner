@@ -4061,7 +4061,6 @@ class FTSBaseTest(unittest.TestCase):
         if self.delete_server_groups:
             rest = RestConnection(self._cb_cluster.get_master_node())
             zones = list(rest.get_zone_names().keys())
-
             if not rest.is_zone_exist("Group 1"):
                 rest.add_zone("Group 1")
 
@@ -4137,6 +4136,7 @@ class FTSBaseTest(unittest.TestCase):
         self.store_in_xattr = self._input.param("store_in_xattr", False)
         self.encode_base64_vector = self._input.param("encode_base64_vector", False)
         self.docker_containers = []
+
 
     def create_capella_config(self):
         services_count = {}
