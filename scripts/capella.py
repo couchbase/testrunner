@@ -14,7 +14,7 @@ def seed_email(email):
         prefix, _ = name.split("+")
     else:
         prefix = name
-    return "{}+{}@{}".format(prefix, uuid, domain)
+    return "{}+{}@{}".format(prefix, uuid.__str__().split("-")[0], domain)
 
 
 def invite_user(token, api_url, user, password, tenant):
