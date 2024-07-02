@@ -48,6 +48,13 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             })
             self.memory_validator_thread.start()
 
+        self.goloader_toggle = TestInputSingleton.input.param("goloader_toggle", False)
+        self.log.info("Modifying quotas for each services in the cluster")
+        try:
+            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
+        except Exception as e:
+            print(e)
+
     def tearDown(self):
         if self.validate_memory_leak:
             self.stop_memory_collector_and_validator = True
@@ -158,7 +165,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         vect_bucket_containers = self.create_vect_bucket_containers(self.num_vect_buckets)
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client,
                                                               containers=vect_bucket_containers)
-        self.load_vector_data(containers, dataset=self.vector_dataset)
+        self.load_vector_data(containers, dataset=self.vector_dataset, goloader_toggle= self.goloader_toggle)
         vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
                                                                   self.index_per_vect_bucket)
 
@@ -2274,7 +2281,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                               containers=vect_bucket_containers)
 
         self.load_data(exempt_bucket_prefix="vector-data")
-        self.load_vector_data(containers, dataset=self.vector_dataset)
+        self.load_vector_data(containers, dataset=self.vector_dataset, goloader_toggle= self.goloader_toggle)
         vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
                                                                   self.index_per_vect_bucket)
 

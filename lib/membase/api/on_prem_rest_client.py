@@ -3742,6 +3742,23 @@ class RestConnection(object):
             raise Exception("Error setting fts ram quota: {0}".format(content))
         return status
 
+    @not_for_capella
+    def modify_memory_quota(self, kv_quota,index_quota,fts_quota,cbas_quota,eventing_quota):
+        api = self.baseUrl + "pools/default"
+        params = urllib.parse.urlencode({"memoryQuota": kv_quota, "indexMemoryQuota":index_quota,"ftsMemoryQuota":fts_quota,"cbasMemoryQuota":cbas_quota,"eventingMemoryQuota":eventing_quota})
+        headers = self._create_headers()
+        status, content, _ = self.urllib_request(api, verb="POST", params=params, headers=headers)
+        if status:
+            log.info(f"SUCCESS")
+            log.info(f"KV RAM quota set to {kv_quota}mb.")
+            log.info(f"Index RAM quota set to {index_quota}mb.")
+            log.info(f"FTS RAM quota set to {fts_quota}mb.")
+            log.info(f"Cbas RAM quota set to {cbas_quota}mb.")
+            log.info(f"Eventing RAM quota set to {eventing_quota}mb.")
+        else:
+            raise Exception("Error setting the RAM quota for each services")
+        return status
+
     def set_maxConcurrentPartitionMovesPerNode(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
         params = {"maxConcurrentPartitionMovesPerNode": str(value)}
