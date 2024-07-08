@@ -25,17 +25,16 @@ class UtilVector(object):
     def compare_distance(self, query_vector, xb, vector_results, vector_distances, distance="L2"):
         fail_count = 0
         for idx, vector in enumerate(vector_results):
-            actual_distance = round(vector_distances[idx], 6)
-            print(f'actual: {actual_distance}')
+            actual_distance = vector_distances[idx]
             if distance == "L2" or distance == "EUCLIDEAN":
-                expected_distance = round(self.l2_dist(query_vector, xb[vector]),6)
+                expected_distance = self.l2_dist(query_vector, xb[vector])
             if distance == "L2_SQUARED" or distance == "EUCLIDEAN_SQUARED":
-                expected_distance = round(self.l2_dist_sq(query_vector, xb[vector]),1)
+                expected_distance = self.l2_dist_sq(query_vector, xb[vector])
             if distance == "DOT":
-                expected_distance = - round(self.dot_product_dist(query_vector, xb[vector]),1)
+                expected_distance = - self.dot_product_dist(query_vector, xb[vector])
             if distance == "COSINE":
-                expected_distance = round(self.cosine_dist(query_vector, xb[vector]), 6)
-            if expected_distance != actual_distance:
+                expected_distance = self.cosine_dist(query_vector, xb[vector])
+            if not(np.isclose(expected_distance,actual_distance)):
                 fail_count += 1
                 print(f"FAIL: expected: {expected_distance} actual: {actual_distance}")
                 continue
