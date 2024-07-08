@@ -39,6 +39,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
         self.upgrade_to = self.input.param("upgrade_to")
         self.index_batch_size = self.input.param("index_batch_size", -1)
+        self.drop_all_indexes = self.input.param("drop_all_indexes", True)
         self.toggle_disable_upgrade = self.input.param("toggle_disable_upgrade", False)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format("job_title")
@@ -51,6 +52,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
         self.no_mutation_docs = self.input.param("no_mutation_docs", 75000)
+        self.post_upgrade_load = self.input.param("post_upgrade_load", 10000)
         self.continuous_mutations = self.input.param("continuous_mutations", False)
         self.upgrade_mode = self.input.param("upgrade_mode", 'online')
         self.toggle_shard_rebalance = self.input.param("toggle_shard_rebalance", False)
@@ -1562,6 +1564,169 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future.result()
 
+    def test_plasma_shards_post_upgrade(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
+        self.index_rest.set_index_settings({"indexer.plasma.minNumShard": 2})
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        namespace_index_map = {}
+        select_queries = set()
+        for namespace in self.namespaces:
+            query_definitions_before_upgrade = self.gsi_util_obj.generate_hotel_data_index_definition()
+            queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions_before_upgrade,
+                                                              namespace=namespace,
+                                                              randomise_replica_count=False)
+            select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions_before_upgrade, namespace=namespace))
+
+            self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                 query_node=query_node)
+
+        self.wait_until_indexes_online()
+        query_result = self.run_scans_and_return_results(select_queries=select_queries)
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        shard_map_before_upgrade = self.gen_shard_map_node()
+        for node in nodes:
+            node_rest = RestConnection(node)
+            self.log.info(
+                f"node is {node_rest.ip} and version is {node_rest.get_complete_version()} and upgrade version is {self.upgrade_to.split('-')[0][:5]}")
+            failover_task = self.cluster.async_failover(
+                [self.master],
+                failover_nodes=[node],
+                graceful=False)
+            failover_task.result()
+            log.info("Node Failed over...")
+            upgrade_th = self._async_update(self.upgrade_to, [node])
+            for th in upgrade_th:
+                th.join()
+            log.info("==== Upgrade Complete ====")
+            self.sleep(120)
+            rest = RestConnection(self.master)
+            nodes_all = rest.node_statuses()
+            for cluster_node in nodes_all:
+                if cluster_node.ip == node.ip:
+                    log.info("Adding Back: {0}".format(node))
+                    rest.add_back_node(cluster_node.id)
+                    rest.set_recovery_type(otpNode=cluster_node.id,
+                                           recoveryType="full")
+            log.info("Adding node back to cluster...")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            rebalance.result()
+
+        if self.drop_all_indexes:
+            for namespace in namespace_index_map:
+                drop_index_queries = self.gsi_util_obj.get_drop_index_list(
+                    definition_list=namespace_index_map[namespace], namespace=namespace)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=drop_index_queries, database=namespace,
+                                                     query_node=query_node)
+                self.sleep(10)
+
+        else:
+            for namespace in self.namespaces:
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  randomise_replica_count=False)
+                namespace_index_map[namespace] = query_definitions
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
+                                                     query_node=query_node)
+
+            self.wait_until_indexes_online()
+
+            for namespace in namespace_index_map:
+                drop_index_queries = self.gsi_util_obj.get_drop_index_list(
+                    definition_list=namespace_index_map[namespace], namespace=namespace)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=drop_index_queries, database=namespace,
+                                                     query_node=query_node)
+                self.sleep(10)
+
+        shard_map_after_upgrade = self.gen_shard_map_node()
+
+        for node in nodes:
+            self.assertNotEqual(sorted(shard_map_before_upgrade[node.ip]), sorted(shard_map_after_upgrade[node.ip]),
+                                f'shard map before upgrade {shard_map_before_upgrade}, shard map after upgrade {shard_map_after_upgrade}')
+
+        if not self.drop_all_indexes:
+            self.log.info("Loading new docs to collection")
+            task_list = []
+            for namespace in self.namespaces:
+                _, keyspace = namespace.split(':')
+                bucket, scope, collection = keyspace.split('.')
+                key_prefix = 'doc_' + "".join(random.choices(digits, k=2))
+                gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope,
+                                            collection=collection, json_template='Hotel', key_prefix=key_prefix,
+                                            output=True)
+                task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                        generator=gen_create, pause_secs=1,
+                                                        timeout_secs=300, use_magma_loader=True)
+                task_list.append(task)
+            for task in task_list:
+                task.result()
+
+            self.sleep(240, "sleep for docs to get indexed")
+
+            for query in select_queries:
+                post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                           server=query_node)['results']
+
+                self.assertGreaterEqual(len(post_rebalance_result), len(query_result[query]), "Docs not indexed post upgrade dco load")
+
+            for node in nodes:
+                index_rest = RestConnection(node)
+                stat_map = index_rest.get_index_stats()
+                for bucket in stat_map:
+                    for index in stat_map[bucket]:
+                        for stat in stat_map[bucket][index]:
+                            if "num_docs_pending" in stat:
+                                self.assertEqual(stat_map[stat], 0, f"num docs is still pending for the index {index}")
+
+
+
+        # killing index process on all the indexer nodes
+        for node in nodes:
+            self._kill_all_processes_index(server=node)
+
+        shard_map_after_restart = self.gen_shard_map_node()
+        for node in nodes:
+            self.assertEqual(sorted(shard_map_after_upgrade[node.ip]), sorted(shard_map_after_restart[node.ip]),
+                             f'shard map before upgrade {shard_map_before_upgrade}, shard map after restart {shard_map_after_restart}')
+
+        self.capture_lsof_output_of_indexer()
+
+
+    def capture_lsof_output_of_indexer(self):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            indexer_pid = shell.execute_command(command='pgrep -f indexer',
+                                           get_pty=True)[0]
+            lsof_output = shell.execute_command(command=f'lsof -p {indexer_pid[0]}')
+            self.log.info(f'lsof output for node {node.ip} is {lsof_output}')
+
+    def gen_shard_map_node(self):
+        shard_map = {}
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            output = shell.execute_command(command='ls /opt/couchbase/var/lib/couchbase/data/@2i/shards/',
+                                           get_pty=True)
+            self.sleep(1)
+            self.log.info(f'output is {output}')
+            for shard in output:
+                shard_map[node.ip] = shard[0].split('\t')
+                break
+        return shard_map
 
     def post_upgrade_with_nodes_clause(self, num_replica=1, random_replica=False, indexes_after_upgrade=None, node_in=None, provisioned=True):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
