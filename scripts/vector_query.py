@@ -22,6 +22,25 @@ cfg = {
 }
 
 class UtilVector(object):
+    def compare_distance(self, query_vector, xb, vector_results, vector_distances, distance="L2"):
+        fail_count = 0
+        for idx, vector in enumerate(vector_results):
+            actual_distance = round(vector_distances[idx], 6)
+            print(f'actual: {actual_distance}')
+            if distance == "L2" or distance == "EUCLIDEAN":
+                expected_distance = round(self.l2_dist(query_vector, xb[vector]),6)
+            if distance == "L2_SQUARED" or distance == "EUCLIDEAN_SQUARED":
+                expected_distance = round(self.l2_dist_sq(query_vector, xb[vector]),1)
+            if distance == "DOT":
+                expected_distance = - round(self.dot_product_dist(query_vector, xb[vector]),1)
+            if distance == "COSINE":
+                expected_distance = round(self.cosine_dist(query_vector, xb[vector]), 6)
+            if expected_distance != actual_distance:
+                fail_count += 1
+                print(f"FAIL: expected: {expected_distance} actual: {actual_distance}")
+                continue
+            print(f"PASS: expected: {expected_distance} actual: {actual_distance}")
+        return fail_count
     def compare_vector(self, query_vector, xb, actual, expected, dist="L2"):
         fail_count = 0
         for idx, actual_vector in enumerate(actual):
@@ -53,13 +72,17 @@ class UtilVector(object):
     def vector_dist(self, v1, v2, dist="L2"):
         if dist == "L2" or dist == "EUCLIDEAN":
             return self.l2_dist(v1, v2)
-        elif dist == "DOT_PRODUCT":
+        if dist == "L2_SQUARED" or dist == "EUCLIDEAN_SQUARED":
+            return self.l2_dist_sq(v1, v2)
+        elif dist == "DOT":
             return self.dot_product_dist(v1, v2)
-        elif dist == "COSINE_SIM":
-            return self.cosine_sim_dist(v1, v2)
+        elif dist == "COSINE":
+            return self.cosine_dist(v1, v2)
     def l2_dist(self, v1, v2):
         return float(norm(v1-v2))
-    def cosine_sim_dist(self, v1, v2):
+    def l2_dist_sq(self, v1, v2):
+        return self.l2_dist(v1, v2)**2
+    def cosine_dist(self, v1, v2):
         return float(1 - dot(v1, v2)/(norm(v1)*norm(v2)))
     def dot_product_dist(self, v1, v2):
         return float(dot(v1, v2))
@@ -152,24 +175,41 @@ class LoadVector(object):
         except Exception as e:
             print(e)
 
+class IndexVector(object):
+    def create_index(self, cluster, bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', similarity='L2_SQUARED'):
+        cb = cluster.bucket(bucket)
+        cb_scope = cb.scope(scope)
+        vector_definition = {"dimension":128, "train_list":10000, "description": "IVF,PQ8x8", "similarity": similarity, "nprobes":3}
+        index_query = f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, brand, {vector_field} VECTOR) WITH {vector_definition}'
+        print(index_query)
+        result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
+        for row in result:
+            print(f"Result: {row}")
+        print(f"Execution time: {result.metadata().metrics().execution_time()}")
+    def drop_index(self, cluster, bucket='siftsmall', scope='_default', collection='_default', similarity='L2_SQUARED'):
+        cb = cluster.bucket(bucket)
+        cb_scope = cb.scope(scope)
+        index_query = f'DROP INDEX vector_index_{similarity} IF EXISTS ON {collection}'
+        print(index_query)
+        result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
+        for row in result:
+            print(f"Result: {row}")
+        print(f"Execution time: {result.metadata().metrics().execution_time()}")
+
 class QueryVector(object):
     def vector_knn_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, direction='ASC', k=100):
         if is_xattr:
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        if search_function == 'DOT_PRODUCT':
-            direction = 'DESC'
-        query = f"SELECT RAW id FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY {search_function}_DIST({vector_field}, $qvec) {direction} LIMIT {k}"
+        query = f'SELECT RAW id FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
         return query
     def distance_knn_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, direction='ASC', k=100):
         if is_xattr:
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        if search_function == 'DOT_PRODUCT':
-            direction = 'DESC'
-        query = f"SELECT RAW {search_function}_DIST({vector_field}, $qvec) FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY {search_function}_DIST({vector_field}, $qvec) {direction} LIMIT {k}"
+        query = f'SELECT RAW VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
         return query
     def run_queries(self, cluster, qdocs, gdocs, search_function="L2", bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
@@ -235,6 +275,7 @@ if __name__ == "__main__":
     use_base64 = False
     use_bigendian = False
     load_vector = True
+    index_vector = False
     query_vector = True
     query_vector_dot = False
     query_vector_cosine = False
@@ -253,30 +294,45 @@ if __name__ == "__main__":
         LoadVector().load_documents(cluster, xb, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian)
         print
 
+    if index_vector:
+        print("Index documents ...")
+        IndexVector().create_index(cluster)
+
     if query_vector:
         print("Run (l2) queries and compare with SIFT ...")
         QueryVector().run_queries(cluster, xq[:10], gt, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian)
+        print
+        print("Run (euclidean) queries and compare with SIFT ...")
+        QueryVector().run_queries(cluster, xq[:10], gt, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian, search_function="EUCLIDEAN")
         print
 
     if query_vector_l2:
         index_l2 = FAISSVector().create_l2_index(xb)
         faiss_l2_distances, faiss_l2_result = FAISSVector().search_index(index_l2, xq)
         print("Run (l2) query and compare with FAISS")
-        QueryVector().run_queries(cluster, xq[:5], faiss_l2_result, search_function="L2")
+        QueryVector().run_queries(cluster, xq[:10], faiss_l2_result, search_function="L2")
         print
 
     if query_vector_dot:
         index_dot = FAISSVector().create_dot_index(xb)
         faiss_dot_distances, faiss_dot_result = FAISSVector().search_index(index_dot, xq)
         print("Run (dot product) query and compare with FAISS")
-        QueryVector().run_queries(cluster, xq[:5], faiss_dot_result, search_function="DOT_PRODUCT")
+        QueryVector().run_queries(cluster, xq[:10], faiss_dot_result, search_function="DOT")
         print
 
     if query_vector_cosine:
         index_cosine = FAISSVector().create_cosine_index(xb, normalize=True)
         faiss_cosine_distances, faiss_cosine_result = FAISSVector().search_index(index_cosine, xq, normalize=True)
-        print("Run (cosine sim) query and compare with FAISS")
-        QueryVector().run_queries(cluster, xq[:5], faiss_cosine_result, search_function="COSINE_SIM")
+        print("Run (cosine) query and compare with FAISS")
+        QueryVector().run_queries(cluster, xq[:10], faiss_cosine_result, search_function="COSINE")
         print
 
     # cb_l2_distances, cb_l2_results = QueryVector().search_knn(cluster, xq[:2], 'L2')
+    # cb_l2sq_distances, cb_l2sq_results = QueryVector().search_knn(cluster, xq[:2], 'L2_SQUARED')
+    # cb_cosine_distances, cb_cosine_results = QueryVector().search_knn(cluster, xq[:2], 'COSINE')
+    # cb_dot_distances, cb_dot_results = QueryVector().search_knn(cluster, xq[:2], 'DOT')
+    # 
+    # UtilVector().compare_distance(xq[0], xb, cb_l2_results[0], cb_l2_distances[0], distance="L2")
+    # UtilVector().compare_distance(xq[0], xb, cb_l2sq_results[0], cb_l2sq_distances[0], distance="L2_SQUARED")
+    # UtilVector().compare_distance(xq[0], xb, cb_cosine_results[0], cb_cosine_distances[0], distance="COSINE")
+    # UtilVector().compare_distance(xq[0], xb, cb_dot_results[0], cb_dot_distances[0], distance="DOT")    
