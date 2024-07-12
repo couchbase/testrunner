@@ -7,13 +7,14 @@ from couchbase.cluster import Cluster, ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
 from lib.vector.vector import LoadVector, QueryVector, UtilVector
 
-class VectorSearchKNNTests(QueryTests):
+class VectorSearchTests(QueryTests):
     def setUp(self):
-        super(VectorSearchKNNTests, self).setUp()
+        super(VectorSearchTests, self).setUp()
         self.bucket = "default"
         self.use_xattr = self.input.param("use_xattr", False)
         self.use_base64 = self.input.param("use_base64", False)
         self.use_bigendian = self.input.param("use_bigendian", False)
+        self.distance = self.input.param("distance", "L2")
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -23,7 +24,7 @@ class VectorSearchKNNTests(QueryTests):
         self.gt = sift().read_groundtruth()
 
     def suite_setUp(self):
-        super(VectorSearchKNNTests, self).suite_setUp()
+        super(VectorSearchTests, self).suite_setUp()
         threads = []
         self.log.info("Start loading vector data")
         for i in range(0, len(self.xb), 1000): # load in batches of 1000 docs per thread
@@ -38,18 +39,18 @@ class VectorSearchKNNTests(QueryTests):
         self.log.info("Completed loading vector data")
 
     def tearDown(self):
-        super(VectorSearchKNNTests, self).tearDown()
+        super(VectorSearchTests, self).tearDown()
 
     def suite_tearDown(self):
-        super(VectorSearchKNNTests, self).suite_tearDown()
+        super(VectorSearchTests, self).suite_tearDown()
 
     def test_knn_distances(self):
-        begin = random.randrange(0, len(self.xq) - 5)
+        begin = random.randint(0, len(self.xq) - 5)
         self.log.info(f"Running KNN query for range [{begin}:{begin+5}]")
-        distances, indices = QueryVector().search_knn(self.database, self.xq[begin:begin+5], 'L2', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        distances, indices = QueryVector().search_knn(self.database, self.xq[begin:begin+5], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
         for i in range(5):
             self.log.info(f"Check distance for query {i + begin}")
-            fail_count = UtilVector().check_distance(self.xq[i + begin], self.xb, indices[i], distances[i], distance="L2")
+            fail_count = UtilVector().check_distance(self.xq[i + begin], self.xb, indices[i], distances[i], distance=self.distance)
             self.assertEqual(fail_count, 0, "We got some diff! Check log above.")
 
     def test_knn_distances_faiss(self):
