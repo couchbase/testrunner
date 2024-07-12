@@ -40,34 +40,27 @@ class UtilVector(object):
                 continue
             print(f"PASS: expected: {expected_distance} actual: {actual_distance}")
         return fail_count
-    def compare_vector(self, query_vector, xb, actual, expected, dist="L2"):
+    def compare_vector(self, query_vector, xb, actual, expected, dist="L2", k=100):
         fail_count = 0
         for idx, actual_vector in enumerate(actual):
             expected_vector = expected[idx]
             if actual_vector != expected_vector:
-                print(f"Warn: Value#{idx} actual: {actual_vector} different than expected {expected_vector}")
+                # print(f"Warn: Value#{idx} actual: {actual_vector} different than expected {expected_vector}")
                 d1 = self.vector_dist(query_vector, xb[expected_vector], dist)
                 d2 = self.vector_dist(query_vector, xb[actual_vector], dist)
-                print(f"distance of {expected_vector} to query vector is {d1}")
-                print(f"distance of {actual_vector} to query vector is {d2}")
+                # print(f"distance of {expected_vector} to query vector is {d1}")
+                # print(f"distance of {actual_vector} to query vector is {d2}")
                 if d1 == d2:
                     continue
                 else:
                     fail_count += 1
-        if fail_count > 0:
-            print (f"Fail rate {fail_count} out of 100")
-            return False
-        return True
+        return (k - fail_count / k)
     def compare_result(self, expected, actual, query_vector, dist="L2"):
         if expected == actual:
-            print("Success: result matches ground truth")
+            return 100.0
         else:
-            print(f"Warn: result don't match! Let's check each vectors")
-            match = self.compare_vector(query_vector, xb, actual, expected, dist)
-            if match:
-                print(f"Success: difference in some vectors order was due to equidistant vectors")
-            else:
-                print(f"Fail: result did not match ground truth")
+            recall = self.compare_vector(query_vector, xb, actual, expected, dist)
+            return recall
     def vector_dist(self, v1, v2, dist="L2"):
         if dist == "L2" or dist == "EUCLIDEAN":
             return self.l2_dist(v1, v2)
@@ -230,7 +223,8 @@ class QueryVector(object):
         for row in result.rows():
             actual.append(row)
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
-        UtilVector().compare_result(expected, actual, query_vector, dist=search_function)
+        recall = UtilVector().compare_result(expected, actual, query_vector, dist=search_function)
+        print(f"Recall rate: {recall}%")
     def search_knn(self, cluster, xq, search_function="L2", bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
