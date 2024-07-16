@@ -55,7 +55,7 @@ class UtilVector(object):
                 else:
                     fail_count += 1
         return (k - fail_count) / k * 100
-    def compare_result(self, expected, actual, query_vector, dist="L2"):
+    def compare_result(self, xb, expected, actual, query_vector, dist="L2"):
         if expected == actual:
             return 100.0
         else:
@@ -203,15 +203,14 @@ class QueryVector(object):
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
         query = f'SELECT RAW VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
         return query
-    def run_queries(self, cluster, qdocs, gdocs, search_function="L2", bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
+    def run_queries(self, cluster, xb, qdocs, gdocs, tid=1, search_function="L2", bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         for idx, x in enumerate(qdocs):
-            print("-"*30)
-            print(f"Running query#{idx} with vector {x.tolist()[:9]} ...")
+            print(f"Thread {tid}: Running query#{idx} with vector {x.tolist()[:5]} ...")
             qdoc = {"size":[random.choice(cfg["sizes"])], "brand":[random.choice(cfg["brands"])],"qvec": x.tolist(), "sizeidx":0, "brandidx":0}
-            self.n1ql_query(cb_scope, qdoc, gdocs[idx], search_function, collection, vector_field, is_xattr, is_base64, is_bigendian)
-    def n1ql_query(self, cb_scope, qdoc, gdoc, search_function="L2", collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
+            self.n1ql_query(cb_scope, xb, qdoc, gdocs[idx], search_function, collection, vector_field, is_xattr, is_base64, is_bigendian)
+    def n1ql_query(self, cb_scope, xb, qdoc, gdoc, search_function="L2", collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         vector_query = self.vector_knn_query(vector_field, collection, search_function, is_xattr, is_base64, network_byte_order=is_bigendian)
         actual = []
         expected = gdoc.tolist()
@@ -223,7 +222,7 @@ class QueryVector(object):
         for row in result.rows():
             actual.append(row)
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
-        recall = UtilVector().compare_result(expected, actual, query_vector, dist=search_function)
+        recall = UtilVector().compare_result(xb, expected, actual, query_vector, dist=search_function)
         print(f"Recall rate: {recall}%")
     def search_knn(self, cluster, xq, search_function="L2", bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
@@ -293,31 +292,31 @@ if __name__ == "__main__":
 
     if query_vector:
         print("Run (l2) queries and compare with SIFT ...")
-        QueryVector().run_queries(cluster, xq[:10], gt, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian)
+        QueryVector().run_queries(cluster, xb, xq[:10], gt, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian)
         print
         print("Run (euclidean) queries and compare with SIFT ...")
-        QueryVector().run_queries(cluster, xq[:10], gt, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian, search_function="EUCLIDEAN")
+        QueryVector().run_queries(cluster, xb, xq[:10], gt, is_xattr=use_xattr, is_base64=use_base64, is_bigendian=use_bigendian, search_function="EUCLIDEAN")
         print
 
     if query_vector_l2:
         index_l2 = FAISSVector().create_l2_index(xb)
         faiss_l2_distances, faiss_l2_result = FAISSVector().search_index(index_l2, xq)
         print("Run (l2) query and compare with FAISS")
-        QueryVector().run_queries(cluster, xq[:10], faiss_l2_result, search_function="L2")
+        QueryVector().run_queries(cluster, xb, xq[:10], faiss_l2_result, search_function="L2")
         print
 
     if query_vector_dot:
         index_dot = FAISSVector().create_dot_index(xb)
         faiss_dot_distances, faiss_dot_result = FAISSVector().search_index(index_dot, xq)
         print("Run (dot product) query and compare with FAISS")
-        QueryVector().run_queries(cluster, xq[:10], faiss_dot_result, search_function="DOT")
+        QueryVector().run_queries(cluster, xb, xq[:10], faiss_dot_result, search_function="DOT")
         print
 
     if query_vector_cosine:
         index_cosine = FAISSVector().create_cosine_index(xb, normalize=True)
         faiss_cosine_distances, faiss_cosine_result = FAISSVector().search_index(index_cosine, xq, normalize=True)
         print("Run (cosine) query and compare with FAISS")
-        QueryVector().run_queries(cluster, xq[:10], faiss_cosine_result, search_function="COSINE")
+        QueryVector().run_queries(cluster, xb, xq[:10], faiss_cosine_result, search_function="COSINE")
         print
 
     # cb_l2_distances, cb_l2_results = QueryVector().search_knn(cluster, xq[:2], 'L2')
