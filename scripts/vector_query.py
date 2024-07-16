@@ -54,7 +54,7 @@ class UtilVector(object):
                     continue
                 else:
                     fail_count += 1
-        return (k - fail_count / k)
+        return (k - fail_count) / k * 100
     def compare_result(self, expected, actual, query_vector, dist="L2"):
         if expected == actual:
             return 100.0
