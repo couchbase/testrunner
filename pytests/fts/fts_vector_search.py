@@ -408,8 +408,6 @@ class VectorSearch(FTSBaseTest):
 
     # Indexing
     def test_basic_vector_search(self):
-
-
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []

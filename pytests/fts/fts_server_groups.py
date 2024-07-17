@@ -12,6 +12,7 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
     def setUp(self):
         super(FTSServerGroups, self).setUp()
         self.rest = RestConnection(self._cb_cluster.get_master_node())
+        self.fts_rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         self.helper = RestHelper(self.rest)
         self.default_group_name = "Group 1"
         self.fts_query = {"match": "emp", "field": "type"}
@@ -52,7 +53,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         fts_nodes = []
         for initial_query_zone in initial_query_zones:
             fts_nodes.extend(self.get_zone_healthy_fts_nodes(zone=initial_query_zone))
@@ -70,6 +73,10 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             fts_nodes = self.get_zone_healthy_fts_nodes(zone=post_eject_query_zone)
             post_eject_query_nodes.extend(fts_nodes)
 
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
+
         self._maybe_rebalance()
 
         try:
@@ -82,16 +89,24 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
                     remote = RemoteMachineShellConnection(ejected_node)
                     remote.start_couchbase()
 
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
+
     def test_index_modification(self):
         mod_type = self._input.param("mod_type", None)
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         self.update_index(index=idx, mod_type=mod_type)
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         fts_nodes = self._cb_cluster.get_fts_nodes()
         etalon_hits = self.query_node(index=idx, node=fts_nodes[0])
         for node in fts_nodes[1:]:
@@ -103,28 +118,39 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         idx.update_num_replicas(final_replicas)
 
         self.wait_for_indexing_complete(item_count=1000)
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         index_replica = idx.get_num_replicas()
         zones_with_replica = self.calculate_zones_with_replica(index=idx)
         self.assertEqual(index_replica + 1, zones_with_replica,
                         f"Found incorrect replicas distribution: index replicas: {index_replica}"
                         f", zones with replica count: {zones_with_replica}")
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
     def test_partitions_distribution(self):
         index_partitions = int(self._input.param("partitions", 1))
 
         self.build_cluster()
         self.load_data()
         idx = self.build_index()
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         self.wait_for_indexing_complete(item_count=1000)
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
             if len(zone_fts_nodes) > 0:
@@ -144,13 +170,18 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.load_data()
         idx = self.build_index()
         self.wait_for_indexing_complete(item_count=1000)
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         self.modify_server_groups(available_nodes=available_nodes)
         if final_replicas:
             idx.update_num_replicas(final_replicas)
         self.wait_for_indexing_complete(item_count=1000)
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
             if len(zone_fts_nodes) > 0:
@@ -165,7 +196,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         fts_nodes = self._cb_cluster.get_fts_nodes()
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         initial_hits = self.query_node(index=idx, node=fts_nodes[0])
         for node in fts_nodes[1:]:
             hits = self.query_node(index=idx, node=node)
@@ -193,6 +226,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
             self.wait_for_indexing_complete(item_count=1000)
 
         self._maybe_rebalance()
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
 
         for zone in self.rest.get_zone_names():
             zone_fts_nodes = self.get_zone_healthy_fts_nodes(zone=zone)
@@ -219,7 +255,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.load_data()
         idx = self.build_index()
         self.wait_for_indexing_complete(item_count=1000)
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         fts_nodes = self._cb_cluster.get_fts_nodes()
         initial_hits = self.query_node(index=idx, node=fts_nodes[0])
 
@@ -228,7 +266,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.wait_for_indexing_complete(item_count=1000)
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         fts_nodes = self._cb_cluster.get_fts_nodes()
         for node in fts_nodes:
             hits = self.query_node(index=idx, node=node)
@@ -250,7 +290,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.load_data()
         idx = self.build_index()
         self.wait_for_indexing_complete(item_count=1000)
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         fts_nodes = self._cb_cluster.get_fts_nodes()
         initial_hits = self.query_node(index=idx, node=fts_nodes[0])
 
@@ -259,7 +301,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.wait_for_indexing_complete(item_count=1000)
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         # server group having maximum number of partitions
         max_server_group = self.find_max_server_group(idx=idx)
 
@@ -285,7 +329,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
                 self._cb_cluster.failover(graceful=False, node=max_group_fts_nodes[i])
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         min_fts_node_hints = self.query_node(index=idx, node=min_fts_node)
         self.assertEqual(initial_hits, min_fts_node_hints, "Best effort distribution test is failed.")
 
@@ -296,13 +342,17 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.load_data()
         idx = self.build_index()
         self.wait_for_indexing_complete(item_count=1000)
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
 
         self.wait_for_indexing_complete(item_count=1000)
 
         self._maybe_rebalance()
-
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         fts_nodes = self._cb_cluster.get_fts_nodes()
         for node in fts_nodes:
             hits = self.query_node(index=idx, node=node)
@@ -320,7 +370,6 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         except Exception as e:
             self.assertTrue("cluster needs 3 search nodes to support the requested replica count of 2" in str(e), "Unexpected error message while trying to create index with incorrect number of replicas.")
 
-
     def test_group_autofailover(self):
         eject_nodes_structure = self._input.param("eject_nodes", None)
         eject_type = self._input.param("eject_type", None)
@@ -328,11 +377,17 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         self.load_data()
         idx = self.build_index()
         self.wait_for_indexing_complete(item_count=1000)
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
         self.rest.update_autofailover_settings(True, 60, enableServerGroup=True)
 
         ejected_nodes = self.eject_nodes(eject_nodes_structure=eject_nodes_structure, eject_type=eject_type)
 
         try:
+            err = self.validate_partition_distribution(self.fts_rest)
+            if len(err) > 0:
+                self.fail(err)
             self.sleep(120, "Waiting for server group auto failover to be started.")
             initial_hits = self.query_node(index=idx, node=self._cb_cluster.get_fts_nodes()[0])
 
@@ -492,6 +547,9 @@ class FTSServerGroups(FTSBaseTest, NewUpgradeBaseTest):
         elif "delete" == mod_type:
             self._cb_cluster.delete_fts_index(index.name)
         self.wait_for_indexing_complete(item_count=1000)
+        err = self.validate_partition_distribution(self.fts_rest)
+        if len(err) > 0:
+            self.fail(err)
 
     def rebuild_cluster_to_initial_state(self):
         cleanup_nodes = self.rest.get_nodes_in_zone(self.default_group_name)
