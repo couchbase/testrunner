@@ -13,6 +13,14 @@ from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 from lib.Cb_constants.CBServer import CbServer
 from lib.collection.collections_cli_client import CollectionsCLI
 from scripts.java_sdk_setup import JavaSdkSetup
+import json
+from pathlib import Path
+from pytests.fts.vector_dataset_generator.vector_dataset_loader import GoVectorLoader, VectorLoader
+from pytests.fts.vector_dataset_generator.vector_dataset_generator import VectorDataset
+import struct
+import base64
+from pytests.fts.fts_base import QUERY
+
 
 class FTSCallable:
     """
@@ -34,7 +42,8 @@ class FTSCallable:
         fts_obj.delete_all()
     """
 
-    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False, is_elixir=False, reduce_query_logging=False):
+    def __init__(self, nodes, es_validate=False, es_reset=True, scope=None, collections=None, collection_index=False, is_elixir=False, reduce_query_logging=False,
+                 variable_node=None, xattr_flag=False, base64_flag=False,servers = None):
         self.log = logger.Logger.get_logger()
         self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log, reduce_query_logging=reduce_query_logging)
         self.cb_cluster.get_buckets()
@@ -73,6 +82,38 @@ class FTSCallable:
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
         self.run_via_n1ql = False
         self.reduce_query_logging = reduce_query_logging
+
+
+        self.variable_node = variable_node
+        self.store_in_xattr = xattr_flag
+        self.encode_base64_vector = base64_flag
+        file_path = Path('b/resources/fts/vector_index_def.json')
+        self.vector_index_definition = json.loads(file_path.read_text())
+        self.expected_accuracy_and_recall = TestInputSingleton.input.param("expected_accuracy_and_recall", 70)
+        self.vector_field_type = "vector_base64" if self.encode_base64_vector else "vector"
+        if self.encode_base64_vector:
+            if self.store_in_xattr:
+                self.vector_field_name = "vector_encoded"
+            else:
+                self.vector_field_name = "vector_data_base64"
+        else:
+            self.vector_field_name = "vector_data"
+
+        self.k = TestInputSingleton.input.param("k", 2)
+        self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                      "knn": [{"field": "vector_data", "k": self.k,
+                               "vector": []}]}
+        self.index_obj = {"name": "index_default"}
+        self.vector_dataset = TestInputSingleton.input.param("vector_dataset", "siftsmall")
+        self.vector_queries_count = TestInputSingleton.input.param("vector_queries_count", 5)
+        self.count = 0
+        self.run_n1ql_search_function = TestInputSingleton.input.param("run_n1ql_search_function", True)
+        self.servers = servers
+        self.inbetween_active = False
+        self.inbetween_tests = 0
+        self.vector_flag = TestInputSingleton.input.param("vector_search_test", False)
+        self.skip_validation_if_no_query_hits = TestInputSingleton.input.param("skip_validation_if_no_query_hits", True)
+
 
     def __create_buckets(self):
         self.log.info("__create_buckets() is not implemented yet.")
@@ -181,7 +222,7 @@ class FTSCallable:
         return index
 
     def create_default_index(self, index_name, bucket_name, analyzer='standard',
-                             cluster=None, collection_index=False, scope=None, collections=None):
+                             cluster=None, collection_index=False, scope=None, collections=None, plan_params=None):
 
         """Create fts index
         @param index_name: name of the index/alias
@@ -195,6 +236,7 @@ class FTSCallable:
         if not cluster:
             cluster = self.cb_cluster
 
+
         index = FTSIndex(
             cluster=cluster,
             name=index_name,
@@ -202,8 +244,11 @@ class FTSCallable:
             type_mapping=types_mapping,
             collection_index=collection_index,
             scope=scope,
-            collections=collections
+            collections=collections,
+            plan_params=plan_params
         )
+
+
 
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         index.create(rest)
@@ -217,10 +262,12 @@ class FTSCallable:
                     index.add_type_mapping_to_index_definition(type=types_mapping, analyzer=analyzer)
 
             doc_config = dict()
+
             doc_config['mode'] = 'scope.collection.type_field'
             doc_config['type_field'] = "type"
             index.index_definition['params']['doc_config'] = {}
             index.index_definition['params']['doc_config'] = doc_config
+
 
         return index
 
@@ -379,7 +426,8 @@ class FTSCallable:
                 es=self.es,
                 es_index_name=es_index_name,
                 query_index=count,
-                use_collections=self.collection_index))
+                use_collections=self.collection_index,
+                variable_node=self.variable_node))
         num_queries = len(tasks)
 
         for task in tasks:
@@ -666,5 +714,613 @@ class FTSCallable:
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         return rest.get_fts_defrag_output(node, creds).json()
 
+    def create_vector_index(self, xattr_flag, base64_flag, index_name, similarity="l2_norm", dimensions=128):
+
+        self.store_in_xattr = xattr_flag
+        self.encode_base64_vector = base64_flag
+
+        index_body = copy.deepcopy(self.vector_index_definition)
+        index_body["name"] = index_name
+        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+            "dims"] = dimensions
+        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+            "similarity"] = similarity
+
+        if self.encode_base64_vector:
+            if self.store_in_xattr:
+                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
+                    "fields"][0]['name'] = "vector_encoded"
+            else:
+                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
+                    "fields"][0]['name'] = "vector_data_base64"
+
+            index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+                'type'] = "vector_base64"
+
+            vector_temp = index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]
+            index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+            if self.store_in_xattr:
+                index_body['params']['mapping']['types']['_default._default']['properties'][
+                    'vector_encoded'] = vector_temp
+            else:
+                index_body['params']['mapping']['types']['_default._default']['properties'][
+                    'vector_data_base64'] = vector_temp
+
+        if self.store_in_xattr:
+            vector_temp = index_body['params']['mapping']['types']['_default._default']['properties']
+            index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+            index_body['params']['mapping']['types']['_default._default']['properties']['_$xattrs'] = {
+                "enabled": True,
+                "dynamic": False,
+                "properties": vector_temp}
+
+        try:
+            status, result = RestConnection(self.servers[1]).create_fts_index(index_name, index_body, mode="upgrade")
+            if status:
+                time.sleep(50)
+                return str(result), 200
+            else:
+                return str(result), 100
+        except Exception as e:
+            print(e)
+            return str(e), 100
+
+    def update_vector_index(self, xattr_flag, base64_flag, index_name, similarity="l2_norm", dimensions=128):
+
+        self.store_in_xattr = xattr_flag
+        self.encode_base64_vector = base64_flag
+
+        uuid = ""
+        try:
+            uuid = RestConnection(self.servers[1]).get_fts_index_uuid(index_name, bucket="default")
+        except Exception as e:
+            print(e)
 
 
+        index_body = copy.deepcopy(self.vector_index_definition)
+        index_body["name"] = index_name
+        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+            "dims"] = dimensions
+        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+            "similarity"] = similarity
+        index_body["uuid"] = uuid
+
+        if self.encode_base64_vector:
+            if self.store_in_xattr:
+                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
+                    "fields"][0]['name'] = "vector_encoded"
+            else:
+                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
+                    "fields"][0]['name'] = "vector_data_base64"
+
+            index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+                'type'] = "vector_base64"
+
+            vector_temp = index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]
+            index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+            if self.store_in_xattr:
+                index_body['params']['mapping']['types']['_default._default']['properties'][
+                    'vector_encoded'] = vector_temp
+            else:
+                index_body['params']['mapping']['types']['_default._default']['properties'][
+                    'vector_data_base64'] = vector_temp
+
+        if self.store_in_xattr:
+            vector_temp = index_body['params']['mapping']['types']['_default._default']['properties']
+            index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+            index_body['params']['mapping']['types']['_default._default']['properties']['_$xattrs'] = {
+                "enabled": True,
+                "dynamic": False,
+                "properties": vector_temp}
+
+        try:
+            status, result = RestConnection(self.servers[1]).update_fts_index(index_name, index_body, mode="upgrade")
+            if status:
+                time.sleep(50)
+                return str(result), 200
+            else:
+                return str(result), 100
+        except Exception as e:
+            print(e)
+            return str(e), 100
+
+    def push_vector_data(self, node, username, password, bucket="default", scope="_default", collection="_default",
+                         vector_dataset="siftsmall", xattr=False, prefix="emp", start_index=10000000,
+                         end_index= 10005001, base64Flag=False):
+
+        goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
+                                         start_index,end_index,base64Flag)
+        goloader_object.load_data("upgrade")
+
+    def get_query_vectors(self, dataset_name, dimension=None):
+        ds = VectorDataset(dataset_name)
+        use_hdf5_datasets = True
+        if ds.dataset_name in ds.supported_sift_datasets:
+            use_hdf5_datasets = False
+        ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="query")
+
+        if dimension:
+            import numpy as np
+            ds.query_vecs = list(ds.query_vecs)
+
+            for index in range(len(ds.query_vecs)):
+                vector = ds.query_vecs[index]
+                current_dim = len(vector)
+
+                # Resize the vector to the desired dimension
+                if current_dim < dimension:
+                    # If the current dimension is less than the desired dimension, repeat the values
+                    repeat_values = dimension - current_dim
+                    repeated_values = np.tile(vector, ((dimension + current_dim - 1) // current_dim))
+                    ds.query_vecs[index] = repeated_values[:dimension]
+                elif current_dim > dimension:
+                    # If the current dimension is greater than the desired dimension, truncate the vector
+                    ds.query_vecs[index] = vector[:dimension]
+
+        print(f"First Query vector:{str(ds.query_vecs[0])}")
+        print(f"Length of first query vector: {len(ds.query_vecs[0])}")
+
+        return ds.query_vecs
+    def get_groundtruth_file(self, dataset_name):
+        ds = VectorDataset(dataset_name)
+        use_hdf5_datasets = True
+        if ds.dataset_name in ds.supported_sift_datasets:
+            use_hdf5_datasets = False
+        ds.extract_vectors_from_file(use_hdf5_datasets=use_hdf5_datasets, type_of_vec="groundtruth")
+        print(f"First groundtruth vector:{str(ds.neighbors_vecs[0])}")
+        return ds.neighbors_vecs
+
+    def floats_to_little_endian_bytes(self, floats):
+        byte_array = bytearray()
+        for num in floats:
+            float_bytes = struct.pack('<f', num)
+            byte_array.extend(float_bytes)
+
+        return byte_array
+
+    def get_base64_encoding(self, array):
+        byte_array = self.floats_to_little_endian_bytes(array)
+        base64_string = base64.b64encode(byte_array).decode('ascii')
+        return base64_string
+
+    def run_n1ql_query_upgrade(self, query="", node=None, timeout=70, verbose=True):
+        res = RestConnection(node).query_tool(query, timeout=timeout, verbose=verbose)
+        return res
+
+    def construct_cbft_query_json_upgrade(self, index, query, fields=None, timeout=60000,
+                                          facets=False,
+                                          sort_fields=None,
+                                          explain=False,
+                                          show_results_from_item=0,
+                                          highlight=False,
+                                          highlight_style=None,
+                                          highlight_fields=None,
+                                          consistency_level='',
+                                          consistency_vectors={},
+                                          score='',
+                                          knn=None):
+
+        max_matches = 10000000
+        max_limit_matches = 100
+
+        query_json = copy.deepcopy(QUERY.JSON)
+
+        # query is a unicode dict
+        query_type = "match_none"
+        query_json['query'][query_type] = {}
+        query_json['knn'] = [query]
+
+        query_json['indexName'] = str(self.index_obj['name'])
+        query_json['explain'] = explain
+
+        query_json['size'] = int(max_matches)
+
+        if max_limit_matches is not None:
+            query_json['limit'] = int(max_limit_matches)
+        if show_results_from_item:
+            query_json['from'] = int(show_results_from_item)
+        if timeout is not None:
+            query_json['ctl']['timeout'] = int(timeout)
+        if fields:
+            query_json['fields'] = fields
+        if facets:
+            query_json['facets'] = self.construct_facets_definition()
+        if sort_fields:
+            query_json['sort'] = sort_fields
+        if highlight:
+            query_json['highlight'] = {}
+            if highlight_style:
+                query_json['highlight']['style'] = highlight_style
+            if highlight_fields:
+                query_json['highlight']['fields'] = highlight_fields
+        if consistency_level is None:
+            del query_json['ctl']['consistency']['level']
+        else:
+            query_json['ctl']['consistency']['level'] = consistency_level
+        if consistency_vectors is None:
+            del query_json['ctl']['consistency']['vectors']
+        elif consistency_vectors != {}:
+            query_json['ctl']['consistency']['vectors'] = consistency_vectors
+        if score != '':
+            query_json['score'] = "none"
+        if knn is not None:
+            query_json['knn'] = knn
+        return query_json
+
+    def compare_results(self, listA, listB, nameA="listA", nameB="listB"):
+        common_elements = set(listA) & set(listB)
+        not_common_elements = set(listA) ^ set(listB)
+        self.log.info(f"Elements not common in both lists: {not_common_elements}")
+        percentage_exist = (len(common_elements) / len(listB)) * 100
+        self.log.info(f"Percentage of elements in {nameB} that exist in {nameA}: {percentage_exist:.2f}%")
+        accuracy = 0
+        if listA[0] == listB[0]:
+            accuracy = 1
+        return accuracy, percentage_exist
+
+    def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
+                      rest=None):
+        if not node:
+            node = self.servers[0]
+        if not rest:
+            rest = RestConnection(node)
+        try:
+            total_hits, hit_list, time_taken, status = \
+                rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name)
+
+            return total_hits, hit_list, time_taken, status
+        except Exception as e:
+            print(e)
+            return -1, -1, -1, -1
+
+    def execute_query_upgrade(self, query, index, zero_results_ok=True, expected_hits=None,
+                              return_raw_hits=False, sort_fields=None,
+                              explain=False, show_results_from_item=0, highlight=False,
+                              highlight_style=None, highlight_fields=None, consistency_level='',
+                              consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
+                              node=None, knn=None, fields=None):
+
+        vector_search = False
+        if self.vector_flag:
+            vector_search = True
+
+        query_dict = self.construct_cbft_query_json_upgrade(query,
+                                                            index,
+                                                            fields=fields,
+                                                            sort_fields=sort_fields,
+                                                            explain=explain,
+                                                            show_results_from_item=show_results_from_item,
+                                                            highlight=highlight,
+                                                            highlight_style=highlight_style,
+                                                            highlight_fields=highlight_fields,
+                                                            consistency_level=consistency_level,
+                                                            consistency_vectors=consistency_vectors,
+                                                            timeout=timeout,
+                                                            score=score,
+                                                            knn=knn)
+
+        hits = -1
+        matches = []
+        doc_ids = []
+        time_taken = 0
+        status = {}
+
+        try:
+            if timeout == 0:
+                # force limit in 10 min in case timeout=0(no timeout)
+                rest_timeout = 600
+            else:
+                rest_timeout = timeout // 1000 + 10
+            hits, matches, time_taken, status = \
+                self.run_fts_query(str(index['name']), query_dict, scope_name="_default",
+                                   bucket_name="default", node=node, timeout=rest_timeout, rest=rest)
+        except Exception as e:
+            print(e)
+
+        if status == 'fail':
+            return hits, matches, time_taken, status
+        if hits:
+            for doc in matches:
+                doc_ids.append(doc['id'])
+        if int(hits) == 0 and not zero_results_ok:
+            print("ERROR: 0 hits returned!")
+            raise FTSException(f"No docs returned for query : {query_dict}")
+        if expected_hits and expected_hits != hits:
+            print(f"ERROR: Expected hits: {expected_hits}, fts returned: {hits}"
+                  % (expected_hits, hits))
+            raise FTSException("Expected hits: %s, fts returned: %s"
+                               % (expected_hits, hits))
+        if expected_hits and expected_hits == hits:
+            print(f"SUCCESS! Expected hits: {expected_hits}, fts returned: {hits}")
+        if expected_no_of_results is not None:
+            if expected_no_of_results == doc_ids.__len__():
+                print(
+                    f"SUCCESS! Expected number of results: {expected_no_of_results}, fts returned: {doc_ids.__len__()}")
+            else:
+                print(f"ERROR! Expected number of results: {expected_no_of_results}, fts returned: {doc_ids.__len__()}")
+                print(doc_ids)
+                raise FTSException("Expected number of results: %s, fts returned: %s"
+                                   % (expected_no_of_results, doc_ids.__len__()))
+
+        if not return_raw_hits:
+            return hits, doc_ids, time_taken, status
+        else:
+            return hits, matches, time_taken, status
+
+    def run_vector_query(self, vector, index, neighbours=None,
+                         validate_result_count=True, load_invalid_base64_string=False):
+
+        if isinstance(self.query, str):
+            self.query = json.loads(self.query)
+
+        if self.encode_base64_vector:
+            if load_invalid_base64_string:
+                self.query['knn'][0][
+                    'vector_base64'] = "Q291Y2hiYXNlIGlzIGdyZWF0ICB3c2txY21lcW9qZmNlcXcgZGZlIGpkbmZldyBmamUgd2Zob3VyIGwgZnJ3OWZmIGdmaXJ3ZnJ3IGhmaXJoIGZlcmYgcmYgZXJpamZoZXJ1OWdlcmcgb2ogZmhlcm9hZiBmZTlmdSBnZXJnIHJlOWd1cmZyZWZlcmcgaHJlIG8gZXJmZ2Vyb2ZyZmdvdQ=="
+            else:
+                self.query['knn'][0]['vector_base64'] = self.get_base64_encoding(vector)
+        else:
+            self.query['knn'][0]['vector'] = vector
+
+        self.log.info("*" * 20 + f" Running Query # {self.count} - on index {self.index_obj['name']} " + "*" * 20)
+        self.count += 1
+        # Run fts query via n1ql
+        n1ql_hits = -1
+        if self.run_n1ql_search_function:
+            n1ql_query = f"SELECT COUNT(*) FROM `default`.`_default`.`_default` AS t1 WHERE SEARCH(t1, {self.query});"
+            self.log.info(f" Running n1ql Query - {n1ql_query}")
+            try:
+                if self.inbetween_active:
+                    n1ql_hits = self.run_n1ql_query_upgrade(n1ql_query, node=self.servers[1])['results'][0]['$1']
+                else:
+                    n1ql_hits = self.run_n1ql_query_upgrade(n1ql_query, node=self.servers[0])['results'][0]['$1']
+            except Exception as e:
+                print(e)
+
+
+            if n1ql_hits == 0:
+                n1ql_hits = -1
+            self.log.info("FTS Hits for N1QL query: %s" % n1ql_hits)
+
+        # Run fts query
+        self.log.info(f" Running FTS Query - {self.query}")
+
+        hits, matches, time_taken, status = self.execute_query_upgrade(query=self.query['query'], index=index,
+                                                                       knn=self.query['knn'],
+                                                                       explain=self.query['explain'],
+                                                                       return_raw_hits=True,
+                                                                       fields=self.query['fields'])
+
+        if hits == 0:
+            hits = -1
+
+        if hits==-1:
+            self.log.info(f"debug for hits -1 : hits : {hits}, status: {status}\n")
+
+        self.log.info("FTS Hits for Search query: %s" % hits)
+        # compare fts and n1ql results if required
+        if self.run_n1ql_search_function:
+            if n1ql_hits == hits:  #
+                self.log.info(
+                    f"Validation for N1QL and FTS Passed! N1QL hits =  {n1ql_hits}, FTS hits = {hits}")
+            else:
+                self.log.info({"query": self.query, "reason": f"N1QL hits =  {n1ql_hits}, FTS hits = {hits}"})
+
+        if self.skip_validation_if_no_query_hits and hits == 0:
+            hits = -1
+            self.log.info(f"FTS Hits for Search query: {hits}, Skipping validations")
+            return -1, -1, None, {}
+
+        recall_and_accuracy = {}
+
+        if neighbours is not None:
+            query_vector = vector
+            fts_matches = []
+            for i in range(self.k):
+                fts_matches.append(int(matches[i]['id'][3:]) - 10000001)
+
+            self.log.info("*" * 5 + f"Query RESULT # {self.count}" + "*" * 5)
+            self.log.info(f"FTS MATCHES: {fts_matches}")
+
+            fts_accuracy, fts_recall = self.compare_results(neighbours[:100], fts_matches, "groundtruth", "fts")
+
+            recall_and_accuracy['fts_accuracy'] = fts_accuracy
+            recall_and_accuracy['fts_recall'] = fts_recall
+
+            self.log.info("*" * 30)
+
+        # validate no of results are k only
+        if self.run_n1ql_search_function:
+            if validate_result_count:
+                if len(matches) != self.k and n1ql_hits != self.k:
+                    self.log.error(
+                        f"No of results are not same as k=({self.k} \n k = {self.k} || N1QL hits = {n1ql_hits}  || "
+                        f"FTS hits = {hits}")
+
+        return n1ql_hits, hits, matches, recall_and_accuracy
+
+    def run_vector_queries(self, store_in_xattr=False, encode_base_64=False, vector_field_name="vector_data",
+                           vector_field_type="vector", index_name=None):
+
+        is_passed = True
+        self.encode_base64_vector = encode_base_64
+        self.store_in_xattr = store_in_xattr
+        self.vector_field_name = vector_field_name
+        self.vector_field_type = vector_field_type
+
+        if store_in_xattr:
+            self.vector_field_name = "_$xattrs." + self.vector_field_name
+
+        self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
+                      "knn": [{"field": "vector_data", "k": self.k,
+                               "vector": []}]}
+
+        self.query['knn'][0]['field'] = self.vector_field_name
+
+        if self.vector_field_type == "vector_base64":
+            self.query['knn'][0] = {}
+            self.query['knn'][0] = {"field": self.vector_field_name, "k": self.k, "vector_base64": ""}
+
+        all_stats = []
+        bad_indexes = []
+
+        if index_name:
+            index_name = index_name
+        else:
+            index_name = "index_default_vector"
+        try:
+            self.index_obj = {"name": index_name}
+            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0}
+            dataset_name = self.vector_dataset
+            queries = self.get_query_vectors(dataset_name)
+            neighbours = self.get_groundtruth_file(dataset_name)
+            fts_accuracy = []
+            fts_recall = []
+            num_queries = self.vector_queries_count
+
+            for count, q in enumerate(queries[:num_queries]):
+                _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=self.index_obj,
+                                                                     neighbours=neighbours[count])
+                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
+                fts_recall.append(recall_and_accuracy['fts_recall'])
+
+            self.log.info(f"fts_accuracy: {fts_accuracy}")
+            self.log.info(f"fts_recall: {fts_recall}")
+
+            index_stats['index_name'] = self.index_obj['name']
+            index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
+            index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+
+            if (index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats['fts_recall'] <
+                    self.expected_accuracy_and_recall):
+                bad_indexes.append(index_stats)
+            all_stats.append(index_stats)
+
+            self.log.info(f"Accuracy and recall for queries run on each index : {all_stats}")
+            if len(bad_indexes) != 0:
+                self.log.error(f"Indexes have poor accuracy and recall: {bad_indexes}")
+                is_passed = False
+            else:
+                self.log.info(f"SUCCESS")
+        except Exception as e:
+            self.log.error(e)
+            is_passed = False
+
+        return is_passed
+
+    def get_ideal_index_distribution(self,k, n):
+        if k==0:
+            return [0 for i in range(n)]
+        quotient = k // n
+        remainder = k % n
+        result = [quotient] * n
+        for i in range(remainder):
+            result[i] += 1
+        return result
+
+    def validate_partition_distribution(self, rest):
+        _, payload = rest.get_cfg_stats()
+        node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
+
+        node_active_count = {}
+        node_replica_count = {}
+
+        index_active_count = {}
+        index_replica_count = {}
+
+        for k, v in payload["planPIndexes"]["planPIndexes"].items():
+            index_name = v["indexName"]
+            if index_name not in index_active_count:
+                index_active_count[index_name] = {}
+            if index_name not in index_replica_count:
+                index_replica_count[index_name] = {}
+
+            for k1, v1 in v["nodes"].items():
+                if v1["priority"] == 0:
+                    node_active_count[k1] = node_active_count.get(k1, 0) + 1
+                    index_active_count[index_name][k1] = index_active_count[index_name].get(k1, 0) + 1
+                else:
+                    node_replica_count[k1] = node_replica_count.get(k1, 0) + 1
+                    index_replica_count[index_name][k1] = index_replica_count[index_name].get(k1, 0) + 1
+
+        actual_partition_count = sum(node_active_count.values()) + sum(node_replica_count.values())
+
+        print("Actives:")
+        for k, v in node_active_count.items():
+            print(f"\t{node_defs_known[k]} : {v}")
+
+        print("Replicas:")
+        for k, v in node_replica_count.items():
+            print(f"\t{node_defs_known[k]} : {v}")
+
+        print(f"Actual number of index partitions in cluster: {actual_partition_count}")
+
+        indexes_map = {}
+        expected_partition_count = 0
+        num_rep = 0
+        if "indexDefs" in payload:
+            for k, v in payload["indexDefs"]["indexDefs"].items():
+                try:
+                    num_rep = v['planParams']['numReplicas']
+                except:
+                    num_rep = 0
+                indexes_map[
+                    k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {num_rep}"
+                curr_active_partitions = v["planParams"]["indexPartitions"]
+                curr_replica_partitions = curr_active_partitions * num_rep
+                expected_partition_count += curr_active_partitions + curr_replica_partitions
+
+        print(f"Expected number of index partitions in cluster: {expected_partition_count}")
+        print(f"Indexes: {len(indexes_map)}")
+        pindexes_count = []
+        for k, v in indexes_map.items():
+            print(f"\t{k} :: {v}")
+            parts = v.split(", ")
+            for part in parts:
+                if part.startswith("indexPartitions"):
+                    index_partitions = part.split(": ")[1]
+                    pindexes_count.append(index_partitions)
+        print("Index actives distribution:")
+        error = []
+        count = 0
+        for k, v in index_active_count.items():
+            print(f"\tIndex: {k}")
+            index_distribution = []
+            current_partition_count = 0
+            total = 0
+            for k1, v1 in v.items():
+                total += v1
+                print(f"\t\t{node_defs_known[k1]} : {v1}")
+                index_distribution.append(int(v1))
+                current_partition_count += int(v1)
+            if total != pindexes_count[count]:
+                error.append(f"Total active partitions are different- total:: {total} - :: expected{pindexes_count[count]}")
+
+            index_distribution.sort(reverse = True)
+
+            if index_distribution !=  self.get_ideal_index_distribution(current_partition_count,len(v)):
+                error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
+
+        if num_rep != 0:
+            print("Index replicas distribution:")
+            count = 0
+            for k, v in index_replica_count.items():
+                print(f"\tIndex: {k}")
+                index_distribution = []
+                current_partition_count = 0
+                total = 0
+                for k1, v1 in v.items():
+                    total += v1
+                    print(f"\t\t{node_defs_known[k1]} : {v1}")
+                    index_distribution.append(int(v1))
+                    current_partition_count += int(v1)
+                if total != pindexes_count[count]:
+                    error.append(
+                        f"Total active partitions are different- total:: {total} - :: expected{pindexes_count[count]}")
+
+                index_distribution.sort(reverse=True)
+
+                if index_distribution != self.get_ideal_index_distribution(current_partition_count,len(v)):
+                    error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
+
+        return error

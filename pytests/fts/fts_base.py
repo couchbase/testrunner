@@ -1613,7 +1613,7 @@ class FTSIndex:
                       highlight_style=None, highlight_fields=None, consistency_level='',
                       consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
                       node=None, knn=None, fields=None,
-                      raise_on_error=False):
+                      raise_on_error=False, variable_node=None):
 
         vector_search = False
         if self.is_vector_query(query):
@@ -1648,7 +1648,8 @@ class FTSIndex:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope,
-                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest)
+                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest,
+                                             variable_node=variable_node)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -1906,9 +1907,9 @@ class FTSIndex:
                     index1, index2 = expected_docs.index(
                         tolerance[0]), expected_docs.index(tolerance[1])
                     expected_docs[index1], expected_docs[index2] = expected_docs[
-                        index2], \
-                        expected_docs[
-                            index1]
+                                                                       index2], \
+                                                                   expected_docs[
+                                                                       index1]
                     if docs == expected_docs:
                         result = True
                     else:
@@ -2070,17 +2071,17 @@ class FTSIndex:
                         doc['explanation']['children'], weight, searchTerm)
                     if 'children' in tree:
                         tf_score, field_norm_score, idf_score, query_norm_score, \
-                            coord_score = self.extract_detailed_score_from_node(
+                        coord_score = self.extract_detailed_score_from_node(
                             tree['children'])
                     else:
                         nodes = []
                         nodes.append(tree)
                         tf_score, field_norm_score, idf_score, query_norm_score, \
-                            coord_score = self.extract_detailed_score_from_node(
+                        coord_score = self.extract_detailed_score_from_node(
                             nodes)
                 else:
                     tf_score, field_norm_score, idf_score, query_norm_score, \
-                        coord_score = self.extract_detailed_score_from_node(
+                    coord_score = self.extract_detailed_score_from_node(
                         doc['explanation'])
 
         return tf_score, field_norm_score, idf_score, query_norm_score, coord_score
@@ -2887,7 +2888,7 @@ class CouchbaseCluster:
         self.__indexes.clear()
 
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
-                      rest=None):
+                      rest=None, variable_node=None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2895,7 +2896,9 @@ class CouchbaseCluster:
         @return hit_list : list of docs that match the query
 
         """
-        if not node:
+        if variable_node:
+            node = variable_node
+        elif not node:
             node = self.get_random_fts_node()
         if not rest:
             rest = RestConnection(node)
@@ -3461,7 +3464,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None):
+                                    use_collections=False, dataset=None, variable_node=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3473,7 +3476,8 @@ class CouchbaseCluster:
                                                             n1ql_executor=n1ql_executor,
                                                             use_collections=use_collections,
                                                             dataset=dataset,
-                                                            reduce_query_logging=self.reduce_query_logging)
+                                                            reduce_query_logging=self.reduce_query_logging,
+                                                            variable_node=variable_node)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -3821,11 +3825,14 @@ class CouchbaseCluster:
                 self.__kv_nodes.remove(node)
         self.__fail_over_nodes = []
 
-    def add_back_specific_node(self, recovery_type=None, services=None, node=None):
+    def add_back_specific_node(self, recovery_type=None, services=None, node=None, master_node=None, rebalance=True):
         """add-back failed-over node to the cluster.
             @param recovery_type: delta/full
         """
-        rest = RestConnection(self.__master_node)
+        if master_node:
+            rest = RestConnection(master_node)
+        else:
+            rest = RestConnection(self.__master_node)
         if recovery_type:
             rest.set_recovery_type(otpNode=node.id, recoveryType=recovery_type)
 
@@ -3837,8 +3844,9 @@ class CouchbaseCluster:
         for nd in self.__fail_over_nodes:
             if nd not in self.__nodes:
                 self.__nodes.append(nd)
-        self.__clusterop.rebalance(self.__nodes, [], [], services=services)
-        self.__fail_over_nodes = []
+        if rebalance:
+            self.__clusterop.rebalance(self.__nodes, [], [], services=services)
+            self.__fail_over_nodes = []
 
     def add_back_node(self, recovery_type=None, services=None):
         """add-back failed-over node to the cluster.
@@ -4060,7 +4068,6 @@ class FTSBaseTest(unittest.TestCase):
         if self.delete_server_groups:
             rest = RestConnection(self._cb_cluster.get_master_node())
             zones = list(rest.get_zone_names().keys())
-
             if not rest.is_zone_exist("Group 1"):
                 rest.add_zone("Group 1")
 
@@ -4117,6 +4124,7 @@ class FTSBaseTest(unittest.TestCase):
         self.log.info(
             "==== FTSbasetests setup is finished for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
+        time.sleep(50)
         if not self.skip_log_scan and not self.capella_run:
             self.log_scan_file_prefix = f'{self._testMethodName}_test_{self.__case_number}'
             _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix + "_BEFORE")
@@ -4294,8 +4302,8 @@ class FTSBaseTest(unittest.TestCase):
             test_failed = error or failure
 
         return test_failed \
-            or (hasattr(self, '_exc_info')
-                and self._exc_info()[1] is not None)
+               or (hasattr(self, '_exc_info')
+                   and self._exc_info()[1] is not None)
 
     def __is_cleanup_not_needed(self):
         return ((self.__is_test_failed() and
@@ -5821,6 +5829,8 @@ class FTSBaseTest(unittest.TestCase):
             self.sleep(5, "Waiting 5 seconds for index to update..")
             if wait_for_index_complete:
                 self.wait_for_indexing_complete()
+
+        time.sleep(20)
         return indexes
 
     def define_index_parameters_collection_related(self):
@@ -6562,7 +6572,7 @@ class FTSBaseTest(unittest.TestCase):
     def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims=128, use_cbimport=True,
                          percentages_to_resize=[], dims_to_resize=[],
                          iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
-                         python_loader_toggle=True, provideDefaultDocs=False,goloader_toggle = True):
+                         python_loader_toggle=True, provideDefaultDocs=True):
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6599,63 +6609,62 @@ class FTSBaseTest(unittest.TestCase):
                             self.docker_containers.append(container_name)
                             vl.load_data(container_name)
 
-                        if goloader_toggle:
-                            if self.store_in_xattr and self.encode_base64_vector:
-                                container_name = self.generate_random_container_name()
-                                self.docker_containers.append(container_name)
-                                if dataset[0] == "sift":
-                                    ei = 1000000
-                                else:
-                                    ei = 10000
-                                govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                      self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                      collection_name, dataset[0], True, "vect", 0, ei,
-                                                      self.encode_base64_vector, percentages_to_resize, dims_to_resize,
-                                                      provideDefaultDocs=provideDefaultDocs)
-                                govl.load_data(container_name)
-
-
-                            elif self.store_in_xattr:
-                                container_name = self.generate_random_container_name()
-                                self.docker_containers.append(container_name)
-                                if dataset[0] == "sift":
-                                    ei = 1000000
-                                else:
-                                    ei = 10000
-                                govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                      self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                      collection_name, dataset[0], True, "vect", 0, ei,
-                                                      self.encode_base64_vector, percentages_to_resize, dims_to_resize,
-                                                      provideDefaultDocs=provideDefaultDocs)
-                                govl.load_data(container_name)
-
-                            elif self.encode_base64_vector:
-                                print("self.encode_base64_vector", self.encode_base64_vector)
-                                container_name = self.generate_random_container_name()
-                                self.docker_containers.append(container_name)
-                                if dataset[0] == "sift":
-                                    ei = 1000000
-                                else:
-                                    ei = 10000
-                                govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                      self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                      collection_name, dataset[0], False, "vect", 0, ei, True,
-                                                      percentages_to_resize, dims_to_resize,
-                                                      provideDefaultDocs=provideDefaultDocs)
-                                govl.load_data(container_name)
+                        if self.store_in_xattr and self.encode_base64_vector:
+                            container_name = self.generate_random_container_name()
+                            self.docker_containers.append(container_name)
+                            if dataset[0] == "sift":
+                                ei = 1000000
                             else:
-                                container_name = self.generate_random_container_name()
-                                self.docker_containers.append(container_name)
-                                if dataset[0] == "sift":
-                                    ei = 1000000
-                                else:
-                                    ei = 10000
-                                govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                      self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                      collection_name, dataset[0], False, "vect", 0, ei, False,
-                                                      percentages_to_resize, dims_to_resize,
-                                                      provideDefaultDocs=provideDefaultDocs)
-                                govl.load_data(container_name)
+                                ei = 10000
+                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], True, "vect", 0, ei,
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,
+                                                  provideDefaultDocs=provideDefaultDocs)
+                            govl.load_data(container_name)
+
+
+                        elif self.store_in_xattr:
+                            container_name = self.generate_random_container_name()
+                            self.docker_containers.append(container_name)
+                            if dataset[0] == "sift":
+                                ei = 1000000
+                            else:
+                                ei = 10000
+                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], True, "vect", 0, ei,
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,
+                                                  provideDefaultDocs=provideDefaultDocs)
+                            govl.load_data(container_name)
+
+                        elif self.encode_base64_vector:
+                            print("self.encode_base64_vector", self.encode_base64_vector)
+                            container_name = self.generate_random_container_name()
+                            self.docker_containers.append(container_name)
+                            if dataset[0] == "sift":
+                                ei = 1000000
+                            else:
+                                ei = 10000
+                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], False, "vect", 0, ei, True,
+                                                  percentages_to_resize, dims_to_resize,
+                                                  provideDefaultDocs=provideDefaultDocs)
+                            govl.load_data(container_name)
+                        else:
+                            container_name = self.generate_random_container_name()
+                            self.docker_containers.append(container_name)
+                            if dataset[0] == "sift":
+                                ei = 1000000
+                            else:
+                                ei = 10000
+                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                                  collection_name, dataset[0], False, "vect", 0, ei, False,
+                                                  percentages_to_resize, dims_to_resize,
+                                                  provideDefaultDocs=provideDefaultDocs)
+                            govl.load_data(container_name)
 
         return bucketvsdataset
 
@@ -6817,3 +6826,126 @@ class FTSBaseTest(unittest.TestCase):
             else:
                 self.fail(
                     f"Validation: The final average {final_average} is not similar to the initial average {initial_average}. Memory isn't coming down")
+
+    def get_ideal_index_distribution(self, k, n):
+        if k == 0:
+            return [0 for i in range(n)]
+        quotient = k // n
+        remainder = k % n
+        result = [quotient] * n
+        for i in range(remainder):
+            result[i] += 1
+        return result
+
+    def validate_partition_distribution(self, rest):
+        ###TODO : validate that replica parititons and active paritions reside in different server groups if any
+        _, payload = rest.get_cfg_stats()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        print(f"FTS NODES: {fts_nodes}")
+
+        _, payload = rest.get_cfg_stats()
+        node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
+
+        node_active_count = {}
+        node_replica_count = {}
+
+        index_active_count = {}
+        index_replica_count = {}
+
+        for k, v in payload["planPIndexes"]["planPIndexes"].items():
+            index_name = v["indexName"]
+            if index_name not in index_active_count:
+                index_active_count[index_name] = {}
+            if index_name not in index_replica_count:
+                index_replica_count[index_name] = {}
+
+            for k1, v1 in v["nodes"].items():
+                if v1["priority"] == 0:
+                    node_active_count[k1] = node_active_count.get(k1, 0) + 1
+                    index_active_count[index_name][k1] = index_active_count[index_name].get(k1, 0) + 1
+                else:
+                    node_replica_count[k1] = node_replica_count.get(k1, 0) + 1
+                    index_replica_count[index_name][k1] = index_replica_count[index_name].get(k1, 0) + 1
+
+        actual_partition_count = sum(node_active_count.values()) + sum(node_replica_count.values())
+
+        print("Actives:")
+        for k, v in node_active_count.items():
+            print(f"\t{node_defs_known[k]} : {v}")
+
+        print("Replicas:")
+        for k, v in node_replica_count.items():
+            print(f"\t{node_defs_known[k]} : {v}")
+
+        print(f"Actual number of index partitions in cluster: {actual_partition_count}")
+
+        indexes_map = {}
+        expected_partition_count = 0
+        num_rep = 0
+        if "indexDefs" in payload:
+            for k, v in payload["indexDefs"]["indexDefs"].items():
+                try:
+                    num_rep = v['planParams']['numReplicas']
+                except:
+                    num_rep = 0
+                indexes_map[
+                    k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {num_rep}"
+                curr_active_partitions = v["planParams"]["indexPartitions"]
+                curr_replica_partitions = curr_active_partitions * num_rep
+                expected_partition_count += curr_active_partitions + curr_replica_partitions
+
+        print(f"Expected number of index partitions in cluster: {expected_partition_count}")
+        print(f"Indexes: {len(indexes_map)}")
+        pindexes_count = []
+        for k, v in indexes_map.items():
+            print(f"\t{k} :: {v}")
+            parts = v.split(", ")
+            for part in parts:
+                if part.startswith("indexPartitions"):
+                    index_partitions = part.split(": ")[1]
+                    pindexes_count.append(index_partitions)
+        print("Index actives distribution:")
+        error = []
+        count = 0
+        for k, v in index_active_count.items():
+            print(f"\tIndex: {k}")
+            index_distribution = []
+            current_partition_count = 0
+            total = 0
+            for k1, v1 in v.items():
+                total += int(v1)
+                print(f"\t\t{node_defs_known[k1]} : {v1}")
+                index_distribution.append(int(v1))
+                current_partition_count += int(v1)
+            if total != int(pindexes_count[count]):
+                error.append(
+                    f"Total active partitions are different- total:: {total} - :: expected - :: {pindexes_count[count]}")
+
+            index_distribution.sort(reverse=True)
+
+            if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
+                error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
+
+        if num_rep != 0:
+            print("Index replicas distribution:")
+            count = 0
+            for k, v in index_replica_count.items():
+                print(f"\tIndex: {k}")
+                index_distribution = []
+                current_partition_count = 0
+                total = 0
+                for k1, v1 in v.items():
+                    total += int(v1)
+                    print(f"\t\t{node_defs_known[k1]} : {v1}")
+                    index_distribution.append(int(v1))
+                    current_partition_count += int(v1)
+                if total != int(pindexes_count[count]):
+                    error.append(
+                        f"Total active partitions are different- total:: {total} - :: expected{pindexes_count[count]}")
+
+                index_distribution.sort(reverse=True)
+
+                if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
+                    error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
+
+        return error
