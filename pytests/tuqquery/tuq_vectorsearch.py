@@ -131,3 +131,19 @@ class VectorSearchTests(QueryTests):
         self.log.info(f"Normalize vector: {vector}")
         result = self.run_cbq_query(f'SELECT normalize_vector({vector}) as norm')
         self.assertEqual(result['results'][0]['norm'], None, f"Got wrong result: {result['results']}")
+
+    def test_encode(self):
+        vector = ast.literal_eval(self.vector)
+        self.log.info(f"Encode vector: {vector}")
+        result = self.run_cbq_query(f'SELECT encode_vector({vector}, {self.use_bigendian}) as encoded_vector')
+        encoded_vector = result['results'][0]['encoded_vector']
+        expected_vector = LoadVector().encode_vector(vector, self.use_bigendian)
+        self.assertEqual(encoded_vector, expected_vector, f"We expected: {expected_vector} but got: {encoded_vector}")
+
+    def test_decode(self):
+        vector = ast.literal_eval(self.vector)
+        encoded_vector = LoadVector().encode_vector(vector, self.use_bigendian)
+        self.log.info(f"Decode vector: {encoded_vector}")
+        result = self.run_cbq_query(f'SELECT decode_vector("{encoded_vector}", {self.use_bigendian}) as decoded_vector')
+        decoded_vector = result['results'][0]['decoded_vector']
+        self.assertTrue(np.allclose(decoded_vector, vector), f"We expected: {vector} but got: {decoded_vector}")
