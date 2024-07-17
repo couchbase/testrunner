@@ -23,16 +23,17 @@ from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPL
 
 
 class GSIUtils(object):
-    def __init__(self, query_obj):
+    def __init__(self, query_obj, encoder=None):
         self.initial_index_num = 0
         self.log = logger.Logger.get_logger()
         self.definition_list = []
         self.run_query = query_obj
         self.batch_size = 0
         self.query_event = Event()
+        self.encoder = encoder
 
     def generate_mini_car_vector_index_definition(self, index_name_prefix=None,
-                                                    skip_primary=False, array_indexes=True):
+                                                  skip_primary=False, array_indexes=True):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
@@ -47,7 +48,8 @@ class GSIUtils(object):
 
         # Single vector field
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'descriptionVector', index_fields=['descriptionVector VECTOR'],
+            QueryDefinition(index_name=index_name_prefix + 'descriptionVector',
+                            index_fields=['descriptionVector VECTOR'],
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format("*", 'APPROX_L2_DIST '
                                                                                    f'descriptionVector vectorValue')))
 
@@ -88,7 +90,8 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                "rating BETWEEN 1 and 3 AND"
                                                                                "category = BMW ",
-                                                                               f'APPROX_L2_DIST colorRGBVector vectorValue'),
+                                                                               f'APPROX_L2_DIST '
+                                                                               f'colorRGBVector vectorValue'),
                             partition_by_fields=['meta().id']
                             ))
 
@@ -113,13 +116,26 @@ class GSIUtils(object):
                                                                                'APPROX_L2_DIST '
                                                                                f'descriptionVector vectorValue')))
 
+    def generate_car_vector_loader_index_definition(self, index_name_prefix=None, similarity="L2", train_list=None,
+                                                    scan_nprobes=1, skip_primary=False, array_indexes=False,
+                                                    limit=10):
 
-
-
-
-    def generate_car_vector_loader_index_definition(self, index_name_prefix=None,
-                                                    skip_primary=False, array_indexes=True):
         definitions_list = []
+        color_vec_1 = [43.0, 133.0, 178.0]
+        color_vec_2 = [90.0, 33.0, 18.0]
+
+        desc_1 = "A convertible car with red color made in 1990"
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        descVec1 = list(self.encoder.encode(desc_1))
+        descVec2 = list(self.encoder.encode(desc_2))
+
+        scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_2 = f"ANN(colorRGBVector, {color_vec_2}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_1 = f"ANN(descriptionVector, {descVec1}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{similarity}', {scan_nprobes})"
+
+
+
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
 
@@ -128,79 +144,100 @@ class GSIUtils(object):
             prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("*", "price > 40000 and rating >= 4"),
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color", 'colorHex like "#8f%%"'),
                                 is_primary=True))
         # Single vector field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'colorRGBVector', index_fields=['colorRGBVector VECTOR'],
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format("*", 'APPROX_L2_DIST '
-                                                                                   f'colorRGBVector vectorValue')))
+                            dimension=3, description="IVF,PQ3x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector,"
+                                                                              f" {scan_color_vec_1}",
+                                                                              scan_color_vec_1)))
 
         # Single vector + single scalar field + partitioned on vector
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVector',
                             index_fields=['description', 'descriptionVector VECTOR'],
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
+                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, descriptionVector,"
+                                                                               f" {scan_desc_vec_1}",
                                                                                'description like "%%CVT%%"',
-                                                                               'APPROX_L2_DIST '
-                                                                               f'descriptionVector vectorValue'),
+                                                                               scan_desc_vec_1
+                                                                               ),
                             partition_by_fields=['colorRGBVector']))
 
         # Single vector (leading) + single scalar field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarOneVectorLeading',
                             index_fields=['descriptionVector VECTOR', 'id'],
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
-                                                                               'id like "%%58%%"',
-                                                                               'APPROX_L2_DIST '
-                                                                               f'descriptionVector vectorValue')))
+                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"id, descriptionVector",
+                                                                               'id > 1575644878',
+                                                                               scan_desc_vec_1)))
 
         # Single vector + multiple scalar field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
-                            index_fields=['year', 'manufacturer', 'fuel', 'descriptionVector Vector'],
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
-                                                                               "year > 1980 and "
-                                                                               "manufacturer like '%%C%% and "
-                                                                               "fuel = Diesel",
-                                                                               f'APPROX_L2_DIST '
-                                                                               f'descriptionVector vectorValue')))
+
+                            index_fields=['year', 'descriptionVector Vector', 'manufacturer', 'fuel'],
+                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, year,"
+                                                                               f" descriptionVector, {scan_desc_vec_2}",
+                                                                               "year between 1950 and 1990 and "
+                                                                               "manufacturer like '%%c%%' and "
+                                                                               "(fuel = 'Gasoline' OR "
+                                                                               " fuel= 'Electric') ",
+                                                                               scan_desc_vec_2)))
 
         # Single vector + multiple scalar field + Partitioned
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_2',
-                            index_fields=['rating', 'category', 'colorRGBVector Vector'],
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
-                                                                               "rating BETWEEN 1 and 3 AND"
-                                                                               "category = Convertible ",
-                                                                               f'APPROX_L2_DIST colorRGBVector vectorValue'),
+                            index_fields=['rating', 'colorRGBVector Vector', 'category'],
+                            dimension=3, description="IVF,PQ3x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("color, colorRGBVector",
+                                                                               "rating = 2 and "
+                                                                               "category in ['Convertible', "
+                                                                               "'Luxury Car', 'Supercar']",
+                                                                               scan_color_vec_2),
                             partition_by_fields=['meta().id']
                             ))
+
         # Single vector + multiple scalar field with Include clause
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
+            QueryDefinition(index_name=index_name_prefix + 'includeMissing',
                             index_fields=['colorHex ', 'year', 'fuel', 'descriptionVector Vector'],
-                            missing_indexes=True, missing_field_desc=True,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
+                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, missing_indexes=True, missing_field_desc=True,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("fuel, year, descriptionVector",
                                                                                "year > 1980 OR "
-                                                                               "fuel != Diesel ",
-                                                                               f'APPROX_L2_DIST '
-                                                                               f'descriptionVector vectorValue')))
+                                                                               "fuel = 'Diesel' ",
+                                                                               scan_desc_vec_2)))
         # Partial Indexes
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
+            QueryDefinition(index_name=index_name_prefix + 'PartialIndex',
                             index_fields=['rating ', 'description', 'colorRGBVector Vector'],
                             index_where_clause='rating > 3',
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
+                            dimension=3, description="IVF,PQ3x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
                                                                                "rating = 4 and "
-                                                                               'description like "%%Hybrid%%"',
-                                                                               'APPROX_L2_DIST '
-                                                                               f'colorRGBVector vectorValue')))
+                                                                               'description like "%%Convertible%%"',
+                                                                               scan_color_vec_2)))
+
         if array_indexes:
             # Single vector + array scalar field 1
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'arrayScalarOneVector',
-                                index_fields=['model', 'ALL ARRAY cv.`smart features` FOR cv in evaluation.`smart features` END ', 'colorRGBVector Vector'],
+                                index_fields=['model',
+                                              'ALL ARRAY cv.`smart features` FOR cv in evaluation.`smart features` END, ',
+                                              'colorRGBVector Vector'],
+                                dimension=384, description="IVF,PQ8x8", similarity=similarity,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "model = Atlas and "
                                                                                    'ANY cv in evaluation SATISFIES cv.`smart features` like "%%lights%%" ',
@@ -209,7 +246,10 @@ class GSIUtils(object):
             # Single vector + array scalar field 2
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'flatenScalarOneVector',
-                                index_fields=['rating', 'ALL ARRAY  cv.variant FOR cv in evaluation END ', 'descriptionVector Vector'],
+                                index_fields=['rating', 'ALL ARRAY  cv.variant FOR cv in evaluation END ',
+                                              'descriptionVector Vector'],
+                                dimension=384, description="IVF,PQ8x8", similarity=similarity,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "rating BETWEEN 1 and 3 AND"
                                                                                    "ANY cv in evaluation SATISFIES cv.variant = Prestige ",
@@ -218,7 +258,11 @@ class GSIUtils(object):
             # Single vector + flatten array scalar field
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'arrayScalarOneVector',
-                                index_fields=['year', 'ALL ARRAY FLATTEN_KEYS(cv.comfort DESC, cv.performance) FOR cv in evaluation END ', 'descriptionVector Vector'],
+                                index_fields=['year',
+                                              'ALL ARRAY FLATTEN_KEYS(cv.comfort DESC, cv.performance) FOR cv in evaluation END ',
+                                              'descriptionVector Vector'],
+                                dimension=384, description="IVF,PQ8x8", similarity=similarity,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "year BETWEEN 1970 and 1990 AND"
                                                                                    "ANY cv in evaluation SATISFIES cv.comfort = 'Panoramic sunroof' OR "
@@ -231,6 +275,8 @@ class GSIUtils(object):
                                 index_fields=['fuel',
                                               'ALL ARRAY cv.featureVectors VECTOR FOR cv in evaluation END ',
                                               'year'],
+                                dimension=384, description="IVF,PQ8x8", similarity=similarity,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "fuel = Ethanol"
                                                                                    "AND year BETWEEN 1990 and 2000 ",
@@ -242,12 +288,15 @@ class GSIUtils(object):
                                 index_fields=['fuel',
                                               'ALL ARRAY FLATTEN_KEYS(cv.featureVectors) VECTOR FOR cv in evaluation END ',
                                               'year'],
+                                dimension=384, description="IVF,PQ8x8", similarity=similarity,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "fuel = Ethanol"
                                                                                    "AND year BETWEEN 1990 and 2000 ",
                                                                                    f'APPROX_L2_DIST descriptionVector vectorValue')))
         self.batch_size = len(definitions_list)
         return definitions_list
+
 
     def generate_magma_doc_loader_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
@@ -376,7 +425,8 @@ class GSIUtils(object):
             prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL"), is_primary=True))
+                                query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL"),
+                                is_primary=True))
 
         # GSI index on multiple fields
         definitions_list.append(
@@ -391,12 +441,13 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'free_breakfast_array_count',
                             index_fields=['free_breakfast', 'type', 'free_parking', 'array_count(public_likes)',
                                           'price', 'country'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("country, avg(price) as AvgPrice, min(price) as MinPrice,"
-                                                                      " max(price) as MaxPrice",
-                                                                      "free_breakfast=True and free_parking=True and "
-                                                                      "price is not null and "
-                                                                      "array_count(public_likes)>5 and "
-                                                                      "`type`='Hotel' group by country")))
+                            query_template=RANGE_SCAN_TEMPLATE.format(
+                                "country, avg(price) as AvgPrice, min(price) as MinPrice,"
+                                " max(price) as MaxPrice",
+                                "free_breakfast=True and free_parking=True and "
+                                "price is not null and "
+                                "array_count(public_likes)>5 and "
+                                "`type`='Hotel' group by country")))
 
         # # GSI index with Flatten Keys
         definitions_list.append(
@@ -429,7 +480,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'array_index_overall',
                             index_fields=['price, All ARRAY v.ratings.Overall FOR v IN reviews END'],
                             query_template=RANGE_SCAN_TEMPLATE.format("address", 'ANY v IN reviews SATISFIES v.ratings.'
-                                                                           '`Overall` > 3  END and price < 1000 ')))
+                                                                                 '`Overall` > 3  END and price < 1000 ')))
 
         # Array Index
         definitions_list.append(
@@ -501,7 +552,8 @@ class GSIUtils(object):
         return definitions_list
 
     def get_create_index_list(self, definition_list, namespace, defer_build_mix=False,
-                              defer_build=False, num_replica=None, deploy_node_info=None, randomise_replica_count=False, trainlist=None, dimension=None, description=None, similarity=None, nprobes=None):
+                              defer_build=False, num_replica=None, deploy_node_info=None, randomise_replica_count=False,
+                              trainlist=None, dimension=None, description=None, similarity=None, scan_nprobes=None):
         create_index_list = []
         for index_gen in definition_list:
             nodes_list = None
@@ -510,11 +562,14 @@ class GSIUtils(object):
             if randomise_replica_count and num_replica >= 1:
                 num_replicas = random.randint(1, num_replica)
                 if deploy_node_info is not None:
-                    nodes_list = random.sample(deploy_node_info, k=num_replicas+1)
+                    nodes_list = random.sample(deploy_node_info, k=num_replicas + 1)
             else:
                 num_replicas = num_replica
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build,
-                                                          num_replica=num_replicas, deploy_node_info=nodes_list, train_list=trainlist, dimension=dimension, description=description, similarity=similarity, nprobes=nprobes)
+                                                          num_replica=num_replicas, deploy_node_info=nodes_list,
+                                                          train_list=trainlist, dimension=dimension,
+                                                          description=description, similarity=similarity,
+                                                          scan_nprobes=scan_nprobes)
             create_index_list.append(query)
         return create_index_list
 
@@ -532,9 +587,12 @@ class GSIUtils(object):
         return drop_index_list
 
     def get_select_queries(self, definition_list, namespace, limit=0):
+
         select_query_list = []
         for index_gen in definition_list:
             query = index_gen.generate_query(bucket=namespace)
+            if limit == 0 and index_gen.limit > 0:
+                limit = index_gen.limit
             if limit > 0:
                 query = f'{query} LIMIT {limit}'
             select_query_list.append(query)
@@ -676,7 +734,8 @@ class GSIUtils(object):
     def cleanup_operations(self):
         pass
 
-    def get_index_definition_list(self, dataset, prefix=None, skip_primary=False):
+    def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
+                                  scan_nprobes=1, array_indexes=False, limit=None):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -689,14 +748,19 @@ class GSIUtils(object):
         elif dataset == 'Magma':
             definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix,
                                                                               skip_primary=skip_primary)
-        elif dataset == 'Car':
+        elif dataset == 'Cars':
             definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
-                                                                               skip_primary=skip_primary)
+                                                                               skip_primary=skip_primary,
+                                                                               similarity=similarity,
+                                                                               train_list=train_list,
+                                                                               scan_nprobes=scan_nprobes,
+                                                                               array_indexes=array_indexes,
+                                                                               limit=limit)
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)
         else:
-            raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, and Hotel")
+            raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, Car, MiniCar and Hotel")
         return definition_list
 
     def get_indexes_name(self, query_definitions):

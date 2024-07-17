@@ -37,9 +37,10 @@ class QueryDefinition(object):
     def __init__(self, index_name="Random", index_fields=None,
                  index_creation_template=INDEX_CREATION_TEMPLATE,
                  index_drop_template=INDEX_DROP_TEMPLATE, nodes=None,
-                 query_template="", query_use_index_template="", groups=None,
+                 query_template="", query_use_index_template="", groups=None, limit=None,
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
-                 missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False):
+                 missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
+                 dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -63,12 +64,30 @@ class QueryDefinition(object):
         self.capella_run = capella_run
         self.is_primary = is_primary
         self.nodes = nodes
+        self.dimension = dimension
+        self.description = description
+        self.similarity = similarity
+        self.train_list = train_list
+        self.scan_nprobes = scan_nprobes
+        self.limit = limit
 
-    def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True,
+    def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
                                     num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
-                                    missing_indexes=False, missing_field_desc=False, dimension=None, train_list=None, description=None, similarity=None, nprobes=None):
-
+                                    missing_indexes=False, missing_field_desc=False, dimension=None, train_list=None,
+                                    description=None, similarity=None, scan_nprobes=None):
+        if dimension:
+            self.dimension = dimension
+        if train_list:
+            self.train_list = train_list
+        if description:
+            self.description = description
+        if similarity:
+            self.similarity = similarity
+        if scan_nprobes:
+            self.scan_nprobes = scan_nprobes
+        if limit:
+            self.limit = limit
         if self.is_primary:
             return self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
                                                             defer_build=defer_build, num_replica=num_replica)
@@ -124,16 +143,16 @@ class QueryDefinition(object):
             deployment_plan["defer_build"] = defer_build
         if num_replica:
             deployment_plan["num_replica"] = num_replica
-        if dimension:
-            deployment_plan["dimension"] = dimension
-        if train_list:
-            deployment_plan["train_list"] = train_list
-        if description:
-            deployment_plan["description"] = description
-        if similarity:
-            deployment_plan["similarity"] = similarity
-        if nprobes:
-            deployment_plan["nprobes"] = nprobes
+        if self.dimension:
+            deployment_plan["dimension"] = self.dimension
+        if self.train_list:
+            deployment_plan["train_list"] = self.train_list
+        if self.description:
+            deployment_plan["description"] = self.description
+        if self.similarity:
+            deployment_plan["similarity"] = self.similarity
+        if self.scan_nprobes:
+            deployment_plan["scan_nprobes"] = self.scan_nprobes
         if self.partition_by_fields:
             if not self.capella_run:
                 deployment_plan["num_partition"] = num_partition

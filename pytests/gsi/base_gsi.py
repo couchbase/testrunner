@@ -1951,7 +1951,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
-                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False, model=self.data_model):
+                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False, model="sentence-transformers/all-MiniLM-L6-v2"):
         if not bucket_name:
             bucket_name = self.test_bucket
         pre_load_idx_pri = None
@@ -2118,6 +2118,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         for index_info in index_status['status']:
             index_name_list.append(index_info['name'])
         return index_name_list
+
+    def convert_to_faiss_queries(self, select_query):
+        # Regular expression to remove ORDER BY clause
+        pattern = r'\bORDER\s+BY\b.*'
+
+        # Remove everything after 'ORDER BY'
+        query_with_no_order_by = re.sub(pattern, '', select_query, flags=re.IGNORECASE).strip()
+
+        return query_with_no_order_by
 
     def get_nodes_in_cluster_after_upgrade(self, master_node=None):
         rest = None
@@ -2710,22 +2719,22 @@ class BaseSecondaryIndexingTests(QueryTests):
     def load_data_into_faiss(self, vectors, dim=None):
         if dim is None:
             dim = len(vectors[0])
+
         index = faiss.IndexFlatL2(dim)
         # Might not need it.
         faiss.normalize_L2(vectors)
         index.add(vectors)
         return index
 
-    def search_ann_in_faiss(self, query, faiss_db, n_probe=None):
-        query_vector = self.encoder.encode(query)
-        _vector = np.array([query_vector])
+    def search_ann_in_faiss(self, query, faiss_db, limit=100, n_probe=None):
+        _vector = np.array([query], dtype="float32")
         # Might not need it.
         faiss.normalize_L2(_vector)
         if n_probe is None:
             n_probe = faiss_db.ntotal
         dist, ann = faiss_db.search(_vector, k=n_probe)
-        results = pd.DataFrame({'distances': dist[0], 'ann': ann[0]})
-        return results
+        results = pd.DataFrame({'distances': dist[0][:limit], 'ann': ann[0][:limit]})
+        return results, ann[0][:limit]
 
 class ConCurIndexOps():
     def __init__(self):
