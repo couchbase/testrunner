@@ -2,6 +2,7 @@ from .tuq import QueryTests
 import threading
 import random
 import numpy as np
+import ast
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster, ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
@@ -13,6 +14,7 @@ class VectorSearchTests(QueryTests):
         self.bucket = "default"
         self.recall_knn = 100
         self.recall_ann = 50 # TBD
+        self.vector = self.input.param("vector", [1,2,3])
         self.use_xattr = self.input.param("use_xattr", False)
         self.use_base64 = self.input.param("use_base64", False)
         self.use_bigendian = self.input.param("use_bigendian", False)
@@ -116,3 +118,16 @@ class VectorSearchTests(QueryTests):
                 self.log.warn(f"Expected: {self.gt[begin+i].tolist()}")
                 self.log.warn(f"Actual: {indices[i].tolist()}")
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
+
+    def test_normalize(self):
+        vector = ast.literal_eval(self.vector)
+        self.log.info(f"Normalize vector: {vector}")
+        result = self.run_cbq_query(f'SELECT normalize_vector({vector}) as norm')
+        expected = vector / np.linalg.norm(vector)
+        self.assertTrue(np.allclose(expected, result['results'][0]['norm']), f"Got wrong result: {result['results']}")
+
+    def test_normalize_invalid(self):
+        vector = ast.literal_eval(self.vector)
+        self.log.info(f"Normalize vector: {vector}")
+        result = self.run_cbq_query(f'SELECT normalize_vector({vector}) as norm')
+        self.assertEqual(result['results'][0]['norm'], None, f"Got wrong result: {result['results']}")

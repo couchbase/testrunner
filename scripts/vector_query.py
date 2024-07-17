@@ -142,21 +142,26 @@ class LoadVector(object):
             endian = '<'
         buf = struct.pack(f'{endian}%sf' % len(vector), *vector)
         return base64.b64encode(buf).decode()
-    def load_documents(self, cluster, docs, bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
+    def load_documents(self, cluster, docs, bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
         cb_coll = cb.scope(scope).collection(collection)
         for is1, size in enumerate(cfg["sizes"]):
             for ib, brand in enumerate(cfg["brands"]):
+                documents = {}
                 for idx, x in enumerate(docs):
+                    key = f"vec_{brand}_{size}_{idx}"
                     vector = x.tolist()
                     doc = {
                         "id": idx,
                         "size":size,
                         "sizeidx":is1,
                         "brand":brand,
-                        "brandidx":ib
+                        "brandidx":ib,
+                        vector_field: vector
                     }
-                    self.upsert_document_into_cb(cb_coll, doc, vector, vector_field, is_xattr, is_base64, is_bigendian)
+                    documents[key] = doc
+                    # self.upsert_document_into_cb(cb_coll, doc, vector, vector_field, is_xattr, is_base64, is_bigendian)
+                cb_coll.upsert_multi(documents)
     def upsert_document_into_cb(self, cb_coll, doc, vector, vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         if is_base64:
             vector = self.encode_vector(vector, is_bigendian)
@@ -168,10 +173,10 @@ class LoadVector(object):
             print(e)
 
 class IndexVector(object):
-    def create_index(self, cluster, bucket='siftsmall', scope='_default', collection='_default', vector_field='vec', similarity='L2_SQUARED'):
+    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', vector_field='vec', similarity='L2_SQUARED'):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
-        vector_definition = {"dimension":128, "train_list":10000, "description": "IVF,PQ8x8", "similarity": similarity, "nprobes":3}
+        vector_definition = {"dimension":128, "train_list":10000, "description": "IVF,PQ8x8", "similarity": similarity, "scan_nprobes":3}
         index_query = f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, brand, {vector_field} VECTOR) WITH {vector_definition}'
         print(index_query)
         result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
