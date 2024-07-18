@@ -38,24 +38,22 @@ class UtilVector(object):
                 continue
             print(f"PASS: expected: {expected_distance} actual: {actual_distance}")
         return fail_count
-    def compare_vector(self, query_vector, xb, actual, expected, dist="L2", k=100):
-        fail_count = 0
+    def compare_vector(self, actual, expected):
+        recall_count = 0
+        accuracy_count = 0 
         for idx, actual_vector in enumerate(actual):
-            expected_vector = expected[idx]
-            if actual_vector != expected_vector:
-                d1 = self.vector_dist(query_vector, xb[expected_vector], dist)
-                d2 = self.vector_dist(query_vector, xb[actual_vector], dist)
-                if d1 == d2:
-                    continue
-                else:
-                    fail_count += 1
-        return (k - fail_count) / k * 100
-    def compare_result(self, xb, expected, actual, query_vector, dist="L2"):
+            if actual_vector == expected[idx]:
+                recall_count += 1
+                accuracy_count += 1
+            elif actual_vector in expected:
+                recall_count += 1
+        return recall_count / len(expected) * 100, accuracy_count / len(expected) * 100
+    def compare_result(self, expected, actual):
         if expected == actual:
-            return 100.0
+            return 100.0, 100.0
         else:
-            recall = self.compare_vector(query_vector, xb, actual, expected, dist)
-            return recall
+            recall, accuracy = self.compare_vector(actual, expected)
+            return recall, accuracy
     def vector_dist(self, v1, v2, dist="L2"):
         if dist == "L2" or dist == "EUCLIDEAN":
             return self.l2_dist(v1, v2)
@@ -111,7 +109,7 @@ class SiftVector(object):
             with closing(request.urlopen(f'ftp://ftp.irisa.fr/local/texmex/corpus/{self.dataset}.tar.gz')) as r:
                 with open(f'{self.dataset}.tar.gz', 'wb') as f:
                     shutil.copyfileobj(r, f)
-            tar = tarfile.open(f'{self.da}.tar.gz', "r:gz")
+            tar = tarfile.open(f'{self.dataset}.tar.gz', "r:gz")
             tar.extractall()
     def read_fvecs(self, fp):
         a = np.fromfile(fp, dtype='int32')
@@ -209,7 +207,7 @@ class QueryVector(object):
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        query = f'SELECT id, VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY ANN({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
+        query = f'SELECT id, ANN({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY ANN({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
         return query
     def run_queries(self, cluster, xb, qdocs, gdocs, search_function="L2", bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
@@ -231,8 +229,8 @@ class QueryVector(object):
         for row in result.rows():
             actual.append(row['id'])
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
-        recall = UtilVector().compare_result(xb, expected, actual, query_vector, dist=search_function)
-        print(f"Recall rate: {recall}%")
+        recall, accuracy = UtilVector().compare_result(expected, actual)
+        print(f"Recall rate: {recall}% with accuracy: {accuracy}%")
     def search(self, cluster, xq, search_function="L2", type = 'KNN', bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)

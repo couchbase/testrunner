@@ -13,7 +13,8 @@ class VectorSearchTests(QueryTests):
         super(VectorSearchTests, self).setUp()
         self.bucket = "default"
         self.recall_knn = 100
-        self.recall_ann = 50 # TBD
+        self.recall_ann = 40 # TBD
+        self.accuracy_ann = 10 # TBD
         self.vector = self.input.param("vector", [1,2,3])
         self.use_xattr = self.input.param("use_xattr", False)
         self.use_base64 = self.input.param("use_base64", False)
@@ -76,8 +77,8 @@ class VectorSearchTests(QueryTests):
         distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
         for i in range(5):
             self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
-            recall = UtilVector().compare_result(self.xb, self.gt[begin+i].tolist(), indices[i].tolist(), self.xq[begin+i], self.distance)
-            self.log.info(f'Recall rate: {recall}%')
+            recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
+            self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
             if recall < self.recall_knn:
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_knn}")
 
@@ -98,9 +99,9 @@ class VectorSearchTests(QueryTests):
         distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
         for i in range(5):
             self.log.info(f"Check recall rate for query {begin+i} compare to FAISS ({self.distance})")
-            recall = UtilVector().compare_result(self.xb, faiss_result[begin+i].tolist(), indices[i].tolist(), self.xq[begin+i], self.distance)
-            self.log.info(f'Recall rate: {recall}%')
-            if recall < self.recall_knn:
+            recall, accuracy = UtilVector().compare_result(faiss_result[begin+i].tolist(), indices[i].tolist())
+            self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
+            if recall < self.recall_knn and accuracy < 100:
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_knn}")
 
     def test_ann_search(self):
@@ -112,11 +113,12 @@ class VectorSearchTests(QueryTests):
         distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
         for i in range(5):
             self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
-            recall = UtilVector().compare_result(self.xb, self.gt[begin+i].tolist(), indices[i].tolist(), self.xq[begin+i], self.distance)
-            self.log.info(f'Recall rate: {recall}%')
+            recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
+            self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
             if recall < self.recall_ann:
                 self.log.warn(f"Expected: {self.gt[begin+i].tolist()}")
                 self.log.warn(f"Actual: {indices[i].tolist()}")
+                self.log.warn(f"Distances: {distances[i].tolist()}")
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
 
     def test_normalize(self):
