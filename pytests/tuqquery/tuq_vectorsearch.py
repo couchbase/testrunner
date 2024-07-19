@@ -91,7 +91,7 @@ class VectorSearchTests(QueryTests):
         if self.distance == 'COSINE':
             normalize = True
             faiss_index = faiss().create_cosine_index(self.xb, normalize)
-        if self.distance == 'L2':
+        if self.distance == 'L2_SQUARED':
             faiss_index = faiss().create_l2_index(self.xb)
         faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
 
@@ -107,7 +107,7 @@ class VectorSearchTests(QueryTests):
     def test_ann_search(self):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         self.log.info("Create Vector Index")
-        IndexVector().create_index(self.database, similarity='L2_SQUARED')
+        IndexVector().create_index(self.database, similarity=self.distance)
         begin = random.randint(0, len(self.xq) - 5)
         self.log.info(f"Running ANN query for range [{begin}:{begin+5}]")
         distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
