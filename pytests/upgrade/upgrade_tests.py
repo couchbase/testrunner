@@ -13,12 +13,12 @@ from .newupgradebasetest import NewUpgradeBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from testconstants import FUTURE_BUILD_NUMBER
 
-
 class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
         self.queue = queue.Queue()
+        self.run_partition_validation = self.input.param("run_partition_validation", True)
         self.graceful = self.input.param("graceful", False)
         self.after_upgrade_nodes_in = self.input.param("after_upgrade_nodes_in", 1)
         self.after_upgrade_nodes_out = self.input.param("after_upgrade_nodes_out", 1)
@@ -212,7 +212,7 @@ class UpgradeTests(NewUpgradeBaseTest):
     """
     def test_upgrade(self):
         from pytests.fts.fts_callable import FTSCallable
-        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
         self.event_threads = []
         self.after_event_threads = []
         try:
@@ -222,6 +222,12 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.finish_events(initialize_events)
             if not self.success_run and self.failed_thread is not None:
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
+            else:
+                if self.run_partition_validation:
+                    try:
+                        self.partition_validation()
+                    except Exception as ex:
+                        self.fail(ex)
             self.cluster_stats(self.servers[:self.nodes_init])
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
@@ -252,6 +258,12 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.finish_events(self.after_event_threads)
             if not self.success_run and self.failed_thread is not None:
                 raise Exception("*** Failed to {0} ***".format(self.failed_thread))
+            else:
+                if self.run_partition_validation:
+                    try:
+                        self.partition_validation()
+                    except Exception as ex:
+                        self.fail(ex)
             """ Default set to always verify data """
             if self.after_events[0]:
                 self.log.info("*** Start after events ***")
@@ -1002,6 +1014,12 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.finish_events(self.event_threads)
                 self.in_between_events = None
 
+            if self.run_partition_validation:
+                try:
+                    self.partition_validation()
+                except Exception as ex:
+                    self.fail(ex)
+
     def online_upgrade_incremental(self):
         self.log.info("online_upgrade_incremental")
         try:
@@ -1016,6 +1034,22 @@ class UpgradeTests(NewUpgradeBaseTest):
                 self.cluster.rebalance(self.servers, [server], [])
                 self.log.info("Rebalanced in upgraded nodes")
                 self.sleep(self.sleep_time)
+
+                try:
+                    if self.in_between_events:
+                        self.event_threads = []
+                        self.event_threads += self.run_event(self.in_between_events)
+                        self.finish_events(self.event_threads)
+                        self.in_between_events = None
+                except Exception as ex:
+                    print(ex)
+
+                if self.run_partition_validation:
+                    try:
+                        self.partition_validation()
+                    except Exception as ex:
+                        print(ex)
+
             self._new_master(self.servers[1])
             self.cluster.rebalance(self.servers, [], [self.servers[0]])
             self.log.info("Rebalanced out all old version nodes")

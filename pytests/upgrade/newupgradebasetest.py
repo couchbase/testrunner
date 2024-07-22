@@ -62,6 +62,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
 
         self.start_version = self.input.param('initial_version', '2.5.1-1083')
+        self.run_partition_validation = self.input.param("run_partition_validation", True)
         self.vector_flag = self.input.param("vector_search_test", False)
         self.fts_quota = self.input.param("fts_quota", 600)
         self.passed = True
@@ -70,6 +71,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.vector_queries_count = self.input.param("vector_queries_count", 5)
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 2)
+        self.partition_list = self.input.param("partition_list",[18,3,3])
 
         self.upgrade_type = self.input.param("upgrade_type", "online")
         self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
@@ -78,6 +80,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 70)
 
         self.fts_indexes_store = None
+
+        self.fts_indexes_persist = []
 
         self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
         self.validate_memory_leak = self.input.param("validate_memory_leak", False)
@@ -128,6 +132,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid', self.cbas_dataset_name)
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid', self.cbas_bucket_name)
         self.num_index_replicas = self.input.param("num_index_replica", 0)
+        self.num_indexes = self.input.param("num_indexes", 3)
         self.expected_err_msg = self.input.param("expected_err_msg", None)
         self.rest_settings = self.input.membase_settings
         self.multi_nodes_services = False
@@ -363,6 +368,12 @@ class NewUpgradeBaseTest(BaseTestCase):
             for server in self.servers[:self.nodes_init]:
                 hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
                 server.hostname = hostname
+
+    def construct_custom_plan_params(self, replicas, partitions):
+        plan_params = {}
+        plan_params['numReplicas'] = replicas
+        plan_params['indexPartitions'] = partitions
+        return plan_params
 
     def initial_services(self, services=None):
         if services is not None:
@@ -812,8 +823,15 @@ class NewUpgradeBaseTest(BaseTestCase):
                     success_upgrade &= self.queue.get()
                 if not success_upgrade:
                     self.fail("Upgrade failed!")
+
+                if self.run_partition_validation:
+                    try:
+                        self.partition_validation()
+                    except Exception as ex:
+                        self.fail(ex)
             """ set install cb version to upgrade version after done upgrade """
             self.initial_version = self.upgrade_versions[0]
+
         except Exception as ex:
             self.log.info(ex)
             raise
@@ -837,6 +855,11 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.fail("Upgrade failed. See logs above!")
                 self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                 total_nodes -= 1
+                if self.run_partition_validation:
+                    try:
+                        self.partition_validation()
+                    except Exception as ex:
+                        self.fail(ex)
             if total_nodes == 0:
                 self.rest = RestConnection(upgrade_nodes[total_nodes])
         except Exception as ex:
@@ -1113,11 +1136,14 @@ class NewUpgradeBaseTest(BaseTestCase):
         3. Runs queries and compares the results against ElasticSearch
         """
         try:
-            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
             for bucket in self.buckets:
-                self.fts_obj.create_default_index(
-                    index_name="index_{0}".format(bucket.name),
-                    bucket_name=bucket.name)
+                for i in range(self.num_indexes):
+                    plans = self.construct_custom_plan_params(1, self.partition_list[i % self.num_indexes])
+                    self.fts_obj.create_default_index(
+                        index_name="index_{0}".format(i+1),
+                        bucket_name=bucket.name,
+                        plan_params=plans)
             self.fts_obj.load_data(self.num_items)
             self.fts_obj.wait_for_indexing_complete()
             for index in self.fts_obj.fts_indexes:
@@ -1130,6 +1156,22 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
+    def partition_validation(self):
+        fts_node = None
+        try:
+            fts_node = self.get_nodes_from_services_map(service_type="fts")
+            frest = RestConnection(fts_node)
+            self.fts_obj.validate_partition_distribution(frest)
+
+            if fts_node:
+                fts_obj_partition = FTSCallable(nodes=self.servers, es_validate=False, servers=self.servers)
+                error = fts_obj_partition.validate_partition_distribution(RestConnection(fts_node))
+                if error:
+                    self.fail(f"partition distribution error: {error}")
+                else:
+                    self.log.info(f"partition distribution OK")
+        except Exception as ex:
+            self.fail(ex)
 
     def create_fts_vector_index_query_compare(self, queue=None):
 

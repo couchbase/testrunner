@@ -222,7 +222,7 @@ class FTSCallable:
         return index
 
     def create_default_index(self, index_name, bucket_name, analyzer='standard',
-                             cluster=None, collection_index=False, scope=None, collections=None):
+                             cluster=None, collection_index=False, scope=None, collections=None, plan_params=None):
 
         """Create fts index
         @param index_name: name of the index/alias
@@ -244,8 +244,11 @@ class FTSCallable:
             type_mapping=types_mapping,
             collection_index=collection_index,
             scope=scope,
-            collections=collections
+            collections=collections,
+            plan_params=plan_params
         )
+
+
 
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         index.create(rest)
@@ -1205,12 +1208,18 @@ class FTSCallable:
 
         return is_passed
 
+    def get_ideal_index_distribution(self,k, n):
+        if k==0:
+            return [0 for i in range(n)]
+        quotient = k // n
+        remainder = k % n
+        result = [quotient] * n
+        for i in range(remainder):
+            result[i] += 1
+        return result
 
     def validate_partition_distribution(self, rest):
         _, payload = rest.get_cfg_stats()
-        fts_nodes = self._cb_cluster.get_fts_nodes()
-        print(f"FTS NODES: {fts_nodes}")
-
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
 
         node_active_count = {}
@@ -1262,33 +1271,37 @@ class FTSCallable:
         for k, v in indexes_map.items():
             print(f"\t{k} :: {v}")
 
+
         print("Index actives distribution:")
         error = []
         for k, v in index_active_count.items():
             print(f"\tIndex: {k}")
-            # if len(v.items()) < len(fts_nodes):
-            #     error.append("uneven active distribution found")
+            index_distribution = []
+            current_partition_count = 0
 
             for k1, v1 in v.items():
                 print(f"\t\t{node_defs_known[k1]} : {v1}")
-                if k == "default_index_1":
-                    if v1 != 6:
-                        error.append(f'index {k} has faulty distribution')
-                else:
-                    if v1 != 1:
-                        error.append(f'index {k} has faulty distribution')
+                index_distribution.append(int(v1))
+                current_partition_count += int(v1)
+
+            index_distribution.sort(reverse = True)
+
+            if index_distribution !=  self.get_ideal_index_distribution(current_partition_count,len(v)):
+                error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
         print("Index replicas distribution:")
         for k, v in index_replica_count.items():
             print(f"\tIndex: {k}")
-            # if len(v.items()) < len(fts_nodes):
-            #     error.append("uneven replica distribution found")
+            index_distribution = []
+            current_partition_count = 0
             for k1, v1 in v.items():
                 print(f"\t\t{node_defs_known[k1]} : {v1}")
-                if k == "default_index_1":
-                    if v1 != 6:
-                        error.append(f'index {k} has faulty distribution')
-                else:
-                    if v1 != 1:
-                        error.append(f'index {k} has faulty distribution')
+                index_distribution.append(int(v1))
+                current_partition_count += int(v1)
+
+            index_distribution.sort(reverse=True)
+
+            if index_distribution !=  self.get_ideal_index_distribution(current_partition_count,len(v)):
+                error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
+
         return error
