@@ -174,7 +174,7 @@ class LoadVector(object):
             print(e)
 
 class IndexVector(object):
-    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', vector_field='vec', dimension=128, train=10000, description='IVF,PQ8x8', similarity='L2_SQUARED', nprobes=3):
+    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', vector_field='vec', dimension=128, train=10000, description='IVF,PQ8x8', similarity='L2_SQUARED', nprobes=5):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         vector_definition = {"dimension": dimension, "train_list": train, "description": description, "similarity": similarity, "scan_nprobes": nprobes}
@@ -202,12 +202,12 @@ class QueryVector(object):
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
         query = f'SELECT id, VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
         return query
-    def vector_ann_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, direction='ASC', k=100):
+    def vector_ann_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, nprobes=5, direction='ASC', k=100):
         if is_xattr:
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        query = f'SELECT id, ANN({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY ANN({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
+        query = f'SELECT id, ANN({vector_field}, $qvec, "{search_function}", {nprobes}) as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY ANN({vector_field}, $qvec, "{search_function}", {nprobes}) {direction} LIMIT {k}'
         return query
     def run_queries(self, cluster, xb, qdocs, gdocs, search_function="L2", bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)

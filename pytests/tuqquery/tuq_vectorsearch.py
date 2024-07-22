@@ -14,7 +14,7 @@ class VectorSearchTests(QueryTests):
         self.bucket = "default"
         self.recall_knn = 100
         self.recall_ann = 40 # TBD
-        self.accuracy_ann = 10 # TBD
+        self.accuracy_ann = 2 # TBD
         self.vector = self.input.param("vector", [1,2,3])
         self.use_xattr = self.input.param("use_xattr", False)
         self.use_base64 = self.input.param("use_base64", False)
@@ -114,7 +114,7 @@ class VectorSearchTests(QueryTests):
         for i in range(5):
             self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
             recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
-            self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             if recall < self.recall_ann:
                 self.log.warn(f"Expected: {self.gt[begin+i].tolist()}")
                 self.log.warn(f"Actual: {indices[i].tolist()}")
