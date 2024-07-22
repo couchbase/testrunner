@@ -1136,8 +1136,7 @@ class FTSCallable:
 
         return n1ql_hits, hits, matches, recall_and_accuracy
 
-
-    def run_vector_queries(self,store_in_xattr=False, encode_base_64=False, vector_field_name="vector_data",
+    def run_vector_queries(self, store_in_xattr=False, encode_base_64=False, vector_field_name="vector_data",
                            vector_field_type="vector", index_name=None):
 
         is_passed = True
@@ -1206,3 +1205,90 @@ class FTSCallable:
 
         return is_passed
 
+
+    def validate_partition_distribution(self, rest):
+        _, payload = rest.get_cfg_stats()
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        print(f"FTS NODES: {fts_nodes}")
+
+        node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
+
+        node_active_count = {}
+        node_replica_count = {}
+
+        index_active_count = {}
+        index_replica_count = {}
+
+        for k, v in payload["planPIndexes"]["planPIndexes"].items():
+            index_name = v["indexName"]
+            if index_name not in index_active_count:
+                index_active_count[index_name] = {}
+            if index_name not in index_replica_count:
+                index_replica_count[index_name] = {}
+
+            for k1, v1 in v["nodes"].items():
+                if v1["priority"] == 0:
+                    node_active_count[k1] = node_active_count.get(k1, 0) + 1
+                    index_active_count[index_name][k1] = index_active_count[index_name].get(k1, 0) + 1
+                else:
+                    node_replica_count[k1] = node_replica_count.get(k1, 0) + 1
+                    index_replica_count[index_name][k1] = index_replica_count[index_name].get(k1, 0) + 1
+
+        actual_partition_count = sum(node_active_count.values()) + sum(node_replica_count.values())
+
+        print("Actives:")
+        for k, v in node_active_count.items():
+            print(f"\t{node_defs_known[k]} : {v}")
+
+        print("Replicas:")
+        for k, v in node_replica_count.items():
+            print(f"\t{node_defs_known[k]} : {v}")
+
+        print(f"Actual number of index partitions in cluster: {actual_partition_count}")
+
+        indexes_map = {}
+        expected_partition_count = 0
+
+        if "indexDefs" in payload:
+            for k, v in payload["indexDefs"]["indexDefs"].items():
+                indexes_map[
+                    k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {v['planParams']['numReplicas']}"
+                curr_active_partitions = v["planParams"]["indexPartitions"]
+                curr_replica_partitions = curr_active_partitions * v["planParams"]["numReplicas"]
+                expected_partition_count += curr_active_partitions + curr_replica_partitions
+
+        print(f"Expected number of index partitions in cluster: {expected_partition_count}")
+        print(f"Indexes: {len(indexes_map)}")
+        for k, v in indexes_map.items():
+            print(f"\t{k} :: {v}")
+
+        print("Index actives distribution:")
+        error = []
+        for k, v in index_active_count.items():
+            print(f"\tIndex: {k}")
+            # if len(v.items()) < len(fts_nodes):
+            #     error.append("uneven active distribution found")
+
+            for k1, v1 in v.items():
+                print(f"\t\t{node_defs_known[k1]} : {v1}")
+                if k == "default_index_1":
+                    if v1 != 6:
+                        error.append(f'index {k} has faulty distribution')
+                else:
+                    if v1 != 1:
+                        error.append(f'index {k} has faulty distribution')
+
+        print("Index replicas distribution:")
+        for k, v in index_replica_count.items():
+            print(f"\tIndex: {k}")
+            # if len(v.items()) < len(fts_nodes):
+            #     error.append("uneven replica distribution found")
+            for k1, v1 in v.items():
+                print(f"\t\t{node_defs_known[k1]} : {v1}")
+                if k == "default_index_1":
+                    if v1 != 6:
+                        error.append(f'index {k} has faulty distribution')
+                else:
+                    if v1 != 1:
+                        error.append(f'index {k} has faulty distribution')
+        return error
