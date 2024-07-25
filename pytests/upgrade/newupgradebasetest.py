@@ -71,7 +71,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.vector_queries_count = self.input.param("vector_queries_count", 5)
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 2)
-        self.partition_list = self.input.param("partition_list",[18,3,3])
+        self.partition_list = eval(self.input.param("partition_list",[18,3,3]))
+
 
         self.upgrade_type = self.input.param("upgrade_type", "online")
         self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
@@ -1146,6 +1147,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                         plan_params=plans)
             self.fts_obj.load_data(self.num_items)
             self.fts_obj.wait_for_indexing_complete()
+
+            self.log.info("Triggering additional wait time for index partitions to get distributed")
+            time.sleep(100)
+
             for index in self.fts_obj.fts_indexes:
                 self.fts_obj.run_query_and_compare(index=index, num_queries=20)
             return self.fts_obj
@@ -1157,19 +1162,14 @@ class NewUpgradeBaseTest(BaseTestCase):
             queue.put(True)
 
     def partition_validation(self):
-        fts_node = None
         try:
             fts_node = self.get_nodes_from_services_map(service_type="fts")
             frest = RestConnection(fts_node)
-            self.fts_obj.validate_partition_distribution(frest)
-
-            if fts_node:
-                fts_obj_partition = FTSCallable(nodes=self.servers, es_validate=False, servers=self.servers)
-                error = fts_obj_partition.validate_partition_distribution(RestConnection(fts_node))
-                if error:
-                    self.fail(f"partition distribution error: {error}")
-                else:
-                    self.log.info(f"partition distribution OK")
+            error = self.fts_obj.validate_partition_distribution(frest)
+            if error:
+                self.fail(f"partition distribution error: {error}")
+            else:
+                self.log.info(f"partition distribution OK")
         except Exception as ex:
             self.fail(ex)
 
