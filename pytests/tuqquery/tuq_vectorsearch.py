@@ -20,6 +20,7 @@ class VectorSearchTests(QueryTests):
         self.use_base64 = self.input.param("use_base64", False)
         self.use_bigendian = self.input.param("use_bigendian", False)
         self.distance = self.input.param("distance", "L2")
+        self.nprobes = self.input.param("nprobes", 3)
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -107,10 +108,10 @@ class VectorSearchTests(QueryTests):
     def test_ann_search(self):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         self.log.info("Create Vector Index")
-        IndexVector().create_index(self.database, similarity=self.distance)
+        IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian)
         begin = random.randint(0, len(self.xq) - 5)
         self.log.info(f"Running ANN query for range [{begin}:{begin+5}]")
-        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
         for i in range(5):
             self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
             recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
