@@ -1,4 +1,5 @@
 import json
+import os
 import random
 import time
 
@@ -20,11 +21,13 @@ class MultipleCA(BaseTestCase):
         self.wildcard_dns = self.input.param("wildcard_dns", None)
         self.passphrase_url = self.input.param("rest_url",
                                                "https://testingsomething.free.beeceptor.com/")
+        self.slave_host = self.input.param("slave_host_ip", "127.0.0.1")
         self.x509 = x509main(host=self.master, standard=self.standard,
                              encryption_type=self.encryption_type,
                              passphrase_type=self.passphrase_type,
                              wildcard_dns=self.wildcard_dns,
-                             passhprase_url=self.passphrase_url)
+                             passhprase_url=self.passphrase_url,
+                             slave_host_ip=self.slave_host)
         for server in self.servers:
             self.x509.delete_inbox_folder_on_server(server=server)
         sample_bucket = self.input.param("sample_bucket", "travel-sample")
@@ -68,6 +71,25 @@ class MultipleCA(BaseTestCase):
         if servers is None:
             servers = [self.servers[0]]
         for client_cert_path_tuple in client_certs:
+            slave_host = self.x509.slave_host
+            if slave_host.ip != '127.0.0.1':
+                client_certs_to_copy = [cert for cert in client_cert_path_tuple]
+                client_certs_to_copy.append(x509main.ALL_CAs_PATH + x509main.ALL_CAs_PEM_NAME)
+                for client_cert_path in client_certs_to_copy:
+
+                    # Get the directory path excluding the file
+                    dir_path = os.path.dirname(client_cert_path)
+
+                    # Check if the directory path exists
+                    if not os.path.exists(dir_path):
+                        # Create the entire directory path
+                        os.makedirs(dir_path, exist_ok=True)
+                        self.log.info(f"Created directory path: {dir_path}")
+                    else:
+                        self.log.info(f"Directory path already exists: {dir_path}")
+
+                    self.x509.copy_file_from_host_to_slave(client_cert_path, client_cert_path)
+
             for server in servers:
                 if api is None:
                     api_ep = "https://" + server.ip + ":18091/pools/default/"
