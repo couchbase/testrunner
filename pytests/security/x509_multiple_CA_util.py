@@ -10,6 +10,7 @@ import requests
 import logger
 import httplib2
 
+import shutil
 from shutil import copyfile
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -48,6 +49,7 @@ class x509main:
     CA_EXT = "./pytests/security/x509_extension_files/ca.ext"
     SERVER_EXT = "./pytests/security/x509_extension_files/server.ext"
     CLIENT_EXT = "./pytests/security/x509_extension_files/client.ext"
+    CONFIG_PATH = "./pytests/security/x509_extension_files/"
     ALL_CAs_PATH = CACERTFILEPATH + "all/"  # a dir to store the combined root ca .pem files
     ALL_CAs_PEM_NAME = "all_ca.pem"  # file name of the CA bundle
 
@@ -67,7 +69,8 @@ class x509main:
                  passhprase_url="https://testingsomething.free.beeceptor.com/",
                  passphrase_plain="default",
                  passphrase_load_timeout=5000,
-                 https_opts=None):
+                 https_opts=None,
+                 slave_host_ip='127.0.0.1'):
         self.root_ca_names = list()  # list of active root certs
         self.manifest = dict()  # active CA manifest
         self.node_ca_map = dict()  # {<node_ip>: {signed_by: <int_ca_name>, path: <node_ca_dir>}}
@@ -81,7 +84,7 @@ class x509main:
         if host is not None:
             self.host = host
             self.install_path = self._get_install_path(self.host)
-        self.slave_host = x509main.SLAVE_HOST
+        self.slave_host = ServerInfo(slave_host_ip, 22, 'root', 'couchbase')
         self.windows_test = False  # will be set to True in generate_multiple_x509_certs if windows VMs are used
 
         # Node cert settings
@@ -110,6 +113,29 @@ class x509main:
         self.passphrase_url = passhprase_url
         self.passphrase_plain = passphrase_plain
         self.passphrase_load_timeout = passphrase_load_timeout
+
+    def move_config_files_to_remote_host(self):
+        config_dir = x509main.CACERTFILEPATH + "x509_extension_files/"
+        self.create_directory(config_dir)
+        x509main.CONFIG_PATH = config_dir
+        dest_root_ca_config_path = config_dir + "config"
+        self.copy_file_from_slave_to_server(self.slave_host, x509main.ROOT_CA_CONFIG,
+                                            dest_root_ca_config_path)
+        x509main.ROOT_CA_CONFIG = dest_root_ca_config_path
+        dest_ca_ext_path = config_dir + "ca.ext"
+        self.copy_file_from_slave_to_server(self.slave_host, x509main.CA_EXT,
+                                            dest_ca_ext_path)
+        x509main.CA_EXT = dest_ca_ext_path
+        dest_server_ext_path = config_dir + "server.ext"
+        self.copy_file_from_slave_to_server(self.slave_host, x509main.SERVER_EXT,
+                                            dest_server_ext_path)
+        x509main.SERVER_EXT = dest_server_ext_path
+        dest_client_ext_path = config_dir = "client.ext"
+        self.copy_file_from_slave_to_server(self.slave_host, x509main.CLIENT_EXT,
+                                            dest_client_ext_path)
+        x509main.CLIENT_EXT = dest_client_ext_path
+
+
 
     # Get the install path for different operating systems
     def _get_install_path(self, host):
@@ -174,6 +200,7 @@ class x509main:
             server = self.host
         shell = RemoteMachineShellConnection(server)
         final_path = self.install_path + x509main.CHAINFILEPATH
+        self.log.info("Creating inbox directory on {}".format(server.ip))
         shell.create_directory(final_path)
         shell.disconnect()
 
@@ -182,6 +209,7 @@ class x509main:
             server = self.host
         shell = RemoteMachineShellConnection(server)
         final_path = self.install_path + x509main.SCRIPTSPATH
+        self.log.info("Creating scripts folder on {}".format(server.ip))
         shell.create_directory(final_path)
         shell.disconnect()
 
@@ -189,6 +217,7 @@ class x509main:
         if server is None:
             server = self.host
         shell = RemoteMachineShellConnection(server)
+        self.log.info("Creating CA folder on {}".format(server.ip))
         final_path = self.install_path + x509main.CHAINFILEPATH \
                      + "/" + x509main.TRUSTEDCAPATH
         shell.create_directory(final_path)
@@ -199,6 +228,34 @@ class x509main:
         shell = RemoteMachineShellConnection(server)
         shell.copy_file_local_to_remote(src, dst)
         shell.disconnect()
+
+    def copy_file_from_host_to_slave(self, src, dst):
+        shell_host = RemoteMachineShellConnection(self.slave_host)
+        shell_host.copy_file_remote_to_local(src, dst)
+        shell_host.disconnect()
+
+    def copy_file_from_host_to_server(self, server, src, dst):
+        # Extract the file extension
+        _, file_extension = os.path.splitext(src)
+
+        local_copy_path = "/tmp/remote_copy_" + str(random.randint(1, 100)) + "/"
+        os.makedirs(local_copy_path)
+        local_copy_file = local_copy_path + "temp_file_" + str(random.randint(1,100)) + \
+                          file_extension
+        try:
+            # Copy file from host to local
+            shell_host = RemoteMachineShellConnection(self.slave_host)
+            shell_host.copy_file_remote_to_local(src, local_copy_file)
+            shell_host.disconnect()
+            # Copy file from local to servef
+            shell_server = RemoteMachineShellConnection(server)
+            shell_server.copy_file_local_to_remote(local_copy_file, dst)
+            shell_server.disconnect()
+        finally:
+            # Clean up the temporary directory
+            if os.path.exists(local_copy_path):
+                shutil.rmtree(local_copy_path)
+
 
     def get_a_root_cert(self, root_ca_name=None):
         """
@@ -217,12 +274,16 @@ class x509main:
         returns pkey.key, chain.pem,  ie;
         node's cert's key and cert
         """
-
-        node_ca_key_path = self.node_ca_map[str(server.ip)]["path"] + \
-                           server.ip + ".key"
-        node_ca_path = self.node_ca_map[str(server.ip)]["path"] + \
-                       "long_chain" + server.ip + ".pem"
-        return node_ca_key_path, node_ca_path
+        if self.standard == "pkcs12":
+            node_ca_key_path = self.node_ca_map[str(server.ip)]["path"] + \
+                            "couchbase.p12"
+            return node_ca_key_path
+        else:
+            node_ca_key_path = self.node_ca_map[str(server.ip)]["path"] + \
+                            server.ip + ".key"
+            node_ca_path = self.node_ca_map[str(server.ip)]["path"] + \
+                        "long_chain" + server.ip + ".pem"
+            return node_ca_key_path, node_ca_path
 
     def get_node_private_key_passphrase_script(self, server):
         """
@@ -263,6 +324,57 @@ class x509main:
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command(cat_cmd)
         shell.disconnect()
+
+    def convert_to_pkcs12(self, node_ip, key_path, node_ca_dir, node_chain_ca_path):
+        """
+        converts pkcs#1 key to encrypted pkcs#12
+
+        :node_ip: ip_addr of the node
+        :key_path: pkcs#1 key path on slave
+        :node_ca_dir: node's dir which contains related cert documents.
+        """
+        tmp_encrypted_key_path = node_ca_dir + "couchbase.p12"
+        shell = RemoteMachineShellConnection(self.slave_host)
+        if self.passphrase_type == "plain":
+            if self.passphrase_plain != "default":
+                passw = self.passphrase_plain
+            else:
+                # generate passw
+                passw = ''.join(random.choice(string.ascii_uppercase + string.digits)
+                                for _ in range(20))
+            self.private_key_passphrase_map[str(node_ip)] = passw
+
+        elif self.passphrase_type == "script":
+            # generate passw
+            passw = ''.join(random.choice(string.ascii_uppercase + string.digits)
+                            for _ in range(20))
+            # create bash file with "echo <passw>"
+            if self.windows_test:
+                passphrase_path = node_ca_dir + "passphrase.bat"
+                bash_content = "@echo off\n"
+                bash_content = bash_content + "ECHO " + passw
+                shell.create_file(passphrase_path, bash_content)
+                shell.execute_command("chmod 777 " + passphrase_path)
+            else:
+                passphrase_path = node_ca_dir + "passphrase.sh"
+                bash_content = "#!/bin/bash\n"
+                bash_content = bash_content + "echo '" + passw + "'"
+                shell.create_file(passphrase_path, bash_content)
+                shell.execute_command("chmod 777 " + passphrase_path)
+        else:
+            response = requests.get(self.passphrase_url)
+            passw = response.content.decode('utf-8')
+
+        self.log.info("Converting node {} cert to pkcs 12".format(node_ip))
+        convert_cmd = "openssl pkcs12 -export -out " + tmp_encrypted_key_path + " -inkey " + \
+                        key_path + " -in " + node_chain_ca_path + \
+                        " -passout pass:" + passw
+        output, error = shell.execute_command(convert_cmd)
+        self.log.info('Output message is {0} and error message is {1}'.format(output, error))
+
+        del_cmd = "rm -rf " + key_path
+        output, error = shell.execute_command(del_cmd)
+        self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
     def convert_to_pkcs8(self, node_ip, key_path, node_ca_dir):
         """
@@ -333,12 +445,20 @@ class x509main:
         root_ca_dir = x509main.CACERTFILEPATH + root_ca_name + "/"
         self.create_directory(root_ca_dir)
 
+
         root_ca_key_path = root_ca_dir + "ca.key"
         root_ca_path = root_ca_dir + "ca.pem"
         config_path = x509main.ROOT_CA_CONFIG
 
+        if self.slave_host.ip != '127.0.0.1':
+            dest_cofig_path = x509main.CONFIG_PATH + "config"
+            self.copy_file_from_slave_to_server(self.slave_host, config_path,
+                                                dest_cofig_path)
+            config_path = dest_cofig_path
+
         shell = RemoteMachineShellConnection(self.slave_host)
         # create ca.key
+        self.log.info("Creating Root CA private key")
         output, error = shell.execute_command("openssl genrsa " +
                                               " -out " + root_ca_key_path +
                                               " " + str(self.key_length))
@@ -346,6 +466,7 @@ class x509main:
         if cn_name is None:
             cn_name = root_ca_name
         # create ca.pem
+        self.log.info("Creating Root CA certificate")
         output, error = shell.execute_command("openssl req -config " + config_path +
                                               " -new -x509 -days 3650" +
                                               " -sha256 -key " + root_ca_key_path +
@@ -370,27 +491,35 @@ class x509main:
         int_ca_key_path = int_ca_dir + "int.key"
         int_ca_csr_path = int_ca_dir + "int.csr"
         int_ca_path = int_ca_dir + "int.pem"
-
+        int_ca_ext = x509main.CA_EXT
+        if self.slave_host.ip != '127.0.0.1':
+            dest_int_ca_ext_path = x509main.CONFIG_PATH + "ca.ext"
+            self.copy_file_from_slave_to_server(self.slave_host, x509main.CA_EXT,
+                                                dest_int_ca_ext_path)
+            int_ca_ext = dest_int_ca_ext_path
         shell = RemoteMachineShellConnection(self.slave_host)
         # create int CA private key
+        self.log.info("Creating intermediate CA private key")
         output, error = shell.execute_command("openssl genrsa " +
                                               " -out " + int_ca_key_path +
                                               " " + str(self.key_length))
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create int CA csr
+        self.log.info("Creating intermediate CA signing request")
         output, error = shell.execute_command("openssl req -new -key " + int_ca_key_path +
                                               " -out " + int_ca_csr_path +
                                               " -subj '/C=UA/O=MyCompany/OU=Servers/CN=ClientAndServerSigningCA'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create int CA pem
+        self.log.info("Creating intermediate CA certificate")
         output, error = shell.execute_command("openssl x509 -req -in " + int_ca_csr_path +
                                               " -CA " + root_ca_path +
                                               " -CAkey " + root_ca_key_path +
                                               " -CAcreateserial -CAserial " +
                                               int_ca_dir + "rootCA.srl" +
-                                              " -extfile " + x509main.CA_EXT +
+                                              " -extfile " + int_ca_ext +
                                               " -out " + int_ca_path + " -days 365 -sha256")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
@@ -430,20 +559,29 @@ class x509main:
         with open(temp_cert_extensions_file, "r") as fout:
             print(fout.read())
 
+        if self.slave_host.ip != '127.0.0.1':
+            dest_temp_cert_extensions_file = x509main.CONFIG_PATH + "server2.ext"
+            self.copy_file_from_slave_to_server(self.slave_host, temp_cert_extensions_file,
+                                                dest_temp_cert_extensions_file)
+            temp_cert_extensions_file = dest_temp_cert_extensions_file
+
         shell = RemoteMachineShellConnection(self.slave_host)
         # create node CA private key
+        self.log.info("Creating node {} private key".format(node_ip))
         output, error = shell.execute_command("openssl genrsa " +
                                               " -out " + node_ca_key_path +
                                               " " + str(self.key_length))
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create node CA csr
+        self.log.info("Creating node {} certificate signing request".format(node_ip))
         output, error = shell.execute_command("openssl req -new -key " + node_ca_key_path +
                                               " -out " + node_ca_csr_path +
                                               " -subj '/C=UA/O=MyCompany/OU=Servers/CN=couchbase.node.svc'")
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
         # create node CA pem
+        self.log.info("Creating node {} certificate".format(node_ip))
         output, error = shell.execute_command("openssl x509 -req -in " + node_ca_csr_path +
                                               " -CA " + int_ca_path +
                                               " -CAkey " + int_ca_key_path +
@@ -463,8 +601,13 @@ class x509main:
         if self.standard == "pkcs8":
             self.convert_to_pkcs8(node_ip=node_ip, key_path=node_ca_key_path,
                                   node_ca_dir=node_ca_dir)
+        if self.standard == "pkcs12":
+            self.convert_to_pkcs12(node_ip=node_ip, key_path=node_ca_key_path,
+                                   node_ca_dir=node_ca_dir,
+                                   node_chain_ca_path=node_chain_ca_path)
 
-        os.remove(temp_cert_extensions_file)
+        if self.slave_host.ip == '127.0.0.1':
+            os.remove(temp_cert_extensions_file)
         shell.disconnect()
         self.node_ca_map[str(node_ip)] = dict()
         self.node_ca_map[str(node_ip)]["signed_by"] = int_ca_name
@@ -508,6 +651,12 @@ class x509main:
         with open(temp_cert_extensions_file, "r") as fout:
             print(fout.read())
 
+        if self.slave_host.ip != '127.0.0.1':
+            dest_temp_cert_extensions_file = x509main.CONFIG_PATH + "client2.ext"
+            self.copy_file_from_slave_to_server(self.slave_host, temp_cert_extensions_file,
+                                                dest_temp_cert_extensions_file)
+            temp_cert_extensions_file = dest_temp_cert_extensions_file
+
         shell = RemoteMachineShellConnection(self.slave_host)
         # create private key for client
         output, error = shell.execute_command("openssl genrsa " +
@@ -537,7 +686,8 @@ class x509main:
                                               " " + int_ca_path +
                                               " > " + client_chain_ca_path)
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
-        os.remove(temp_cert_extensions_file)
+        if self.slave_host.ip == '127.0.0.1':
+            os.remove(temp_cert_extensions_file)
         shell.disconnect()
         self.client_ca_map[str(client_ca_name)] = dict()
         self.client_ca_map[str(client_ca_name)]["signed_by"] = int_ca_name
@@ -556,13 +706,16 @@ class x509main:
         returns
         None
         """
-
         shell = RemoteMachineShellConnection(servers[0])
         if shell.extract_remote_info().distribution_type == "windows":
             self.windows_test = True
         shell.disconnect()
 
         self.create_directory(x509main.CACERTFILEPATH)
+        if self.slave_host.ip != '127.0.0.1':
+            config_dir = x509main.CACERTFILEPATH + "x509_extension_files/"
+            x509main.CONFIG_PATH = config_dir
+            self.create_directory(x509main.CONFIG_PATH)
 
         # Take care of creating certs from spec file
         spec = self.import_spec_file(spec_file=spec_file_name)
@@ -710,6 +863,13 @@ class x509main:
     def write_client_cert_json_new(self):
         template_path = './pytests/security/' + x509main.CLIENT_CERT_AUTH_TEMPLATE
         config_json = x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON
+        if not os.path.exists(x509main.CACERTFILEPATH):
+            # Create the directory
+            os.makedirs(x509main.CACERTFILEPATH)
+            self.log.info(f"Directory {x509main.CACERTFILEPATH} created.")
+        else:
+            self.log.info(f"Directory {x509main.CACERTFILEPATH} already exists.")
+
         with open(template_path, 'r') as source_file:
             client_cert = '{"state" : ' + "'" + self.client_cert_state + "'" + ", 'prefixes' : [ "
             for line in source_file:
@@ -753,6 +913,7 @@ class x509main:
     def load_trusted_CAs(self, server=None):
         if not server:
             server = self.host
+        self.log.info("Loading root CA certificate on {}".format(server.ip))
         rest = RestConnection(server)
         status, content = rest.load_trusted_CAs()
         if not status:
@@ -771,6 +932,7 @@ class x509main:
         if shell.extract_remote_info().distribution_type == "windows":
             script_file = x509main.SCRIPTWINDOWSFILEPATH
         shell.disconnect()
+        self.log.info("Building params for loading node cert")
         if self.encryption_type:
             params["privateKeyPassphrase"] = dict()
             params["privateKeyPassphrase"]["type"] = self.passphrase_type
@@ -804,8 +966,9 @@ class x509main:
         for server in servers:
             rest = RestConnection(server)
             params = ''
-            if self.standard == "pkcs8":
+            if self.standard == "pkcs8" or self.standard == "pkcs12":
                 params = self.build_params(server)
+            self.log.info("Loading node certificate for {}".format(server.ip))
             status, content = rest.reload_certificate(params=params)
             if not status:
                 msg = "Could not load reload node cert on %s; Failed with error %s" \
@@ -905,7 +1068,12 @@ class x509main:
             src_pem_path = self.get_a_root_cert(root_ca_name)
             dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/CA/" + \
                             root_ca_name + "_ca.pem"
-            self.copy_file_from_slave_to_server(server, src_pem_path, dest_pem_path)
+            self.log.info("Copying root certificate from {}:{} to {}:{}".
+                          format(self.slave_host.ip, src_pem_path, server.ip,dest_pem_path))
+            if self.slave_host.ip != '127.0.0.1':
+                self.copy_file_from_host_to_server(server, src_pem_path, dest_pem_path)
+            else:
+                self.copy_file_from_slave_to_server(server, src_pem_path, dest_pem_path)
 
     def copy_node_cert(self, server):
         """
@@ -913,20 +1081,37 @@ class x509main:
         """
         self.create_inbox_folder_on_server(server=server)
         self.create_scripts_folder_on_server(server=server)
-        node_ca_key_path, node_ca_path = self.get_node_cert(server)
-        dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/chain.pem"
-        self.copy_file_from_slave_to_server(server, node_ca_path, dest_pem_path)
-        dest_pkey_path = self.install_path + x509main.CHAINFILEPATH + "/pkey.key"
-        self.copy_file_from_slave_to_server(server, node_ca_key_path, dest_pkey_path)
-        if self.standard == "pkcs8" and self.encryption_type and \
+        if self.standard == "pkcs12":
+            node_ca_key_path = self.get_node_cert(server)
+            dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/couchbase.p12"
+            self.log.info("Copying node pkcs 12 key from {}:{} to {}:{}".
+                          format(self.slave_host.ip, node_ca_key_path, server.ip, dest_pem_path))
+            if self.slave_host.ip != '127.0.0.1':
+                self.copy_file_from_host_to_server(server, node_ca_key_path, dest_pem_path)
+            else:
+                self.copy_file_from_slave_to_server(server, node_ca_key_path, dest_pem_path)
+            dest_pem_folder = self.install_path + x509main.CHAINFILEPATH
+            shell = RemoteMachineShellConnection(server)
+            shell.execute_command("chown -R couchbase " + dest_pem_folder)
+        else:
+            node_ca_key_path, node_ca_path = self.get_node_cert(server)
+            dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/chain.pem"
+            self.copy_file_from_slave_to_server(server, node_ca_path, dest_pem_path)
+            dest_pkey_path = self.install_path + x509main.CHAINFILEPATH + "/pkey.key"
+            self.copy_file_from_slave_to_server(server, node_ca_key_path, dest_pkey_path)
+        if (self.standard == "pkcs8" or self.standard == "pkcs12") and self.encryption_type and \
                 self.passphrase_type == "script":
             node_key_passphrase_path = self.get_node_private_key_passphrase_script(server)
             shell = RemoteMachineShellConnection(server)
             if shell.extract_remote_info().distribution_type == "windows":
                 dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
                                                 x509main.SCRIPTWINDOWSFILEPATH
-                self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
-                                                    dest_node_key_passphrase_path)
+                if self.slave_host.ip != '127.0.0.1':
+                    self.copy_file_from_host_to_server(server, node_key_passphrase_path,
+                                                       dest_node_key_passphrase_path)
+                else:
+                    self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
+                                                        dest_node_key_passphrase_path)
                 dest_node_key_passphrase_path = "/cygdrive/c/Program Files/Couchbase/Server/var/lib/couchbase/" + \
                                                 x509main.SCRIPTSPATH + x509main.SCRIPTWINDOWSFILEPATH
                 shell.execute_command("chmod 777 '" +
@@ -934,8 +1119,12 @@ class x509main:
             else:
                 dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
                                                 x509main.SCRIPTFILEPATH
-                self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
-                                                    dest_node_key_passphrase_path)
+                if self.slave_host.ip != '127.0.0.1':
+                    self.copy_file_from_host_to_server(server, node_key_passphrase_path,
+                                                       dest_node_key_passphrase_path)
+                else:
+                    self.copy_file_from_slave_to_server(server, node_key_passphrase_path,
+                                                        dest_node_key_passphrase_path)
                 output, error = shell.execute_command("chmod 777 '" +
                                                       dest_node_key_passphrase_path + "'")
                 self.log.info('Output message is {0} and error message is {1}'.
