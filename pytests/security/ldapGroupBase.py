@@ -13,11 +13,11 @@ log = logger.Logger.get_logger()
 
 class ldapGroupBase:
     LDAP_GROUP_DN = "ou=Groups,dc=couchbase,dc=com"
-    LDAP_HOST = '172.23.120.205'
+    LDAP_HOST = '172.23.120.175'
     LDAP_PORT = "389"
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"
-    LDAP_ADMIN_USER = "cn=Manager,dc=couchbase,dc=com"
+    LDAP_ADMIN_USER = "cn=admin,dc=couchbase,dc=com"
     LDAP_ADMIN_PASS = "p@ssword"
     LDAP_GROUP_QUERY =  "ou=Groups,dc=couchbase,dc=com??one?(member=cn=%u,ou=Users,dc=couchbase,dc=com)"
     LDAP_USER_DN_MAPPING = "ou=Users,dc=couchbase,dc=com??one?(uid=%u)"

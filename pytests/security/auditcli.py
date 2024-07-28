@@ -57,8 +57,8 @@ class auditcli(ldaptest):
             AuditTemp.setAuditEnable('true')
             self.sleep(30)
         self.ipAddress = self.getLocalIPAddress()
-        self.ldapUser = self.input.param('ldapUser', 'Administrator')
-        self.ldapPass = self.input.param('ldapPass', 'password')
+        self.ldapUser = self.input.param('ldapUser', 'dave')
+        self.ldapPass = self.input.param('ldapPass', 'p@ssw0rd')
         self.source = self.input.param('source', 'ns_server')
         self.user_id = "{}:{}".format(self.ldapUser, self.ldapPass)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
@@ -74,10 +74,10 @@ class auditcli(ldaptest):
 
                 rest = RestConnection(self.master)
                 param = {
-                    'hosts': '{0}'.format("172.23.120.205"),
+                    'hosts': '{0}'.format("172.23.120.175"),
                     'port': '{0}'.format("389"),
                     'encryption': '{0}'.format("None"),
-                    'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
+                    'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),
                     'bindPass': '{0}'.format("p@ssword"),
                     'authenticationEnabled': '{0}'.format("true"),
                     'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
