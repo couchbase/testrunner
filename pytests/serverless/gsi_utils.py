@@ -118,7 +118,7 @@ class GSIUtils(object):
 
     def generate_car_vector_loader_index_definition(self, index_name_prefix=None, similarity="L2", train_list=None,
                                                     scan_nprobes=1, skip_primary=False, array_indexes=False,
-                                                    limit=10):
+                                                    limit=10, quantization_algo_color_vector=None,quantization_algo_description_vector=None):
 
         definitions_list = []
         color_vec_1 = [43.0, 133.0, 178.0]
@@ -149,7 +149,7 @@ class GSIUtils(object):
         # Single vector field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'colorRGBVector', index_fields=['colorRGBVector VECTOR'],
-                            dimension=3, description="IVF,PQ3x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector,"
                                                                               f" {scan_color_vec_1}",
@@ -159,7 +159,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVector',
                             index_fields=['description', 'descriptionVector VECTOR'],
-                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, descriptionVector,"
                                                                                f" {scan_desc_vec_1}",
@@ -172,7 +172,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarOneVectorLeading',
                             index_fields=['descriptionVector VECTOR', 'id'],
-                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"id, descriptionVector",
                                                                                'id > 1575644878',
@@ -183,7 +183,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
 
                             index_fields=['year', 'descriptionVector Vector', 'manufacturer', 'fuel'],
-                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, year,"
                                                                                f" descriptionVector, {scan_desc_vec_2}",
@@ -197,7 +197,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_2',
                             index_fields=['rating', 'colorRGBVector Vector', 'category'],
-                            dimension=3, description="IVF,PQ3x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("color, colorRGBVector",
                                                                                "rating = 2 and "
@@ -211,7 +211,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'includeMissing',
                             index_fields=['colorHex ', 'year', 'fuel', 'descriptionVector Vector'],
-                            dimension=384, description="IVF,PQ8x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, missing_indexes=True, missing_field_desc=True,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("fuel, year, descriptionVector",
                                                                                "year > 1980 OR "
@@ -222,7 +222,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'PartialIndex',
                             index_fields=['rating ', 'description', 'colorRGBVector Vector'],
                             index_where_clause='rating > 3',
-                            dimension=3, description="IVF,PQ3x8", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
                                                                                "rating = 4 and "
@@ -559,6 +559,8 @@ class GSIUtils(object):
             nodes_list = None
             if defer_build_mix:
                 defer_build = random.choice([True, False])
+            if deploy_node_info is not None:
+                nodes_list = deploy_node_info
             if randomise_replica_count and num_replica >= 1:
                 num_replicas = random.randint(1, num_replica)
                 if deploy_node_info is not None:
@@ -735,7 +737,7 @@ class GSIUtils(object):
         pass
 
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
-                                  scan_nprobes=1, array_indexes=False, limit=None):
+                                  scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None, quantization_algo_description_vector=None):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -755,7 +757,7 @@ class GSIUtils(object):
                                                                                train_list=train_list,
                                                                                scan_nprobes=scan_nprobes,
                                                                                array_indexes=array_indexes,
-                                                                               limit=limit)
+                                                                               limit=limit,quantization_algo_color_vector=quantization_algo_color_vector,quantization_algo_description_vector=quantization_algo_description_vector)
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)

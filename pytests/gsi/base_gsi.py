@@ -98,7 +98,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.region = self.input.param("region", "us-west-1")
         self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
         self.download_vector_dataset = self.input.param("download_vector_dataset", False)
-        self.vector_backup_filename = self.input.param("vector_backup_filename", "100K_car.zip")
+        self.vector_backup_filename = self.input.param("vector_backup_filename", "backup_zips/100K_car.zip")
         self.storage_prefix = self.input.param("storage_prefix", None)
         self.index_batch_weight = self.input.param("index_batch_weight", 1)
         self.server_group_map = {}
@@ -137,18 +137,20 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
+        self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
+        self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
         self.encoder = SentenceTransformer(self.data_model)
+        self.encoder.cpu()
         self.base64 = self.input.param("base64", False)
         self.namespaces = []
-
-        self.gsi_util_obj = GSIUtils(self.run_cbq_query, self.encoder)
+        self.gsi_util_obj = GSIUtils(self.run_cbq_query, encoder=self.encoder)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
         if self.dgm_run and hasattr(self, "gens_load"):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
-        self.num_index_replicas = self.input.param("num_index_replica", 0)
+        self.num_index_replicas = self.input.param("num_index_replicas", 0)
         self.redistribute_nodes = self.input.param("redistribute_nodes", False)
         if self.capella_run:
             if self.num_index_replicas == 0:
