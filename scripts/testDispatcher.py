@@ -458,6 +458,10 @@ def main():
                                     addPoolId = "localstack"
                                     break
 
+                        support_py3 = "false"
+                        if 'support_py3' in data:
+                            support_py3 = data["support_py3"]
+
                         testsToLaunch.append({
                             'component': data['component'],
                             'subcomponent': data['subcomponent'],
@@ -478,6 +482,7 @@ def main():
                             'framework': framework,
                             'addPoolId': addPoolId,
                             'target_jenkins': str(jenkins_server_url),
+                            'support_py3': support_py3,
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -786,6 +791,11 @@ def main():
                     else:
                         parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
+                branch_to_trigger = options.branch
+                if (testsToLaunch[i]['framework'] == "TAF"
+                        and options.branch == "master"
+                        and testsToLaunch[i]["support_py3"] == "true"):
+                    branch_to_trigger = "master_py3_dev"
                 url = launchString.format(options.version,
                                             testsToLaunch[i]['confFile'],
                                             descriptor,
@@ -796,7 +806,7 @@ def main():
                                             options.os,
                                             testsToLaunch[i]['initNodes'],
                                             testsToLaunch[i]['installParameters'],
-                                            options.branch,
+                                            branch_to_trigger,
                                             testsToLaunch[i]['slave'],
                                             urllib.parse.quote(testsToLaunch[i]['owner']),
                                             urllib.parse.quote(
