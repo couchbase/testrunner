@@ -1258,3 +1258,35 @@ class EventingRecovery(EventingBaseTest):
         self.undeploy_and_delete_function(body)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_is_balanced_after_stopping_couchbase_server(self):
+            # Get all eventing nodes
+            nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+            if len(nodes_out_list)<2:
+                self.fail("Need two or more eventing nodes")
+            body = self.create_save_function_body(self.function_name,self.handler_code)
+            # load some data
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the update mutations and verify results
+            if self.non_default_collection:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+            for node in nodes_out_list:
+                self.stop_server(node,True)
+            self.log.info("Couchbase stopped on all eventing nodes")
+            for node in nodes_out_list:
+                self.start_server(node)
+            for node in nodes_out_list:
+                rest_conn = RestConnection(node)
+                json_response = rest_conn.cluster_status()
+                self.log.info("Pools Default Statistics: {0}".format(json_response))
+                is_balanced=json_response['balanced']
+                if not is_balanced:
+                    servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
+                    self.assertFalse('eventing' in servicesNeedRebalance,
+                            msg="Eventing Nodes are not balanced, need rebalance after starting couchbase server."  )
