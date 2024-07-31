@@ -122,12 +122,15 @@ def parse_args(argv):
         parse_conf_file(options.conf, tests, test_params)
     if options.globalsearch:
         parse_global_conf_file(options.globalsearch, tests, test_params)
-    if options.include_tests:
-        tests = process_include_or_filter_exclude_tests("include", options.include_tests, tests,
-                                                        options)
-    if options.exclude_tests:
-        tests = process_include_or_filter_exclude_tests("exclude", options.exclude_tests, tests, options)
-
+    try:
+        if options.include_tests:
+            tests = process_include_or_filter_exclude_tests("include", options.include_tests, tests,
+                                                            options)
+        if options.exclude_tests:
+            tests = process_include_or_filter_exclude_tests("exclude", options.exclude_tests, tests, options)
+    except Exception as e:
+        log.error("Failed to get the test xml to include or exclude the tests. Running all the tests instead.")
+        log.error(e)
     if options.testcase:
         tests.append(options.testcase)
     if options.noop:

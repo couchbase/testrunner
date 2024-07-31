@@ -254,6 +254,21 @@ def get_rerun_parameters(rerun_document=None, is_rerun=False):
         if job['install_failure']:
             num_runs -= 1
         else:
+            job_url = job['job_url']
+            artifacts = get_jenkins_params.get_js(job_url, "tree=artifacts[*]")
+            if not artifacts or len(artifacts['artifacts']) == 0:
+                print("Could not find the job. Job might be deleted. Seeing if the job was saved on s3")
+                build = rerun_document['build']
+                job_name = job_url.rstrip('/').split('/')[-2]
+                job_build_number = job_url.rstrip('/').split('/')[-1]
+                aws_link = '{0}/{1}/jenkins_logs/{2}/{3}' \
+                           '/archive.zip'.format(AWS_LINK, build, job_name,
+                                                 job_build_number)
+                archive_zip = get_jenkins_params.download_url_data(aws_link)
+                if not archive_zip:
+                    print("Job wasn't saved. Trying with older build.")
+                    num_runs -= 1
+                    continue
             valid_run = True
             valid_job = job
     if valid_run and valid_job:
