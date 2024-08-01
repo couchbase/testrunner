@@ -236,8 +236,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             list_of_vectors_to_be_indexed_on_faiss.append(v[vectorField])
         faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"))
 
-        df, ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
-        self.log.info(f'faiss df {df}')
+        ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
 
         faiss_closest_vectors = []
         for idx in ann:

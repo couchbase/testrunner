@@ -15,7 +15,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import faiss
 import numpy as np
-import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
 from sentence_transformers import SentenceTransformer
@@ -2733,8 +2732,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if n_probe is None:
             n_probe = faiss_db.ntotal
         dist, ann = faiss_db.search(_vector, k=n_probe)
-        results = pd.DataFrame({'distances': dist[0][:limit], 'ann': ann[0][:limit]})
-        return results, ann[0][:limit]
+        return ann[0][:limit]
 
 class ConCurIndexOps():
     def __init__(self):
