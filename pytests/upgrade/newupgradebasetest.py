@@ -71,7 +71,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.vector_queries_count = self.input.param("vector_queries_count", 5)
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 2)
-        self.partition_list = eval(self.input.param("partition_list",[18,3,3]))
+        self.partition_list = eval(self.input.param("partition_list","[18,3,3]"))
 
 
         self.upgrade_type = self.input.param("upgrade_type", "online")
