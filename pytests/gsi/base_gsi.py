@@ -89,6 +89,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.partition_fields = self.input.param('partition_fields', None)
         self.partitoned_index = self.input.param('partitioned_index', False)
         self.json_template = self.input.param("json_template", "Person")
+        self.magma_flask_host = self.input.param("magma_flask_host", '172.23.219.57')
+        self.magma_flask_port = self.input.param("magma_flask_port", 5000)
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
         self.num_partition = self.input.param('num_partition', 8)
@@ -159,6 +161,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.scan_nprobes = self.input.param("scan_nprobes", 1)
         self.scan_limit = self.input.param("scan_limit", 100)
         self.base64 = self.input.param("base64", False)
+        self.use_magma_server = self.input.param("use_magma_server", False)
         self.namespaces = []
         self.gsi_util_obj = GSIUtils(self.run_cbq_query, encoder=self.encoder)
         if self.index_loglevel:
@@ -2095,6 +2098,35 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.namespaces.append(namespace)
         for task in tasks:
             task.result()
+
+    def load_docs_via_magma_server(self, server, bucket, gen):
+        url = f'http://{self.magma_flask_host}:{self.magma_flask_port}/run'
+        params = {
+            'ip' : f'{server.ip}',
+            'user' : f'{gen.username}',
+            'password' : f'{gen.password}',
+            'bucket' : f'{bucket}',
+            'create_s' : f'{gen.start_seq_num}',
+            'create_e' : f'{gen.end + 2}',
+            'cr' : f'{gen.percent_create}',
+            'up' : f'{gen.percent_update}',
+            'rd' : f'{gen.percent_delete}',
+            'docSize' : f'{gen.doc_size}',
+            'keyPrefix' : f'{gen.key_prefix}',
+            'scope' : f'{gen.scope}',
+            'collection' : f'{gen.collection}',
+            'valueType' : f'{gen.json_template}',
+            'ops' : f'{gen.ops_rate}',
+            'workers' : f'{gen.workers}',
+            'timeout' : f'{gen.timeout}',
+            'debug' : f'{gen.get_sdk_logs}'
+        }
+
+        response = requests.post(url, data=params)
+        if response.status_code != 200:
+            raise Exception(f'exception is {response.content}')
+        else:
+            self.log.info(f'Doc loading is sucessful on bucket {bucket}, scope {gen.scope}, collection {gen.collection}')
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
