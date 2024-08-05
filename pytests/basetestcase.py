@@ -1109,6 +1109,8 @@ class OnPremBaseTestCase(unittest.TestCase):
                                        bucket_storage=self.bucket_storage,
                                        lww=self.lww))
 
+        self.sleep(30)
+
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 
