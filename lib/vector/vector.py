@@ -174,7 +174,7 @@ class LoadVector(object):
             print(e)
 
 class IndexVector(object):
-    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ8x8', similarity='L2_SQUARED', nprobes=3):
+    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         if is_xattr:
