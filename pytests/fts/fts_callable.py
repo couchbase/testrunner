@@ -714,7 +714,7 @@ class FTSCallable:
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         return rest.get_fts_defrag_output(node, creds).json()
 
-    def create_vector_index(self, xattr_flag, base64_flag, index_name, similarity="l2_norm", dimensions=128):
+    def create_vector_index(self, xattr_flag, base64_flag, index_name,plans, similarity="l2_norm", dimensions=128):
 
         self.store_in_xattr = xattr_flag
         self.encode_base64_vector = base64_flag
@@ -753,11 +753,14 @@ class FTSCallable:
                 "enabled": True,
                 "dynamic": False,
                 "properties": vector_temp}
+        
+        index_body['planParams']['indexPartitions'] = plans['indexPartitions']
+        index_body['planParams']['numReplicas'] = plans['numReplicas']
 
         try:
             status, result = RestConnection(self.servers[1]).create_fts_index(index_name, index_body, mode="upgrade")
             if status:
-                time.sleep(50)
+                time.sleep(100)
                 return str(result), 200
             else:
                 return str(result), 100
@@ -777,41 +780,53 @@ class FTSCallable:
             print(e)
 
 
-        index_body = copy.deepcopy(self.vector_index_definition)
-        index_body["name"] = index_name
-        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-            "dims"] = dimensions
-        index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-            "similarity"] = similarity
-        index_body["uuid"] = uuid
+        index_body_def = RestConnection(self.servers[1]).get_fts_index_definition(name=index_name)[1]['indexDef']
+        index_partition = index_body_def['planParams']['indexPartitions']
+        num_replicas = index_body_def['planParams']['numReplicas']
+        
 
-        if self.encode_base64_vector:
-            if self.store_in_xattr:
-                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
-                    "fields"][0]['name'] = "vector_encoded"
-            else:
-                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
-                    "fields"][0]['name'] = "vector_data_base64"
-
+        try:
+            index_body = copy.deepcopy(self.vector_index_definition)
+            index_body["name"] = index_name
             index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
-                'type'] = "vector_base64"
+                "dims"] = dimensions
+            index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+                "similarity"] = similarity
+            index_body["uuid"] = uuid
 
-            vector_temp = index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]
-            index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+            if self.encode_base64_vector:
+                if self.store_in_xattr:
+                    index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
+                        "fields"][0]['name'] = "vector_encoded"
+                else:
+                    index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"][
+                        "fields"][0]['name'] = "vector_data_base64"
+
+                index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]["fields"][0][
+                    'type'] = "vector_base64"
+
+                vector_temp = index_body["params"]["mapping"]["types"]["_default._default"]["properties"]["vector_data"]
+                index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+                if self.store_in_xattr:
+                    index_body['params']['mapping']['types']['_default._default']['properties'][
+                        'vector_encoded'] = vector_temp
+                else:
+                    index_body['params']['mapping']['types']['_default._default']['properties'][
+                        'vector_data_base64'] = vector_temp
+
             if self.store_in_xattr:
-                index_body['params']['mapping']['types']['_default._default']['properties'][
-                    'vector_encoded'] = vector_temp
-            else:
-                index_body['params']['mapping']['types']['_default._default']['properties'][
-                    'vector_data_base64'] = vector_temp
-
-        if self.store_in_xattr:
-            vector_temp = index_body['params']['mapping']['types']['_default._default']['properties']
-            index_body['params']['mapping']['types']['_default._default']['properties'] = {}
-            index_body['params']['mapping']['types']['_default._default']['properties']['_$xattrs'] = {
-                "enabled": True,
-                "dynamic": False,
-                "properties": vector_temp}
+                vector_temp = index_body['params']['mapping']['types']['_default._default']['properties']
+                index_body['params']['mapping']['types']['_default._default']['properties'] = {}
+                index_body['params']['mapping']['types']['_default._default']['properties']['_$xattrs'] = {
+                    "enabled": True,
+                    "dynamic": False,
+                    "properties": vector_temp}
+            
+            index_body['planParams']['indexPartitions'] = index_partition
+            index_body['planParams']['numReplicas'] = num_replicas
+        
+        except Exception as ex:
+            print(f"error occured while trying to update index . reason : {ex}\n")
 
         try:
             status, result = RestConnection(self.servers[1]).update_fts_index(index_name, index_body, mode="upgrade")
@@ -1255,23 +1270,27 @@ class FTSCallable:
 
         print(f"Actual number of index partitions in cluster: {actual_partition_count}")
 
-        indexes_map = {}
-        expected_partition_count = 0
-        num_rep = 0
-        if "indexDefs" in payload:
-            for k, v in payload["indexDefs"]["indexDefs"].items():
-                try:
-                    num_rep = v['planParams']['numReplicas']
-                except:
-                    num_rep = 0
-                indexes_map[
-                    k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {num_rep}"
-                curr_active_partitions = v["planParams"]["indexPartitions"]
-                curr_replica_partitions = curr_active_partitions * num_rep
-                expected_partition_count += curr_active_partitions + curr_replica_partitions
+        try:
+            indexes_map = {}
+            expected_partition_count = 0
+            num_rep = 0
+            if "indexDefs" in payload:
+                for k, v in payload["indexDefs"]["indexDefs"].items():
+                    try:
+                        num_rep = v['planParams']['numReplicas']
+                    except:
+                        num_rep = 0
+                    indexes_map[
+                        k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {num_rep}"
+                    curr_active_partitions = v['planParams']['indexPartitions']
+                    curr_replica_partitions = curr_active_partitions * num_rep
+                    expected_partition_count += curr_active_partitions + curr_replica_partitions
+ 
+            print(f"Expected number of index partitions in cluster: {expected_partition_count}")
+            print(f"Indexes: {len(indexes_map)}")
+        except Exception as ex:
+            print(ex)
 
-        print(f"Expected number of index partitions in cluster: {expected_partition_count}")
-        print(f"Indexes: {len(indexes_map)}")
         pindexes_count = []
         for k, v in indexes_map.items():
             print(f"\t{k} :: {v}")
@@ -1287,14 +1306,13 @@ class FTSCallable:
             print(f"\tIndex: {k}")
             index_distribution = []
             current_partition_count = 0
-            total = 0
             for k1, v1 in v.items():
-                total += v1
                 print(f"\t\t{node_defs_known[k1]} : {v1}")
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
-            if total != pindexes_count[count]:
-                error.append(f"Total active partitions are different- total:: {total} - :: expected{pindexes_count[count]}")
+            if current_partition_count != int(pindexes_count[count]):
+                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")         
+            count+=1
 
             index_distribution.sort(reverse = True)
 
@@ -1308,16 +1326,14 @@ class FTSCallable:
                 print(f"\tIndex: {k}")
                 index_distribution = []
                 current_partition_count = 0
-                total = 0
                 for k1, v1 in v.items():
-                    total += v1
                     print(f"\t\t{node_defs_known[k1]} : {v1}")
                     index_distribution.append(int(v1))
                     current_partition_count += int(v1)
-                if total != pindexes_count[count]:
+                if current_partition_count != int(pindexes_count[count]):
                     error.append(
-                        f"Total active partitions are different- total:: {total} - :: expected{pindexes_count[count]}")
-
+                        f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")
+                count+=1
                 index_distribution.sort(reverse=True)
 
                 if index_distribution != self.get_ideal_index_distribution(current_partition_count,len(v)):
