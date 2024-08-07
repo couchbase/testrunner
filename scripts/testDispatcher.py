@@ -262,6 +262,7 @@ def main():
     parser.add_option('--capella_password', dest='capella_password', default=None)
     parser.add_option('--capella_tenant', dest='capella_tenant', default=None)
     parser.add_option('--capella_token', dest='capella_token', default=None)
+    parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -929,6 +930,8 @@ def main():
                 elif options.serverType == DOCKER:
                     # Due to the docker port allocation race
                     time.sleep(240)
+                elif int(options.sleep_between_trigger) != 0:
+                    time.sleep(int(options.sleep_between_trigger))
                 else:
                     time.sleep(30)
             else:

@@ -286,6 +286,7 @@ def main():
     parser.add_option('--capella_token', dest='capella_token', default=None)
     parser.add_option('--build_url', dest='build_url', default=None)
     parser.add_option('--job_url', dest='job_url', default=None)
+    parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
 
     # set of parameters for testing purposes.
     # TODO: delete them after successful testing
@@ -949,6 +950,8 @@ def main():
                     pass # no sleeping necessary
                 elif options.serverType == DOCKER:
                     time.sleep(240)     # this is due to the docker port allocation race
+                elif int(options.sleep_between_trigger) != 0:
+                    time.sleep(int(options.sleep_between_trigger))
                 else:
                     time.sleep(30)
             else:
