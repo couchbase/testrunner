@@ -9,11 +9,19 @@ __created_on__ = "19/06/24 03:27 pm"
 """
 
 import ast
+import os.path
 import re
+import subprocess
+from urllib.request import urlretrieve
+
 import numpy as np
+
+from collection.gsi.backup_restore_utils import IndexBackupClient
 from gsi.base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from concurrent.futures import ThreadPoolExecutor
+
+from remote.remote_util import RemoteMachineShellConnection
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -40,18 +48,97 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def suite_tearDown(self):
         pass
 
-    def test_create_indexes(self):
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
-                                            bucket_params=self.bucket_params)
+    def restore_couchbase_bucket(self, backup_filename, skip_default_scope=True):
+        self.s3_utils_obj.download_file(object_name=backup_filename,
+                                        filename=backup_filename)
+        copy_backup_bucket_cmd = ["scp", backup_filename, f"root@{self.master.ip}:~"]
+        proc = subprocess.Popen(copy_backup_bucket_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc.communicate()
+        if proc.returncode == 0:
+            self.log.info('File successfully uploaded.')
+        else:
+            self.fail(f'Error uploading file: {proc.stderr}')
+        repo = backup_filename.split('.')[0]
+        remote_client = RemoteMachineShellConnection(self.master)
+        remote_client.execute_command("rm -rf backup")
+        backup_config_cmd = f"/opt/couchbase/bin/cbbackupmgr config --archive backup/ --repo {repo}"
+        out = remote_client.execute_command(backup_config_cmd)
+        self.log.info(out)
+        self.log.info("unzip the backup repo before restoring it")
+        unzip_cmd = f"unzip -o {backup_filename}"
+        remote_client.execute_command(command=unzip_cmd)
+        restore_cmd = f"/opt/couchbase/bin/cbbackupmgr restore --archive backup --repo {repo} " \
+                      f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
+                      f"-auto-create-buckets "
+        remote_client.execute_command(restore_cmd)
+
         self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template,
-                                             load_default_coll=True, model=self.data_model, base64=self.base64)
+        self.namespaces = []
+        for bucket in self.buckets:
+            scopes = self.rest.get_bucket_scopes(bucket=bucket)
+            for scope in scopes:
+                if scope == '_default' and skip_default_scope:
+                    continue
+                collections = self.rest.get_scope_collections(bucket=bucket, scope=scope)
+                for collection in collections:
+                    self.namespaces.append(f"{bucket}.{scope}.{collection}")
+
+    def validate_scans_for_recall_and_accuracy(self, select_query):
+        faiss_query = self.convert_to_faiss_queries(select_query=select_query)
+        vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
+        query_res_faiss = self.run_cbq_query(query=faiss_query)['results']
+        list_of_vectors_to_be_indexed_on_faiss = []
+        for v in query_res_faiss:
+            list_of_vectors_to_be_indexed_on_faiss.append(v[vector_field])
+        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"))
+
+        ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
+
+        faiss_closest_vectors = []
+        for idx in ann:
+            self.log.info(f'for idx {idx} vector is {list_of_vectors_to_be_indexed_on_faiss[idx]}')
+            faiss_closest_vectors.append(list_of_vectors_to_be_indexed_on_faiss[idx])
+        gsi_query_res = self.run_cbq_query(query=select_query)['results']
+        gsi_query_vec_list = []
+
+        for v in gsi_query_res:
+            gsi_query_vec_list.append(v[vector_field])
+
+        self.log.info(f'len of qv list is {len(gsi_query_vec_list)}')
+        self.log.info(f'len of faiss list is {len(faiss_closest_vectors)}')
+
+        recall = accuracy = 0
+
+        for ele in gsi_query_vec_list:
+            if ele in faiss_closest_vectors:
+                recall += 1
+
+        for qv, faiss in zip(gsi_query_vec_list, faiss_closest_vectors):
+            if qv == faiss:
+                accuracy += 1
+
+        accuracy = accuracy / self.scan_limit
+        recall = recall / self.scan_limit
+
+        self.log.info(f"accuracy for the query : {select_query} is {accuracy}")
+        self.log.info(f"recall for the query is : {select_query} is {recall}")
+
+    def extract_vector_field_and_query_vector(self, query):
+        pattern = r"ANN\(\s*(\w+),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
+        matches = re.search(pattern, query)
+
+        if matches:
+            vector_field = matches.group(1)
+            vector = matches.group(2)
+            self.log.info(f"vector_field: {vector_field}")
+            self.log.info(f"Vector : {vector}")
+            vector = ast.literal_eval(vector)
+            return vector_field, vector
+        else:
+            raise Exception("no fields extracted")
+
+    def test_create_indexes(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
 
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
@@ -68,8 +155,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             for create, select, drop in zip(create_queries, select_queries, drop_queries):
                 self.run_cbq_query(query=create)
-                if "PRIMARY" not in create:
-                    self.validate_scans_for_recall_and_accuracy(select_query=select)
+                if "PRIMARY" in create:
+                    continue
+                self.validate_scans_for_recall_and_accuracy(select_query=select)
                 # todo validate indexer metadata for indexes
 
                 self.run_cbq_query(query=drop)
@@ -224,56 +312,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 executor.submit(self.run_cbq_query, query=query)
         self.wait_until_indexes_online(timeout=600)
 
-    def validate_scans_for_recall_and_accuracy(self, select_query):
-        faiss_query = self.convert_to_faiss_queries(select_query=select_query)
-        vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
-        query_res_faiss = self.run_cbq_query(query=faiss_query)['results']
-        list_of_vectors_to_be_indexed_on_faiss = []
-        for v in query_res_faiss:
-            list_of_vectors_to_be_indexed_on_faiss.append(v[vector_field])
-        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"))
+    def test_rebalance(self):
+        redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
+        self.rest.set_index_settings(redistribute)
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
-        ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
-
-        faiss_closest_vectors = []
-        for idx in ann:
-            self.log.info(f'for idx {idx} vector is {list_of_vectors_to_be_indexed_on_faiss[idx]}')
-            faiss_closest_vectors.append(list_of_vectors_to_be_indexed_on_faiss[idx])
-        gsi_query_res = self.run_cbq_query(query=select_query)['results']
-        gsi_query_vec_list = []
-
-        for v in gsi_query_res:
-            gsi_query_vec_list.append(v[vector_field])
-
-        self.log.info(f'len of qv list is {len(gsi_query_vec_list)}')
-        self.log.info(f'len of faiss list is {len(faiss_closest_vectors)}')
-
-        recall = accuracy = 0
-
-        for ele in gsi_query_vec_list:
-            if ele in faiss_closest_vectors:
-                recall += 1
-
-        for qv, faiss in zip(gsi_query_vec_list, faiss_closest_vectors):
-            if qv == faiss:
-                accuracy += 1
-
-        accuracy = accuracy / self.scan_limit
-        recall = recall / self.scan_limit
-
-        self.log.info(f"accuracy for the query : {select_query} is {accuracy}")
-        self.log.info(f"recall for the query is : {select_query} is {recall}")
-
-    def extract_vector_field_and_query_vector(self, query):
-        pattern = r"ANN\(\s*(\w+),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
-        matches = re.search(pattern, query)
-
-        if matches:
-            vector_field = matches.group(1)
-            vector = matches.group(2)
-            self.log.info(f"vector_field: {vector_field}")
-            self.log.info(f"Vector : {vector}")
-            vector = ast.literal_eval(vector)
-            return vector_field, vector
-        else:
-            raise Exception("no fields extracted")
+            select_queries.extend(self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        with ThreadPoolExecutor() as executor:
+            select_task = executor.submit(self.gsi_util_obj.run_continous_query_load,
+                                          select_queries=select_queries, query_node=query_node)
+            if rebalance_type = 'rebalance_in':
+                add_nodes = [self.servers[2]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[], services=['index', 'index'])

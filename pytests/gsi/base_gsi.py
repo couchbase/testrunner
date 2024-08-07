@@ -97,6 +97,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         self.region = self.input.param("region", "us-west-1")
         self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
+        self.download_vector_dataset = self.input.param("download_vector_dataset", False)
+        self.vector_backup_filename = self.input.param("vector_backup_filename", "100K_car.zip")
         self.storage_prefix = self.input.param("storage_prefix", None)
         self.index_batch_weight = self.input.param("index_batch_weight", 1)
         self.server_group_map = {}
@@ -139,7 +141,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.base64 = self.input.param("base64", False)
         self.namespaces = []
 
-        self.gsi_util_obj = GSIUtils(self.run_cbq_query)
+        self.gsi_util_obj = GSIUtils(self.run_cbq_query, self.encoder)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
         if self.dgm_run and hasattr(self, "gens_load"):

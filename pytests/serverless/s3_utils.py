@@ -1,5 +1,5 @@
 """
-s3_utils.py: 
+s3_utils.py:
 
 __author__ = "Hemant Rajput"
 __maintainer = "Hemant Rajput"
@@ -8,6 +8,8 @@ __git_user__ = "hrajput89"
 __created_on__ = 30/11/22 4:52 pm
 
 """
+import os.path
+
 import boto3
 import logger
 from time import sleep
@@ -72,3 +74,10 @@ class S3Utils(object):
             else:
                 self.log.info(folder_list_on_aws)
                 raise Exception("Bucket is not cleaned up after rebalance.")
+
+    def download_file(self, object_name, filename, force_download=False):
+        self.log.info("Downloading file from S3")
+        if os.path.exists(filename) and not force_download:
+            self.log.info("File exist in the local setup, skipping downloading")
+            return
+        self.s3.download_file(self.s3_bucket, object_name, filename)
