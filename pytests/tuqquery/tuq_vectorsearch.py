@@ -22,6 +22,7 @@ class VectorSearchTests(QueryTests):
         self.distance = self.input.param("distance", "L2")
         self.description = self.input.param("description", "IVF,SQ8")
         self.nprobes = self.input.param("nprobes", 3)
+        self.dimension = self.input.param("dimension", 128)
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -29,6 +30,13 @@ class VectorSearchTests(QueryTests):
         self.xb = sift().read_base()
         self.xq = sift().read_query()
         self.gt = sift().read_groundtruth()
+        # Extend dimension beyond 128
+        if self.dimension > 128:
+            add_dimension = self.dimension - 128
+            xq_add = np.ones((len(self.xq), add_dimension), "float32")
+            xb_add = np.ones((len(self.xb), add_dimension), "float32")
+            self.xb = np.append(self.xb, xb_add, axis=1)
+            self.xq = np.append(self.xq, xq_add, axis=1)
         random.seed()
 
     def suite_setUp(self):
@@ -40,6 +48,7 @@ class VectorSearchTests(QueryTests):
             threads.append(thread)
         # Start threads
         for i in range(len(threads)):
+            self.sleep(1)
             threads[i].start()
         # Wait for threads to finish
         for i in range(len(threads)):
@@ -62,7 +71,7 @@ class VectorSearchTests(QueryTests):
             self.assertEqual(fail_count, 0, "We got some diff! Check log above.")
 
     def test_knn_distances_faiss(self):
-        index = faiss().create_l2_index(self.xb)
+        index = faiss().create_l2_index(self.xb, dim=self.dimension)
         faiss_distances, faiss_indices = faiss().search_index(index, self.xq)
 
         begin = random.randrange(0, len(self.xq) - 5)
@@ -89,12 +98,12 @@ class VectorSearchTests(QueryTests):
         begin = random.randint(0, len(self.xq) - 5)
         normalize = False
         if self.distance == 'DOT':
-            faiss_index = faiss().create_dot_index(self.xb)
+            faiss_index = faiss().create_dot_index(self.xb, dim=self.dimension)
         if self.distance == 'COSINE':
             normalize = True
-            faiss_index = faiss().create_cosine_index(self.xb, normalize)
+            faiss_index = faiss().create_cosine_index(self.xb, normalize, dim=self.dimension)
         if self.distance == 'L2_SQUARED':
-            faiss_index = faiss().create_l2_index(self.xb)
+            faiss_index = faiss().create_l2_index(self.xb, dim=self.dimension)
         faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
 
         self.log.info(f"Running KNN query for range [{begin}:{begin+5}]")
@@ -110,7 +119,7 @@ class VectorSearchTests(QueryTests):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description)
+            IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
             begin = random.randint(0, len(self.xq) - 5)
             self.log.info(f"Running ANN query for range [{begin}:{begin+5}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
