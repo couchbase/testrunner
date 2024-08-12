@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import json
+import ast
 
 from string import ascii_letters, digits
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +19,8 @@ import numpy as np
 import requests
 from requests.auth import HTTPBasicAuth
 from sentence_transformers import SentenceTransformer
+from table_view import TableView
+
 
 from Cb_constants import CbServer
 from couchbase_helper.cluster import Cluster
@@ -139,6 +142,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
+        self.dimension = self.input.param("dimension", None)
+        self.trainlist = self.input.param("trainlist", None)
+        self.description = self.input.param("description", None)
+        self.similarity = self.input.param("similarity", "L2_SQUARED")
+        self.scan_nprobes = self.input.param("scan_nprobes", 1)
+        self.scan_limit = self.input.param("scan_limit", 100)
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
         self.encoder = SentenceTransformer(self.data_model)
@@ -404,6 +413,112 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
                     self.create_index(bucket.name, query_definition, deploy_node_info)
+
+    def restore_couchbase_bucket(self, backup_filename, skip_default_scope=True):
+        filename = backup_filename.split('/')[-1]
+        self.s3_utils_obj.download_file(object_name=backup_filename,
+                                        filename=filename)
+        remote_client = RemoteMachineShellConnection(self.master)
+        remote_client.copy_file_local_to_remote(src_path=filename, des_path=filename)
+        repo = filename.split('.')[0]
+        remote_client.execute_command("rm -rf backup")
+        backup_config_cmd = f"/opt/couchbase/bin/cbbackupmgr config --archive backup/ --repo {repo}"
+        out = remote_client.execute_command(backup_config_cmd)
+        self.log.info(out)
+        if "failed" in out[0]:
+            self.fail(out)
+        self.log.info("unzip the backup repo before restoring it")
+        unzip_cmd = f"unzip -o {filename}"
+        remote_client.execute_command(command=unzip_cmd)
+        restore_cmd = f"/opt/couchbase/bin/cbbackupmgr restore --archive backup --repo {repo} " \
+                      f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
+                      f"-auto-create-buckets "
+        restore_out = remote_client.execute_command(restore_cmd)
+        self.log.debug(restore_out)
+
+        self.buckets = self.rest.get_buckets()
+        self.namespaces = []
+        for bucket in self.buckets:
+            scopes = self.rest.get_bucket_scopes(bucket=bucket)
+            for scope in scopes:
+                if scope == '_default' and skip_default_scope:
+                    continue
+                collections = self.rest.get_scope_collections(bucket=bucket, scope=scope)
+                for collection in collections:
+                    self.namespaces.append(f"{bucket}.{scope}.{collection}")
+        self.log.info("namespaces created sucessfully")
+        self.log.info(self.namespaces)
+
+    def validate_scans_for_recall_and_accuracy(self, select_query):
+        faiss_query = self.convert_to_faiss_queries(select_query=select_query)
+        vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
+        query_res_faiss = self.run_cbq_query(query=faiss_query)['results']
+        list_of_vectors_to_be_indexed_on_faiss = []
+        for v in query_res_faiss:
+            list_of_vectors_to_be_indexed_on_faiss.append(v[vector_field])
+        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"))
+
+        ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
+
+        faiss_closest_vectors = []
+        for idx in ann:
+            # self.log.info(f'for idx {idx} vector is {list_of_vectors_to_be_indexed_on_faiss[idx]}')
+            faiss_closest_vectors.append(list_of_vectors_to_be_indexed_on_faiss[idx])
+        gsi_query_res = self.run_cbq_query(query=select_query)['results']
+        gsi_query_vec_list = []
+
+        for v in gsi_query_res:
+            gsi_query_vec_list.append(v[vector_field])
+
+        self.log.info(f'len of qv list is {len(gsi_query_vec_list)}')
+        self.log.info(f'len of faiss list is {len(faiss_closest_vectors)}')
+
+        #todo will comment this out post the resloving of https://issues.couchbase.com/browse/MB-62783
+        # self.assertNotEqual(len(gsi_query_vec_list), 0, f"vector list is not equal for query {self.gen_query_without_entire_qvec(select_query)} gsi query results are {gsi_query_res}")
+
+
+
+        recall = accuracy = 0
+
+        for ele in gsi_query_vec_list:
+            if ele in faiss_closest_vectors:
+                recall += 1
+
+        for qv, faiss in zip(gsi_query_vec_list, faiss_closest_vectors):
+            if qv == faiss:
+                accuracy += 1
+
+        accuracy = accuracy / self.scan_limit
+        recall = recall / self.scan_limit
+        faiss_db.reset()
+        
+        redacted_select_query = self.gen_query_without_entire_qvec(query=select_query)
+        self.log.info(f"accuracy for the query : {select_query} is {accuracy}")
+        self.log.info(f"recall for the query is : {select_query} is {recall}")
+        return redacted_select_query, recall, accuracy
+    
+
+    def gen_query_without_entire_qvec(self, query):
+        # Regex pattern to match the array of numbers
+        array_pattern = r'\[[-+eE\d.,\s]+\]'
+
+        # Replace the matched array with 'qvec'
+        modified_query = re.sub(array_pattern, 'qvec', query)
+
+        return modified_query
+    def extract_vector_field_and_query_vector(self, query):
+        pattern = r"ANN\(\s*(\w+),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
+        matches = re.search(pattern, query)
+
+        if matches:
+            vector_field = matches.group(1)
+            vector = matches.group(2)
+            # self.log.info(f"vector_field: {vector_field}")
+            self.log.info(f"Vector : {vector}")
+            vector = ast.literal_eval(vector)
+            return vector_field, vector
+        else:
+            raise Exception("no fields extracted")
 
     def multi_create_index_using_rest(self, buckets=None, query_definitions=None, deploy_node_info=None):
         self.index_id_map = {}
@@ -2727,18 +2842,39 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         index = faiss.IndexFlatL2(dim)
         # Might not need it.
-        # faiss.normalize_L2(vectors)
+        #faiss.normalize_L2(vectors)
         index.add(vectors)
         return index
 
     def search_ann_in_faiss(self, query, faiss_db, limit=100, n_probe=None):
         _vector = np.array([query], dtype="float32")
         # Might not need it.
-        faiss.normalize_L2(_vector)
+        #faiss.normalize_L2(_vector)
         if n_probe is None:
             n_probe = faiss_db.ntotal
         dist, ann = faiss_db.search(_vector, k=n_probe)
         return ann[0][:limit]
+
+    def gen_table_view(self, query_stats_map, message="query stats"):
+        table = TableView(self.log.info)
+        table.set_headers(['Query', 'Recall', 'Accuracy'])
+        for query in query_stats_map:
+            table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
+        table.display(message=message)
+
+    def display_recall_and_accuracy_stats(self, select_queries,message="query stats"):
+        query_stats_map = {}
+        for query in select_queries:
+            # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
+            if "ANN" not in query:
+                continue
+            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+            query_stats_map[redacted_query] = [recall, accuracy]
+        self.gen_table_view(query_stats_map=query_stats_map, message=message)
+        for query in query_stats_map:
+            self.assertGreaterEqual(query_stats_map[query][0]*100, 80, f"recall for query {query} is less than threshold 10")
+            self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
+                                    f"accuracy for query {query} is less than threshold 10")
 
 class ConCurIndexOps():
     def __init__(self):

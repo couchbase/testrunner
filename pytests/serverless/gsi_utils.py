@@ -588,11 +588,14 @@ class GSIUtils(object):
             drop_index_list.append(query)
         return drop_index_list
 
-    def get_select_queries(self, definition_list, namespace, limit=0):
+    def get_select_queries(self, definition_list, namespace, limit=0, index_name=None):
 
         select_query_list = []
         for index_gen in definition_list:
-            query = index_gen.generate_query(bucket=namespace)
+            if index_name:
+                query = index_gen.generate_use_index_query(bucket=namespace, index_name=index_name)
+            else:
+                query = index_gen.generate_query(bucket=namespace)
             if limit == 0 and index_gen.limit > 0:
                 limit = index_gen.limit
             if limit > 0:
