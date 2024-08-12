@@ -29,7 +29,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.chaos_action = self.input.param("chaos_action", None)
         self.topology_change = self.input.param("topology_change", True)
         self.capella_rebalance = self.input.param("capella_rebalance", "None")
-        self.rebalance_type = self.input.param("rebalance_type", True)
         self.stress_factor = self.input.param("stress_factor", 0.5)
         self.disable_shard_affinity = self.input.param("disable_shard_affinity", False)
         self.index_resident_ratio = int(self.input.param("index_resident_ratio", 50))

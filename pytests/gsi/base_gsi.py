@@ -105,6 +105,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.password = self.input.membase_settings.rest_password
         self.username = self.input.membase_settings.rest_username
         self.cancel_rebalance = self.input.param("cancel_rebalance", False)
+        self.fail_rebalance = self.input.param("fail_rebalance", False)
+        self.rebalance_type = self.input.param("rebalance_type", None)
         self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", False)
         self.use_cbo = self.input.param("use_cbo", False)
         self.create_query_node_pattern = r"create .*?index (.*?) on .*?nodes':.*?\[(.*?)].*?$"
@@ -2725,7 +2727,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         index = faiss.IndexFlatL2(dim)
         # Might not need it.
-        faiss.normalize_L2(vectors)
+        # faiss.normalize_L2(vectors)
         index.add(vectors)
         return index
 

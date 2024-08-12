@@ -143,7 +143,7 @@ class GSIUtils(object):
         if not skip_primary:
             prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
             definitions_list.append(
-                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
                                 query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color", 'colorHex like "#8f%%"'),
                                 is_primary=True))
         # Single vector field
@@ -737,7 +737,8 @@ class GSIUtils(object):
         pass
 
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
-                                  scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None, quantization_algo_description_vector=None):
+                                  scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
+                                  quantization_algo_description_vector=None):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -757,7 +758,9 @@ class GSIUtils(object):
                                                                                train_list=train_list,
                                                                                scan_nprobes=scan_nprobes,
                                                                                array_indexes=array_indexes,
-                                                                               limit=limit,quantization_algo_color_vector=quantization_algo_color_vector,quantization_algo_description_vector=quantization_algo_description_vector)
+                                                                               limit=limit,
+                                                                               quantization_algo_color_vector=quantization_algo_color_vector,
+                                                                               quantization_algo_description_vector=quantization_algo_description_vector)
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)
