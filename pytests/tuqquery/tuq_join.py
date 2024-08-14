@@ -950,3 +950,14 @@ class JoinTests(QuerySanityTests):
         query = 'select * from {} a left join {} b on false'
         result = self.run_cbq_query(query)
         self.assertEqual(result['results'], [{"a": {}}])
+
+    def test_MB63024(self):
+        upsert = 'UPSERT INTO default VALUES("k01", {"cid": "c01", "status":"active", "pid": "p01"})'
+        index = 'CREATE INDEX ix11 ON default(cid, status, pid)'
+        self.run_cbq_query(upsert)
+        self.run_cbq_query(index)
+
+        join_query = 'SELECT a.* FROM default AS a LEFT JOIN (SELECT b.pid, COUNT(1) AS cnt FROM default AS b WHERE b.cid > "c01" AND b.status IN [\'active\'] GROUP BY b.pid) AS m USE NL ON m.pid = a.cid WHERE a.cid IS NOT NULL'
+        result = self.run_cbq_query(join_query)
+        expected = [{"cid": "c01", "pid": "p01", "status": "active"}]
+        self.assertEqual(expected, result['results'], f"Expect: {expected} but actual: {result['results']}")
