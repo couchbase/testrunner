@@ -321,3 +321,10 @@ class QueryCTETests(QueryTests):
         result = self.run_cbq_query(cte_query)
         expected_result = [1]
         self.assertEqual(result['results'], expected_result)
+
+    def test_MB63147(self):
+        udf = "create or replace function TEST_CTE_CORR(abc) {( WITH CTE_1 AS ( SELECT 1 as CTE_1_Value ), CTE_2 AS ( SELECT c.*, abc from CTE_1 c ) SELECT * from CTE_2 ) }"
+        self.run_cbq_query(udf)
+        result = self.run_cbq_query("execute function TEST_CTE_CORR(123)")
+        expected = [[{'CTE_2': {'CTE_1_Value': 1, 'abc': 123}}]]
+        self.assertEqual(result['results'], expected, f"Expected: {expected} but got actual: {result['results']}")
