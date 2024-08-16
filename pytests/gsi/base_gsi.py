@@ -152,6 +152,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
         self.encoder = SentenceTransformer(self.data_model)
         self.encoder.cpu()
+        self.dimension = self.input.param("dimension", None)
+        self.trainlist = self.input.param("trainlist", None)
+        self.description = self.input.param("description", None)
+        self.similarity = self.input.param("similarity", "L2_SQUARED")
+        self.scan_nprobes = self.input.param("scan_nprobes", 1)
+        self.scan_limit = self.input.param("scan_limit", 100)
         self.base64 = self.input.param("base64", False)
         self.namespaces = []
         self.gsi_util_obj = GSIUtils(self.run_cbq_query, encoder=self.encoder)
@@ -519,6 +525,27 @@ class BaseSecondaryIndexingTests(QueryTests):
             return vector_field, vector
         else:
             raise Exception("no fields extracted")
+
+    def gen_table_view(self, query_stats_map, message="query stats"):
+        table = TableView(self.log.info)
+        table.set_headers(['Query', 'Recall', 'Accuracy'])
+        for query in query_stats_map:
+            table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
+        table.display(message=message)
+
+    def display_recall_and_accuracy_stats(self, select_queries, message="query stats"):
+        query_stats_map = {}
+        for query in select_queries:
+            # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
+            if "ANN" not in query:
+                continue
+            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+            query_stats_map[redacted_query] = [recall, accuracy]
+        self.gen_table_view(query_stats_map=query_stats_map, message=message)
+        for query in query_stats_map:
+            self.assertGreaterEqual(query_stats_map[query][0]*100, 80, f"recall for query {query} is less than threshold 10")
+            self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
+                                    f"accuracy for query {query} is less than threshold 10")
 
     def multi_create_index_using_rest(self, buckets=None, query_definitions=None, deploy_node_info=None):
         self.index_id_map = {}

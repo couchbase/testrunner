@@ -745,3 +745,4 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                         f"accuracy for query {query} is less than threshold 70")
 
 
+

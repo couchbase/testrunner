@@ -34,7 +34,7 @@ class IndexBackupClient(object):
     """
 
     def __init__(self, backup_node, use_cbbackupmgr, backup_bucket,
-                 restore_bucket=None, restore_node=None):
+                 restore_bucket=None, restore_node=None, disabled_services="--disable-ft-indexes --disable-views --disable-data --disable-ft-alias --disable-eventing --disable-analytics"):
         self.use_cbbackupmgr = use_cbbackupmgr
         self.set_backup_node(backup_node)
         if not self.use_cbbackupmgr and isinstance(backup_bucket, list):
@@ -50,7 +50,7 @@ class IndexBackupClient(object):
             self.set_restore_bucket(backup_bucket)
         self.rand = random.randint(1, 1000000000)
         self.log = logger.Logger.get_logger()
-        self.disabled_services = "--disable-ft-indexes --disable-views --disable-data --disable-ft-alias --disable-eventing --disable-analytics"
+        self.disabled_services = disabled_services
 
     def __repr__(self):
         obj = """backup node:{0}
