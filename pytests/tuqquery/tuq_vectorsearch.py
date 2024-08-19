@@ -163,3 +163,29 @@ class VectorSearchTests(QueryTests):
         result = self.run_cbq_query(f'SELECT decode_vector("{encoded_vector}", {self.use_bigendian}) as decoded_vector')
         decoded_vector = result['results'][0]['decoded_vector']
         self.assertTrue(np.allclose(decoded_vector, vector), f"We expected: {vector} but got: {decoded_vector}")
+
+    def test_mutate(self):
+        self.log.info("Create Vector Index")
+        IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+        distances, indices = QueryVector().search(self.database, self.xq[10:11], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
+        # Get 2 vectors from the result set also in gt
+        intersect = np.intersect1d(self.gt[10:11], indices)
+        vector_id_1 = intersect[0]
+        vector_id_2 = intersect[2]
+        vector_1 = self.xb[vector_id_1].tolist()
+        vector_2 = self.xb[vector_id_2].tolist()
+        pos_1 = np.where(indices[0] == vector_id_1)[0][0]
+        pos_2 = np.where(indices[0] == vector_id_2)[0][0]
+        self.log.info(f"BEFORE position 1: {pos_1} and position 2: {pos_2}")
+        # Swap vectors
+        update1 = f"UPDATE default SET vec = {vector_2} WHERE id = {vector_id_1}"
+        update2 = f"UPDATE default SET vec = {vector_1} WHERE id = {vector_id_2}"
+        result1 = self.run_cbq_query(update1)
+        result2 = self.run_cbq_query(update2)
+        # Search for vector post update
+        distances, indices = QueryVector().search(self.database, self.xq[10:11], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
+        pos_1_after = np.where(indices[0] == vector_id_1)[0][0]
+        pos_2_after = np.where(indices[0] == vector_id_2)[0][0]
+        self.log.info(f"AFTER position 1: {pos_1_after} and position 2: {pos_2_after}")
+        # Check position in search have been swapped
+        self.assertTrue(pos_1 == pos_2_after and pos_2 == pos_1_after)
