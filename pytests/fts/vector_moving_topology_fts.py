@@ -48,7 +48,6 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             })
             self.memory_validator_thread.start()
 
-        self.goloader_toggle = TestInputSingleton.input.param("goloader_toggle", False)
         self.log.info("Modifying quotas for each services in the cluster")
         try:
             RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
@@ -165,7 +164,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         vect_bucket_containers = self.create_vect_bucket_containers(self.num_vect_buckets)
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client,
                                                               containers=vect_bucket_containers)
-        self.load_vector_data(containers, dataset=self.vector_dataset, goloader_toggle= self.goloader_toggle)
+        self.load_vector_data(containers, dataset=self.vector_dataset)
         vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
                                                                   self.index_per_vect_bucket)
 
@@ -1160,7 +1159,13 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         bucket_names = []
         for bucket in self._cb_cluster.get_buckets():
             bucket_names.append(bucket.name)
-        NodeHelper.kill_erlang(self._cb_cluster.get_random_fts_node(), bucket_names)
+        fts_node = self._cb_cluster.get_random_fts_node()
+        for node in self._cb_cluster.get_fts_nodes():
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                fts_node = node
+                break
+        NodeHelper.kill_erlang(fts_node, bucket_names)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
 
@@ -1982,8 +1987,16 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
     def erl_crash_during_querying(self):
         self.load_data_and_create_indexes(wait_for_index_complete=True, generate_queries=True)
-        node = self._cb_cluster.get_random_fts_node()
-        NodeHelper.kill_erlang(node)
+        bucket_names = []
+        for bucket in self._cb_cluster.get_buckets():
+            bucket_names.append(bucket.name)
+        fts_node = self._cb_cluster.get_random_fts_node()
+        for node in self._cb_cluster.get_fts_nodes():
+            node_services = node.services.split(",")
+            if "kv" in node_services and "fts" in node_services:
+                fts_node = node
+                break
+        NodeHelper.kill_erlang(fts_node, bucket_names=bucket_names)
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         tasks = []
@@ -2281,7 +2294,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                                                               containers=vect_bucket_containers)
 
         self.load_data(exempt_bucket_prefix="vector-data")
-        self.load_vector_data(containers, dataset=self.vector_dataset, goloader_toggle= self.goloader_toggle)
+        self.load_vector_data(containers, dataset=self.vector_dataset)
         vect_index_containers = self.create_vect_index_containers(vect_bucket_containers,
                                                                   self.index_per_vect_bucket)
 

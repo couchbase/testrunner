@@ -31,6 +31,7 @@ class StableTopFTS(FTSBaseTest):
         except Exception as e:
             print(e)
 
+
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
 
@@ -661,6 +662,7 @@ class StableTopFTS(FTSBaseTest):
             self.create_es_index_mapping(index.es_custom_map,
                                          index.index_definition)
         self.load_data()
+        time.sleep(150)
         self.wait_for_indexing_complete()
         if self._update or self._delete:
             self.async_perform_update_delete(self.upd_del_fields)

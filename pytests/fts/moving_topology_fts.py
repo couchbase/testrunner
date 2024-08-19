@@ -41,12 +41,6 @@ class MovingTopFTS(FTSBaseTest):
             except Exception as err:
                 self.log.info(str(err))
 
-    # def suite_setUp(self):
-    #     self.log.info("*** MovingTopFTS: suite_setUp() ***")
-
-    # def suite_tearDown(self):
-    #     self.log.info("*** MovingTopFTS: suite_tearDown() ***")
-
     """ Topology change during indexing"""
 
     def kill_fts_service(self, timeout=0, retries=1):

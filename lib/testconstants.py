@@ -11,6 +11,7 @@ CB_VERSION_NAME = {"0.0": "master",
                    "7.1": "neo", "7.2": "neo",
                    "7.5": "elixir",
                    "7.6": "trinity",
+                   "7.7": "cypher",
                    "8.0": "morpheus"}
 
 CB_RELEASE_BUILDS = {"0.0.0": "0000",
@@ -26,9 +27,9 @@ CB_RELEASE_BUILDS = {"0.0.0": "0000",
                      "7.1.6": "3955",
                      "7.2.0": "5325", "7.2.1": "5934", "7.2.2": "6401",
                      "7.2.3": "6705", "7.2.4": "7070", "7.2.5": "0000",
-                     "7.5.0": "3000",
+                     "7.2.6": "0000",  "7.5.0": "3000",
                      "7.6.0": "0000", "7.6.1": "0000", "7.6.2": "0000",
-                     "8.0.0": "0000"}
+                     "7.6.3": "0000", "7.7.0": "1000", "8.0.0": "0000"}
 
 MACOS_NAME = {"10.10": "Yosemite", "10.11": "El Capitan", "10.12": "Sierra",
               "10.13": "High Sierra", "10.14": "Mojave", "10.15": "Catalina",
@@ -155,6 +156,7 @@ COUCHBASE_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DO
 CB_LATESTBUILDS_REPO = "http://{0}/builds/latestbuilds/"
 #CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
 CB_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
+CB_COLUMNAR_REPO = "http://{0}/builds/latestbuilds/couchbase-columnar/".format(CB_DOWNLOAD_SERVER)
 CB_FQDN_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER_FQDN)
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 CB_RELEASE_REPO = "http://{0}/builds/releases/".format(CB_DOWNLOAD_SERVER)

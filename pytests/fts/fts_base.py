@@ -16,7 +16,6 @@ from statistics import mean
 
 import boto3
 import logger
-
 try:
     from prettytable import PrettyTable
 except ImportError:
@@ -836,6 +835,7 @@ class FTSIndex:
         self.store_in_xattr = TestInputSingleton.input.param("store_in_xattr", False)
         self.num_pindexes = 0
 
+
         self.index_definition = {
             "type": "fulltext-index",
             "name": "",
@@ -1093,8 +1093,7 @@ class FTSIndex:
 
     def add_child_field_to_default_collection_mapping(self, field_name, field_type,
                                                       field_alias=None, analyzer=None, scope=None, collection=None,
-                                                      vector_fields=None, xattr=True, xattr_flag=False,
-                                                      base64_flag=False, store_all_flag=False):
+                                                      vector_fields=None, xattr=True,xattr_flag=False,base64_flag=False,store_all_flag=False):
         """
         This method will add a field mapping to a default mapping
         """
@@ -1336,6 +1335,8 @@ class FTSIndex:
                 self.__log.error("defn['indexDef']['params']['store']['indexType']")
                 raise Exception("Unable to convert index to upside_down")
 
+
+
     def update_index_to_scorch(self):
         if self.is_scorch():
             self.__log.info("The index {0} is already scorch index, conversion not needed!")
@@ -1350,6 +1351,7 @@ class FTSIndex:
             else:
                 self.__log.error("defn['indexDef']['params']['store']['indexType']")
                 raise Exception("Unable to convert index to scorch")
+
 
     def update_num_pindexes(self, new):
         self.index_definition['planParams']['maxPartitionsPerPIndex'] = new
@@ -1648,8 +1650,7 @@ class FTSIndex:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope,
-                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest,
-                                             variable_node=variable_node)
+                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest, variable_node = variable_node)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2788,8 +2789,9 @@ class CouchbaseCluster:
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
-                         scope=None, collections=None, no_check=False, xattr_flag=False, base64_flag=False,
-                         store_all_flag=False):
+                         scope=None, collections=None, no_check=False,xattr_flag=False,base64_flag=False,store_all_flag=False):
+
+
 
         """Create fts index/alias
         @param node: Node on which index is created
@@ -2829,6 +2831,7 @@ class CouchbaseCluster:
         )
         if store_all_flag:
             index.store_in_xattr = xattr_flag
+
 
         if collection_index:
             if not index.custom_map:
@@ -2888,7 +2891,7 @@ class CouchbaseCluster:
         self.__indexes.clear()
 
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
-                      rest=None, variable_node=None):
+                      rest=None,variable_node = None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -3464,7 +3467,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None, variable_node=None):
+                                    use_collections=False, dataset=None, variable_node = None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3477,7 +3480,7 @@ class CouchbaseCluster:
                                                             use_collections=use_collections,
                                                             dataset=dataset,
                                                             reduce_query_logging=self.reduce_query_logging,
-                                                            variable_node=variable_node)
+                                                            variable_node = variable_node)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4144,6 +4147,7 @@ class FTSBaseTest(unittest.TestCase):
         self.store_in_xattr = self._input.param("store_in_xattr", False)
         self.encode_base64_vector = self._input.param("encode_base64_vector", False)
         self.docker_containers = []
+
 
     def create_capella_config(self):
         services_count = {}
@@ -5645,10 +5649,13 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None,
-                     collections=None, no_check=False, store_all_flag=False):
+                     collections=None, no_check=False,store_all_flag=False):
         """
         Creates a default index given bucket, index_name and plan_params
         """
+
+
+
 
         if not plan_params:
             plan_params = self.construct_plan_params()
@@ -5663,9 +5670,9 @@ class FTSBaseTest(unittest.TestCase):
             scope=scope,
             collections=collections,
             no_check=no_check,
-            xattr_flag=self.store_in_xattr,
-            base64_flag=self.encode_base64_vector,
-            store_all_flag=store_all_flag)
+            xattr_flag = self.store_in_xattr,
+            base64_flag = self.encode_base64_vector,
+            store_all_flag = store_all_flag)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -5754,12 +5761,12 @@ class FTSBaseTest(unittest.TestCase):
 
     def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False,
                                         vector_fields=None, field_type=None, field_name=None, extra_fields=None,
-                                        wait_for_index_complete=True, xattr_flag=False, base64_flag=False,
-                                        store_all_flag=False):
+                                        wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False):
 
         if store_all_flag:
             self.store_in_xattr = xattr_flag
             self.encode_base64_vector = base64_flag
+
 
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
@@ -5771,8 +5778,7 @@ class FTSBaseTest(unittest.TestCase):
             if collection_index:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
                                               decoded_index["name"], collection_index=True, _type=_type,
-                                              scope=index_scope, collections=index_collections,
-                                              store_all_flag=store_all_flag)
+                                              scope=index_scope, collections=index_collections,store_all_flag=store_all_flag)
                 if field_name and field_type:
                     for collection in index_collections:
                         if create_vector_index:
@@ -5799,6 +5805,7 @@ class FTSBaseTest(unittest.TestCase):
                                                                                     xattr_flag=xattr_flag,
                                                                                     base64_flag=base64_flag,
                                                                                     store_all_flag=store_all_flag)
+
 
                 if extra_fields:
                     for collection in index_collections:
@@ -6345,7 +6352,7 @@ class FTSBaseTest(unittest.TestCase):
                 failed_queries.append(task.query_index + 1)
 
         if fail_count:
-
+            
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))
@@ -6571,8 +6578,9 @@ class FTSBaseTest(unittest.TestCase):
 
     def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims=128, use_cbimport=True,
                          percentages_to_resize=[], dims_to_resize=[],
-                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
-                         python_loader_toggle=True, provideDefaultDocs=True):
+                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',python_loader_toggle = True,provideDefaultDocs = True):
+
+
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6619,8 +6627,7 @@ class FTSBaseTest(unittest.TestCase):
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                                   self._input.membase_settings.rest_password, bucket_name, scope_name,
                                                   collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,
-                                                  provideDefaultDocs=provideDefaultDocs)
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
                             govl.load_data(container_name)
 
 
@@ -6634,12 +6641,10 @@ class FTSBaseTest(unittest.TestCase):
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                                   self._input.membase_settings.rest_password, bucket_name, scope_name,
                                                   collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,
-                                                  provideDefaultDocs=provideDefaultDocs)
+                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
                             govl.load_data(container_name)
 
                         elif self.encode_base64_vector:
-                            print("self.encode_base64_vector", self.encode_base64_vector)
                             container_name = self.generate_random_container_name()
                             self.docker_containers.append(container_name)
                             if dataset[0] == "sift":
@@ -6649,8 +6654,7 @@ class FTSBaseTest(unittest.TestCase):
                             govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                                   self._input.membase_settings.rest_password, bucket_name, scope_name,
                                                   collection_name, dataset[0], False, "vect", 0, ei, True,
-                                                  percentages_to_resize, dims_to_resize,
-                                                  provideDefaultDocs=provideDefaultDocs)
+                                                  percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
                             govl.load_data(container_name)
                         else:
                             container_name = self.generate_random_container_name()
@@ -6827,8 +6831,8 @@ class FTSBaseTest(unittest.TestCase):
                 self.fail(
                     f"Validation: The final average {final_average} is not similar to the initial average {initial_average}. Memory isn't coming down")
 
-    def get_ideal_index_distribution(self, k, n):
-        if k == 0:
+    def get_ideal_index_distribution(self,k, n):
+        if k==0:
             return [0 for i in range(n)]
         quotient = k // n
         remainder = k % n
@@ -6918,12 +6922,11 @@ class FTSBaseTest(unittest.TestCase):
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
             if total != int(pindexes_count[count]):
-                error.append(
-                    f"Total active partitions are different- total:: {total} - :: expected - :: {pindexes_count[count]}")
+                error.append(f"Total active partitions are different- total:: {total} - :: expected - :: {pindexes_count[count]}")
 
-            index_distribution.sort(reverse=True)
+            index_distribution.sort(reverse = True)
 
-            if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
+            if index_distribution !=  self.get_ideal_index_distribution(current_partition_count,len(v)):
                 error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
         if num_rep != 0:
@@ -6945,7 +6948,7 @@ class FTSBaseTest(unittest.TestCase):
 
                 index_distribution.sort(reverse=True)
 
-                if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
+                if index_distribution != self.get_ideal_index_distribution(current_partition_count,len(v)):
                     error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
         return error

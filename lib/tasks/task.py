@@ -1745,7 +1745,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None,reduce_query_logging=False):
+                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1763,6 +1763,7 @@ class ESRunQueryCompare(Task):
         self.use_collections = use_collections
         self.dataset = dataset
         self.reduce_query_logging = reduce_query_logging
+        self.variable_node = variable_node
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1815,7 +1816,7 @@ class ESRunQueryCompare(Task):
                 self.fts_query["vector"] = search_vector.tolist()
             try:
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
-                    self.run_fts_query(self.fts_query, self.score)
+                    self.run_fts_query(self.fts_query, self.score,variable_node=self.variable_node)
                 if "vector" in str(self.fts_query):
                     self.log.info(fts_doc_ids)
                 if not self.reduce_query_logging:

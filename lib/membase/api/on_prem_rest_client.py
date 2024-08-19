@@ -266,7 +266,7 @@ class RestConnection(object):
     POST = "POST"
     PUT = "PUT"
 
-    def __new__(cls, serverInfo={}):
+    def __new__(cls, serverInfo={}, check_connectivity=True):
         # allow port to determine
         # behavior of restconnection
         port = None
@@ -292,7 +292,7 @@ class RestConnection(object):
 
         return obj
 
-    def __init__(self, serverInfo):
+    def __init__(self, serverInfo, check_connectivity=True):
         # serverInfo can be a json object/dictionary
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
@@ -406,6 +406,9 @@ class RestConnection(object):
             self.cbas_port = CbServer.ssl_cbas_port
         self.cbas_base_url = generic_url % (self.cbas_ip, self.cbas_port)
         self.cbas_base_url = self.cbas_base_url[:-1]
+
+        if not check_connectivity:
+            return
 
         # for Node is unknown to this cluster error
         for iteration in range(5):
@@ -3425,6 +3428,13 @@ class RestConnection(object):
             log.error('failed to change autoReprovision_settings!')
         return status
 
+    def reset_node(self):
+        api = self.baseUrl + "controller/hardResetNode"
+        status, _, _ = self._http_request(api, "POST",
+                                          headers=self._create_headers())
+        if not status:
+            raise Exception("Failed during hard resetting '%s'" % self.ip)
+
     def reset_autofailover(self):
         api = self.baseUrl + 'settings/autoFailover/resetCount'
         status, content, header = self._http_request(api, 'POST', '')
@@ -3743,7 +3753,7 @@ class RestConnection(object):
         return status
 
     @not_for_capella
-    def modify_memory_quota(self, kv_quota,index_quota,fts_quota,cbas_quota,eventing_quota):
+    def modify_memory_quota(self, kv_quota=512,index_quota=400,fts_quota=600,cbas_quota=1024,eventing_quota=256):
         api = self.baseUrl + "pools/default"
         params = urllib.parse.urlencode({"memoryQuota": kv_quota, "indexMemoryQuota":index_quota,"ftsMemoryQuota":fts_quota,"cbasMemoryQuota":cbas_quota,"eventingMemoryQuota":eventing_quota})
         headers = self._create_headers()
@@ -3758,6 +3768,8 @@ class RestConnection(object):
         else:
             raise Exception("Error setting the RAM quota for each services")
         return status
+
+
 
     def set_maxConcurrentPartitionMovesPerNode(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
@@ -3792,7 +3804,7 @@ class RestConnection(object):
             log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
         return status
 
-    def create_fts_index(self, index_name, params, bucket="_default", scope="_default"):
+    def create_fts_index(self, index_name, params, bucket="_default", scope="_default",mode =None):
         """create or edit fts index , returns {"status":"ok"} on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         if self.is_elixir:
@@ -3801,13 +3813,16 @@ class RestConnection(object):
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, index_name)
         log.info(json.dumps(params))
         status, content, header = self.urllib_request(api, verb='PUT', params=json.dumps(params, ensure_ascii=False))
+        if mode:
+            return status, content
+
         if status:
             log.info("Index {0} created".format(index_name))
         else:
             raise Exception("Error creating index: {0}".format(content))
         return status
 
-    def update_fts_index(self, index_name, index_def, bucket="_default", scope="_default"):
+    def update_fts_index(self, index_name, index_def, bucket="_default", scope="_default",mode=None):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         if self.is_elixir:
             if scope is None:
@@ -3815,6 +3830,9 @@ class RestConnection(object):
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}".format(bucket, scope, index_name)
         log.info(json.dumps(index_def, indent=3))
         status, content, header = self.urllib_request(api, verb='PUT', params=json.dumps(index_def, ensure_ascii=False))
+        if mode:
+            return status, content
+
         if status:
             log.info("Index/alias {0} updated".format(index_name))
         else:
@@ -4278,6 +4296,15 @@ class RestConnection(object):
         if status:
             if "alerts" in json_parsed:
                 return json_parsed['alerts']
+        else:
+            return None
+
+    def get_nodes_status_from_self(self):
+        api = self.baseUrl + "nodes/self"
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            return json_parsed
         else:
             return None
 
