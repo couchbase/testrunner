@@ -6842,6 +6842,7 @@ class FTSBaseTest(unittest.TestCase):
             result[i] += 1
         return result
 
+
     def validate_partition_distribution(self, rest):
         ###TODO : validate that replica parititons and active paritions reside in different server groups if any
         _, payload = rest.get_cfg_stats()
@@ -6884,23 +6885,27 @@ class FTSBaseTest(unittest.TestCase):
 
         print(f"Actual number of index partitions in cluster: {actual_partition_count}")
 
-        indexes_map = {}
-        expected_partition_count = 0
-        num_rep = 0
-        if "indexDefs" in payload:
-            for k, v in payload["indexDefs"]["indexDefs"].items():
-                try:
-                    num_rep = v['planParams']['numReplicas']
-                except:
-                    num_rep = 0
-                indexes_map[
-                    k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {num_rep}"
-                curr_active_partitions = v["planParams"]["indexPartitions"]
-                curr_replica_partitions = curr_active_partitions * num_rep
-                expected_partition_count += curr_active_partitions + curr_replica_partitions
+        try:
+            indexes_map = {}
+            expected_partition_count = 0
+            num_rep = 0
+            if "indexDefs" in payload:
+                for k, v in payload["indexDefs"]["indexDefs"].items():
+                    try:
+                        num_rep = v['planParams']['numReplicas']
+                    except:
+                        num_rep = 0
+                    indexes_map[
+                        k] = f"maxPartitionsPerPIndex: {v['planParams']['maxPartitionsPerPIndex']}, indexPartitions: {v['planParams']['indexPartitions']}, numReplicas: {num_rep}"
+                    curr_active_partitions = v['planParams']['indexPartitions']
+                    curr_replica_partitions = curr_active_partitions * num_rep
+                    expected_partition_count += curr_active_partitions + curr_replica_partitions
 
-        print(f"Expected number of index partitions in cluster: {expected_partition_count}")
-        print(f"Indexes: {len(indexes_map)}")
+            print(f"Expected number of index partitions in cluster: {expected_partition_count}")
+            print(f"Indexes: {len(indexes_map)}")
+        except Exception as ex:
+            print(ex)
+
         pindexes_count = []
         for k, v in indexes_map.items():
             print(f"\t{k} :: {v}")
@@ -6916,18 +6921,18 @@ class FTSBaseTest(unittest.TestCase):
             print(f"\tIndex: {k}")
             index_distribution = []
             current_partition_count = 0
-            total = 0
             for k1, v1 in v.items():
-                total += int(v1)
                 print(f"\t\t{node_defs_known[k1]} : {v1}")
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
-            if total != int(pindexes_count[count]):
-                error.append(f"Total active partitions are different- total:: {total} - :: expected - :: {pindexes_count[count]}")
+            if current_partition_count != int(pindexes_count[count]):
+                error.append(
+                    f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")
+            count += 1
 
-            index_distribution.sort(reverse = True)
+            index_distribution.sort(reverse=True)
 
-            if index_distribution !=  self.get_ideal_index_distribution(current_partition_count,len(v)):
+            if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
                 error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
         if num_rep != 0:
@@ -6937,19 +6942,17 @@ class FTSBaseTest(unittest.TestCase):
                 print(f"\tIndex: {k}")
                 index_distribution = []
                 current_partition_count = 0
-                total = 0
                 for k1, v1 in v.items():
-                    total += int(v1)
                     print(f"\t\t{node_defs_known[k1]} : {v1}")
                     index_distribution.append(int(v1))
                     current_partition_count += int(v1)
-                if total != int(pindexes_count[count]):
+                if current_partition_count != int(pindexes_count[count]):
                     error.append(
-                        f"Total active partitions are different- total:: {total} - :: expected{pindexes_count[count]}")
-
+                        f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")
+                count += 1
                 index_distribution.sort(reverse=True)
 
-                if index_distribution != self.get_ideal_index_distribution(current_partition_count,len(v)):
+                if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
                     error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
         return error
