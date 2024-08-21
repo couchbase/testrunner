@@ -46,7 +46,7 @@ params = {
     "install_debug_info": False,
     "use_hostnames": False,
     "force_reinstall": True,
-    "columnar" : False,
+    "columnar": False,
 
     # For serverless change
     # None - Leave it default
@@ -57,7 +57,7 @@ params = {
 
 
 class build:
-    def __init__(self, name, url, path, product="cb",
+    def __init__(self, name, url, path, version, product="cb",
                  debug_build_present=False, debug_name=None,
                  debug_url=None, debug_path=None):
         self.name = name
@@ -68,7 +68,7 @@ class build:
         self.debug_name = debug_name
         self.debug_url = debug_url
         self.debug_path = debug_path
-        self.version = params["version"]
+        self.version = version or params["version"]
         self.bkrs_client = None
 
 
@@ -89,6 +89,12 @@ class NodeHelper:
         self.check_node_reachable()
         self.nonroot = self.shell.nonroot
         self.actions_dict = install_constants.NON_ROOT_CMDS if self.nonroot else install_constants.CMDS
+
+        # Create local context to ease the installation in per node basis
+        self.cb_version = node.cb_version
+        self.profile = node.profile
+        # If None, then assume default for that profile basis (Unused for now)
+        self.install_tasks = None
 
     def check_node_reachable(self):
         start_time = time.time()
@@ -192,7 +198,7 @@ class NodeHelper:
                     start_time = time.time()
                     while time.time() < start_time + timeout:
                         try:
-                            ret = hdiutil_attach(self.shell, self.build.path)
+                            ret = hdiutil_attach(self.node, self.shell, self.build.path)
                             if ret:
                                 break
                             self.wait_for_completion(duration, event)
@@ -213,9 +219,10 @@ class NodeHelper:
             self.shell.execute_command(cmd)
 
             # Explicitly set the profile mode value (if provided by user)
-            if params["cluster_profile"] in ["default", "serverless", "provisioned", "columnar"]:
+            c_profile = self.profile or params["cluster_profile"]
+            if c_profile in ["default", "serverless", "provisioned", "columnar"]:
                 cmd = install_constants.CREATE_SERVERLESS_PROFILE_FILE[key] \
-                      % params["cluster_profile"]
+                      % c_profile
                 self.shell.execute_command(cmd)
         # End of Serverless changes
 
@@ -258,9 +265,10 @@ class NodeHelper:
                 cmd_d = self.actions_dict[self.info.deliverable_type]["install"].format(cb_non_package_installer_name)
                 cmd_debug = None
 
+            version = self.node.cb_version or params["version"]
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
-            cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
+            cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + version)
             if self.get_os() in \
                     install_constants.DEBUG_INFO_SUPPORTED and cmd_d \
                     is not None and self.build.debug_build_present:
@@ -458,6 +466,9 @@ class NodeHelper:
         raise Exception("Couchbase was not reachable after {}s".format(timeout))
 
     def init_cb(self):
+        # Skip init for columnar profile
+        if self.profile == "columnar":
+            return
         self.wait_for_couchbase_reachable()
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
         start_time = time.time()
@@ -523,15 +534,16 @@ def _get_mounted_volumes(shell):
     return volumes
 
 
-def hdiutil_attach(shell, dmg_path):
+def hdiutil_attach(node, shell, dmg_path):
     volumes = _get_mounted_volumes(shell)
     for volume in volumes:
         shell.execute_command("hdiutil detach " + '"' + "/tmp/" + volume + '"')
         shell.execute_command("umount " + '"' + "/tmp/" + volume + '"')
 
+    version = node.cb_version or params["version"]
     shell.execute_command("hdiutil attach {0} -mountpoint /tmp/{1}".
-                          format(dmg_path, "couchbase-server-" + params["version"]))
-    return shell.file_exists("/tmp/", "couchbase-server-" + params["version"])
+                          format(dmg_path, "couchbase-server-" + version))
+    return shell.file_exists("/tmp/", "couchbase-server-" + version)
 
 
 def check_if_version_already_installed(server, install_version, cb_edition,
@@ -799,42 +811,36 @@ def _check_version_compatibility(node):
     pass
 
 def pre_install_steps_columnar(node_helpers):
-    if params["url"] is not None:
-        if node_helpers[0].shell.is_url_live(params["url"]):
-            params["all_nodes_same_os"] = True
-            for node in node_helpers:
-                build_binary = __get_columnar_build_binary_name(node)
-                build_url = params["url"]
-                filepath = __get_download_dir(node) + build_binary
-                node.build = build(build_binary, build_url, filepath)
-        else:
-            print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
-    else:
-        install_debug_info = params["install_debug_info"]
-        is_release_build = check_for_columnar_release_or_latest_build()
-        for node in node_helpers:
-            build_binary = __get_columnar_build_binary_name(node, is_release_build)
-            debug_binary = __get_columnar_debug_binary_name(node, is_release_build) if \
-                install_debug_info else None
-            build_url = __get_columnar_build_url(node, build_binary)
-            debug_url = __get_columnar_build_url(node, debug_binary) if \
-                install_debug_info else None
-            debug_build_present = install_debug_info
-            if not build_url:
-                print_result_and_exit(
-                    "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
-            if not debug_url and install_debug_info:
-                print("Debug info build not present. Debug info "
-                        "build will not be installed for this run.")
-                debug_build_present = False
-            filepath = __get_download_dir(node) + build_binary
-            filepath_debug = __get_download_dir(node) + \
-                                debug_binary if debug_binary else None
-            node.build = build(build_binary, build_url, filepath,
-                                debug_build_present=debug_build_present,
-                                debug_name=debug_binary,
-                                debug_url=debug_url,
-                                debug_path=filepath_debug)
+    install_debug_info = params["install_debug_info"]
+    is_release_build = check_for_columnar_release_or_latest_build()
+    for node in node_helpers:
+        if not(params["columnar"] or node.profile == "columnar"):
+            # Continue if not columnar for this node
+            continue
+
+        build_binary = __get_columnar_build_binary_name(node, is_release_build)
+        debug_binary = __get_columnar_debug_binary_name(node, is_release_build) if \
+            install_debug_info else None
+        build_url = __get_columnar_build_url(node, build_binary)
+        debug_url = __get_columnar_build_url(node, debug_binary) if \
+            install_debug_info else None
+        debug_build_present = install_debug_info
+        if not build_url:
+            print_result_and_exit(
+                "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
+        if not debug_url and install_debug_info:
+            print("Debug info build not present. Debug info "
+                    "build will not be installed for this run.")
+            debug_build_present = False
+        filepath = __get_download_dir(node) + build_binary
+        filepath_debug = __get_download_dir(node) + \
+                            debug_binary if debug_binary else None
+        node.build = build(build_binary, build_url, filepath,
+                           version=node.cb_version,
+                           debug_build_present=debug_build_present,
+                           debug_name=debug_binary,
+                           debug_url=debug_url,
+                           debug_path=filepath_debug)
 
 def pre_install_steps(node_helpers):
     if not node_helpers:
@@ -857,22 +863,29 @@ def pre_install_steps(node_helpers):
             tools_url = __get_tools_url(node, tools_name)
             node.tools_url = tools_url
     if "install" in params["install_tasks"]:
-        if params["columnar"]:
-            pre_install_steps_columnar(node_helpers)
-        elif params["url"] is not None:
+        if params["url"] is not None:
             if node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True
                 for node in node_helpers:
-                    build_binary = __get_build_binary_name(node)
+                    if params["columnar"] or node.profile == "columnar":
+                        build_binary = __get_columnar_build_binary_name(node)
+                    else:
+                        build_binary = __get_build_binary_name(node)
                     build_url = params["url"]
                     filepath = __get_download_dir(node) + build_binary
-                    node.build = build(build_binary, build_url, filepath)
+                    node.build = build(build_binary, build_url, filepath,
+                                       version=node.cb_version)
             else:
-                print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
+                print_result_and_exit(
+                    "URL {0} is not live. Exiting.".format(params["url"]))
         else:
+            pre_install_steps_columnar(node_helpers)
             install_debug_info = params["install_debug_info"]
-            is_release_build = check_for_release_or_latest_build()
             for node in node_helpers:
+                if params["columnar"] or node.profile == "columnar":
+                    # Continue if columnar for this node
+                    continue
+                is_release_build = check_for_release_or_latest_build(node)
                 build_binary = __get_build_binary_name(node, is_release_build)
                 debug_binary = __get_debug_binary_name(node, is_release_build) if \
                     install_debug_info else None
@@ -891,14 +904,15 @@ def pre_install_steps(node_helpers):
                 filepath_debug = __get_download_dir(node) + \
                                  debug_binary if debug_binary else None
                 node.build = build(build_binary, build_url, filepath,
+                                   version=node.cb_version,
                                    debug_build_present=debug_build_present,
                                    debug_name=debug_binary,
                                    debug_url=debug_url,
                                    debug_path=filepath_debug)
 
-def check_for_release_or_latest_build():
-    cb_version = params["version"].split('-')[0]
-    cb_build = params["version"].split('-')[1]
+def check_for_release_or_latest_build(node):
+    version = node.cb_version or params["version"]
+    cb_version, cb_build = version.split('-')[0], version.split('-')[1]
     if cb_version in CB_RELEASE_BUILDS \
          and CB_RELEASE_BUILDS[cb_version] == cb_build:
             return True
@@ -950,7 +964,7 @@ def _copy_to_nodes(node_helpers, debug=False):
 
 
 def __get_build_url(node, build_binary):
-    cb_version = params["version"]
+    cb_version = node.cb_version or params["version"]
     if params["bkrs_client"]:
         if node.ip != params["bkrs_client"].ip:
             cb_version = params["cluster_version"]
@@ -970,7 +984,7 @@ def __get_build_url(node, build_binary):
     return None
 
 def __get_columnar_build_url(node, build_binary):
-    cb_version = params["version"]
+    cb_version = node.cb_version or params["version"]
 
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
         testconstants.CB_COLUMNAR_REPO,
@@ -988,7 +1002,7 @@ def __get_columnar_build_url(node, build_binary):
 
 
 def __get_tools_url(node, tools_package):
-    cb_version = params["version"]
+    cb_version = node.cb_version or params["version"]
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
         testconstants.CB_REPO,
         testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
@@ -1267,24 +1281,25 @@ def __get_columnar_build_binary_name(node, is_release_build=False):
     # couchbase-columnar-enterprise_1.0.0-2056-linux_arm64.deb
     # couchbase-columnar-enterprise-1.0.0-2056-linux.aarch64.rpm
     # couchbase-columnar-enterprise-1.0.0-2056-linux.x86_64.rpm
-    cb_version = params["version"]
     if is_release_build:
         raise NotImplementedError("Not Implemented")
 
+    cb_version = node.cb_version or params["version"]
+    cb_edition = install_constants.CB_COLUMNAR
     if node.get_os() in install_constants.X86:
-        return "{0}-{1}-{2}.{3}.{4}".format(params["cb_edition"],
+        return "{0}-{1}-{2}.{3}.{4}".format(cb_edition,
                                             cb_version,
                                             "linux",
                                             node.info.architecture_type,
                                             node.info.deliverable_type)
     elif node.get_os() in install_constants.LINUX_AMD64:
         if node.get_os() in install_constants.LINUX_DISTROS and node.info.architecture_type == "aarch64":
-            return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
+            return "{0}_{1}-{2}_{3}.{4}".format(cb_edition,
                                                 cb_version,
                                                 "linux",
                                                 "arm64",
                                                 node.info.deliverable_type)
-        return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
+        return "{0}_{1}-{2}_{3}.{4}".format(cb_edition,
                                             cb_version,
                                             "linux",
                                             "amd64",
@@ -1304,7 +1319,7 @@ def __get_build_binary_name(node, is_release_build=False):
     # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
     #All the above ones replaced by couchbase-server-enterprise-6.5.0-4557-linux.x86_64.rpm for 7.1 and above
 
-    cb_version = params["version"]
+    cb_version = node.cb_version or params["version"]
     if is_release_build:
         cb_version = cb_version.split("-")[0]
 
@@ -1368,7 +1383,7 @@ def __get_build_binary_name(node, is_release_build=False):
                                             node.info.deliverable_type)
 
 def __get_tools_package_name(node):
-    cb_version = params["version"]
+    cb_version = node.cb_version or params["version"]
     # couchbase-server-tools_7.1.1-3103-windows_amd64.zip
     if "windows" in node.get_os():
         return f"couchbase-server-tools_{cb_version}-windows_amd64.zip"
@@ -1437,14 +1452,14 @@ def __get_columnar_debug_binary_name(node, is_release_build=False):
     # couchbase-columnar-enterprise-dbg_1.0.0-2056-linux_arm64.deb
     # couchbase-columnar-enterprise-debuginfo-1.0.0-2056-linux.aarch64.rpm
     # couchbase-columnar-enterprise-debuginfo-1.0.0-2056-linux.x86_64.rpm
-    version = params["version"]
+    version = node.cb_version or params["version"]
     if is_release_build:
         raise NotImplementedError("Not implemented")
 
     if node.get_os() in install_constants.X86:
         return "{0}-{1}-{2}.{3}.{4}".format(
             params["cb_edition"] + "-debuginfo",
-            params["version"],
+            version,
             "linux",
             node.info.architecture_type,
             node.info.deliverable_type)
@@ -1471,7 +1486,7 @@ def __get_debug_binary_name(node, is_release_build=False):
     # couchbase-server-enterprise-debuginfo-6.5.0-4557-amzn2.x86_64.rpm
     # All the above ones replaced by couchbase-server-enterprise-debuginfo-6.5.0-4557-linux.x86_64.rpm in 7.1 and above
 
-    version = params["version"]
+    version = node.cb_version or params["version"]
     if is_release_build:
         version = version.split("-")[0]
 
@@ -1485,7 +1500,7 @@ def __get_debug_binary_name(node, is_release_build=False):
                 node.info.deliverable_type)
         return "{0}-{1}-{2}.{3}.{4}".format(
             params["cb_edition"] + "-debuginfo",
-            params["version"],
+            node.cb_version or params["version"],
             "linux",
             node.info.architecture_type,
             node.info.deliverable_type)

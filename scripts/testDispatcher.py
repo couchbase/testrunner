@@ -203,6 +203,34 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
     return False
 
 
+def flatten_param_to_str(value):
+    """
+    Convert dict/list -> str
+    """
+    result = ""
+    if isinstance(value, dict):
+        result = '{'
+        for key, val in value.items():
+            if isinstance(val, dict) or isinstance(val, list):
+                result += SiriusCouchbaseLoader.flatten_param_to_str(val)
+            else:
+                try:
+                    val = int(val)
+                except ValueError:
+                    val = '\"%s\"' % val
+                result += '\"%s\":%s,' % (key, val)
+        result = result.rstrip(",") + '}'
+    elif isinstance(value, list):
+        result = '['
+        for val in value:
+            if isinstance(val, dict) or isinstance(val, list):
+                result += SiriusCouchbaseLoader.flatten_param_to_str(val)
+            else:
+                result += '"%s",' % val
+        result = result.rstrip(",") + ']'
+    return result
+
+
 def main():
     global SERVER_MANAGER
     global ADDL_SERVER_MANAGER
@@ -263,6 +291,7 @@ def main():
     parser.add_option('--capella_tenant', dest='capella_tenant', default=None)
     parser.add_option('--capella_token', dest='capella_token', default=None)
     parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
+    parser.add_option('--columnar_version', dest='columnar_version', default=0)
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -463,6 +492,11 @@ def main():
                         if 'support_py3' in data:
                             support_py3 = data["support_py3"]
 
+                        mixed_build_config = dict()
+                        if str(options.columnar_version).lower() not in ["none", ""]:
+                            if 'mixed_build_config' in data:
+                                mixed_build_config = data["mixed_build_config"]
+
                         testsToLaunch.append({
                             'component': data['component'],
                             'subcomponent': data['subcomponent'],
@@ -484,6 +518,7 @@ def main():
                             'addPoolId': addPoolId,
                             'target_jenkins': str(jenkins_server_url),
                             'support_py3': support_py3,
+                            'mixed_build_config': urllib.parse.quote(flatten_param_to_str(mixed_build_config)),
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -518,7 +553,8 @@ def main():
                    'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                    'iniFile={5}&parameters={6}&os={7}&initNodes={' \
                    '8}&installParameters={9}&branch={10}&slave={' \
-                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
+                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
+                   'columnar_version={16}&mixed_build_config={17}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
@@ -587,7 +623,9 @@ def main():
                                           testsToLaunch[i]['slave'],
                                           urllib.parse.quote(testsToLaunch[i]['owner']),
                                           urllib.parse.quote(testsToLaunch[i]['mailing_list']),
-                                          testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'])
+                                          testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'],
+                                          options.columnar_version,
+                                          testsToLaunch[i]['mixed_build_config'])
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": currentExecutorParams})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
@@ -813,7 +851,9 @@ def main():
                                             urllib.parse.quote(
                                                 testsToLaunch[i]['mailing_list']),
                                             testsToLaunch[i]['mode'],
-                                            testsToLaunch[i]['timeLimit'])
+                                            testsToLaunch[i]['timeLimit'],
+                                            options.columnar_version,
+                                            testsToLaunch[i]['mixed_build_config'])
                 url = url + '&dispatcher_params=' + \
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})

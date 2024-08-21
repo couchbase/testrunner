@@ -1,6 +1,8 @@
 import json
-from optparse import OptionParser
 import configparser
+from optparse import OptionParser
+import urllib.parse
+
 from collect_server_info import memInfoRunner
 from TestInput import TestInputServer
 
@@ -23,6 +25,10 @@ def main():
     parser.add_option('-k', '--keyValue', dest='keyValue')
     parser.add_option('-r', '--replaceValue', dest='replaceValue')
     parser.add_option('-m', '--skip_mem_info', dest='skip_mem_info', action='store_true', default=False)
+
+    parser.add_option('--cb_version', dest='cb_version', default=None)
+    parser.add_option('--columnar_version', dest='columnar_version', default=None)
+    parser.add_option('--mixed_build_config', dest='mixed_build_config', default=None)
     options, args = parser.parse_args()
 
     print('the ini file is', options.inifile)
@@ -109,7 +115,7 @@ def main():
 
     data = f.readlines()
 
-    for i in range( len(data) ):
+    for i in range(len(data)):
         if 'dynamic' in data[i] and servers:
             ip = servers[0]
             data[i] = data[i].replace('dynamic', ip)
@@ -147,16 +153,42 @@ def main():
                 if old in data[i]:
                     data[i] = data[i].replace(old, new)
 
-
-    for d in data:
-          print(d.strip())
-
     if options.outputFile:
-        f = open(options.outputFile, 'w')
-        f.writelines(data)
-    else:
-        for d in data:
-            print(d.strip())
+        with open(options.outputFile, 'w') as f:
+            f.writelines(data)
+
+        # Handling mixed_build_config
+        if options.mixed_build_config:
+            options.mixed_build_config = json.loads(urllib.parse.unquote(options.mixed_build_config))
+            config = configparser.RawConfigParser(delimiters=(':', ':'))
+            config.read(options.outputFile)
+            ini_servers = config.items('servers')
+            version_config = dict()
+            for profile_type, num_servers in options.mixed_build_config.items():
+                version_config[profile_type] = ini_servers[-num_servers:]
+                ini_servers = ini_servers[:-num_servers]
+            version_config["default"] = ini_servers
+            for profile_name, servers in version_config.items():
+                cb_version = options.cb_version
+                if profile_name == "columnar":
+                    cb_version = options.columnar_version
+                for server in servers:
+                    config.set(server[1], "profile", profile_name)
+                    config.set(server[1], "version", cb_version)
+
+            # Update the output file with latest data
+            with open(options.outputFile, "w") as f:
+                config.write(f, space_around_delimiters=False)
+        # End of mixed_build_config handling
+
+        # Populate 'data' to print
+        with open(options.outputFile, "rt") as f:
+            data = f.readlines()
+
+    # Print the final version of the file to user
+    for line in data:
+        print(line.strip())
+
 
 def update_config(config_in_file, json_object, config_out_file):
     config = configparser.RawConfigParser(delimiters=(':', ':'))
@@ -182,4 +214,3 @@ def update_config(config_in_file, json_object, config_out_file):
 
 if __name__ == "__main__":
     main()
-

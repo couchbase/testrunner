@@ -50,10 +50,13 @@ def do_install_task(task, node):
         traceback.print_exc()
 
 def validate_columnar_install(params):
-    log.info("-" * 100)
     cluster_nodes = []
     for node in install_utils.NodeHelpers:
-        version = params["version"]
+        if not (params["columnar"] or node.profile == "columnar"):
+            # Continue if this node is not columnar profile
+            continue
+
+        version = node.cb_version or params["version"]
         if node.install_success is None:
             node.install_success = False
             node.rest = RestConnection(node.node, check_connectivity=False)
@@ -81,12 +84,12 @@ def validate_columnar_install(params):
                 node.install_success = False
 
             cluster_nodes.append({
-                "ipaddr" : node.ip,
-                "status" : node_status["status"],
-                "version" : node_status["version"],
-                "implementedVersion" : pools_status["implementationVersion"],
-                "profile" : pools_status["configProfile"],
-                "isEnterprise" : pools_status["isEnterprise"]
+                "ipaddr": node.ip,
+                "status": node_status["status"],
+                "version": node_status["version"],
+                "implementedVersion": pools_status["implementationVersion"],
+                "profile": pools_status["configProfile"],
+                "isEnterprise": pools_status["isEnterprise"]
             })
 
     for [i, node] in enumerate(cluster_nodes):
@@ -95,13 +98,14 @@ def validate_columnar_install(params):
                                                                                      node['version'],
                                                                                      node['profile'],
                                                                                      node['status']))
-    install_utils.print_result_and_exit()
 
 def validate_install(params):
-    log.info("-" * 100)
     cluster_nodes = {}
     for node in install_utils.NodeHelpers:
-        version = params["version"]
+        if node.profile == "columnar" or params["columnar"]:
+            # Continue if this node is columnar profile
+            continue
+        version = node.cb_version or params["version"]
         if node.install_success is None:
             node.install_success = False
             if params["cluster_version"]:
@@ -164,7 +168,6 @@ def validate_install(params):
                                                                                     node['version'],
                                                                                     node['afamily'],
                                                                                     node['services']))
-    install_utils.print_result_and_exit()
 
 
 def do_install(params, install_tasks):
@@ -195,9 +198,12 @@ def do_install(params, install_tasks):
         if params.get("init_clusters", False) and len(params["clusters"]) > 0:
             timeout = force_stop - time.time()
             install_utils.init_clusters(timeout)
-        validate_install(params)
-    if params["columnar"]:
-        validate_columnar_install(params)
+
+    # Common validate for both regular and columnar install (useful in mixed profiles)
+    log.info("-" * 100)
+    validate_install(params)
+    validate_columnar_install(params)
+    install_utils.print_result_and_exit()
 
 
 def do_uninstall(params, node_helpers):

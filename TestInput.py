@@ -118,6 +118,9 @@ class TestInputServer(object):
         self.hosted_on_cloud = False
         self.dummy = False
 
+        self.profile = None
+        self.cb_version = None
+
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
         ip_str = "ip:{0} port:{1}".format(self.ip, self.port)
@@ -233,7 +236,7 @@ class TestInputParser():
         for section in sections:
             result = re.search('^cluster', section)
             if section == "capella":
-                input.capella = TestInputParser.get_capella_config(config, section)  
+                input.capella = TestInputParser.get_capella_config(config, section)
             elif section == 'servers':
                 ips = TestInputParser.get_server_ips(config, section)
             elif section == 'clients':
@@ -527,6 +530,10 @@ class TestInputParser():
                         for collection in collections:
                             server.collections_map[collection] = TestInputParser\
                                 .get_collection_config(collection, config)
+                    if option == "profile":
+                        server.profile = config.get(section, option)
+                    if option == "version":
+                        server.cb_version = config.get(section, option)
                 break
                 #get username
                 #get password
