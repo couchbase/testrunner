@@ -2939,6 +2939,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         except Exception as ex:
             self.fail(str(ex))
         restore_host_data = {}
+
+        self.sleep(100)
+        
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
             value_obj = cb.get(key=key)
@@ -3329,7 +3332,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertIn(f"archive 'xyz' does not exist", output[-1])
+        self.assertIn(f"archive '/root/xyz' does not exist", output[-1])
         cmd = "compact --archive {0} --repo abc --backup {1}" \
             .format(self.backupset.directory, self.backups[0])
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
@@ -3409,7 +3412,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertTrue("Error merging data: archive 'xyz' does not exist" in output[-1],
+        self.assertTrue("Error merging data: archive '/root/xyz' does not exist" in output[-1],
                         "Expected error message not thrown")
         cmd = "merge --archive {0} --repo abc --start {1} --end {2}".format(self.backupset.directory,
                                                                             self.backups[0], self.backups[1])
