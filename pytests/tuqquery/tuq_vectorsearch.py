@@ -135,6 +135,34 @@ class VectorSearchTests(QueryTests):
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance)
 
+    def test_ann_search_faiss(self):
+        normalize = False
+        if self.distance == 'DOT':
+            faiss_index = faiss().create_dot_index(self.xb, dim=self.dimension)
+        if self.distance == 'COSINE':
+            normalize = True
+            faiss_index = faiss().create_cosine_index(self.xb, normalize, dim=self.dimension)
+        if self.distance == 'L2_SQUARED':
+            faiss_index = faiss().create_l2_index(self.xb, dim=self.dimension)
+        faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            begin = random.randint(0, len(self.xq) - 5)
+            self.log.info(f"Running ANN query for range [{begin}:{begin+5}]")
+            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
+            for i in range(5):
+                self.log.info(f"Check recall rate for query {begin+i} compare to FAISS ({self.distance})")
+                recall, accuracy = UtilVector().compare_result(faiss_result[begin+i].tolist(), indices[i].tolist())
+                self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+                if recall < self.recall_ann:
+                    self.log.warn(f"Expected: {self.gt[begin+i].tolist()}")
+                    self.log.warn(f"Actual: {indices[i].tolist()}")
+                    self.log.warn(f"Distances: {distances[i].tolist()}")
+                    self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
     def test_normalize(self):
         vector = ast.literal_eval(self.vector)
         self.log.info(f"Normalize vector: {vector}")
