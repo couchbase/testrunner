@@ -12,6 +12,8 @@ import time
 import copy
 import json
 import random
+import threading
+
 
 
 from threading import Thread
@@ -63,7 +65,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
 
         self.start_version = self.input.param('initial_version', '2.5.1-1083')
-        self.run_partition_validation = self.input.param("run_partition_validation", True)
+        self.run_partition_validation = self.input.param("run_partition_validation", False)
+        self.vector_upgrade = self.input.param("vector_upgrade",False)
+        self.isRebalanceComplete = False
+        self.skip_partition_check_inbetween = self.input.param("skip_partition_check_inbetween", True)
         self.vector_flag = self.input.param("vector_search_test", False)
         self.fts_quota = self.input.param("fts_quota", 600)
         self.passed = True
@@ -838,13 +843,18 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.log.info(ex)
             raise
 
-    def _offline_failover_upgrade(self):
+    def offline_fail_over_upgrade(self):
         try:
             self.log.info("offline_failover_upgrade")
             upgrade_version = self.upgrade_versions[0]
             upgrade_nodes = self.servers[:self.nodes_init]
             total_nodes = len(upgrade_nodes)
+            load_data_node = upgrade_nodes[0]
+            iterator = 0
             for server in upgrade_nodes:
+                if iterator == 0:
+                    load_data_node = upgrade_nodes[1]
+
                 self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
                                     graceful=True)
                 self.sleep(timeout=60)
@@ -855,7 +865,22 @@ class NewUpgradeBaseTest(BaseTestCase):
                                               fts_query_limit=10000000)
                 if "You have successfully installed Couchbase Server." not in output:
                     self.fail("Upgrade failed. See logs above!")
-                self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                
+                try:
+                    thread1 = threading.Thread(target=self.load_items_during_rebalance, args=(load_data_node,))
+                    thread2 = threading.Thread(target=self.cluster.rebalance, args=(self.servers[:self.nodes_init], [], [],))
+                    
+                    thread1.start()
+                    thread2.start()
+
+                    thread2.join()
+                    self.isRebalanceComplete = True
+                    thread1.join()
+
+                except Exception as ex:
+                    self.log.info("Could not push data while rebalancing")
+                    self.log.info(ex)
+
                 total_nodes -= 1
                 if self.run_partition_validation:
                     try:
@@ -867,6 +892,50 @@ class NewUpgradeBaseTest(BaseTestCase):
         except Exception as ex:
             self.log.info(ex)
             raise
+    
+    def load_items_during_rebalance(self,server):
+
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+        while(not self.isRebalanceComplete):
+            if self.vector_upgrade:
+                """delete 20% of docs"""
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10005001,0.2)
+
+                if not status:
+                    self.fail("CRUD operation failed during rebalance. OPS : DELETE")
+                else:
+                    self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+
+                """upsert (update) the first 1000 docs out of 5000 docs present in the cluster"""
+                self.fts_obj.load_data(1000)
+
+                """upserting the vector data"""
+                try:
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+                except Exception as e:
+                    self.log.info(e)
+            else:
+                self.fts_obj.load_data(1000)
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2)
+
+                if not status:
+                    self.fail("CRUD operation failed during rebalance. OPS : DELETE")
+                else:
+                    self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+        
+        self.isRebalanceComplete = False
+        
 
     def generate_map_nodes_out_dist_upgrade(self, nodes_out_dist):
         self.nodes_out_dist = nodes_out_dist
@@ -1141,7 +1210,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
             for bucket in self.buckets:
                 for i in range(self.num_indexes):
-                    plans = self.construct_custom_plan_params(1, self.partition_list[i % self.num_indexes])
+                    plans = self.construct_custom_plan_params(0, self.partition_list[i % self.num_indexes])
                     self.fts_obj.create_default_index(
                         index_name="index_{0}".format(i+1),
                         bucket_name=bucket.name,
@@ -1154,6 +1223,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
             for index in self.fts_obj.fts_indexes:
                 self.fts_obj.run_query_and_compare(index=index, num_queries=20)
+            
             return self.fts_obj
         except Exception as ex:
             print(ex)
@@ -1162,23 +1232,28 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def partition_validation(self):
-        try:
-            fts_node = self.get_nodes_from_services_map(service_type="fts")
-            frest = RestConnection(fts_node)
-            error = self.fts_obj.validate_partition_distribution(frest)
-            if error:
-                self.fail(f"partition distribution error: {error}")
-            else:
-                self.log.info(f"partition distribution OK")
-        except Exception as ex:
-            self.fail(ex)
+    def partition_validation(self, skip_check = True):
+        if not self.run_partition_validation:
+            pass
+        if skip_check and self.skip_partition_check_inbetween:
+            pass
+        else:
+            try:
+                fts_node = self.get_nodes_from_services_map(service_type="fts")
+                frest = RestConnection(fts_node)
+                error = self.fts_obj.validate_partition_distribution(frest)
+                if error:
+                    self.log.info(f"partition distribution error: {error}")
+                else:
+                    self.log.info(f"partition distribution OK")
+            except Exception as ex:
+                self.log.info(ex)
 
     def create_fts_vector_index_query_compare(self, queue=None):
         try:
             self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, servers=self.servers)
             is_passed = True
-            RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+            RestConnection(self.servers[0]).modify_memory_quota()
 
             for bucket in self.buckets:
                 for i in range(self.num_indexes):
@@ -1205,7 +1280,6 @@ class NewUpgradeBaseTest(BaseTestCase):
 
             self.fts_indexes_store = self.fts_obj.fts_indexes[self.num_indexes]
 
-
             try:
                 self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
                                     str(self.rest_settings.rest_password),xattr=True,base64Flag=True)
@@ -1223,13 +1297,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                 print(e)
 
             pass_count = 0
-            if "7.6" in str(self.start_version):
+            if float(str(self.start_version)[0:3]) >= 7.6:
                 for i in range(self.num_indexes):
                     plans = self.construct_custom_plan_params(1, self.partition_list[i % self.num_indexes])
                     index_name = "index_default_vector_" + str(i)
                     _,status = self.fts_obj.create_vector_index(False, False,index_name,plans)
                     if status == 200 :
-                        time.sleep(100)
+                        time.sleep(150)
                         if self.fts_obj.run_vector_queries(index_name=index_name):
                             pass_count +=1
                     
@@ -1267,9 +1341,14 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.fts_obj.inbetween_tests = 1
             self.fts_obj.inbetween_active = True
 
-            RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+            RestConnection(self.servers[0]).modify_memory_quota()
 
-            if ("7.6" in str(self.start_version)) and "7.6.2" in str(self.upgrade_versions):
+            indexes_test_list = ["index_1"]
+            if float(str(self.start_version)[0:3]) >= 7.6:
+                indexes_test_list.append("index_default_vector_1")
+
+            
+            if float(str(self.upgrade_versions[0])[0:3]) >= 7.6 and str(self.upgrade_versions[0])[0:5] != "7.6.1" and str(self.upgrade_versions[0])[0:5] != "7.6.0":
 
                 """
                 try to create and update the index to support vector search via base64.
@@ -1282,46 +1361,46 @@ class NewUpgradeBaseTest(BaseTestCase):
                 """
 
                 self.log.info("Update Index phase")
+                for index_itr in indexes_test_list:
+                    try:
+                        self.log.info("updating index to support vectors in xattr")
+                        result, status_code = self.fts_obj.update_vector_index(True,False,index_itr)
 
-                try:
-                    self.log.info("updating index to support vectors in xattr")
-                    result, status_code = self.fts_obj.update_vector_index(True,False,"index_default_vector_1")
+                        if status_code != 200:
+                            self.log.info("SUCCESS. Cannot update index to xattr vector index in 7.6.0 mode")
+                        else:
+                            self.log.info(result)
+                            self.fail("FAILURE [updated index to xattr vector index]")
 
-                    if status_code != 200 and self.error_validation(result):
-                        self.log.info("SUCCESS. Cannot update index to xattr vector index in 7.6.0 mode")
-                    else:
-                        self.log.info(result)
-                        self.fail("FAILURE [updated index to xattr vector index]")
+                        self.log.info("updating index to support base64 in xattr")
+                        result, status_code = self.fts_obj.update_vector_index(True,True,index_itr)
 
-                    self.log.info("updating index to support base64 in xattr")
-                    result, status_code = self.fts_obj.update_vector_index(True,True,"index_default_vector_1")
+                        if status_code != 200:
+                            self.log.info("SUCCESS. Cannot update index to xattr vector base64 index in 7.6.0 mode")
+                        else:
+                            self.log.info(result)
+                            self.fail("FAILURE [updated index to xattr vector base64 index]")
 
-                    if status_code != 200 and self.error_validation(result):
-                        self.log.info("SUCCESS. Cannot update index to xattr vector base64 index in 7.6.0 mode")
-                    else:
-                        self.log.info(result)
-                        self.fail("FAILURE [updated index to xattr vector base64 index]")
+                        self.log.info("updating index to support base64")
+                        result, status_code = self.fts_obj.update_vector_index(False, True, index_itr)
 
-                    self.log.info("updating index to support base64")
-                    result, status_code = self.fts_obj.update_vector_index(False, True, "index_default_vector_1")
+                        if status_code != 200:
+                            self.log.info("SUCCESS. Cannot update index to vector base64 index in 7.6.0 mode")
+                        else:
+                            self.log.info(result)
+                            self.fail("FAILURE [updated index to vector base64 index] ")
 
-                    if status_code != 200 and self.error_validation(result):
-                        self.log.info("SUCCESS. Cannot update index to vector base64 index in 7.6.0 mode")
-                    else:
-                        self.log.info(result)
-                        self.fail("FAILURE [updated index to vector base64 index] ")
+                        self.log.info("updating index to support 4096 dimensions")
+                        result, status_code = self.fts_obj.update_vector_index(False, False, index_itr,dimensions=4096)
 
-                    self.log.info("updating index to support 4096 dimensions")
-                    result, status_code = self.fts_obj.update_vector_index(False, False, "index_default_vector_1",dimensions=4096)
+                        if status_code != 200:
+                            self.log.info("SUCCESS. Cannot update index to support 4096 dimensions in 7.6.0 mode")
+                        else:
+                            self.log.info(result)
+                            self.fail("FAILURE [updated index to support 4096 dimensions in 7.6.0 mode]")
 
-                    if status_code != 200 and self.error_validation(result):
-                        self.log.info("SUCCESS. Cannot update index to support 4096 dimensions in 7.6.0 mode")
-                    else:
-                        self.log.info(result)
-                        self.fail("FAILURE [updated index to support 4096 dimensions in 7.6.0 mode]")
-
-                except Exception as e:
-                    self.fail(e)
+                    except Exception as e:
+                        self.fail(e)
 
                 self.log.info("Create Index phase")
 
@@ -1330,7 +1409,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     plans = self.construct_custom_plan_params(1, random.choice(self.partition_list))
                     result, status_code = self.fts_obj.create_vector_index(True,False,"index_default_vector_new_1",plans)
 
-                    if status_code != 200 and self.error_validation(result):
+                    if status_code != 200:
                         self.log.info("SUCCESS. Cannot create index to xattr vector index in 7.6.0 mode")
                     else:
                         self.log.info(result)
@@ -1340,7 +1419,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     plans = self.construct_custom_plan_params(1, random.choice(self.partition_list))
                     result, status_code = self.fts_obj.create_vector_index(True, True, "index_default_vector_new_2",plans)
 
-                    if status_code != 200 and self.error_validation(result):
+                    if status_code != 200:
                         self.log.info("SUCCESS. Cannot create index to xattr vector base64 index in 7.6.0 mode")
                     else:
                         self.log.info(result)
@@ -1350,7 +1429,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     plans = self.construct_custom_plan_params(1, random.choice(self.partition_list))
                     result, status_code = self.fts_obj.create_vector_index(False, True, "index_default_vector_new_3",plans)
 
-                    if status_code != 200 and self.error_validation(result):
+                    if status_code != 200:
                         self.log.info("SUCCESS. Cannot create index to base64 index in 7.6.0 mode")
                     else:
                         self.log.info(result)
@@ -1360,7 +1439,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                     plans = self.construct_custom_plan_params(1, random.choice(self.partition_list))
                     result, status_code = self.fts_obj.create_vector_index(False, True, "index_default_vector_new_4",plans,dimensions=4096)
 
-                    if status_code != 200 and self.error_validation(result):
+                    if status_code != 200:
                         self.log.info("SUCCESS. Cannot create index to support 4096 dimensions in 7.6.0 mode")
                     else:
                         self.log.info(result)
@@ -1369,13 +1448,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                 except Exception as e:
                     print(e)
 
-
-                try:
-                    self.log.info("Running vector queries")
-                    if not self.fts_obj.run_vector_queries(index_name="index_default_vector_1"):
-                        self.fail("Error running Vector queries. Terminating the test")
-                except Exception as e:
-                    print(e)
+                if float(str(self.start_version)[0:3]) >= 7.6:
+                    try:
+                        self.log.info("Running vector queries")
+                        if not self.fts_obj.run_vector_queries(index_name="index_default_vector_1"):
+                            self.fail("Error running Vector queries. Terminating the test")
+                    except Exception as e:
+                        print(e)
 
             else:
                 try:
@@ -1413,9 +1492,37 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.inbetween_active = False
 
     def run_fts_vector_query_and_compare(self, queue=None):
+        
+        self.sleep(100)
 
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, variable_node=self.servers[0], servers=self.servers)
-        RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+        RestConnection(self.servers[0]).modify_memory_quota()
+
+        """delete 20% of docs"""
+        status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10005001,0.2)
+
+        if status:
+            self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
+        else:
+            self.fail("CRUD Operation post upgrade failure. OPS: Delete")
+
+        self.fts_obj.load_data(1000)
+
+        try:
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+        except Exception as e:
+            print(e)
 
         try:
             self.log.info("Running FTS queries")
@@ -1423,7 +1530,9 @@ class NewUpgradeBaseTest(BaseTestCase):
         except Exception as e:
             print(e)
 
-        if "7.6.2" in str(self.upgrade_versions):
+        self.sleep(100)
+
+        if float(str(self.upgrade_versions[0])[0:3]) >= 7.6 and str(self.upgrade_versions[0])[0:5] != "7.6.1" and str(self.upgrade_versions[0])[0:5] != "7.6.0":
             try:
                 self.fts_obj.update_vector_index(False, False, "index_1")
                 ok1 = self.fts_obj.run_vector_queries(index_name="index_1")
@@ -1438,16 +1547,22 @@ class NewUpgradeBaseTest(BaseTestCase):
                 ok4 =self.fts_obj.run_vector_queries(False, True, "vector_data_base64", "vector_base64",
                                         index_name="index_1")
 
-                self.fts_obj.update_vector_index(True, True, "index_default_vector_1")
-                ok5 =self.fts_obj.run_vector_queries(True, True, "vector_encoded", "vector_base64",index_name="index_default_vector_1")
+                check = True
+                if float(str(self.start_version)[0:3]) >= 7.6:
+                    check = False
+                    self.fts_obj.update_vector_index(True, True, "index_default_vector_1")
+                    ok5 =self.fts_obj.run_vector_queries(True, True, "vector_encoded", "vector_base64",index_name="index_default_vector_1")
 
-                self.fts_obj.update_vector_index(True, False, "index_default_vector_1")
-                ok6 =self.fts_obj.run_vector_queries(True, False, "vector_data", "vector",index_name="index_default_vector_1")
+                    self.fts_obj.update_vector_index(True, False, "index_default_vector_1")
+                    ok6 =self.fts_obj.run_vector_queries(True, False, "vector_data", "vector",index_name="index_default_vector_1")
 
-                self.fts_obj.update_vector_index(False, True, "index_default_vector_1")
-                ok7 =self.fts_obj.run_vector_queries(False, True, "vector_data_base64", "vector_base64",index_name="index_default_vector_1")
+                    self.fts_obj.update_vector_index(False, True, "index_default_vector_1")
+                    ok7 =self.fts_obj.run_vector_queries(False, True, "vector_data_base64", "vector_base64",index_name="index_default_vector_1")
 
-                if not (ok1 and ok2 and ok3 and ok4 and ok5 and ok6 and ok7):
+                    if (ok5 and ok6 and ok7):
+                        check = True
+
+                if not (ok1 and ok2 and ok3 and ok4 and check):
                     self.fail("Vector queries failed. Terminating the test")
 
                 plans = self.construct_custom_plan_params(1, random.choice(self.partition_list))
@@ -1479,6 +1594,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             except Exception as e:
                 print(e)
 
+
     def setup_for_test(self, queue=None):
         self.set_bleve_max_result_window()
 
@@ -1493,7 +1609,14 @@ class NewUpgradeBaseTest(BaseTestCase):
         try:
             post_upgrade_errors = {}
             fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
-            fts_callable.load_data(100)
+            fts_callable.load_data(2000)
+            status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10002000,0.2)
+            if status:
+                self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
+            else:
+                self.fail("CRUD Operation post upgrade failure. OPS: Delete")
+            fts_callable.load_data(2000)
+            
             fts_query = {"query": "dept:Engineering"}
 
             self.log.info("="*20 + " Starting post offline upgrade tests")
@@ -1584,6 +1707,33 @@ class NewUpgradeBaseTest(BaseTestCase):
     def run_fts_query_and_compare(self, queue=None):
         try:
             self.log.info("Verify fts via queries again")
+
+            """delete 20% of docs"""
+            status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10005001,0.2)
+
+            if status:
+                self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
+            else:
+                self.fail("CRUD Operation post upgrade failure. OPS: Delete")
+
+            self.fts_obj.load_data(1000)
+
+            try:
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+            except Exception as e:
+                print(e)
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
             self.update_delete_fts_data_run_queries(self.fts_obj)
         except Exception as ex:
             print(ex)

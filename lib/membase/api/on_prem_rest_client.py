@@ -3753,7 +3753,7 @@ class RestConnection(object):
         return status
 
     @not_for_capella
-    def modify_memory_quota(self, kv_quota=512,index_quota=400,fts_quota=600,cbas_quota=1024,eventing_quota=256):
+    def modify_memory_quota(self, kv_quota=512,index_quota=256,fts_quota=1062,cbas_quota=1024,eventing_quota=256):
         api = self.baseUrl + "pools/default"
         params = urllib.parse.urlencode({"memoryQuota": kv_quota, "indexMemoryQuota":index_quota,"ftsMemoryQuota":fts_quota,"cbasMemoryQuota":cbas_quota,"eventingMemoryQuota":eventing_quota})
         headers = self._create_headers()
@@ -3769,6 +3769,14 @@ class RestConnection(object):
             raise Exception("Error setting the RAM quota for each services")
         return status
 
+
+    @not_for_capella
+    def delete_docs(self,node_ip,key,bucket = "default", scope = "_default", collection = "_default",prefix = "emp"):
+        api = self.baseUrl + "pools/default/buckets/{0}/scopes/{1}/collections/{2}/docs/{3}".format(bucket,scope,collection,prefix) + str(key)
+        status, content, header = self.urllib_request(
+            api,
+            verb='DELETE')
+        return status
 
 
     def set_maxConcurrentPartitionMovesPerNode(self, value):

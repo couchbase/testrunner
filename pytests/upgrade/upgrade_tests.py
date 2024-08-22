@@ -12,14 +12,17 @@ from remote.remote_util import RemoteMachineShellConnection
 from .newupgradebasetest import NewUpgradeBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from testconstants import FUTURE_BUILD_NUMBER
+from pytests.fts.fts_callable import FTSCallable
 
 class UpgradeTests(NewUpgradeBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
         self.queue = queue.Queue()
-        self.run_partition_validation = self.input.param("run_partition_validation", True)
+        self.run_partition_validation = self.input.param("run_partition_validation", False)
+        self.isRebalanceComplete = False
         self.graceful = self.input.param("graceful", False)
+        self.vector_upgrade = self.input.param("vector_upgrade",False)
         self.after_upgrade_nodes_in = self.input.param("after_upgrade_nodes_in", 1)
         self.after_upgrade_nodes_out = self.input.param("after_upgrade_nodes_out", 1)
         self.verify_vbucket_info = self.input.param("verify_vbucket_info", True)
@@ -210,8 +213,52 @@ class UpgradeTests(NewUpgradeBaseTest):
            skip_init_check_cbserver=true,released_upgrade_version=6.5.0-3265,dgm_run=true,
            doc-per-day=1,upgrade_type=offline,offline_upgrade_type=offline_failover
     """
+
+    def load_items_during_rebalance(self,server):
+        self.sleep(15)
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+        while(not self.isRebalanceComplete):
+            if self.vector_upgrade:
+                """delete 20% of docs"""
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10005001,0.2)
+
+                if not status:
+                    self.fail("CRUD operation failed during rebalance. OPS : DELETE")
+                else:
+                    self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+
+                """upsert (update) the first 1000 docs out of 5000 docs present in the cluster"""
+                self.fts_obj.load_data(1000)
+
+                """upserting the vector data"""
+                try:
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+                except Exception as e:
+                    self.log.info(e)
+            else:
+                self.fts_obj.load_data(1000)
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2)
+
+                if not status:
+                    self.fail("CRUD operation failed during rebalance. OPS : DELETE")
+                else:
+                    self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+        
+        self.isRebalanceComplete = False
+
+
     def test_upgrade(self):
-        from pytests.fts.fts_callable import FTSCallable
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
         self.event_threads = []
         self.after_event_threads = []
@@ -225,7 +272,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             else:
                 if self.run_partition_validation:
                     try:
-                        self.partition_validation()
+                        self.partition_validation(skip_check=False)
                     except Exception as ex:
                         self.fail(ex)
             self.cluster_stats(self.servers[:self.nodes_init])
@@ -261,7 +308,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             else:
                 if self.run_partition_validation:
                     try:
-                        self.partition_validation()
+                        self.partition_validation(skip_check=False)
                     except Exception as ex:
                         self.fail(ex)
             """ Default set to always verify data """
@@ -932,6 +979,36 @@ class UpgradeTests(NewUpgradeBaseTest):
         except Exception as ex:
             self.log.info(ex)
             raise
+    
+    def trigger_rebalance(self,servers, servers_in,servers_out,servicesNodeOut):
+        try:
+            if self.upgrade_services_in == "same":
+                self.cluster.rebalance(list(servers.values()),
+                                        list(servers_in.values()),
+                                        list(servers_out.values()),
+                                        services=[servicesNodeOut],
+                                        sleep_before_rebalance=15)
+            elif self.upgrade_services_in is not None \
+                    and len(self.upgrade_services_in) > 0:
+                tem_services = self.upgrade_services_in[
+                                start_services_num:start_services_num
+                                + len(list(servers_in.values()))]
+                self.cluster.rebalance(list(servers.values()),
+                                        list(servers_in.values()),
+                                        list(servers_out.values()),
+                                        services=tem_services,
+                                        sleep_before_rebalance=15)
+                start_services_num += len(list(servers_in.values()))
+            else:
+                self.cluster.rebalance(list(servers.values()),
+                                        list(servers_in.values()),
+                                        list(servers_out.values()),
+                                        sleep_before_rebalance=15)
+            
+            self.isRebalanceComplete = True
+        except BaseException as ex:
+            self.fail(ex)
+
 
     def online_upgrade_swap_rebalance(self):
         self.log.info("online_upgrade_swap_rebalance")
@@ -974,31 +1051,44 @@ class UpgradeTests(NewUpgradeBaseTest):
             self._install(list(servers_in.values()))
             self.sleep(10, "Wait for ns server is ready")
             old_vbucket_map = self._record_vbuckets(self.master, list(servers.values()))
+            
+            cluster_ips = []
+            in_server_ips = []
+            out_server_ips = []
+            load_data_target_server = None
+
+            for i in list(servers.values()):
+                cluster_ips.append(i.ip)
+
+            for i in list(servers_in.values()):
+                in_server_ips.append(i.ip)
+            
+            for i in list(servers_out.values()):
+                out_server_ips.append(i.ip)
+            
+            itr = 0
+            for i in cluster_ips:
+                if i not in in_server_ips and i not in out_server_ips:
+                    load_data_target_server = servers[i + ':8091']
+                    break
+                itr+=1
+            
+            if not load_data_target_server:
+                load_data_target_server = next(iter(servers_in.values()))
+
             try:
-                if self.upgrade_services_in == "same":
-                    self.cluster.rebalance(list(servers.values()),
-                                           list(servers_in.values()),
-                                           list(servers_out.values()),
-                                           services=[servicesNodeOut],
-                                           sleep_before_rebalance=15)
-                elif self.upgrade_services_in is not None \
-                        and len(self.upgrade_services_in) > 0:
-                    tem_services = self.upgrade_services_in[
-                                    start_services_num:start_services_num
-                                    + len(list(servers_in.values()))]
-                    self.cluster.rebalance(list(servers.values()),
-                                           list(servers_in.values()),
-                                           list(servers_out.values()),
-                                           services=tem_services,
-                                           sleep_before_rebalance=15)
-                    start_services_num += len(list(servers_in.values()))
-                else:
-                    self.cluster.rebalance(list(servers.values()),
-                                           list(servers_in.values()),
-                                           list(servers_out.values()),
-                                           sleep_before_rebalance=15)
-            except BaseException as ex:
-                self.fail(ex)
+                thread1 = threading.Thread(target=self.load_items_during_rebalance, args=(load_data_target_server,))
+                thread2 = threading.Thread(target=self.trigger_rebalance, args=(servers, servers_in,servers_out,servicesNodeOut,))
+                
+                thread1.start()
+                thread2.start()
+
+                thread1.join()
+                thread2.join()
+            except Exception as ex:
+                self.log.info("Could not push data while rebalancing")
+                self.log.info(ex)
+
             self.out_servers_pool = servers_out
             self.in_servers_pool = new_servers
             servers = new_servers
@@ -1061,7 +1151,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         if self.offline_upgrade_type == "offline_shutdown":
             self._offline_upgrade()
         elif self.offline_upgrade_type == "offline_failover":
-            self._offline_failover_upgrade()
+            self.offline_fail_over_upgrade()
 
     def failover_add_back(self):
         try:

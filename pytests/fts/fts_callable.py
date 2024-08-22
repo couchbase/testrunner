@@ -846,6 +846,20 @@ class FTSCallable:
         goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
                                          start_index,end_index,base64Flag)
         goloader_object.load_data("upgrade")
+    
+    def delete_doc_by_key(self,node,start,end,percent):
+        server = RestConnection(node)
+        server.reduce_query_logging = True
+
+        deletes = 0
+        for key in range(start,start + int((end-start)*percent)):
+            if server.delete_docs(node.ip,key):
+                deletes += 1
+        server.reduce_query_logging = False
+
+        if float(deletes / int((end-start)*percent)) > 0.5:
+            return True
+        return False
 
     def get_query_vectors(self, dataset_name, dimension=None):
         ds = VectorDataset(dataset_name)
@@ -1234,6 +1248,7 @@ class FTSCallable:
         return result
 
     def validate_partition_distribution(self, rest):
+        
         _, payload = rest.get_cfg_stats()
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
 
