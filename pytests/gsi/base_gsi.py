@@ -150,7 +150,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.scan_limit = self.input.param("scan_limit", 100)
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
-        self.encoder = SentenceTransformer(self.data_model)
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()
         self.dimension = self.input.param("dimension", None)
         self.trainlist = self.input.param("trainlist", None)
@@ -458,7 +458,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def validate_scans_for_recall_and_accuracy(self, select_query):
         faiss_query = self.convert_to_faiss_queries(select_query=select_query)
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
-        query_res_faiss = self.run_cbq_query(query=faiss_query)['results']
+        query_res_faiss = self.run_cbq_query(query=faiss_query, server=self.n1ql_node)['results']
         list_of_vectors_to_be_indexed_on_faiss = []
         for v in query_res_faiss:
             list_of_vectors_to_be_indexed_on_faiss.append(v[vector_field])
@@ -470,7 +470,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for idx in ann:
             # self.log.info(f'for idx {idx} vector is {list_of_vectors_to_be_indexed_on_faiss[idx]}')
             faiss_closest_vectors.append(list_of_vectors_to_be_indexed_on_faiss[idx])
-        gsi_query_res = self.run_cbq_query(query=select_query)['results']
+        gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
         gsi_query_vec_list = []
 
         for v in gsi_query_res:

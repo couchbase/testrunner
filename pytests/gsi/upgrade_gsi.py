@@ -6,6 +6,7 @@ from datetime import datetime
 import random
 from threading import Thread
 
+
 import global_vars
 from string import digits
 from SystemEventLogLib.Events import EventHelper
@@ -1360,9 +1361,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
+        self.test_bucket = self.test_bucket+'_hotel'
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
+        existing_bucket = self.buckets[0]
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
                                              num_of_docs_per_collection=self.num_of_docs_per_collection,
                                              json_template=self.json_template,
@@ -1401,6 +1404,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.validate_shard_affinity()
                     self.post_upgrade_with_nodes_clause()
 
+                self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, cluster_profile="provsioned")
+
                 #Will uncomment the below code post MB-59107
                 # if not self.check_gsi_logs_for_shard_transfer():
                 #     raise Exception("Shard based rebalance not triggered")
@@ -1410,6 +1415,128 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future.result()
 
+    def post_upgrade_validate_vector_index(self, existing_bucket_name, cluster_profile=None, services=["index"]):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        buckets = self.rest.get_buckets()
+        bucket_list = []
+        for bucket in buckets:
+            if bucket.name != existing_bucket_name.name:
+                bucket_list.append(bucket)
+        namespaces = []
+        for namespace in self.namespaces:
+            for bucket in bucket_list:
+                if bucket.name == namespace.split('.')[0]:
+                    namespaces.append(namespace)
+
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+
+        select_queries = set()
+        namespace_index_map = {}
+        for namespace in namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset="Cars",
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, defer_build=True, num_replica=self.num_index_replicas)
+            build_queries = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                       namespace=namespace, limit=self.scan_limit))
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace)
+            namespace_index_map[namespace] = definitions
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
+            self.sleep(30)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=[build_queries], database=namespace, query_node=self.n1ql_node)
+
+        self.wait_until_indexes_online()
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            if existing_bucket_name.name != index['bucket']:
+                self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+
+        for namespace in namespace_index_map:
+            definition_list = namespace_index_map[namespace]
+            for definitions in definition_list:
+
+                # to reduce the no of replicas
+                self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
+                                          action='replica_count', num_replicas=self.num_index_replicas - 1)
+                self.wait_until_indexes_online()
+                self.sleep(20)
+
+        self.wait_until_indexes_online()
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            if existing_bucket_name.name != index['bucket']:
+                self.assertEqual(index['numReplica'], self.num_index_replicas-1, "No. of replicas are not matching")
+
+
+        nodes_in_cluster = self.get_nodes_in_cluster_after_upgrade(master_node=self.master)
+        rebalance_nodes = []
+        for node in self.servers:
+            if node not in nodes_in_cluster:
+                rebalance_nodes.append(node)
+                if len(rebalance_nodes) == 2:
+                    break
+        existing_indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        nodes_for_installation = []
+
+        for node in rebalance_nodes:
+            if RestConnection(node).get_complete_version() != self.upgrade_to.split("-")[0]:
+                nodes_for_installation.append(node)
+
+        # the below functionality is used to install the desired version of cb server on the given list of nodes
+        upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=rebalance_nodes,
+                                        cluster_profile=cluster_profile)
+        for th in upgrade_th:
+            th.join()
+        self.sleep(120)
+        self.log.info("==== installation Complete ====")
+
+        #swap rebalance with file based rebalance enabled
+        node_in = rebalance_nodes[0]
+        node_out = existing_indexer_node
+
+        self.log.info("Swapping servers...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [node_in], [node_out],
+                                                     services=services)
+        node_in, node_out = node_out, node_in
+        self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
+        self.sleep(3)
+
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+        rebalance.result()
+
+        #swap rebalance with dcp rebalance
+        self.disable_shard_based_rebalance()
+        self.sleep(10)
+
+        self.log.info("Swapping servers...")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [node_in], [node_out],
+                                                 services=["index"])
+
+        self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
+        self.sleep(3)
+
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+        rebalance.result()
+
+
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after reducing num replica count")
+
+        #drop indexes
+        self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, database=namespace)
+
     def test_upgrade_downgrade_upgrade(self):
         self.rest.delete_all_buckets()
         self.sleep(30)
@@ -1417,7 +1544,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+        self.cluster.create_standard_bucket(name=self.test_bucket+"_hotel", port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
@@ -1485,9 +1612,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
+        self.test_bucket = self.test_bucket + '_hotel'
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
+        existing_bucket = self.buckets[0]
         self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
                                              num_of_docs_per_collection=self.num_of_docs_per_collection,
                                              json_template=self.json_template,
@@ -1556,8 +1685,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.sleep(30)
                 self.update_master_node()
                 #self.rest = self.master
+
                 if not self.check_gsi_logs_for_shard_transfer():
                     raise Exception("Shard based rebalance not triggered")
+
+                self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, services=services_in)
 
             finally:
                 event.set()
@@ -2067,7 +2199,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.run_continous_query = False
                 self.sleep(60)
                 if self.upgrade_mode == 'swap_rebalance':
-                    # self.rest = self.master
+                    #self.rest = self.master
                     node_version = RestConnection(self.master).get_nodes_versions()
                     self.log.info("{0} node {1} Upgraded to: {2}".format(service, swapped_in_node.ip, node_version))
                 else:
@@ -2083,6 +2215,18 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         self.validate_shard_affinity(node_in=swapped_in_node)
                         self.validate_alternate_shard_ids_presence(node_in=swapped_in_node)
                         self.sleep(30)
+
+                        # runnning vector index queries in mixed mode
+                        try:
+                            self.run_cbq_query(
+                                query="CREATE INDEX `testcolorRGBVector` ON default:test_bucket_hotel._default._default(colorRGBVector VECTOR) USING GSI  WITH {'defer_build': True, 'num_replica': 1, 'dimension': 3, 'description': 'IVF,PQ3x8', 'similarity': 'L2_SQUARED', 'scan_nprobes': 1}",
+                                server=self.query_node)
+
+                        except Exception as e:
+                            self.log.error(f"{str(e)}")
+                        else:
+                            self.fail("vector indexes created in mixed mode state")
+
                     shard_list_after = self.fetch_shard_id_list()
                     if scan_results_check and select_queries is not None:
                         n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -2106,14 +2250,16 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                 self.log.info(f'shard list after rebalance : {shard_list_after}')
                                 raise Exception(
                                     "No new alternate shard IDs have been created during this rebalance. Possible bug")
+                    self.log.info("upgrade successful")
                     self.sleep(20)
                     map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
-                    
+
                     self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
                                                                   map_after_rebalance=map_after_rebalance,
                                                                   stats_map_before_rebalance=stats_before_rebalance,
                                                                   stats_map_after_rebalance=stats_after_rebalance,
                                                                   nodes_in=[], nodes_out=[], skip_array_index_item_count=True, per_node=True)
+
 
         finally:
             self.run_continous_query = False

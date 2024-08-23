@@ -596,8 +596,9 @@ class GSIUtils(object):
                 query = index_gen.generate_use_index_query(bucket=namespace, index_name=index_name)
             else:
                 query = index_gen.generate_query(bucket=namespace)
-            if limit == 0 and index_gen.limit > 0:
-                limit = index_gen.limit
+            if index_gen.limit is not None:
+                if limit == 0 and index_gen.limit > 0:
+                    limit = index_gen.limit
             if limit > 0:
                 query = f'{query} LIMIT {limit}'
             select_query_list.append(query)
