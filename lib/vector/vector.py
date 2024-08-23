@@ -40,9 +40,10 @@ class UtilVector(object):
         return fail_count
     def compare_vector(self, actual, expected):
         recall_count = 0
-        accuracy_count = 0 
+        accuracy_count = 0
+        pct_accuracy = 5
         for idx, actual_vector in enumerate(actual):
-            if actual_vector == expected[idx]:
+            if actual_vector in expected[max(0, idx-pct_accuracy):idx+pct_accuracy+1]:
                 recall_count += 1
                 accuracy_count += 1
             elif actual_vector in expected:

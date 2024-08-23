@@ -23,6 +23,7 @@ class VectorSearchTests(QueryTests):
         self.description = self.input.param("description", "IVF,SQ8")
         self.nprobes = self.input.param("nprobes", 3)
         self.dimension = self.input.param("dimension", 128)
+        self.query_count = self.input.param("query_count", 10)
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -62,10 +63,10 @@ class VectorSearchTests(QueryTests):
         super(VectorSearchTests, self).suite_tearDown()
 
     def test_knn_distances(self):
-        begin = random.randint(0, len(self.xq) - 5)
-        self.log.info(f"Running KNN query for range [{begin}:{begin+5}]")
-        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
-        for i in range(5):
+        begin = random.randint(0, len(self.xq) - self.query_count)
+        self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
+        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        for i in range(self.query_count):
             self.log.info(f"Check distance for query {i + begin}")
             fail_count = UtilVector().check_distance(self.xq[i + begin], self.xb, indices[i], distances[i], distance=self.distance)
             self.assertEqual(fail_count, 0, "We got some diff! Check log above.")
@@ -74,19 +75,19 @@ class VectorSearchTests(QueryTests):
         index = faiss().create_l2_index(self.xb, dim=self.dimension)
         faiss_distances, faiss_indices = faiss().search_index(index, self.xq)
 
-        begin = random.randrange(0, len(self.xq) - 5)
-        self.log.info(f"Running KNN query for range [{begin}:{begin+5}]")
-        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], 'L2_SQUARED', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
-        for i in range(5):
+        begin = random.randrange(0, len(self.xq) - self.query_count)
+        self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
+        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], 'L2_SQUARED', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        for i in range(self.query_count):
             self.log.info(f"Check distance for query {i + begin} with FAISS")
             self.assertTrue(np.allclose(distances[i], faiss_distances[begin+i]), f"Couchbase distances: {distances[i]} do not match FAISS: {faiss_distances[begin+i]}")
 
     def test_knn_search(self):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
-        begin = random.randint(0, len(self.xq) - 5)
-        self.log.info(f"Running KNN query for range [{begin}:{begin+5}]")
-        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
-        for i in range(5):
+        begin = random.randint(0, len(self.xq) - self.query_count)
+        self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
+        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        for i in range(self.query_count):
             self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
             recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
             self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
@@ -95,7 +96,7 @@ class VectorSearchTests(QueryTests):
 
     def test_knn_search_faiss(self):
         # we build FAISS ground truth for verification for DOT, COSINE and L2
-        begin = random.randint(0, len(self.xq) - 5)
+        begin = random.randint(0, len(self.xq) - self.query_count)
         normalize = False
         if self.distance == 'DOT':
             faiss_index = faiss().create_dot_index(self.xb, dim=self.dimension)
@@ -106,9 +107,9 @@ class VectorSearchTests(QueryTests):
             faiss_index = faiss().create_l2_index(self.xb, dim=self.dimension)
         faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
 
-        self.log.info(f"Running KNN query for range [{begin}:{begin+5}]")
-        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
-        for i in range(5):
+        self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
+        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        for i in range(self.query_count):
             self.log.info(f"Check recall rate for query {begin+i} compare to FAISS ({self.distance})")
             recall, accuracy = UtilVector().compare_result(faiss_result[begin+i].tolist(), indices[i].tolist())
             self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
@@ -120,10 +121,10 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
-            begin = random.randint(0, len(self.xq) - 5)
-            self.log.info(f"Running ANN query for range [{begin}:{begin+5}]")
-            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
-            for i in range(5):
+            begin = random.randint(0, len(self.xq) - self.query_count)
+            self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
+            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
+            for i in range(self.query_count):
                 self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
                 recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
                 self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
@@ -148,10 +149,10 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
-            begin = random.randint(0, len(self.xq) - 5)
-            self.log.info(f"Running ANN query for range [{begin}:{begin+5}]")
-            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+5], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
-            for i in range(5):
+            begin = random.randint(0, len(self.xq) - self.query_count)
+            self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
+            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
+            for i in range(self.query_count):
                 self.log.info(f"Check recall rate for query {begin+i} compare to FAISS ({self.distance})")
                 recall, accuracy = UtilVector().compare_result(faiss_result[begin+i].tolist(), indices[i].tolist())
                 self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
