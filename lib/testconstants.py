@@ -191,7 +191,7 @@ GCP_AUTH_PATH = "/root/.config/gcloud/application_default_credentials.json"
 FILTER_TEST_FIELDS = ['logs_folder', 'conf_file', 'cluster_name',
                       'ini', 'case_number','num_nodes', 'spec',
                       'last_case_fail', 'teardown_run', 'is_container',
-                      'total_testcases']
+                      'total_testcases', 'get-cbcollect-info']
 
 # AWS compute combination
 CAPELLA_AWS_COMPUTES_ORDER = ['m5.xlarge', 'r5.xlarge', 'c5.2xlarge', 'm5.2xlarge', 'r5.2xlarge', 'c5.4xlarge',
