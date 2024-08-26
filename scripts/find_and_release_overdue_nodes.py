@@ -48,7 +48,7 @@ def main():
         print(query_string.format(os, poolId, day, state))
         query_res = cluster.query(query_string.format(os, poolId, day, state))
         for row in query_res:
-            print(f'result: {row}')
+            print('result: ', row)
 
     return
 
