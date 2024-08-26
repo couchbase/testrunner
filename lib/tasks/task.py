@@ -1816,7 +1816,7 @@ class ESRunQueryCompare(Task):
                 self.fts_query["vector"] = search_vector.tolist()
             try:
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
-                    self.run_fts_query(self.fts_query, self.score,variable_node=self.variable_node)
+                    self.run_fts_query(self.fts_query, self.score)
                 if "vector" in str(self.fts_query):
                     self.log.info(fts_doc_ids)
                 if not self.reduce_query_logging:
@@ -2027,7 +2027,7 @@ class ESRunQueryCompare(Task):
             self.set_exception(e)
             self.state = FINISHED
     def run_fts_query(self, query, score=''):
-        return self.fts_index.execute_query(query, score=score)
+        return self.fts_index.execute_query(query, score=score,variable_node =self.variable_node)
 
     def run_es_query(self, query,dataset=None):
         return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset)
