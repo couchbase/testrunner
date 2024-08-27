@@ -3526,6 +3526,16 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return status, json_parsed
 
+    def get_cfg_stats(self):
+        """ get fts cfg definition """
+        json_parsed = {}
+        api = self.fts_baseUrl + "api/cfg"
+        status, content, header = self.urllib_request(
+            api)
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
+
     def get_fts_index_doc_count(self, name, timeout=30):
         """ get number of docs indexed"""
         json_parsed = {}
