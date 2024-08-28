@@ -18,11 +18,11 @@ class ServerInfo():
 
 class LdapUser(UserBase):
 
-    LDAP_HOST = "172.23.120.205"
+    LDAP_HOST = "172.23.120.175"
     LDAP_PORT = "389"
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"
-    LDAP_ADMIN_USER = "cn=Manager,dc=couchbase,dc=com"
+    LDAP_ADMIN_USER = "cn=admin,dc=couchbase,dc=com"
     LDAP_ADMIN_PASS = "p@ssword"
 
     def __init__(self,
