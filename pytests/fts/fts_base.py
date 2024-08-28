@@ -5781,6 +5781,9 @@ class FTSBaseTest(unittest.TestCase):
 
     def validate_partition_distribution(self, rest):
         ###TODO : validate that replica parititons and active paritions reside in different server groups if any
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        self.log.info(f"FTS NODES: {fts_nodes}")
+
         _, payload = rest.get_cfg_stats()
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
 
@@ -5825,6 +5828,7 @@ class FTSBaseTest(unittest.TestCase):
                 for k, v in payload["indexDefs"]["indexDefs"].items():
                     try:
                         num_rep = v['planParams']['numReplicas']
+                        num_rep = min(num_rep, len(fts_nodes) - 1)
                     except:
                         num_rep = 0
                     indexes_map[
