@@ -2444,7 +2444,7 @@ class MovingTopFTS(FTSBaseTest):
         rest = RestConnection(self._master)
 
         index = self._cb_cluster.get_indexes()[0]
-        _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+        _, indexdef = rest.get_fts_index_definition(index.name)
         _, cfg = rest.get_cfg_stats()
 
         for plans in indexdef['planPIndexes']:
@@ -2470,7 +2470,7 @@ class MovingTopFTS(FTSBaseTest):
         self._cb_cluster.delete_bucket(bucket_name="default")
 
         try:
-            _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+            _, indexdef = rest.get_fts_index_definition(index.name)
             self.fail("Index partitions still reside on the node - node not cleaned up properly")
         except Exception as e:
             self.log.info(f"Success - : {str(e)}")
@@ -2505,7 +2505,7 @@ class MovingTopFTS(FTSBaseTest):
         nodeIds = []
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         index = self._cb_cluster.get_indexes()[0]
-        _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+        _, indexdef = rest.get_fts_index_definition(index.name)
         _, cfg = rest.get_cfg_stats()
 
         for plans in indexdef['planPIndexes']:
@@ -2550,7 +2550,7 @@ class MovingTopFTS(FTSBaseTest):
         nodeIds = []
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         index = self._cb_cluster.get_indexes()[0]
-        _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+        _, indexdef = rest.get_fts_index_definition(index.name)
         _, cfg = rest.get_cfg_stats()
         for plans in indexdef['planPIndexes']:
             if "nodes" in plans:
@@ -2596,7 +2596,7 @@ class MovingTopFTS(FTSBaseTest):
         nodeIds = []
         rest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         index = self._cb_cluster.get_indexes()[0]
-        _, indexdef = rest.get_fts_index_definition(index.name, index._source_name, index.scope)
+        _, indexdef = rest.get_fts_index_definition(index.name)
         _, cfg = rest.get_cfg_stats()
         for plans in indexdef['planPIndexes']:
             if "nodes" in plans:
