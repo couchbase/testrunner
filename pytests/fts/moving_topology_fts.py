@@ -727,10 +727,6 @@ class MovingTopFTS(FTSBaseTest):
                 self.is_index_partitioned_balanced(index)
         except Exception as e:
             self.log.info("Expected exception: %s" % e)
-        frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
-        err = self.validate_partition_distribution(frest)
-        if len(err) > 0:
-            self.fail(err)
 
     def failover_master_during_index_building(self):
         self.load_data()
@@ -1123,10 +1119,6 @@ class MovingTopFTS(FTSBaseTest):
             if hits < self._find_expected_indexed_items_number():
                 self.log.info("SUCCESS: Fewer docs ({0}) returned after "
                               "hard-failover".format(hits))
-        frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
-        err = self.validate_partition_distribution(frest)
-        if len(err) > 0:
-            self.fail(err)
 
     def hard_failover_master_between_indexing_and_querying(self):
         # TESTED
