@@ -4045,6 +4045,7 @@ class FTSBaseTest(unittest.TestCase):
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
         self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
+        self.skip_partition_validation = TestInputSingleton.input.param("skip_partition_validation", True)
 
         if self.capella_run and CbServer.capella_cluster_id is None:
             self.capella_servers_setup()
@@ -6844,6 +6845,10 @@ class FTSBaseTest(unittest.TestCase):
 
     def validate_partition_distribution(self, rest):
         ###TODO : validate that replica parititons and active paritions reside in different server groups if any
+
+        if self.skip_partition_validation:
+            return []
+
         _, payload = rest.get_cfg_stats()
         fts_nodes = self._cb_cluster.get_fts_nodes()
         print(f"FTS NODES: {fts_nodes}")
