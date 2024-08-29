@@ -42,12 +42,13 @@ def main():
 
     auth = PasswordAuthenticator(SERVER_MANAGER_USER_NAME, SERVER_MANAGER_PASSWORD)
     cluster = Cluster.connect('couchbase://172.23.104.162', ClusterOptions(auth))
-    cb = cluster.bucket('QE-server-pool')
+    bucket = cluster.bucket('QE-server-pool')
+    collection = bucket.default_collection()
 
     query_select_string = ("select * from `QE-server-pool` where os = '{0}' and "
-                    "(poolId = '{1}' or '{1}' in poolId) and username like '{2}' and state='{3}'")
+                           "(poolId = '{1}' or '{1}' in poolId) and username like '{2}' and state='{3}'")
     query_update_string = ("update `QE-server-pool` set state='available' where os = '{0}' and "
-                    "(poolId = '{1}' or '{1}' in poolId) and username like '{2}' and state='{3}'")
+                           "(poolId = '{1}' or '{1}' in poolId) and username like '{2}' and state='{3}'")
 
     last_n_days = get_last_n_days(n=int(num_days))
     for day in last_n_days:
@@ -61,6 +62,8 @@ def main():
 
         print(query_update_string.format(os, poolId, day, state))
         query_res_update = cluster.query(query_update_string.format(os, poolId, day, state))
+        for row in query_res_update.rows():
+            print('result: ', row)
         time.sleep(20)
         print("\n")
 
