@@ -301,12 +301,13 @@ class SAMLUtils:
         return error_msg
 
     def delete_okta_applications(self, okta_token, okta_account="https://dev-82235514.okta.com/"):
+        self.log.info("Deleting OKTA Application")
         header = {
             'Content-Type': 'application/json',
             'Accept': '*/*',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
-            'Authorization': 'SSWS' + okta_token
+            'Authorization': 'SSWS ' + okta_token
         }
         resp = requests.get(okta_account + "api/v1/apps",
                             headers=header,
@@ -315,7 +316,7 @@ class SAMLUtils:
         app_list = json.loads(resp.content.decode())
         for app in app_list:
             app_label = app["label"]
-            if app_label == "test_saml":
+            if app_label == "shaazin":
                 resp = requests.post(
                     okta_account + "api/v1/apps/" + app["id"] + "/lifecycle/deactivate",
                     headers=header,
@@ -328,15 +329,13 @@ class SAMLUtils:
                 assert resp.status_code == 204
 
     def create_okta_application(self, okta_token, cluster, okta_account="https://dev-82235514.okta.com/"):
+        self.log.info("Creating OKTA Application")
         header = {
             'Content-Type': 'application/json',
-            'Accept': '*/*',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Authorization': 'SSWS' + okta_token
+            'Authorization': 'SSWS ' + okta_token
         }
         body = {
-            "label": "test_saml",
+            "label": "shaazin",
             "accessibility": {
                 "selfService": False,
                 "errorRedirectUrl": None,
@@ -457,7 +456,7 @@ class SAMLUtils:
             'Accept': '*/*',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
-            'Authorization': 'SSWS' + okta_token
+            'Authorization': 'SSWS ' + okta_token
         }
         body = {"id": "00ucptbpbpCBQfhiS5d7",
                 "scope": "USER",
@@ -471,15 +470,16 @@ class SAMLUtils:
 
     def update_okta_application(self, okta_token, cluster,
                                 okta_account="https://dev-82235514.okta.com/"):
+        self.log.info("Updating OKTA Application")
         header = {
             'Content-Type': 'application/json',
             'Accept': '*/*',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
-            'Authorization': 'SSWS' + okta_token
+            'Authorization': 'SSWS ' + okta_token
         }
         body = {
-            "label": "test_saml",
+            "label": "shaazin",
             "accessibility": {
                 "selfService": False,
                 "errorRedirectUrl": None,
@@ -596,15 +596,16 @@ class SAMLUtils:
 
     def reset_okta_application(self, cluster,
                                okta_token, okta_account="https://dev-82235514.okta.com/"):
+        self.log.info("Reset OKTA Application")
         header = {
             'Content-Type': 'application/json',
             'Accept': '*/*',
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
-            'Authorization': 'SSWS' + okta_token
+            'Authorization': 'SSWS ' + okta_token
         }
         body = {
-            "label": "test_saml",
+            "label": "shaazin",
             "accessibility": {
                 "selfService": False,
                 "errorRedirectUrl": None,
