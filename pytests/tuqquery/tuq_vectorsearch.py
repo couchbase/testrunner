@@ -24,6 +24,7 @@ class VectorSearchTests(QueryTests):
         self.nprobes = self.input.param("nprobes", 3)
         self.dimension = self.input.param("dimension", 128)
         self.query_count = self.input.param("query_count", 10)
+        self.index_order = self.input.param("index_order", "tail")
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -120,7 +121,7 @@ class VectorSearchTests(QueryTests):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
             begin = random.randint(0, len(self.xq) - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
@@ -148,7 +149,7 @@ class VectorSearchTests(QueryTests):
         faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
             begin = random.randint(0, len(self.xq) - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
@@ -195,7 +196,7 @@ class VectorSearchTests(QueryTests):
 
     def test_mutate(self):
         self.log.info("Create Vector Index")
-        IndexVector().create_index(self.database, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+        IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
         distances, indices = QueryVector().search(self.database, self.xq[10:11], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
         # Get 2 vectors from the result set also in gt
         intersect = np.intersect1d(self.gt[10:11], indices)
