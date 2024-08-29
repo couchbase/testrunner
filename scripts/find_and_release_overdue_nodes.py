@@ -4,6 +4,7 @@ from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions, QueryOptions
 from couchbase.n1ql import QueryScanConsistency
 import sys
+import time
 
 SERVER_MANAGER_USER_NAME = 'Administrator'
 SERVER_MANAGER_PASSWORD = "esabhcuoc"
@@ -56,15 +57,19 @@ def main():
                                          QueryOptions(scan_consistency=QueryScanConsistency.REQUEST_PLUS))
         for row in query_res_select.rows():
             print('result: ', row)
+        print("\n")
 
         print(query_update_string.format(os, poolId, day, state))
         query_res_update = cluster.query(query_update_string.format(os, poolId, day, state))
+        time.sleep(20)
+        print("\n")
 
         print(query_select_string.format(os, poolId, day, state))
         query_res_select = cluster.query(query_select_string.format(os, poolId, day, state),
                                          QueryOptions(scan_consistency=QueryScanConsistency.REQUEST_PLUS))
         for row in query_res_select.rows():
             print('result: ', row)
+        print("\n")
         print("-----------------------------------------------------------------------------------------------------\n")
 
     return
