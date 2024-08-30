@@ -52,10 +52,7 @@ class auditTest(BaseTestCase):
             auditTemp.setAuditEnable('true')
             self.sleep(30)
         rest = RestConnection(self.master)
-<<<<<<< HEAD   (85ac7b removed parition check from non rebalance test)
         self.setupLDAPSettings(rest)
-=======
-        #self.setupLDAPSettings(rest)
         param = {
             'hosts': '{0}'.format("172.23.120.175"),
             'port': '{0}'.format("389"),
@@ -68,7 +65,6 @@ class auditTest(BaseTestCase):
         rest.setup_ldap(param, '')
         # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
         RbacBase().enable_ldap(rest)
->>>>>>> CHANGE (a57c88 Changing the LDAP config)
 
     def tearDown(self):
         super(auditTest, self).tearDown()
