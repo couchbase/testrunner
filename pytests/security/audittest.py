@@ -64,7 +64,6 @@ class auditTest(BaseTestCase):
         }
         rest.setup_ldap(param, '')
         # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
-        RbacBase().enable_ldap(rest)
 
     def tearDown(self):
         super(auditTest, self).tearDown()
