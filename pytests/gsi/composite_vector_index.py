@@ -539,9 +539,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{index['indexName']}")
+            self.assertEqual(index['numReplica'], self.num_index_replicas-1, "No. of replicas are not matching")
+
+        #rebalancing in for replica repair
+        index_node_in = self.servers[self.nodes_init]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node_in], [],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id")
+
 
     def test_alter_move_index(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -767,12 +779,56 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message)
 
+
+    def test_replica_repair(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.enable_shard_based_rebalance()
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        select_queries = set()
+        namespace_index_map = {}
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit, quantization_algo_color_vector=self.quantization_algo_color_vector, quantization_algo_description_vector=self.quantization_algo_description_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, num_replica=self.num_index_replicas, defer_build=True)
+            select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                       namespace=namespace, limit=self.scan_limit))
+            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            namespace_index_map[namespace] = definitions
+
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.wait_until_indexes_online()
+
+        # rebalancing out an indexer node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_node],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+
+        self.sleep(30)
+
+        self.run_cbq_query(query=build_query)
+        self.wait_until_indexes_online()
+
+        #rebalancing in indexer node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node], [],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+
+
     def gen_table_view(self, query_stats_map, message="query stats"):
         table = TableView(self.log.info)
         table.set_headers(['Query', 'Recall', 'Accuracy'])
         for query in query_stats_map:
             table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
         table.display(message=message)
+
 
     def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True):
         query_stats_map = {}
