@@ -2761,6 +2761,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.buckets = rest.get_buckets()
         self._load_all_buckets(self.master, gen, "create", 0)
 
+        self.sleep(50)
+
         """ create index """
         if self.create_gsi:
             if "5" > rest.get_nodes_version()[:1]:
