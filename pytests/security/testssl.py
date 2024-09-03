@@ -104,6 +104,8 @@ class TestSSLTests(BaseTestCase):
         Scanning the ports to test vulnerabilities
         """
         vulnerability_list = []
+        rest = RestConnection(self.master)
+        cb_version = rest.get_nodes_version()
         for node in self.servers:
             self.log.info("Testing node {0}".format(node.ip))
             ports_to_scan = self.get_service_ports(node)
@@ -235,8 +237,11 @@ class TestSSLTests(BaseTestCase):
                     elif "LUCKY13 (CVE-2013-0169)" in line:
                         scan_count = scan_count + 1
                         if "VULNERABLE" in line:
-                            vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
-                                                      format(line, node_port, node.ip))
+                            if cb_version[:3] == "7.2":
+                                self.log.info("Skipping LUCKY13 vuln for neo builds")
+                            else:
+                                vulnerability_list.append("\"{0}\" is detected in port {1} node {2}".
+                                                          format(line, node_port, node.ip))
                     elif "Winshock" in line:
                         scan_count = scan_count + 1
                         if "VULNERABLE" in line:
