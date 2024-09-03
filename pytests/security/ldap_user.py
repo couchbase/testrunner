@@ -22,7 +22,7 @@ class LdapUser(UserBase):
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"
     LDAP_ADMIN_USER = "cn=admin,dc=couchbase,dc=com"
-    LDAP_ADMIN_PASS = "p@ssword"
+    LDAP_ADMIN_PASS = "p@ssw0rd"
     LDAP_SERVER = ServerInfo(LDAP_HOST, LDAP_PORT, 'root', 'couchbase')
 
     def __init__(self,
@@ -49,8 +49,10 @@ class LdapUser(UserBase):
         r =''
         try:
             shell.write_remote_file("/tmp", fileName, userCreateCmmd)
-            command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
+            command = "ldapadd " + "-f /tmp/" + fileName + " -D " + \
                       self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
+            # command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
+            #           self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
             o, r = shell.execute_command(command)
             shell.log_command_output(o, r)
             command = "rm -rf /tmp/*.ldif"
@@ -64,7 +66,8 @@ class LdapUser(UserBase):
     def delete_user(self):
         if isinstance(self.user_name, list)==True and len(self.user_name)==1:
             self.user_name=self.user_name[0]
-        userDeleteCmd = 'ldapdelete -h ' + self.LDAP_HOST + " -p " + self.LDAP_PORT + ' cn=' + self.user_name + "," + self.LDAP_DN
+        userDeleteCmd = "ldapdelete " + "cn=" + self.user_name + "," + self.LDAP_DN
+        # userDeleteCmd = "ldapdelete -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " cn=" + self.user_name + "," + self.LDAP_DN
         shell = RemoteMachineShellConnection(self.LDAP_SERVER)
         try:
             command = userDeleteCmd + " -D " + self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS

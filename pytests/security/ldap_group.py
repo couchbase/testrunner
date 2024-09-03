@@ -22,7 +22,7 @@ class LdapGroup():
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"
     LDAP_ADMIN_USER = "cn=admin,dc=couchbase,dc=com"
-    LDAP_ADMIN_PASS = "p@ssword"
+    LDAP_ADMIN_PASS = "p@ssw0rd"
     LDAP_GROUP_OBJECT_CLASS = "groupOfNames"
     LDAP_GROUP_DN = "ou=Groups,dc=couchbase,dc=com"
 
@@ -55,8 +55,10 @@ class LdapGroup():
         shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             shell.write_remote_file("/tmp", fileName, userCreateCmmd)
-            command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
+            command = "ldapadd " + "-f /tmp/" + fileName + " -D " + \
                       self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
+            # command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
+            #           self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
             o, r = shell.execute_command(command)
             shell.log_command_output(o, r)
             command = "rm -rf /tmp/*.ldif"
@@ -67,7 +69,8 @@ class LdapGroup():
             return o
 
     def delete_group(self):
-        userDeleteCmd = 'ldapdelete -h ' + self.LDAP_HOST + " -p " + self.LDAP_PORT + ' cn=' + self.group_name + "," + self.LDAP_GROUP_DN
+        userDeleteCmd = "ldapdelete" + ' cn=' + self.group_name + "," + self.LDAP_GROUP_DN
+        # userDeleteCmd = 'ldapdelete -h ' + self.LDAP_HOST + " -p " + self.LDAP_PORT + ' cn=' + self.group_name + "," + self.LDAP_GROUP_DN
         shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             command = userDeleteCmd + " -D " + self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
@@ -99,10 +102,10 @@ class LdapGroup():
         shell = RemoteMachineShellConnection(self.ldap_server)
         try:
             shell.write_remote_file("/tmp", fileName, str(UserCreateCmmd))
-            command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
+            command = "ldapadd " + "-f /tmp/" + fileName + " -D " + \
                       self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
-            print
-            command
+            # command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
+            #           self.LDAP_ADMIN_USER + " -w " + self.LDAP_ADMIN_PASS
             o, r = shell.execute_command(command)
             shell.log_command_output(o, r)
             command = "rm -rf /tmp/*.ldif"

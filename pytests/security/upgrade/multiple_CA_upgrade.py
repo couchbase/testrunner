@@ -152,7 +152,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
 
     @staticmethod
     def get_ldap_params(hosts='172.23.120.175', port='389', encryption='None',
-                        bindDN='cn=admin,dc=couchbase,dc=com', bindPass='p@ssword',
+                        bindDN='cn=admin,dc=couchbase,dc=com', bindPass='p@ssw0rd',
                         serverCertValidation='false',
                         cacert=None,
                         authenticationEnabled='true',
