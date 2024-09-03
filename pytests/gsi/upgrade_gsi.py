@@ -1697,6 +1697,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     future.result()
 
     def test_plasma_shards_post_upgrade(self):
+        if self.upgrade_to.split('-')[0] < '7.6.0':
+            self.skipTest(reason="test applicable only for upgrading to 7.6.0 and above")
         self.rest.delete_all_buckets()
         self.sleep(30)
         self.index_rest.set_index_settings({"indexer.plasma.minNumShard": 2})
