@@ -590,7 +590,7 @@ def main():
                    'iniFile={5}&parameters={6}&os={7}&initNodes={' \
                    '8}&installParameters={9}&branch={10}&slave={' \
                    '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
-                   'columnar_version={16}&mixed_build_config={17}''
+                   'columnar_version={16}&mixed_build_config={17}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
