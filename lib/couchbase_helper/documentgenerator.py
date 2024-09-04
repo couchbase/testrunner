@@ -719,12 +719,13 @@ class GeoSpatialDataLoader(KVGenerator):
 class SDKDataLoader(object):
     # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
     def __init__(self, num_ops=0, percent_create=0, percent_update=0, percent_delete=0, workers=1,
-                 load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_", ops_rate=5000,
+                 load_pattern="uniform", start_seq_num=0, key_prefix="doc_", key_suffix="_", ops_rate=5000,
                  scope="_default", collection="_default", json_template="Person", doc_expiry=0, fields_to_update=None,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
                  es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False,
-                 base64=False, model="sentence-transformers/all-MiniLM-L6-v2"):
+                 base64=False, model="sentence-transformers/all-MiniLM-L6-v2", mutate=0, dim=128,
+                 create_start=0, create_end=0, update_start=0, update_end=0, delete_start=0, delete_end=0):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
@@ -764,6 +765,14 @@ class SDKDataLoader(object):
         self.workers = workers
         self.base64 = base64
         self.model = model
+        self.mutate = mutate
+        self.dim = dim
+        self.create_start = create_start
+        self.create_end = create_end
+        self.update_start = update_start
+        self.update_end = update_end
+        self.delete_start = delete_start
+        self.delete_end = delete_end
 
 
     def update(self, fields_to_update=None):

@@ -7,6 +7,7 @@ __git_user__ = "hrajput89"
 __created_on__ = "19/06/24 03:27 pm"
 
 """
+import time, datetime
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -1325,3 +1326,374 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.assertEqual(sorted(copy_distance_list), distance_list, "distance projection for the query is incorrect")
 
+
+
+    def test_scans_after_vector_field_mutations(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix='test',
+                similarity=self.similarity, train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                limit=self.scan_limit,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                     namespace=namespace)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                  namespace=namespace,
+                                                                  limit=self.scan_limit)
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
+                                                                 namespace=namespace)
+            query_stats_map = {}
+            for create, select, drop in zip(create_queries, select_queries, drop_queries):
+                self.run_cbq_query(query=create)
+                if "PRIMARY" in create:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=select)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+            # Updating vector fields in existing documents and running scans after that
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="update", mutate=1, dim=384,
+                                            update_start=0, update_end=self.num_of_docs_per_collection)
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+            query_stats_map = {}
+            for query in select_queries:
+                if "ANN" not in query:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+    def test_scans_after_adding_invalid_input_for_vector_fields_and_change_it_back(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix='test',
+                similarity=self.similarity, train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                limit=self.scan_limit,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                     namespace=namespace)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                  namespace=namespace,
+                                                                  limit=self.scan_limit)
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
+                                                                 namespace=namespace)
+            for query in create_queries:
+                self.run_cbq_query(query=query)
+
+            # Add invalid/scalar values for vector fields in some of the docs and run scans
+            collection_namespace = self.namespaces[0]
+            upsert_query = (f"update {collection_namespace} set colorRGBVector = 12 and "
+                            f"descriptionVector = 'abcd' where rating > 2")
+            self.run_cbq_query(query=upsert_query)
+
+            for query in select_queries:
+                self.run_cbq_query(query=query)
+
+            # change back the modified fields to vectors and re-run scans
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="update", dim=384,
+                                            update_start=0, update_end=self.num_of_docs_per_collection)
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+            query_stats_map = {}
+            for query in select_queries:
+                if "ANN" not in query:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+            # Fetch no of docs which will be mutated to validate the stats count
+            select_query = f"select count(*) from {collection_namespace} where rating > 2"
+            result = self.run_cbq_query(query=select_query)
+            doc_count = int(result["results"][0]["$1"])
+
+            error_msg_and_doc_count = (f'"The value of a VECTOR expression is expected to be an array of floats. '
+                                       f'Found non-array type":{doc_count}')
+            self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
+
+    def test_scans_after_removing_vector_field_from_some_docs(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix='test',
+                similarity=self.similarity, train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                limit=self.scan_limit,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                     namespace=namespace)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                  namespace=namespace,
+                                                                  limit=self.scan_limit)
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
+                                                                 namespace=namespace)
+            for query in create_queries:
+                self.run_cbq_query(query=query)
+
+            # make vector field null for some of docs and run scans
+            collection_namespace = self.namespaces[0]
+            upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
+            self.run_cbq_query(query=upsert_query)
+
+            query_stats_map = {}
+            for query in select_queries:
+                if "ANN" not in query:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+            # Fetch no of docs which will be mutated to validate the stats count
+            select_query = f"select count(*) from {collection_namespace} where rating = 0"
+            result = self.run_cbq_query(query=select_query)
+            doc_count = int(result["results"][0]["$1"])
+
+            error_msg_and_doc_count = (f'"The value of a VECTOR expression is expected to be an array of floats. '
+                                       f'Found non-array type":{doc_count}')
+            self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
+
+    def test_scans_after_updating_dimensions_of_vector_field_and_reverting_back(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix='test',
+                similarity=self.similarity, train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                limit=self.scan_limit,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                     namespace=namespace)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                  namespace=namespace,
+                                                                  limit=self.scan_limit)
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
+                                                                 namespace=namespace)
+            query_stats_map = {}
+            for create, select, drop in zip(create_queries, select_queries, drop_queries):
+                self.run_cbq_query(query=create)
+                if "PRIMARY" in create:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=select)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+            # Updating dimensions of vector fields for subset of documents and running scans
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="update", mutate=1, dim=128,
+                                            update_start=0, update_end=10000)
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+            for query in select_queries:
+                self.run_cbq_query(query=query)
+
+            # Fetch no of docs which will be mutated to validate the stats count
+            select_query = f"select count(*) from {collection_namespace} where rating > 2"
+            result = self.run_cbq_query(query=select_query)
+            doc_count = int(result["results"][0]["$1"])
+
+            error_msg_and_doc_count = (f'"Length of VECTOR in incoming document is different from '
+                                       f'the expected dimension":{doc_count}')
+            self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
+
+            # Updating dimension of description field back to 384 and re-run scans
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="update", mutate=1, dim=384,
+                                            update_start=0, update_end=10000)
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+            query_stats_map = {}
+            for query in select_queries:
+                if "ANN" not in query:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+    def test_scans_with_incremental_workload_for_composite_vector_index(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix='test',
+                similarity=self.similarity, train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                limit=self.scan_limit,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                     namespace=namespace)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                  namespace=namespace,
+                                                                  limit=self.scan_limit)
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
+                                                                 namespace=namespace)
+            query_stats_map = {}
+            for create, select, drop in zip(create_queries, select_queries, drop_queries):
+                self.run_cbq_query(query=create)
+                if "PRIMARY" in create:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=select)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+
+            # Updating vector fields in existing documents and running scans after that
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="create", dim=384,
+                                            create_start=self.num_of_docs_per_collection,
+                                            create_end=(self.num_of_docs_per_collection + 
+                                            self.num_of_docs_per_collection//2))
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+            query_stats_map = {}
+            for query in select_queries:
+                if "ANN" not in query:
+                    continue
+                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+                query_stats_map[query] = [recall, accuracy]
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+            
+            # verify index count matches bucket item count
+            self._verify_bucket_count_with_index_count()
+
+    def test_scans_with_expiry_workload_for_composite_vector_index(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+
+        # change bucket maxTTL to 120 secs to trigger expiration of docs
+        self.rest.change_bucket_props(self.buckets[0], maxTTL=120)
+
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix='test',
+                similarity=self.similarity, train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                limit=self.scan_limit,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                     namespace=namespace)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                  namespace=namespace,
+                                                                  limit=self.scan_limit)
+
+            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
+                                                                 namespace=namespace)
+            for create in create_queries:
+                self.run_cbq_query(query=create)
+
+            # Updating vector fields in existing documents and running scans after that
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="update", dim=384,
+                                            update_start=0, update_end=self.num_of_docs_per_collection)
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+
+            # run scans in a loop while docs are getting expired
+            start_time = datetime.datetime.now()
+            end_time = start_time + timedelta(minutes=20)
+
+            while datetime.datetime.now() < end_time:
+                query_stats_map = {}
+                for query in select_queries:
+                    if "ANN" not in query:
+                        continue
+                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+                    query_stats_map[query] = [recall, accuracy]
+                self.gen_table_view(query_stats_map=query_stats_map,
+                                    message=f"quantization value is {self.quantization_algo_description_vector}")
+                self.sleep(5, "waiting before re-running queries")
+
+            task.result()
+
+            # verify index count matches bucket item count
+            self._verify_bucket_count_with_index_count()
+
+            # validate that number of indexed docs are zero for all the indexes
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            self.assertTrue(self.check_if_index_count_zero(definitions, index_nodes))

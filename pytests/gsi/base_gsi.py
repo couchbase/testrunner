@@ -27,6 +27,7 @@ from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
@@ -1435,18 +1436,23 @@ class BaseSecondaryIndexingTests(QueryTests):
         else:
             return True
 
-    def check_if_index_count_zero(self, index_list, index_node):
-        index_count_zero = True
+    def check_if_index_count_zero(self, index_list, index_nodes):
         index_map = None
-        while not index_map:
+        index_item_count_map = {}
+        for index_node in index_nodes:
             index_map = self._get_index_map(index_node)
-        for index in index_list:
-            index_count = index_map[index["query_def"].keyspace][index["query_def"].index_name]["items_count"]
-            self.log.info("Index count on index {0} : {1}".format(index["query_def"].index_name, index_count))
-            if index_count:
-                index_count_zero = False
+            for index in index_list:
+                index_count = index_map[index["query_def"].keyspace][index["query_def"].index_name]["items_count"]
+                self.log.info("Index count on index {0} : {1}".format(index["query_def"].index_name, index_count))
+                if index["query_def"].index_name not in index_item_count_map:
+                    index_item_count_map[index["query_def"].index_name] = index_count
+                else:
+                    index_item_count_map[index["query_def"].index_name] += index_count
 
-        return index_count_zero
+        for index in index_item_count_map:
+            if index_item_count_map[index] != 0:
+                return False
+        return True
 
     def _kill_all_processes_index(self, server):
         shell = RemoteMachineShellConnection(server)
@@ -2939,6 +2945,20 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertGreaterEqual(query_stats_map[query][0]*100, 80, f"recall for query {query} is less than threshold 10")
             self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
                                     f"accuracy for query {query} is less than threshold 10")
+
+    def validate_error_msg_and_doc_count_in_cbcollect(self, node, error_message):
+        shell = RemoteMachineShellConnection(node)
+        if shell.extract_remote_info().type.lower() == 'windows':
+            log_path = WIN_COUCHBASE_LOGS_PATH
+        elif shell.extract_remote_info().type.lower() == 'linux':
+            log_path = LINUX_COUCHBASE_LOGS_PATH
+
+        cmd = f"cd {log_path}; grep -r '{error_message}' *"
+        output, error = shell.execute_command(cmd)
+
+        if len(output) == 0:
+            return False
+        return True
 
 class ConCurIndexOps():
     def __init__(self):
