@@ -824,7 +824,8 @@ class x509tests(BaseTestCase):
         kv_node = self.get_nodes_from_services_map(service_type='kv')
         if kv_node is not None:
             self.check_ns_server_rest_api(kv_node)
-            self.check_views_ssl(kv_node)
+            # Commenting check for views because views have been deprecated and the API call fails with 500 internal
+            # self.check_views_ssl(kv_node)
 
     def check_ns_server_rest_api(self, host):
         rest = RestConnection(host)
