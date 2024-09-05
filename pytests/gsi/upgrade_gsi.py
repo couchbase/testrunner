@@ -1404,7 +1404,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.validate_shard_affinity()
                     self.post_upgrade_with_nodes_clause()
 
-                self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, cluster_profile="provsioned")
+                if self.upgrade_to >= "7.7.0":
+                    self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, cluster_profile="provsioned")
 
                 #Will uncomment the below code post MB-59107
                 # if not self.check_gsi_logs_for_shard_transfer():
@@ -1689,7 +1690,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if not self.check_gsi_logs_for_shard_transfer():
                     raise Exception("Shard based rebalance not triggered")
 
-                self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, services=services_in)
+                if self.upgrade_to >= "7.7.0":
+                    self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, services=services_in)
 
             finally:
                 event.set()
