@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta
-from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
-from couchbase.options import ClusterOptions, QueryOptions
-from couchbase.n1ql import QueryScanConsistency
+from couchbase.cluster import PasswordAuthenticator
 import sys
 import time
 
@@ -14,13 +12,13 @@ def get_last_n_days(n=5):
     last_n_days = list()
     current_date = datetime.now()
 
-    # Calculate the date 3 days before so that we don't accidentally release the nodes that are actually being used
+    # Calculate the date 2 days before so that we don't accidentally release the nodes that are actually being used
     two_days_before = current_date - timedelta(days=2)
 
-    # Generate the past 10 days
+    # Generate the past 'n' days in 'Month-Day' format
     past_10_days = [(two_days_before - timedelta(days=i)).strftime("%b-%d") for i in range(n)]
 
-    # append the past 10 days
+    # Append the past days with wildcards for use in the query
     for date in past_10_days:
         last_n_days.append("%" + date + "%")
 
@@ -28,49 +26,55 @@ def get_last_n_days(n=5):
 
 
 def main():
+    # Get command-line arguments for poolId, os, state, and num_days
     poolId = sys.argv[1]
     os = sys.argv[2]
     state = sys.argv[3]
     num_days = sys.argv[4]
 
     print("-----------------------------------------------------------------------------------------------------\n")
-    print('the poolId is', poolId)
-    print('the os is', os)
-    print('the state is', state)
-    print('num_days is', num_days)
+    print('The poolId is:', poolId)
+    print('The OS is:', os)
+    print('The state is:', state)
+    print('Number of days:', num_days)
     print("-----------------------------------------------------------------------------------------------------\n")
 
-    auth = PasswordAuthenticator(SERVER_MANAGER_USER_NAME, SERVER_MANAGER_PASSWORD)
-    cluster = Cluster.connect('couchbase://172.23.104.162', ClusterOptions(auth))
+    # Initialize the Couchbase cluster connection with authentication
+    authenticator = PasswordAuthenticator(SERVER_MANAGER_USER_NAME, SERVER_MANAGER_PASSWORD)
+    cluster = Cluster('couchbase://172.23.104.162', authenticator=authenticator)
     bucket = cluster.bucket('QE-server-pool')
-    collection = bucket.default_collection()
 
+    # Query strings
     query_select_string = ("select * from `QE-server-pool` where os = '{0}' and "
                            "(poolId = '{1}' or '{1}' in poolId) and username like '{2}' and state='{3}'")
     query_update_string = ("update `QE-server-pool` set state='available' where os = '{0}' and "
                            "(poolId = '{1}' or '{1}' in poolId) and username like '{2}' and state='{3}'")
 
+    # Fetch the list of last 'n' days
     last_n_days = get_last_n_days(n=int(num_days))
+
+    # Iterate through the generated days and run queries
     for day in last_n_days:
         print("-----------------------------------------------------------------------------------------------------\n")
+        # Execute the SELECT query to fetch relevant documents
         print(query_select_string.format(os, poolId, day, state))
-        query_res_select = cluster.query(query_select_string.format(os, poolId, day, state),
-                                         QueryOptions(scan_consistency=QueryScanConsistency.REQUEST_PLUS))
-        for row in query_res_select.rows():
+        query_res_select = bucket.query(query_select_string.format(os, poolId, day, state))
+        for row in query_res_select:
             print('result: ', row)
         print("\n")
 
+        # Execute the UPDATE query to change the state to 'available'
         print(query_update_string.format(os, poolId, day, state))
-        query_res_update = cluster.query(query_update_string.format(os, poolId, day, state))
-        for row in query_res_update.rows():
+        query_res_update = bucket.query(query_update_string.format(os, poolId, day, state))
+        for row in query_res_update:
             print('result: ', row)
         time.sleep(20)
         print("\n")
 
+        # Re-execute the SELECT query to verify the update
         print(query_select_string.format(os, poolId, day, state))
-        query_res_select = cluster.query(query_select_string.format(os, poolId, day, state),
-                                         QueryOptions(scan_consistency=QueryScanConsistency.REQUEST_PLUS))
-        for row in query_res_select.rows():
+        query_res_select = bucket.query(query_select_string.format(os, poolId, day, state))
+        for row in query_res_select:
             print('result: ', row)
         print("\n")
         print("-----------------------------------------------------------------------------------------------------\n")
