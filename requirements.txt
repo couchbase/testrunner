@@ -23,5 +23,5 @@ faiss-cpu==1.7.4
 prettytable
 flask
 flask-cors
-sentence-transformers==2.6.0
+sentence-transformers==2.2.2
 torch==2.0.1
