@@ -986,10 +986,15 @@ def __get_build_url(node, build_binary):
 def __get_columnar_build_url(node, build_binary):
     cb_version = node.cb_version or params["version"]
 
+    major_version = cb_version.split('-')[0]
+    build_number = cb_version.split('-')[1]
+    if major_version in ["1.0.1", "1.0.2"]:
+        build_folder_name = "goldfish"
+    else:
+        build_folder_name = major_version
+
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
-        testconstants.CB_COLUMNAR_REPO,
-        cb_version.split('-')[0],
-        cb_version.split('-')[1],
+        testconstants.CB_COLUMNAR_REPO, build_folder_name, build_number,
         build_binary)
     # Release url to be implemented post release
     # release_url = ""
