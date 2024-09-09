@@ -670,3 +670,21 @@ class QueryINDEXUNNESTTests(QueryTests):
                 self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
+
+    def test_MB63414(self):
+        self.run_cbq_query(f'upsert into {self.query_bucket} values("k01", {{"c1": 1, "a1": [{{"ac1":1}}, {{"ac1":1}}, {{"ac1":1}}, {{"ac1":1}}]}})')
+        self.run_cbq_query(f'upsert into {self.query_bucket} values("k02", {{"c1": 1, "a1": [{{"ac1":0}}, {{"ac1":0}}, {{"ac1":1}}, {{"ac1":1}}]}})')
+        self.run_cbq_query(f'upsert into {self.query_bucket} values("k03", {{"c1": 2, "a1": [{{"ac1":1}}, {{"ac1":1}}, {{"ac1":1}}, {{"ac1":1}}]}})')
+        self.run_cbq_query(f'upsert into {self.query_bucket} values("k04", {{"c1": 2, "a1": [{{"ac1":0}}, {{"ac1":0}}, {{"ac1":1}}, {{"ac1":1}}]}})')
+
+        # Create index
+        self.run_cbq_query(f'create index ix20 on {self.query_bucket} (ALL ARRAY v.ac1 FOR v IN a1 END)')
+        unnest_query_unnest = f'select * FROM {self.query_bucket} AS d UNNEST d.a1 AS v WHERE v.ac1 > 0'
+        unnest_query_array = f'select * FROM {self.query_bucket} AS d WHERE ANY v IN d.a1 SATISFIES v.ac1 > 0 END'
+        self.run_cbq_query(unnest_query_unnest, query_params={'memory_quota':1024})
+        self.run_cbq_query(unnest_query_array, query_params={'memory_quota':1024})
+
+        # create index
+        self.run_cbq_query(f'create index ix21 on {self.query_bucket} (c1, ALL ARRAY v.ac1 FOR v IN a1 END)')
+        unnest_query_any = f'select c1, COUNT(price) AS cnt FROM {self.query_bucket} AS d WHERE c1 > 0 GROUP BY c1'
+        self.run_cbq_query(unnest_query_any, query_params={'memory_quota':1024})
