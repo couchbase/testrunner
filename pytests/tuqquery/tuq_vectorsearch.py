@@ -219,3 +219,75 @@ class VectorSearchTests(QueryTests):
         self.log.info(f"AFTER position 1: {pos_1_after} and position 2: {pos_2_after}")
         # Check position in search have been swapped
         self.assertTrue(pos_1 == pos_2_after and pos_2 == pos_1_after)
+
+    def test_explain_ann(self):
+        explain_ann = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            explain = self.run_cbq_query(explain_ann)
+            self.log.info(explain['results'])
+            index_scan = explain['results'][0]['plan']['~children'][0]['~children'][0]
+            index_name = index_scan['index']
+            index_vector = index_scan['index_vector']
+            index_order = index_scan['index_order']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertEqual(index_order[0]['keypos'], index_vector['index_key_pos'])
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_explain_knn_no_index(self):
+        explain_knn = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        explain = self.run_cbq_query(explain_knn)
+        self.log.info(explain['results'])
+        index_scan = explain['results'][0]['plan']['~children'][0]['~children'][0]
+        index_name = index_scan['index']
+        self.assertEqual(index_name, '#sequentialscan')
+
+    def test_explain_knn_index(self):
+        explain_knn = f'EXPLAIN SELECT size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            self.sleep(10)
+            explain = self.run_cbq_query(explain_knn)
+            self.log.info(explain['results'])
+            index_scan = explain['results'][0]['plan']['~children'][0]['~children'][0]
+            index_name = index_scan['index']
+            self.assertTrue('index_vector' not in index_scan)
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_advise_ann(self):
+        similarity = self.distance.lower()
+        if similarity in ['l2', 'euclidean']:
+            similarity += '_squared'
+        expected_index1 = f"CREATE INDEX adv_brand_size_vecVECTOR_id ON `default`(`brand`,`size`,`vec` VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,PQ8x8' }}"
+        expected_index2 = f"CREATE INDEX adv_size_brand_vecVECTOR_id ON `default`(`size`,`brand`,`vec` VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,PQ8x8' }}"
+        expected_property = "ORDER pushdown, LIMIT pushdown"
+        advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        advise = self.run_cbq_query(advise_ann_query)
+        self.log.info(advise['results'])
+        adviseinfo = advise['results'][0]['advice']['adviseinfo']
+        covering_indexes = adviseinfo['recommended_indexes']['covering_indexes']
+        index_property = covering_indexes[0]['index_property']
+        index_statement = covering_indexes[0]['index_statement']
+        self.assertEqual(index_property, expected_property)
+        self.assertTrue(index_statement == expected_index1 or index_statement == expected_index2, f"We expected {expected_index1} or {expected_index2} but got {index_statement}")
+        try:
+            self.run_cbq_query(index_statement)
+        finally:
+            self.run_cbq_query(f'DROP INDEX adv_brand_size_vecVECTOR_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_size_brand_vecVECTOR_id IF EXISTS on default')
+
+    def test_advise_knn(self):
+        expected_index1 = f"CREATE INDEX adv_brand_size ON `default`(`brand`,`size`)"
+        expected_index2 = f"CREATE INDEX adv_size_brand ON `default`(`size`,`brand`)"
+        advise_knn_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        advise = self.run_cbq_query(advise_knn_query)
+        self.log.info(advise['results'])
+        adviseinfo = advise['results'][0]['advice']['adviseinfo']
+        recommended_indexes = adviseinfo['recommended_indexes']['indexes']
+        index_statement = recommended_indexes[0]['index_statement']
+        self.assertTrue(index_statement == expected_index1 or index_statement == expected_index2, f"We expected {expected_index1} or {expected_index2} but got {index_statement}")
