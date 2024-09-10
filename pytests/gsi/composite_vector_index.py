@@ -11,13 +11,13 @@ __created_on__ = "19/06/24 03:27 pm"
 from concurrent.futures import ThreadPoolExecutor
 
 from couchbase_helper.documentgenerator import SDKDataLoader
-from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, \
-    RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE
+from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE
 from gsi.base_gsi import BaseSecondaryIndexingTests
 from membase.api.on_prem_rest_client import RestHelper
-from multilevel_dict import MultilevelDict
+from scripts.multilevel_dict import MultilevelDict
 from remote.remote_util import RemoteMachineShellConnection
 from table_view import TableView
+from memcached.helper.data_helper import MemcachedClientHelper
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -116,6 +116,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         except Exception as err:
             err_msg = 'ErrTraining: The number of documents: 0 in keyspace:'
             self.assertTrue(err_msg in str(err), f"Index with INCLUDE clause is created: {err}")
+
+
+
 
         # indexes with empty collection defer build true
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
@@ -972,3 +975,293 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
                              "Index hasn't recovered the docs within the given time")
+
+    def test_partial_rollback(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        self.sleep(30)
+        select_queries = set()
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replicas)
+            select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                       namespace=namespace, limit=self.scan_limit))
+
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
+        self.wait_until_indexes_online()
+
+        self.log.info("Stopping persistence on NodeA & NodeB")
+        data_nodes = self.get_nodes_from_services_map(service_type="kv",
+                                                      get_all_nodes=True)
+        for data_node in data_nodes:
+            for bucket in self.buckets:
+                mem_client = MemcachedClientHelper.direct_client(data_node, bucket.name)
+                mem_client.stop_persistence()
+        self.sleep(10)
+
+        for namespace in self.namespaces:
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope,
+                                            collection=collection, json_template="Cars",
+                                            output=True, username=self.username, password=self.password, base64=self.base64,
+                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77", start_seq_num=self.num_of_docs_per_collection, end=self.num_of_docs_per_collection+10000)
+            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_create)
+
+        self.sleep(30)
+        # Get count before rollback
+        bucket_before_item_counts = {}
+        for bucket in self.buckets:
+            bucket_count_before_rollback = self.get_item_count(self.master, bucket.name)
+            bucket_before_item_counts[bucket.name] = bucket_count_before_rollback
+            self.log.info("Items in bucket {0} before rollback = {1}".format(
+                bucket.name, bucket_count_before_rollback))
+
+        # Index rollback count before rollback
+        self._verify_bucket_count_with_index_count()
+
+
+        # Kill memcached on Node A so that Node B becomes master
+        self.log.info("Kill Memcached process on NodeA")
+        shell = RemoteMachineShellConnection(data_nodes[0])
+        shell.kill_memcached()
+
+        # Start persistence on Node B
+        self.log.info("Starting persistence on NodeB")
+        for bucket in self.buckets:
+            mem_client = MemcachedClientHelper.direct_client(data_nodes[1], bucket.name)
+            mem_client.start_persistence()
+
+        # Failover Node B
+        self.log.info("Failing over NodeB")
+        self.sleep(10)
+        failover_task = self.cluster.async_failover(
+            self.servers[:self.nodes_init], [data_nodes[1]], self.graceful,
+            wait_for_pending=120)
+
+        failover_task.result()
+
+        # Wait for a couple of mins to allow rollback to complete
+        # self.sleep(120)
+
+        bucket_after_item_counts = {}
+        for bucket in self.buckets:
+            bucket_count_after_rollback = self.get_item_count(self.master, bucket.name)
+            bucket_after_item_counts[bucket.name] = bucket_count_after_rollback
+            self.log.info("Items in bucket {0} after rollback = {1}".format(
+                bucket.name, bucket_count_after_rollback))
+
+        for bucket in self.buckets:
+            if bucket_after_item_counts[bucket.name] == bucket_before_item_counts[bucket.name]:
+                self.log.info("Looks like KV rollback did not happen at all.")
+        self._verify_bucket_count_with_index_count()
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after doing a partial roll back from kv side")
+
+    def test_create_index_without_vector_data(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=False)
+
+        collection_namespace = self.namespaces[0]
+
+        data_node = self.get_nodes_from_services_map(service_type="kv")
+
+        # Building vector indexes without qualifying
+        vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
+                                     description="IVF1024,PQ3x8", similarity="L2_SQUARED")
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
+
+        self.run_cbq_query(query=query)
+        # building index with data not qualified for vector indexes
+        try:
+            query = f"BUILD INDEX ON {collection_namespace}(vector) USING GSI "
+            self.run_cbq_query(query=query)
+        except Exception as err:
+            err_msg = 'are less than the minimum number of documents:'
+            self.assertTrue(err_msg in str(err), f"Index with less docs are created: {err}")
+        else:
+            raise Exception("index has been built with less no of centroids")
+
+        #Loading valid docs for vector indexes
+        for namespace in self.namespaces:
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope,
+                                            collection=collection, json_template="Cars",
+                                            output=True, username=self.username, password=self.password, base64=self.base64,
+                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77", start_seq_num=self.num_of_docs_per_collection, end=self.num_of_docs_per_collection+10000)
+            self.load_docs_via_magma_server(server=data_node.ip, bucket=bucket, gen=self.gen_create)
+
+        self.run_cbq_query(query=query)
+        self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1, "Index not created sucessfully")
+
+    def test_drop_multiple_indexes_in_training_state(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        create_queries = set()
+        drop_queries = set()
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+            create_queries.update(self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replicas))
+            drop_queries.update(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
+
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+
+        timeout = 0
+        with ThreadPoolExecutor() as executor:
+            executor.submit(self.gsi_util_obj.create_gsi_indexes, create_queries=create_queries)
+            self.sleep(5)
+            while timeout < 360:
+                index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
+                if index_state == self.build_phase:
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries)
+                    break
+                self.sleep(1)
+                timeout = timeout + 1
+        if timeout > 360:
+            self.fail("timeout exceeded")
+
+        self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 0, "index not dropped ")
+
+    def test_kill_memecached_during_index_training(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        collection_namespace = self.namespaces[0]
+
+        vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
+                                     description="IVF2048,PQ3x8", similarity="L2_SQUARED")
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
+        build_query = vector_idx.generate_build_query(namespace=collection_namespace)
+
+        self.run_cbq_query(query=query)
+
+        # for the scenario killing memecached during training phase
+        timeout = 0
+        with ThreadPoolExecutor() as executor:
+            executor.submit(self.run_cbq_query, query=build_query)
+            self.sleep(5)
+            while timeout < 360:
+                index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
+                if index_state == self.build_phase:
+                    data_nodes = self.get_nodes_from_services_map(service_type="kv",
+                                                                  get_all_nodes=True)
+                    for data_node in data_nodes:
+                        remote_machine = RemoteMachineShellConnection(data_node)
+                        remote_machine.kill_memcached()
+                    break
+                self.sleep(1)
+                timeout = timeout + 1
+        if timeout > 360:
+            self.fail("timeout exceeded")
+
+        meta_data = self.index_rest.get_indexer_metadata()['status']
+
+        for data in meta_data:
+            self.assertEqual(data['status'], 'Error', "state is not errored out")
+
+    def test_scalar_scans_on_vector_indexes(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        collection_namespace = self.namespaces[0]
+        query_definition_1 = QueryDefinition(index_name='oneScalarOneVectorLeading',
+                        index_fields=['id', 'descriptionVector VECTOR'],
+                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}", similarity=self.similarity,
+                        scan_nprobes=self.scan_nprobes,
+                        limit=self.scan_limit,
+                        query_template=RANGE_SCAN_TEMPLATE.format(f"id", 'id > 1575644878'))
+
+        create_query = query_definition_1.generate_index_create_query(namespace=collection_namespace)
+
+        self.run_cbq_query(query=create_query)
+
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[query_definition_1], namespace=collection_namespace)[0]
+
+        res = self.run_cbq_query(query=select_query)
+
+        self.assertEqual(len(res["results"]), self.scan_limit, "Expected no of results not returned")
+
+
+
+    def test_scans_on_different_distance_functions(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        collection_namespace = self.namespaces[0]
+
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_vec2 = list(self.encoder.encode(desc_2))
+
+        scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, 'COSINE', {self.scan_nprobes})"
+        vector_index_L2 = QueryDefinition("vector_index_L2",
+                                                           index_fields=['rating', 'descriptionVector Vector',
+                                                                         'category'],
+                                                           dimension=384,
+                                                           description=f"IVF,{self.quantization_algo_description_vector}",
+                                                           similarity="L2_SQUARED",
+                                                           scan_nprobes=self.scan_nprobes,
+                                                           limit=self.scan_limit,
+                                                           query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                               "description, descriptionVector",
+                                                               "rating = 2 and "
+                                                               "category in ['Convertible', "
+                                                               "'Luxury Car', 'Supercar']",
+                                                               scan_desc_vec_1))
+
+        vector_index_cosine = QueryDefinition("vector_index_cosine",
+                                                                   index_fields=['rating', 'descriptionVector Vector',
+                                                                                 'category'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity="COSINE",
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "rating = 2 and "
+                                                                       "category in ['Convertible', "
+                                                                       "'Luxury Car', 'Supercar']",
+                                                                       scan_desc_vec_2))
+
+        select_queries = []
+        for idx in [vector_index_L2, vector_index_cosine]:
+            create_query = idx.generate_index_create_query(namespace=collection_namespace)
+            self.run_cbq_query(query=create_query)
+            select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
+                                                                namespace=collection_namespace,
+                                                                index_name=idx.index_name)[0]
+            select_queries.append(select_query)
+
+        for query in [vector_index_L2, vector_index_cosine]:
+            select_query_with_explain = f"EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query], namespace=collection_namespace, limit=self.scan_limit)[0]}"
+            index_used_select_query = \
+                self.run_cbq_query(query=select_query_with_explain)['results'][0]['plan']['~children'][0]['~children'][
+                    0][
+                    'index']
+            self.log.info(index_used_select_query)
+            self.assertEqual(index_used_select_query, query.index_name, 'trained index not used for scans')
+
+
