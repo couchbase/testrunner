@@ -35,13 +35,13 @@ class ldaptest(BaseTestCase):
         super(ldaptest, self).setUp()
         #Capture details of LDAP Server
         #LDAP host, where LDAP Server is running
-        self.ldapHost = self.input.param('ldapHost', '172.23.120.205')
+        self.ldapHost = self.input.param('ldapHost', '172.23.120.175')
         #LDAP Port, port of LDAP Server
         self.ldapPort = self.input.param('ldapPort', '389')
         #LDAP Admin to connect to
-        self.ldapAdmin = self.input.param('ldapAdmin', 'cn=Manager,dc=couchbase,dc=com')
+        self.ldapAdmin = self.input.param('ldapAdmin', 'cn=admin,dc=couchbase,dc=com')
         #LDAP Admin password
-        self.ldapAdminPass = self.input.param('ldapAdminPass', 'p@ssword')
+        self.ldapAdminPass = self.input.param('ldapAdminPass', 'p@ssw0rd')
         #LDAP DN for Users
         self.ldapDN = self.input.param('ldapDN', 'ou=Users,dc=couchbase,dc=com')
         #LDAP Object Class for Users

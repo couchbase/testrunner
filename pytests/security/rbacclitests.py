@@ -69,8 +69,8 @@ class rbacclitests(BaseTestCase):
             'hosts': '{0}'.format("172.23.120.205"),
             'port': '{0}'.format("389"),
             'encryption': '{0}'.format("None"),
-            'bindDN': '{0}'.format("cn=Manager,dc=couchbase,dc=com"),
-            'bindPass': '{0}'.format("p@ssword"),
+            'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),
+            'bindPass': '{0}'.format("p@ssw0rd"),
             'authenticationEnabled': '{0}'.format("true"),
             'userDNMapping': '{0}'.format('{"template":"cn=%u,ou=Users,dc=couchbase,dc=com"}')
         }

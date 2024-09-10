@@ -151,8 +151,8 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
             rest.add_user_group(group_name, user_name)
 
     @staticmethod
-    def get_ldap_params(hosts='172.23.120.205', port='389', encryption='None',
-                        bindDN='cn=Manager,dc=couchbase,dc=com', bindPass='p@ssword',
+    def get_ldap_params(hosts='172.23.120.175', port='389', encryption='None',
+                        bindDN='cn=admin,dc=couchbase,dc=com', bindPass='p@ssw0rd',
                         serverCertValidation='false',
                         cacert=None,
                         authenticationEnabled='true',
