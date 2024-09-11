@@ -832,6 +832,7 @@ def main():
 
                 branch_to_trigger = options.branch
                 if (testsToLaunch[i]['framework'] == "TAF"
+                        and float(options.version[:3]) >= 8
                         and options.branch == "master"
                         and testsToLaunch[i]["support_py3"] == "true"):
                     branch_to_trigger = "master_py3_dev"
