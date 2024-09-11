@@ -291,3 +291,17 @@ class VectorSearchTests(QueryTests):
         recommended_indexes = adviseinfo['recommended_indexes']['indexes']
         index_statement = recommended_indexes[0]['index_statement']
         self.assertTrue(index_statement == expected_index1 or index_statement == expected_index2, f"We expected {expected_index1} or {expected_index2} but got {index_statement}")
+
+    def test_catalog(self):
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            indexes = self.run_cbq_query('SELECT * FROM system:indexes')
+            self.log.info(indexes['results'])
+            index_info = indexes['results'][0]['indexes']
+            index_name = index_info['name']
+            index_key = index_info['index_key']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertEqual(index_key, ['`size`', '`brand`', '`vec` VECTOR'])
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
