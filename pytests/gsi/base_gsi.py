@@ -18,7 +18,6 @@ import faiss
 import numpy as np
 import requests
 from requests.auth import HTTPBasicAuth
-from sentence_transformers import SentenceTransformer
 from table_view import TableView
 
 
@@ -152,8 +151,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.scan_limit = self.input.param("scan_limit", 100)
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
-        self.encoder = SentenceTransformer(self.data_model, device="cpu")
-        self.encoder.cpu()
+        self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.dimension = self.input.param("dimension", None)
         self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
@@ -163,7 +161,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.base64 = self.input.param("base64", False)
         self.use_magma_server = self.input.param("use_magma_server", False)
         self.namespaces = []
-        self.gsi_util_obj = GSIUtils(self.run_cbq_query, encoder=self.encoder)
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
         if self.dgm_run and hasattr(self, "gens_load"):
@@ -500,12 +497,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         accuracy = accuracy / self.scan_limit
         recall = recall / self.scan_limit
         faiss_db.reset()
-        
+
         redacted_select_query = self.gen_query_without_entire_qvec(query=select_query)
         self.log.info(f"accuracy for the query : {select_query} is {accuracy}")
         self.log.info(f"recall for the query is : {select_query} is {recall}")
         return redacted_select_query, recall, accuracy
-    
+
 
     def gen_query_without_entire_qvec(self, query):
         # Regex pattern to match the array of numbers

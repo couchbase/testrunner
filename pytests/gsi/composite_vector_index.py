@@ -10,12 +10,15 @@ __created_on__ = "19/06/24 03:27 pm"
 
 from concurrent.futures import ThreadPoolExecutor
 
+from sentence_transformers import SentenceTransformer
+
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE
 from gsi.base_gsi import BaseSecondaryIndexingTests
 from membase.api.on_prem_rest_client import RestHelper
 from scripts.multilevel_dict import MultilevelDict
 from remote.remote_util import RemoteMachineShellConnection
+from serverless.gsi_utils import GSIUtils
 from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
 
@@ -24,6 +27,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def setUp(self):
         super(CompositeVectorIndex, self).setUp()
         self.log.info("==============  CompositeVectorIndex setup has started ==============")
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj = GSIUtils(self.run_cbq_query, encoder=self.encoder)
         self.namespaces = []
         self.multi_move = self.input.param("multi_move", False)
         self.build_phase = self.input.param("build_phase", "create")
