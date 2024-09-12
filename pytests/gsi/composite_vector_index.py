@@ -18,7 +18,6 @@ from gsi.base_gsi import BaseSecondaryIndexingTests
 from membase.api.on_prem_rest_client import RestHelper
 from scripts.multilevel_dict import MultilevelDict
 from remote.remote_util import RemoteMachineShellConnection
-from serverless.gsi_utils import GSIUtils
 from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
 
@@ -29,7 +28,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.log.info("==============  CompositeVectorIndex setup has started ==============")
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()
-        self.gsi_util_obj = GSIUtils(self.run_cbq_query, encoder=self.encoder)
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         self.namespaces = []
         self.multi_move = self.input.param("multi_move", False)
         self.build_phase = self.input.param("build_phase", "create")
@@ -1269,5 +1268,3 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     'index']
             self.log.info(index_used_select_query)
             self.assertEqual(index_used_select_query, query.index_name, 'trained index not used for scans')
-
-

@@ -2414,6 +2414,10 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     backup_client.remove_backup()
 
     def test_backup_restore_vector_indexes(self):
+        from sentence_transformers import SentenceTransformer
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         try:
             backup_client = None
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -2561,6 +2565,10 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     backup_client.remove_backup()
 
     def test_kill_retry_backup_restore(self):
+        from sentence_transformers import SentenceTransformer
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         try:
             backup_client = None
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -2698,5 +2706,3 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     shell.disconnect()
                 if self.use_cbbackupmgr:
                     backup_client.remove_backup()
-
-

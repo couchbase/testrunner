@@ -13,6 +13,7 @@ from SystemEventLogLib.Events import EventHelper
 from SystemEventLogLib.gsi_events import IndexingServiceEvents
 from failover.AutoFailoverBaseTest import AutoFailoverBaseTest
 from couchbase_helper.documentgenerator import SDKDataLoader
+from serverless.gsi_utils import GSIUtils
 
 from .base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
@@ -1416,7 +1417,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future.result()
 
-    def post_upgrade_validate_vector_index(self, existing_bucket_name, cluster_profile=None, services=["index"]):
+    def post_upgrade_validate_vector_index(self, existing_bucket_name, cluster_profile=None, services=None):
+        from sentence_transformers import SentenceTransformer
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(self.encoder)
+        if services is None:
+            services = ["index"]
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         buckets = self.rest.get_buckets()
         bucket_list = []
@@ -2024,7 +2031,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.sleep(30)
 
             map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
-            
+
             self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
                                                           map_after_rebalance=map_after_rebalance,
                                                           stats_map_before_rebalance=stats_before_rebalance,
@@ -2083,7 +2090,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     raise Exception("Mismatch in query results before and after rebalance")
         self.sleep(30)
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
-        
+
         self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
                                                       map_after_rebalance=map_after_rebalance,
                                                       stats_map_before_rebalance=stats_before_rebalance,

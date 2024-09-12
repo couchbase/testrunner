@@ -81,6 +81,10 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
             pass
 
     def test_gsi_auto_failover_vector_indexes(self):
+        from sentence_transformers import SentenceTransformer
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         select_queries = set()
         for namespace in self.namespaces:
@@ -89,7 +93,9 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit, quantization_algo_color_vector=self.quantization_algo_color_vector, quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                      limit=self.scan_limit,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=self.num_index_replicas)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
@@ -175,6 +181,10 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                3. Addback node and validate that the addback was successful.
                :return: Nothing
         """
+        from sentence_transformers import SentenceTransformer
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         select_queries = set()
         namespace_index_map = {}

@@ -32,6 +32,9 @@ class GSIUtils(object):
         self.query_event = Event()
         self.encoder = encoder
 
+    def set_encoder(self, encoder):
+        self.encoder = encoder
+
     def generate_mini_car_vector_index_definition(self, index_name_prefix=None,
                                                   skip_primary=False, array_indexes=True):
         definitions_list = []
