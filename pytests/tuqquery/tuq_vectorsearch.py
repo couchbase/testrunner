@@ -25,6 +25,7 @@ class VectorSearchTests(QueryTests):
         self.dimension = self.input.param("dimension", 128)
         self.query_count = self.input.param("query_count", 10)
         self.index_order = self.input.param("index_order", "tail")
+        self.prepare_before = self.input.param("prepare_before", False)
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -303,5 +304,48 @@ class VectorSearchTests(QueryTests):
             index_key = index_info['index_key']
             self.assertEqual(index_name, f'vector_index_{self.distance}')
             self.assertEqual(index_key, ['`size`', '`brand`', '`vec` VECTOR'])
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_update_stats(self):
+        update_stats_field = "UPDATE STATISTICS FOR default('vec')"
+        update_stats_index = f"UPDATE STATISTICS FOR INDEX vector_index_{self.distance} on default"
+        self.run_cbq_query(update_stats_field)
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            self.run_cbq_query(update_stats_index)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)        
+
+    def test_prepare(self):
+        query_num = 1
+        prepare_knn_query = f'prepare prepare_knn_vector as SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        prepare_ann_query = f'prepare prepare_ann_vector as SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        if self.prepare_before:
+            prepare_knn = self.run_cbq_query(prepare_knn_query)
+            self.log.info(prepare_knn['results'])
+            prepare_ann = self.run_cbq_query(prepare_ann_query)
+            self.log.info(prepare_ann['results'])
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            if not self.prepare_before:
+                prepare_knn= self.run_cbq_query(prepare_knn_query)
+                self.log.info(prepare_knn['results'])
+                prepare_ann = self.run_cbq_query(prepare_ann_query)
+                self.log.info(prepare_ann['results'])
+            exec_prepare_knn = self.run_cbq_query('execute prepare_knn_vector')
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), exec_prepare_knn['results'])
+            self.log.info(f'RecallKNN rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            self.assertEqual(recall, 100.0)
+
+            exec_prepare_ann = self.run_cbq_query('execute prepare_ann_vector')
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), exec_prepare_ann['results'])
+            self.log.info(f'Recall ANN rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            if self.prepare_before:
+                self.assertEqual(recall, 100.0)
+            else:
+                self.assertTrue(recall > self.recall_ann)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance)
