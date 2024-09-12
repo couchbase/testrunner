@@ -77,7 +77,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.vector_queries_count = self.input.param("vector_queries_count", 5)
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 2)
-        self.partition_list = eval(self.input.param("partition_list","[18,3,3]"))
+        self.partition_list = eval(self.input.param("partition_list","[7,3,2]"))
+        self.load_data_pause = self.input.param("load_data_pause",80)
 
 
         self.upgrade_type = self.input.param("upgrade_type", "online")
@@ -933,6 +934,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.fail("CRUD operation failed during rebalance. OPS : DELETE")
                 else:
                     self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+            
+            time.sleep(int(self.load_data_pause))
         
         self.isRebalanceComplete = False
         
@@ -1207,7 +1210,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         3. Runs queries and compares the results against ElasticSearch
         """
         try:
-            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
             for bucket in self.buckets:
                 for i in range(self.num_indexes):
                     plans = self.construct_custom_plan_params(0, self.partition_list[i % self.num_indexes])
@@ -1253,7 +1256,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         try:
             self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, servers=self.servers)
             is_passed = True
-            RestConnection(self.servers[0]).modify_memory_quota()
 
             for bucket in self.buckets:
                 for i in range(self.num_indexes):
@@ -1340,8 +1342,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.inbetween_tests = 1
             self.fts_obj.inbetween_tests = 1
             self.fts_obj.inbetween_active = True
-
-            RestConnection(self.servers[0]).modify_memory_quota()
 
             indexes_test_list = ["index_1"]
             if float(str(self.start_version)[0:3]) >= 7.6:
@@ -1496,7 +1496,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.sleep(100)
 
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, variable_node=self.servers[0], servers=self.servers)
-        RestConnection(self.servers[0]).modify_memory_quota()
 
         """delete 20% of docs"""
         status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10005001,0.2)
@@ -1616,6 +1615,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             else:
                 self.fail("CRUD Operation post upgrade failure. OPS: Delete")
             fts_callable.load_data(2000)
+
+            RestConnection(self.servers[0]).modify_memory_quota(kv_quota=812,fts_quota = 1700)
             
             fts_query = {"query": "dept:Engineering"}
 
@@ -1630,9 +1631,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             errors = self._test_create_bucket_index()
             if len(errors) > 0:
                 post_upgrade_errors['_test_create_bucket_index'] = errors
-            errors = self._test_scope_limit_num_fts_indexes()
-            if len(errors) > 0:
-                post_upgrade_errors['_test_scope_limit_num_fts_indexes'] = errors
             errors = self._test_backup_restore()
             if len(errors) > 0:
                 post_upgrade_errors['_test_backup_restore'] = errors

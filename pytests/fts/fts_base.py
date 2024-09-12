@@ -2168,6 +2168,7 @@ class CouchbaseCluster:
         self.__bypass_fts_nodes = []
         self.__bypass_n1ql_nodes = []
         self.capella_run = TestInputSingleton.input.param("capella_run", False)
+        self.modify_memory_quotas = TestInputSingleton.input.param("modify_memory_quotas", False)
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
@@ -2183,8 +2184,15 @@ class CouchbaseCluster:
 
     def __set_fts_ram_quota(self):
         fts_quota = TestInputSingleton.input.param("fts_quota", None)
+        kv_quota = TestInputSingleton.input.param("kv_mem", None)
         if fts_quota:
-            RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
+            if self.modify_memory_quotas:
+                if kv_quota:
+                    RestConnection(self.__master_node).modify_memory_quota(kv_quota = int(kv_quota), fts_quota = fts_quota)
+                else:
+                    RestConnection(self.__master_node).modify_memory_quota(fts_quota = fts_quota)
+            else:
+                RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
 
     def get_node(self, ip, port):
         for node in self.__nodes:

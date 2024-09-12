@@ -24,6 +24,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.graceful = self.input.param("graceful", False)
         self.vector_upgrade = self.input.param("vector_upgrade",False)
         self.after_upgrade_nodes_in = self.input.param("after_upgrade_nodes_in", 1)
+        self.load_data_pause = self.input.param("load_data_pause",80)
         self.after_upgrade_nodes_out = self.input.param("after_upgrade_nodes_out", 1)
         self.verify_vbucket_info = self.input.param("verify_vbucket_info", True)
         self.initialize_events = self.input.param("initialize_events", "").split(":")
@@ -254,12 +255,14 @@ class UpgradeTests(NewUpgradeBaseTest):
                     self.fail("CRUD operation failed during rebalance. OPS : DELETE")
                 else:
                     self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+            
+            self.sleep(int(self.load_data_pause))
         
         self.isRebalanceComplete = False
 
 
     def test_upgrade(self):
-        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
         self.event_threads = []
         self.after_event_threads = []
         try:

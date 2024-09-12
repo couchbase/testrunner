@@ -3753,7 +3753,7 @@ class RestConnection(object):
         return status
 
     @not_for_capella
-    def modify_memory_quota(self, kv_quota=512,index_quota=256,fts_quota=1062,cbas_quota=1024,eventing_quota=256):
+    def modify_memory_quota(self, kv_quota=512,index_quota=256,fts_quota=2000,cbas_quota=1024,eventing_quota=256):
         api = self.baseUrl + "pools/default"
         params = urllib.parse.urlencode({"memoryQuota": kv_quota, "indexMemoryQuota":index_quota,"ftsMemoryQuota":fts_quota,"cbasMemoryQuota":cbas_quota,"eventingMemoryQuota":eventing_quota})
         headers = self._create_headers()
