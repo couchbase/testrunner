@@ -118,10 +118,13 @@ class GSIUtils(object):
                                                                                'description like "%%Mercedes%%"',
                                                                                'APPROX_L2_DIST '
                                                                                f'descriptionVector vectorValue')))
+        return definitions_list
 
     def generate_car_vector_loader_index_definition(self, index_name_prefix=None, similarity="L2", train_list=None,
                                                     scan_nprobes=1, skip_primary=False, array_indexes=False,
-                                                    limit=10, quantization_algo_color_vector=None,quantization_algo_description_vector=None):
+                                                    limit=10, quantization_algo_color_vector=None,
+                                                    quantization_algo_description_vector=None,
+                                                    is_base64=False):
 
         definitions_list = []
         color_vec_1 = [43.0, 133.0, 178.0]
@@ -137,7 +140,15 @@ class GSIUtils(object):
         scan_desc_vec_1 = f"ANN(descriptionVector, {descVec1}, '{similarity}', {scan_nprobes})"
         scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{similarity}', {scan_nprobes})"
 
-
+        if is_base64:
+            scan_color_vec_1 = (f"ANN(DECODE_VECTOR(colorRGBVector, false), {color_vec_1},"
+                                f" '{similarity}', {scan_nprobes})")
+            scan_color_vec_2 = (f"ANN(DECODE_VECTOR(colorRGBVector, false), {color_vec_2},"
+                                f" '{similarity}', {scan_nprobes})")
+            scan_desc_vec_1 = (f"ANN(DECODE_VECTOR(descriptionVector, false), {descVec1},"
+                               f" '{similarity}', {scan_nprobes})")
+            scan_desc_vec_2 = (f"ANN(DECODE_VECTOR(descriptionVector,false), {descVec2},"
+                               f" '{similarity}', {scan_nprobes})")
 
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
@@ -152,18 +163,19 @@ class GSIUtils(object):
         # Single vector field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'colorRGBVector', index_fields=['colorRGBVector VECTOR'],
-                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector,"
-                                                                              f" {scan_color_vec_1}",
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"colorRGBVector, {scan_color_vec_1}",
                                                                               scan_color_vec_1)))
 
         # Single vector + single scalar field + partitioned on vector
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVector',
                             index_fields=['description', 'descriptionVector VECTOR'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, descriptionVector,"
                                                                                f" {scan_desc_vec_1}",
                                                                                'description like "%%CVT%%"',
@@ -175,8 +187,9 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarOneVectorLeading',
                             index_fields=['descriptionVector VECTOR', 'id'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"id, descriptionVector",
                                                                                'id > 1575644878',
                                                                                scan_desc_vec_1)))
@@ -186,8 +199,9 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
 
                             index_fields=['year', 'descriptionVector Vector', 'manufacturer', 'fuel'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, year,"
                                                                                f" descriptionVector, {scan_desc_vec_2}",
                                                                                "year between 1950 and 1990 and "
@@ -200,8 +214,9 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_2',
                             index_fields=['rating', 'colorRGBVector Vector', 'category'],
-                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("color, colorRGBVector",
                                                                                "rating = 2 and "
                                                                                "category in ['Convertible', "
@@ -214,7 +229,8 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'includeMissing',
                             index_fields=['colorHex ', 'year', 'fuel', 'descriptionVector Vector'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes, is_base64=is_base64,
                             train_list=train_list, limit=limit, missing_indexes=True, missing_field_desc=True,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("fuel, year, descriptionVector",
                                                                                "year > 1980 OR "
@@ -225,8 +241,9 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'PartialIndex',
                             index_fields=['rating ', 'description', 'colorRGBVector Vector'],
                             index_where_clause='rating > 3',
-                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
@@ -240,7 +257,7 @@ class GSIUtils(object):
                                               'ALL ARRAY cv.`smart features` FOR cv in evaluation.`smart features` END, ',
                                               'colorRGBVector Vector'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
-                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "model = Atlas and "
                                                                                    'ANY cv in evaluation SATISFIES cv.`smart features` like "%%lights%%" ',
@@ -252,7 +269,7 @@ class GSIUtils(object):
                                 index_fields=['rating', 'ALL ARRAY  cv.variant FOR cv in evaluation END ',
                                               'descriptionVector Vector'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
-                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "rating BETWEEN 1 and 3 AND"
                                                                                    "ANY cv in evaluation SATISFIES cv.variant = Prestige ",
@@ -265,7 +282,7 @@ class GSIUtils(object):
                                               'ALL ARRAY FLATTEN_KEYS(cv.comfort DESC, cv.performance) FOR cv in evaluation END ',
                                               'descriptionVector Vector'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
-                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "year BETWEEN 1970 and 1990 AND"
                                                                                    "ANY cv in evaluation SATISFIES cv.comfort = 'Panoramic sunroof' OR "
@@ -279,7 +296,7 @@ class GSIUtils(object):
                                               'ALL ARRAY cv.featureVectors VECTOR FOR cv in evaluation END ',
                                               'year'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
-                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "fuel = Ethanol"
                                                                                    "AND year BETWEEN 1990 and 2000 ",
@@ -292,7 +309,7 @@ class GSIUtils(object):
                                               'ALL ARRAY FLATTEN_KEYS(cv.featureVectors) VECTOR FOR cv in evaluation END ',
                                               'year'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
-                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "fuel = Ethanol"
                                                                                    "AND year BETWEEN 1990 and 2000 ",
@@ -745,7 +762,7 @@ class GSIUtils(object):
 
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
-                                  quantization_algo_description_vector=None):
+                                  quantization_algo_description_vector=None, is_base64=False):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -765,7 +782,7 @@ class GSIUtils(object):
                                                                                train_list=train_list,
                                                                                scan_nprobes=scan_nprobes,
                                                                                array_indexes=array_indexes,
-                                                                               limit=limit,
+                                                                               limit=limit, is_base64=is_base64,
                                                                                quantization_algo_color_vector=quantization_algo_color_vector,
                                                                                quantization_algo_description_vector=quantization_algo_description_vector)
         elif dataset == 'MiniCar':

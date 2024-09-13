@@ -7,20 +7,22 @@ __git_user__ = "hrajput89"
 __created_on__ = "19/06/24 03:27 pm"
 
 """
-import time, datetime
+import datetime
 
 from concurrent.futures import ThreadPoolExecutor
 
 from sentence_transformers import SentenceTransformer
 
 from couchbase_helper.documentgenerator import SDKDataLoader
-from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE
+from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, \
+    RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE
 from gsi.base_gsi import BaseSecondaryIndexingTests
 from membase.api.on_prem_rest_client import RestHelper
 from scripts.multilevel_dict import MultilevelDict
 from remote.remote_util import RemoteMachineShellConnection
 from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
+
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -46,6 +48,29 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def suite_tearDown(self):
         pass
 
+    def gen_table_view(self, query_stats_map, message="query stats"):
+        table = TableView(self.log.info)
+        table.set_headers(['Query', 'Recall', 'Accuracy'])
+        for query in query_stats_map:
+            table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
+        table.display(message=message)
+
+    def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True):
+        query_stats_map = {}
+        for query in select_queries:
+            # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
+            if "ANN" not in query:
+                continue
+            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+            query_stats_map[redacted_query] = [recall, accuracy]
+        self.gen_table_view(query_stats_map=query_stats_map, message=message)
+        if stats_assertion:
+            for query in query_stats_map:
+                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
+                                        f"recall for query {query} is less than threshold 70")
+                self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
+                                        f"accuracy for query {query} is less than threshold 70")
+
     def test_create_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         for namespace in self.namespaces:
@@ -54,7 +79,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace)
@@ -85,7 +110,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         collection_namespace = self.namespaces[0]
         # indexes with more than one vector field
-        index_gen_1 = QueryDefinition(index_name='colorRGBVector_1',
+        index_gen_1 = QueryDefinition(index_name='colorRGBVector_1', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'descriptionVector VECTOR'],
                                       dimension=3, description="IVF,PQ3x8", similarity="L2_SQUARED")
         try:
@@ -96,7 +121,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertTrue(err_msg in str(err), f"Index with more than one vector field is created: {err}")
 
         # indexes with include clause for a vector field
-        index_gen_2 = QueryDefinition(index_name='colorRGBVector_2',
+        index_gen_2 = QueryDefinition(index_name='colorRGBVector_2', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR INCLUDE MISSING DESC', 'description'],
                                       dimension=3, description="IVF,PQ3x8", similarity="L2_SQUARED")
         try:
@@ -112,7 +137,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
-        index_gen_3 = QueryDefinition(index_name='colorRGBVector_3',
+        index_gen_3 = QueryDefinition(index_name='colorRGBVector_3', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'description'],
                                       dimension=3, description="IVF,PQ3x8", similarity="L2_SQUARED")
         try:
@@ -122,12 +147,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             err_msg = 'ErrTraining: The number of documents: 0 in keyspace:'
             self.assertTrue(err_msg in str(err), f"Index with INCLUDE clause is created: {err}")
 
-
-
-
         # indexes with empty collection defer build true
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
-        index_gen_3 = QueryDefinition(index_name='colorRGBVector_4',
+        index_gen_3 = QueryDefinition(index_name='colorRGBVector_4', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'description'],
                                       dimension=3, description="IVF,PQ3x8", similarity="L2_SQUARED")
 
@@ -139,10 +161,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
 
-        # build a scalar and vector index seqentially
+        # build a scalar and vector index sequentially
         scalar_idx = QueryDefinition(index_name='scalar', index_fields=['color'])
         vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF,PQ3x8", similarity="L2_SQUARED")
+                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
 
         for idx in [scalar_idx, vector_idx]:
             query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
@@ -162,7 +184,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF204800,PQ3x8", similarity="L2_SQUARED")
+                                     description="IVF204800,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
 
         self.run_cbq_query(query=query)
@@ -181,7 +203,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         vector_idx = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
-                                     description="IVF1024,PQ32x8", similarity="L2_SQUARED")
+                                     description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64)
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         timeout = 0
@@ -211,7 +233,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             idx_name = f'idx_{item}'
             scalar_idx = QueryDefinition(index_name=idx_name + 'scalar', index_fields=['color'])
             vector_idx = QueryDefinition(index_name=idx_name + 'vector', index_fields=['colorRGBVector VECTOR'],
-                                         dimension=3,
+                                         dimension=3, is_base64=self.base64,
                                          description="IVF,PQ3x8", similarity="L2_SQUARED")
             query1 = scalar_idx.generate_index_create_query(namespace=namespace, defer_build=True)
             query2 = vector_idx.generate_index_create_query(namespace=namespace, defer_build=True)
@@ -241,7 +263,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -295,15 +317,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         query_list = []
         collection_namespace = self.namespaces[0]
         vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF2048,PQ3x8", similarity="L2_SQUARED")
+                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
         self.run_cbq_query(query=query)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
         query_list.append(build_query)
 
         vector_idx_2 = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
-                                       dimension=384,
-                                       description="IVF2048,PQ32x8", similarity="L2_SQUARED")
+                                       dimension=384, is_base64=self.base64,
+                                       description="IVF,PQ32x8", similarity="L2_SQUARED")
         query = vector_idx_2.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
         drop_query = vector_idx_2.generate_index_drop_query(namespace=collection_namespace)
@@ -323,8 +345,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         collection_namespace = self.namespaces[0]
         vector_idx = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
-                                     dimension=384,
-                                     description="IVF2048,PQ32x8", similarity="L2_SQUARED")
+                                     dimension=384, is_base64=self.base64,
+                                     description="IVF,PQ32x8", similarity="L2_SQUARED")
         defer_build = False
         if self.build_phase == "create":
             defer_build = True
@@ -362,7 +384,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for item, namespace in enumerate(self.namespaces):
             idx_name = f'idx_{item}'
             vector_idx = QueryDefinition(index_name=idx_name + 'vector', index_fields=['colorRGBVector VECTOR'],
-                                         dimension=3,
+                                         dimension=3, is_base64=self.base64,
                                          description="IVF,PQ3x8", similarity="L2_SQUARED")
             query1 = vector_idx.generate_index_create_query(namespace=namespace)
             self.run_cbq_query(query=query1)
@@ -389,7 +411,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -458,7 +480,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       prefix='test',
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
-                                                                      array_indexes=False,
+                                                                      array_indexes=False, is_base64=self.base64,
                                                                       limit=self.scan_limit,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
@@ -517,7 +539,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -547,11 +569,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{index['indexName']}")
-            self.assertEqual(index['numReplica'], self.num_index_replicas-1, "No. of replicas are not matching")
+            self.assertEqual(index['numReplica'], self.num_index_replicas - 1, "No. of replicas are not matching")
 
         map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
-        #rebalancing in for replica repair
+        # rebalancing in for replica repair
         index_node_in = self.servers[self.nodes_init]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node_in], [],
                                                  services=['index'], cluster_config=self.cluster_config)
@@ -564,15 +586,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
         self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
-                                           map_after_rebalance=map_after_rebalance,
-                                           stats_map_before_rebalance=stats_before_rebalance,
-                                           stats_map_after_rebalance=stats_after_rebalance,
-                                           item_count_increase=False,
-                                           per_node=True, skip_array_index_item_count=False)
+                                                       map_after_rebalance=map_after_rebalance,
+                                                       stats_map_before_rebalance=stats_before_rebalance,
+                                                       stats_map_after_rebalance=stats_after_rebalance,
+                                                       item_count_increase=False,
+                                                       per_node=True, skip_array_index_item_count=False)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id")
-
 
     def test_alter_move_index(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -591,7 +612,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -653,7 +674,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                          dimension=3,
                                                          description=f"IVF,{self.quantization_algo_color_vector}",
                                                          similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                         limit=self.scan_limit,
+                                                         limit=self.scan_limit, is_base64=self.base64,
                                                          query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                                              f"color, colorRGBVector,"
                                                              f" {scan_color_vec_1}",
@@ -664,7 +685,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                            dimension=3,
                                                            description=f"IVF,{self.quantization_algo_color_vector}",
                                                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                           limit=self.scan_limit,
+                                                           limit=self.scan_limit, is_base64=self.base64,
                                                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                                                f"color, colorRGBVector,"
                                                                f" {scan_color_vec_1}",
@@ -675,7 +696,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                            dimension=384,
                                                            description=f"IVF,{self.quantization_algo_description_vector}",
                                                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                           limit=self.scan_limit,
+                                                           limit=self.scan_limit, is_base64=self.base64,
                                                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                                                f"description, descriptionVector,"
                                                                f" {scan_desc_vec_2}",
@@ -686,7 +707,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                              dimension=384,
                                                              description=f"IVF,{self.quantization_algo_description_vector}",
                                                              similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                             limit=self.scan_limit,
+                                                             limit=self.scan_limit, is_base64=self.base64,
                                                              query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                                                  f"description, descriptionVector,"
                                                                  f" {scan_desc_vec_2}",
@@ -727,7 +748,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                              dimension=3,
                                                              description=f"IVF,{self.quantization_algo_color_vector}",
                                                              similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                             limit=self.scan_limit,
+                                                             limit=self.scan_limit, is_base64=self.base64,
                                                              query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
                                                                  "color, colorRGBVector",
                                                                  "rating = 2 and "
@@ -744,7 +765,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                  description=f"IVF,{self.quantization_algo_color_vector}",
                                                                  similarity=self.similarity,
                                                                  scan_nprobes=self.scan_nprobes,
-                                                                 limit=self.scan_limit,
+                                                                 limit=self.scan_limit, is_base64=self.base64,
                                                                  query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
                                                                      "color, colorRGBVector",
                                                                      "rating = 2 and "
@@ -761,7 +782,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                description=f"IVF,{self.quantization_algo_description_vector}",
                                                                similarity=self.similarity,
                                                                scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit,
+                                                               limit=self.scan_limit, is_base64=self.base64,
                                                                query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
                                                                    "description, descriptionVector",
                                                                    "rating = 2 and "
@@ -778,7 +799,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    description=f"IVF,{self.quantization_algo_description_vector}",
                                                                    similarity=self.similarity,
                                                                    scan_nprobes=self.scan_nprobes,
-                                                                   limit=self.scan_limit,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
                                                                    query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
                                                                        "description, descriptionVector",
                                                                        "rating = 2 and "
@@ -799,7 +820,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message)
 
-
     def test_replica_repair(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.enable_shard_based_rebalance()
@@ -812,8 +832,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit, quantization_algo_color_vector=self.quantization_algo_color_vector, quantization_algo_description_vector=self.quantization_algo_description_vector)
-            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, num_replica=self.num_index_replicas, defer_build=True)
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replicas,
+                                                                     defer_build=True)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
@@ -852,31 +876,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                        item_count_increase=False,
                                                        per_node=True, skip_array_index_item_count=False)
 
-
-    def gen_table_view(self, query_stats_map, message="query stats"):
-        table = TableView(self.log.info)
-        table.set_headers(['Query', 'Recall', 'Accuracy'])
-        for query in query_stats_map:
-            table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
-        table.display(message=message)
-
-
-    def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True):
-        query_stats_map = {}
-        for query in select_queries:
-            # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
-            if "ANN" not in query:
-                continue
-            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
-            query_stats_map[redacted_query] = [recall, accuracy]
-        self.gen_table_view(query_stats_map=query_stats_map, message=message)
-        if stats_assertion:
-            for query in query_stats_map:
-                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
-                                        f"recall for query {query} is less than threshold 70")
-                self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
-                                        f"accuracy for query {query} is less than threshold 70")
-
     def test_vector_indexes_after_bucket_flush(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
@@ -888,7 +887,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -940,7 +939,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -1014,7 +1013,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
@@ -1022,7 +1021,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
 
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                 query_node=self.n1ql_node)
         self.wait_until_indexes_online()
 
         self.log.info("Stopping persistence on NodeA & NodeB")
@@ -1041,8 +1041,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars",
-                                            output=True, username=self.username, password=self.password, base64=self.base64,
-                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77", start_seq_num=self.num_of_docs_per_collection, end=self.num_of_docs_per_collection+10000)
+                                            output=True, username=self.username, password=self.password,
+                                            base64=self.base64,
+                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
+                                            start_seq_num=self.num_of_docs_per_collection,
+                                            end=self.num_of_docs_per_collection + 10000)
             self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_create)
 
         self.sleep(30)
@@ -1056,7 +1059,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # Index rollback count before rollback
         self._verify_bucket_count_with_index_count()
-
 
         # Kill memcached on Node A so that Node B becomes master
         self.log.info("Kill Memcached process on NodeA")
@@ -1114,7 +1116,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # Building vector indexes without qualifying
         vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF1024,PQ3x8", similarity="L2_SQUARED")
+                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
 
         self.run_cbq_query(query=query)
@@ -1136,12 +1138,16 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars",
-                                            output=True, username=self.username, password=self.password, base64=self.base64,
-                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77", start_seq_num=self.num_of_docs_per_collection, end=self.num_of_docs_per_collection+10000)
+                                            output=True, username=self.username, password=self.password,
+                                            base64=self.base64,
+                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
+                                            start_seq_num=self.num_of_docs_per_collection,
+                                            end=self.num_of_docs_per_collection + 10000)
             self.load_docs_via_magma_server(server=data_node.ip, bucket=bucket, gen=self.gen_create)
 
         self.run_cbq_query(query=query)
-        self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1, "Index not created sucessfully")
+        self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1,
+                         "Index not created successfully")
 
     def test_drop_multiple_indexes_in_training_state(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -1153,11 +1159,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
-                                                                      limit=self.scan_limit,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
-            create_queries.update(self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replicas))
+            create_queries.update(
+                self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                        num_replica=self.num_index_replicas))
             drop_queries.update(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
@@ -1183,7 +1190,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF2048,PQ3x8", similarity="L2_SQUARED")
+                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
 
@@ -1216,23 +1223,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
         query_definition_1 = QueryDefinition(index_name='oneScalarOneVectorLeading',
-                        index_fields=['id', 'descriptionVector VECTOR'],
-                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}", similarity=self.similarity,
-                        scan_nprobes=self.scan_nprobes,
-                        limit=self.scan_limit,
-                        query_template=RANGE_SCAN_TEMPLATE.format(f"id", 'id > 1575644878'))
+                                             index_fields=['id', 'descriptionVector VECTOR'],
+                                             dimension=384,
+                                             description=f"IVF,{self.quantization_algo_description_vector}",
+                                             similarity=self.similarity,
+                                             scan_nprobes=self.scan_nprobes,
+                                             limit=self.scan_limit, is_base64=self.base64,
+                                             query_template=RANGE_SCAN_TEMPLATE.format(f"id", 'id > 1575644878'))
 
         create_query = query_definition_1.generate_index_create_query(namespace=collection_namespace)
 
         self.run_cbq_query(query=create_query)
 
-        select_query = self.gsi_util_obj.get_select_queries(definition_list=[query_definition_1], namespace=collection_namespace)[0]
+        select_query = \
+            self.gsi_util_obj.get_select_queries(definition_list=[query_definition_1], namespace=collection_namespace)[
+                0]
 
         res = self.run_cbq_query(query=select_query)
 
         self.assertEqual(len(res["results"]), self.scan_limit, "Expected no of results not returned")
-
-
 
     def test_scans_on_different_distance_functions(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -1244,34 +1253,34 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
         scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, 'COSINE', {self.scan_nprobes})"
         vector_index_L2 = QueryDefinition("vector_index_L2",
-                                                           index_fields=['rating', 'descriptionVector Vector',
-                                                                         'category'],
-                                                           dimension=384,
-                                                           description=f"IVF,{self.quantization_algo_description_vector}",
-                                                           similarity="L2_SQUARED",
-                                                           scan_nprobes=self.scan_nprobes,
-                                                           limit=self.scan_limit,
-                                                           query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                               "description, descriptionVector",
-                                                               "rating = 2 and "
-                                                               "category in ['Convertible', "
-                                                               "'Luxury Car', 'Supercar']",
-                                                               scan_desc_vec_1))
+                                          index_fields=['rating', 'descriptionVector Vector',
+                                                        'category'],
+                                          dimension=384,
+                                          description=f"IVF,{self.quantization_algo_description_vector}",
+                                          similarity="L2_SQUARED",
+                                          scan_nprobes=self.scan_nprobes,
+                                          limit=self.scan_limit, is_base64=self.base64,
+                                          query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                              "description, descriptionVector",
+                                              "rating = 2 and "
+                                              "category in ['Convertible', "
+                                              "'Luxury Car', 'Supercar']",
+                                              scan_desc_vec_1))
 
         vector_index_cosine = QueryDefinition("vector_index_cosine",
-                                                                   index_fields=['rating', 'descriptionVector Vector',
-                                                                                 'category'],
-                                                                   dimension=384,
-                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
-                                                                   similarity="COSINE",
-                                                                   scan_nprobes=self.scan_nprobes,
-                                                                   limit=self.scan_limit,
-                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                                       "description, descriptionVector",
-                                                                       "rating = 2 and "
-                                                                       "category in ['Convertible', "
-                                                                       "'Luxury Car', 'Supercar']",
-                                                                       scan_desc_vec_2))
+                                              index_fields=['rating', 'descriptionVector Vector',
+                                                            'category'],
+                                              dimension=384,
+                                              description=f"IVF,{self.quantization_algo_description_vector}",
+                                              similarity="COSINE",
+                                              scan_nprobes=self.scan_nprobes,
+                                              limit=self.scan_limit, is_base64=self.base64,
+                                              query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                  "description, descriptionVector",
+                                                  "rating = 2 and "
+                                                  "category in ['Convertible', "
+                                                  "'Luxury Car', 'Supercar']",
+                                                  scan_desc_vec_2))
 
         select_queries = []
         for idx in [vector_index_L2, vector_index_cosine]:
@@ -1283,7 +1292,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.append(select_query)
 
         for query in [vector_index_L2, vector_index_cosine]:
-            select_query_with_explain = f"EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query], namespace=collection_namespace, limit=self.scan_limit)[0]}"
+            select_query_with_explain = f"""EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query],
+                                                                                          namespace=collection_namespace,
+                                                                                          limit=self.scan_limit)[0]}"""
             index_used_select_query = \
                 self.run_cbq_query(query=select_query_with_explain)['results'][0]['plan']['~children'][0]['~children'][
                     0][
@@ -1325,8 +1336,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         copy_distance_list = distance_list[:]
 
         self.assertEqual(sorted(copy_distance_list), distance_list, "distance projection for the query is incorrect")
-
-
 
     def test_scans_after_vector_field_mutations(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -1402,6 +1411,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
 
+            # Todo: @Sujay:Remove this if it's not required
             drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                  namespace=namespace)
             for query in create_queries:
@@ -1466,13 +1476,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
-
+            # Todo: @Sujay:Remove this if it's not required
             drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                  namespace=namespace)
             for query in create_queries:
                 self.run_cbq_query(query=query)
 
-            # make vector field null for some of docs and run scans
+            # make vector field null for some of the docs and run scans
             collection_namespace = self.namespaces[0]
             upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
             self.run_cbq_query(query=upsert_query)
@@ -1544,7 +1554,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
 
             # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {collection_namespace} where rating > 2"
+            select_query = f"select count(*) from {namespace} where rating > 2"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
 
@@ -1614,8 +1624,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="create", dim=384,
                                             create_start=self.num_of_docs_per_collection,
-                                            create_end=(self.num_of_docs_per_collection + 
-                                            self.num_of_docs_per_collection//2))
+                                            create_end=(self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 2))
             task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
                                                     generator=self.gen_update, pause_secs=1,
                                                     timeout_secs=600, use_magma_loader=True)
@@ -1629,7 +1639,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
-            
+
             # verify index count matches bucket item count
             self._verify_bucket_count_with_index_count()
 
@@ -1656,7 +1666,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
-
+            # Todo: @Sujay:Remove this if it's not required
             drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                  namespace=namespace)
             for create in create_queries:

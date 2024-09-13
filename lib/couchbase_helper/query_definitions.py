@@ -41,7 +41,8 @@ class QueryDefinition(object):
                  query_template="", query_use_index_template="", groups=None, limit=None,
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
-                 dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None):
+                 dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
+                 is_base64=False):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -71,6 +72,7 @@ class QueryDefinition(object):
         self.train_list = train_list
         self.scan_nprobes = scan_nprobes
         self.limit = limit
+        self.is_base64 = is_base64
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
@@ -103,6 +105,12 @@ class QueryDefinition(object):
         if missing_indexes:
             self.missing_indexes = missing_indexes
             self.missing_field_desc = missing_field_desc
+        if self.is_base64:
+            for idx, field in enumerate(self.index_fields):
+                if 'vector' in str(field).lower():
+                    field_name = field.split(' ')[0]
+                    self.index_fields[idx] = f"DECODE_VECTOR({field_name}, false) VECTOR"
+                    break
         if desc is None:
             if self.missing_indexes:
                 field_list = []

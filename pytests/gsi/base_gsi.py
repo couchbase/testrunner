@@ -1,44 +1,44 @@
+import ast
+import base64
 import copy
+import json
 import logging
 import math
 import os
 import random
 import re
 import string
+import struct
 import subprocess
 import threading
 import time
-import json
-import ast
-
-from string import ascii_letters, digits
 from concurrent.futures import ThreadPoolExecutor
+from string import ascii_letters, digits
 
 import faiss
 import numpy as np
 import requests
+from deepdiff import DeepDiff
 from requests.auth import HTTPBasicAuth
-from table_view import TableView
-
 
 from Cb_constants import CbServer
+from collection.collections_cli_client import CollectionsCLI
+from collection.collections_rest_client import CollectionsRest
+from collection.collections_stats import CollectionsStats
 from couchbase_helper.cluster import Cluster
+from couchbase_helper.documentgenerator import SDKDataLoader
+from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
 from membase.api.rest_client import RestConnection, RestHelper
-from couchbase_helper.documentgenerator import SDKDataLoader
-from couchbase_helper.query_definitions import QueryDefinition
-from collection.collections_rest_client import CollectionsRest
-from collection.collections_stats import CollectionsStats
-from collection.collections_cli_client import CollectionsCLI
-from tasks.task import ConcurrentIndexCreateTask
-from .newtuq import QueryTests
-from tasks.task import SDKLoadDocumentsTask
-from deepdiff import DeepDiff
 from serverless.gsi_utils import GSIUtils
+from table_view import TableView
+from tasks.task import ConcurrentIndexCreateTask
+from tasks.task import SDKLoadDocumentsTask
+from .newtuq import QueryTests
 
 log = logging.getLogger(__name__)
 
@@ -462,7 +462,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         query_res_faiss = self.run_cbq_query(query=faiss_query, server=self.n1ql_node)['results']
         list_of_vectors_to_be_indexed_on_faiss = []
         for v in query_res_faiss:
-            list_of_vectors_to_be_indexed_on_faiss.append(v[vector_field])
+            result = v[vector_field]
+            if self.base64:
+                result = self.decode_base64_to_float(result)
+            list_of_vectors_to_be_indexed_on_faiss.append(result)
+
+        # Todo: Add a provision to convert base64 encoded embeddings to float32 embeddings
+
         faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"))
 
         ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
@@ -470,7 +476,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         faiss_closest_vectors = []
         for idx in ann:
             # self.log.info(f'for idx {idx} vector is {list_of_vectors_to_be_indexed_on_faiss[idx]}')
-            faiss_closest_vectors.append(list_of_vectors_to_be_indexed_on_faiss[idx])
+            if self.base64:
+                value = self.encode_floats_to_base64(list_of_vectors_to_be_indexed_on_faiss[idx])
+            else:
+                value = list_of_vectors_to_be_indexed_on_faiss[idx]
+            faiss_closest_vectors.append(value)
         gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
         gsi_query_vec_list = []
 
@@ -482,8 +492,6 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         #todo will comment this out post the resloving of https://issues.couchbase.com/browse/MB-62783
         # self.assertNotEqual(len(gsi_query_vec_list), 0, f"vector list is not equal for query {self.gen_query_without_entire_qvec(select_query)} gsi query results are {gsi_query_res}")
-
-
 
         recall = accuracy = 0
 
@@ -504,7 +512,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(f"recall for the query is : {select_query} is {recall}")
         return redacted_select_query, recall, accuracy
 
-
     def gen_query_without_entire_qvec(self, query):
         # Regex pattern to match the array of numbers
         array_pattern = r'\[[-+eE\d.,\s]+\]'
@@ -514,7 +521,10 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         return modified_query
     def extract_vector_field_and_query_vector(self, query):
-        pattern = r"ANN\(\s*(\w+),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
+        if self.base64:
+            pattern = r"ANN\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
+        else:
+            pattern = r"ANN\(\s*(\w+),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
         matches = re.search(pattern, query)
 
         if matches:
@@ -2308,6 +2318,20 @@ class BaseSecondaryIndexingTests(QueryTests):
         for index_info in index_status['status']:
             index_name_list.append(index_info['name'])
         return index_name_list
+
+    def encode_floats_to_base64(self, float_array):
+        # Pack the float array into bytes
+        byte_data = struct.pack(f'{len(float_array)}f', *float_array)
+        # Encode the byte data to a base64 string
+        base64_encoded = base64.b64encode(byte_data).decode('utf-8')
+        return base64_encoded
+
+    def decode_base64_to_float(self, value):
+        byte_data = base64.b64decode(value)
+        num_floats = len(byte_data) // struct.calcsize('f')
+        # Unpack bytes into floats
+        result = list(struct.unpack(f'{num_floats}f', byte_data))
+        return result
 
     def convert_to_faiss_queries(self, select_query):
         # Regular expression to remove ORDER BY clause
