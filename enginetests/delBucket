@@ -1,4 +1,0 @@
-#!/bin/bash
-
-#delete existing bucket
-/opt/couchbase/bin/couchbase-cli bucket-delete -c 127.0.0.1:8091 --bucket=default -u Administrator -p password

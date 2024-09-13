@@ -1,1 +1,0 @@
-{"views":{"getrev":{"map":"function (doc, meta) {\n {\n    emit(meta.id, meta.rev);\n  } \n}"}}}

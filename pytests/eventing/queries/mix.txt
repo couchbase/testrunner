@@ -1,2 +1,0 @@
-EXPLAIN UPSERT INTO src_bucket VALUES ("key1", { "a" : "b" });
-INFER `src_bucket` WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0};

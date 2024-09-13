@@ -1,7 +1,0 @@
-SELECT src_bucket.age, src_bucket.email FROM src_bucket LEFT JOIN dst_bucket ON KEYS ( src_bucket.email );
-SELECT src_bucket.age, src_bucket.email FROM src_bucket INNER JOIN dst_bucket ON KEYS ( src_bucket.email );
-SELECT dst_bucket.age, dst_bucket.email FROM dst_bucket LEFT JOIN src_bucket ON KEYS ( dst_bucket.email );
-SELECT src_bucket.age, src_bucket.email FROM src_bucket INNER JOIN dst_bucket ON KEYS ( src_bucket.email ) UNION ALL SELECT dst_bucket.age, dst_bucket.email FROM dst_bucket LEFT JOIN src_bucket ON KEYS ( dst_bucket.email );
-SELECT src_bucket.age, src_bucket.email FROM src_bucket LEFT JOIN dst_bucket ON KEYS ( src_bucket.email ) WHERE META(dst_bucket).id IS MISSING;
-SELECT dst_bucket.age, dst_bucket.email FROM dst_bucket LEFT JOIN src_bucket ON KEYS ( dst_bucket.email ) WHERE META(dst_bucket).id IS MISSING;
-SELECT src_bucket.age, src_bucket.email FROM src_bucket LEFT JOIN dst_bucket ON KEYS ( src_bucket.email ) WHERE META(dst_bucket).id IS MISSING UNION ALL SELECT dst_bucket.age, dst_bucket.email FROM dst_bucket LEFT JOIN src_bucket ON KEYS ( dst_bucket.email ) WHERE META(dst_bucket).id IS MISSING;

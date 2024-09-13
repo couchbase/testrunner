@@ -1,8 +1,0 @@
-#!/bin/bash
-
-#delete existing bucket
-/opt/couchbase/bin/couchbase-cli bucket-delete -c 127.0.0.1:8091 --bucket=default -u Administrator -p password
-
-#remove second node
-/opt/couchbase/bin/couchbase-cli rebalance -c 127.0.0.1:8091 --server-remove={serverip} -u Administrator -p password
-

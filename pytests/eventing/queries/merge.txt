@@ -1,3 +1,0 @@
-MERGE INTO dst_bucket USING src_bucket ON KEY src_bucket.email WHEN MATCHED THEN UPDATE SET dst_bucket.email="a@b.c";
-MERGE INTO dst_bucket USING src_bucket ON KEY src_bucket.email WHEN MATCHED THEN DELETE WHERE dst_bucket.email="a@b.c";
-MERGE INTO dst_bucket USING src_bucket b ON KEY b.email WHEN NOT MATCHED THEN INSERT {"email": b.email};
