@@ -1,7 +1,8 @@
+import copy
 import os
+import paramiko
 import re
 import sys
-import copy
 import urllib.request, urllib.parse, urllib.error
 import uuid
 import time
@@ -19,7 +20,6 @@ import logger
 from builds.build_query import BuildQuery
 import testconstants
 from testconstants import VERSION_FILE
-from testconstants import MISSING_UBUNTU_LIB
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import SYSTEMD_SERVER
@@ -51,13 +51,6 @@ from lib.Cb_constants.CBServer import CbServer
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
-
-try:
-    import paramiko
-except ImportError:
-    log.warning("{0} {1} {2}".format("Warning: proceeding without importing",
-                                  "paramiko due to import error.",
-                                  "ssh connections to remote machines will fail!\n"))
 
 
 class RemoteMachineInfo(object):
@@ -4006,7 +3999,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if not running and retry >= 3:
             sys.exit("Server not started even after 3 retries on "+self.info.ip)
 
-    # To be used when a calling a method with killall is used, because it's 
+    # To be used when a calling a method with killall is used, because it's
     # not necessarily installed on the VM.
     def install_psmisc(self):
         if "centos" in self.info.distribution_version.lower():
@@ -4014,8 +4007,8 @@ class RemoteMachineShellConnection(KeepRefs):
         if "debian" in self.info.distribution_version.lower():
             self.execute_command("apt-get -y install psmisc")
 
-    # When editing this function please make sure that it's not slowing it down 
-    # significantly. Some tests rely on this function to complete relatively fast a 
+    # When editing this function please make sure that it's not slowing it down
+    # significantly. Some tests rely on this function to complete relatively fast a
     # they are trying to generate a complicated scenarios. Slowing this function could cause flakiness
     def pause_memcached(self, os="linux", timesleep=30, delay=0):
         log.info("*** pause memcached process ***")

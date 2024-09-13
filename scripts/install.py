@@ -269,12 +269,7 @@ class Installer(object):
             if "timeout" in params:
                 timeout = int(params["timeout"])
             releases_version = ["1.6.5.4", "1.7.0", "1.7.1", "1.7.1.1", "1.8.0"]
-            cb_releases_version = ["1.8.1", "2.0.0", "2.0.1", "2.1.0", "2.1.1", "2.2.0",
-                                    "2.5.0", "2.5.1", "2.5.2", "3.0.0", "3.0.1", "3.0.2",
-                                    "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.5", "3.1.6",
-                                    "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0"]
-            build_repo = MV_LATESTBUILD_REPO
-            if toy is not "":
+            if toy != "":
                 build_repo = CB_REPO
             elif "server-analytics" in names:
                 build_repo = CB_REPO.replace("couchbase-server", "server-analytics") + CB_VERSION_NAME[version[:3]] + "/"
@@ -304,7 +299,6 @@ class Installer(object):
                                             os_version = info.distribution_version,
                                             direct_build_url=direct_build_url)
                 else:
-                    #print("--> Getting all builds..{}".format(info.architecture_type))
                     builds, changes = BuildQuery().get_all_builds(version=version,
                                       timeout=timeout,
                                       direct_build_url=direct_build_url,
@@ -1240,6 +1234,7 @@ def main():
     if "change_indexer_ports" in input.test_params and input.test_params["change_indexer_ports"].lower() == 'true'\
             and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
         change_couchbase_indexer_ports(input)
+
 
 if __name__ == "__main__":
     main()

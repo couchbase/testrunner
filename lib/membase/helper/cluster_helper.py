@@ -2,7 +2,6 @@ from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedClient, MemcachedError
-from membase.api.exception import ServerAlreadyJoinedException
 from membase.helper.rebalance_helper import RebalanceHelper
 from TestInput import TestInputSingleton
 import memcacheConstants
@@ -10,7 +9,6 @@ import memcacheConstants
 import logger
 import testconstants
 import time
-import queue
 from threading import Thread
 import traceback
 

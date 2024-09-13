@@ -1,13 +1,11 @@
 from random import shuffle
 import time
 import logger
-from couchbase_helper.cluster import Cluster
 from membase.api.exception import StatsUnavailableException, \
     ServerAlreadyJoinedException, RebalanceFailedException, \
     FailoverFailedException, InvalidArgumentException, ServerSelfJoinException, \
     AddNodeException
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
-from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from mc_bin_client import MemcachedClient, MemcachedError
 
@@ -74,79 +72,7 @@ class RebalanceHelper():
                     time.sleep(2)
         return verified
 
-    @staticmethod
-    def wait_for_replication(servers, cluster_helper=None, timeout=600):
-        if cluster_helper is None:
-            cluster = Cluster()
-        else:
-            cluster = cluster_helper
-        tasks = []
-        rest = RestConnection(servers[0])
-        buckets = rest.get_buckets()
-        for server in servers:
-            for bucket in buckets:
-                for server_repl in list(set(servers) - {server}):
-                    tasks.append(cluster.async_wait_for_stats([server], bucket, 'tap',
-                                   'eq_tapq:replication_ns_1@' + server_repl.ip + ':idle', '==', 'true'))
-                    tasks.append(cluster.async_wait_for_stats([server], bucket, 'tap',
-                                   'eq_tapq:replication_ns_1@' + server_repl.ip + ':backfill_completed', '==', 'true'))
-        try:
-            for task in tasks:
-                task.result(timeout)
-        finally:
-            if cluster_helper is None:
-                # stop all newly created task manager threads
-                cluster.shutdown()
-            return True
-
-    @staticmethod
     #bucket is a json object that contains name,port,password
-    def wait_for_stats(master, bucket, stat_key, stat_value, timeout_in_seconds=120, verbose=True):
-        log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \
-                                                                                stat_value, master.ip))
-        time_to_timeout = 0
-        previous_stat_value = -1
-        curr_stat_value = -1
-        verified = False
-        while not verified:
-            rest = RestConnection(master)
-            try:
-                stats = rest.get_bucket_stats(bucket)
-                if stats and stat_key in stats and stats[stat_key] == stat_value:
-                    log.info("{0} : {1}".format(stat_key, stats[stat_key]))
-                    verified = True
-                    break
-                else:
-                    if stats and stat_key in stats:
-                        if verbose:
-                            log.info("{0} : {1}".format(stat_key, stats[stat_key]))
-                        curr_stat_value = stats[stat_key]
-
-                    # values are changing so clear any timeout
-                    if curr_stat_value != previous_stat_value:
-                        time_to_timeout = 0
-                    else:
-                        if time_to_timeout == 0:
-                            time_to_timeout = time.time() + timeout_in_seconds
-                        if time_to_timeout < time.time():
-                            log.info("no change in {0} stat after {1} seconds (value = {2})".format(stat_key, timeout_in_seconds, curr_stat_value))
-                            break
-
-                    previous_stat_value = curr_stat_value
-
-                    if not verbose:
-                        time.sleep(0.1)
-                    else:
-                        time.sleep(2)
-            except:
-                log.info("unable to collect stats from server {0}".format(master))
-                verified = True  #TODO: throw ex and assume caller catches
-                break
-            # wait for 5 seconds for the next check
-            time.sleep(5)
-
-        return verified
-
     @staticmethod
     def wait_for_stats_no_timeout(master, bucket, stat_key, stat_value, timeout_in_seconds=-1, verbose=True):
         log.info("waiting for bucket {0} stat : {1} to match {2} on {3}".format(bucket, stat_key, \

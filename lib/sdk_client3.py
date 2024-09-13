@@ -3,23 +3,18 @@
 Python based SDK client interface
 
 """
-import json
 import sys
 import time
 
-import couchbase_core
 import crc32
 import logger
+from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster, ClusterOptions
-from couchbase.cluster import _N1QLQuery
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-from couchbase_core.cluster import PasswordAuthenticator
 
-from lib.Cb_constants import CBServer
 from lib.Cb_constants.CBServer import CbServer
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
-from couchbase_core.connstr import ConnectionString
 
 
 class SDKClient(object):
@@ -28,7 +23,7 @@ class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
-                 ssl_path=None, uhm_options=None, username= None, password=None,
+                 ssl_path=None, uhm_options=None, username=None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
                  sasl_mech=True):
         if CbServer.use_https:
@@ -38,12 +33,12 @@ class SDKClient(object):
                                certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression, sasl_mech=sasl_mech)
         self.bucket = bucket
         sys.setrecursionlimit(100)
-        if username == None:
+        if username is None:
             self.username = 'Administrator'
         else:
             self.username = username
-        if password == None:
-            self.password ='password'
+        if password is None:
+            self.password = 'password'
         else:
             self.password = password
         self.quiet = quiet
@@ -51,7 +46,6 @@ class SDKClient(object):
         self.default_timeout = 1
         self._createConn()
         SDKClient.sdk_connections += 1
-        couchbase_core.set_json_converters(json.dumps, json.loads)
         self.log = logger.Logger.get_logger()
 
     def _createString(self, scheme="couchbase", bucket=None, hosts=["localhost"], certpath=None,
@@ -61,25 +55,21 @@ class SDKClient(object):
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
         if uhm_options != None:
             connection_string = "{0}?{1}".format(connection_string, uhm_options)
-        
+
         conn_string = ConnectionString.parse(connection_string)
-        
+
         if scheme == "couchbases":
             conn_string.set_option('certpath', certpath)
             if not certpath:
                 conn_string.set_option('ssl', 'no_verify')
-        
+
         if sasl_mech is not None:
             conn_string.set_option('sasl_mech_force',sasl_mech)
-        
-        if ipv6 == True:
-            conn_string.set_option('ipv6',"allow")
-        
-        if compression == True:
-            conn_string.set_option('compression',"on")
-        else:
-            conn_string.set_option('compression',"off")
-        
+
+        if ipv6 is True:
+            conn_string.set_option('ipv6', "allow")
+
+        conn_string.set_option('compression', "off")
         return conn_string
 
     def _createConn(self):

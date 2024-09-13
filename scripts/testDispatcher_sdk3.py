@@ -15,7 +15,8 @@ import ipaddress
 import subprocess
 import configparser
 
-from couchbase.cluster import Cluster, ClusterOptions, PasswordAuthenticator
+from couchbase.auth import PasswordAuthenticator
+from couchbase.cluster import Cluster, ClusterOptions
 import get_jenkins_params
 import find_rerun_job
 
@@ -212,7 +213,6 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            #ssh.auth_password()
             ssh.connect(hostname=server, username=ssh_username, password=ssh_password)
             print("Successfully established test ssh connection to {0}. VM is recognized as valid.".format(server))
             return True
@@ -235,22 +235,28 @@ def flatten_param_to_str(value):
         result = '{'
         for key, val in value.items():
             if isinstance(val, dict) or isinstance(val, list):
-                result += SiriusCouchbaseLoader.flatten_param_to_str(val)
+                result += '\"%s\":%s,' % (key, flatten_param_to_str(val))
             else:
                 try:
                     val = int(val)
                 except ValueError:
                     val = '\"%s\"' % val
                 result += '\"%s\":%s,' % (key, val)
-        result = result.rstrip(",") + '}'
+        if value:
+            result = result[:-1] + '}'
+        else:
+            result += '}'
     elif isinstance(value, list):
         result = '['
         for val in value:
             if isinstance(val, dict) or isinstance(val, list):
-                result += SiriusCouchbaseLoader.flatten_param_to_str(val)
+                result += flatten_param_to_str(val) + ","
             else:
                 result += '"%s",' % val
-        result = result.rstrip(",") + ']'
+        if value:
+            result = result[:-1] + ']'
+        else:
+            result += ']'
     return result
 
 
