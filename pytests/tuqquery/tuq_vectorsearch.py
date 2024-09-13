@@ -346,6 +346,93 @@ class VectorSearchTests(QueryTests):
             if self.prepare_before:
                 self.assertEqual(recall, 100.0)
             else:
+                operator = prepare_ann['results'][0]['operator']
+                children = operator['~child']['~children'][0]['~children'][0]['~children'][0]
+                index_name = children['index']
+                self.assertEqual(index_name, f'vector_index_{self.distance}')
+                self.assertTrue('index_vector' in children)
                 self.assertTrue(recall > self.recall_ann)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_cte1(self):
+        query_num = 11
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            query_cte = f'WITH query_vector AS ( SELECT embedding FROM [{self.xq[query_num].tolist()}] embedding ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, query_vector[0].embedding, "{self.distance}") LIMIT 100'
+            explain_query_cte = f'EXPLAIN {query_cte}'
+            explain = self.run_cbq_query(explain_query_cte)
+            result = self.run_cbq_query(query_cte)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~child']['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertTrue('index_vector' in children)
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+    
+    def test_cte2(self):
+        query_num = 15
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            query_cte = f'WITH query_vector AS ( SELECT id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100 ) SELECT RAW id FROM query_vector'
+            explain_query_cte = f'EXPLAIN {query_cte}'
+            explain = self.run_cbq_query(explain_query_cte)
+            result = self.run_cbq_query(query_cte)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            subquery_plan = explain['results'][0]['~subqueries'][0]['plan']
+            children = subquery_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertTrue('index_vector' in children)
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_cte3(self):
+        query_num = 11
+        query_cte = f'WITH query_vector AS ( {self.xq[query_num].tolist()} ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, query_vector, "{self.distance}") LIMIT 100'
+        explain_query_cte = f'EXPLAIN {query_cte}'
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            explain = self.run_cbq_query(explain_query_cte)
+            result = self.run_cbq_query(query_cte)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~child']['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertTrue('index_vector' in children)
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_cte_udf(self):
+        query_num = 21
+        create_udf = f'CREATE OR REPLACE FUNCTION embedding() {{ {self.xq[query_num].tolist()} }}'
+        self.run_cbq_query(create_udf)
+        query_cte = f'WITH query_vector AS ( embedding() ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, query_vector, "{self.distance}") LIMIT 100'
+        explain_query_cte = f'EXPLAIN {query_cte}'
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            explain = self.run_cbq_query(explain_query_cte)
+            result = self.run_cbq_query(query_cte)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~child']['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertTrue('index_vector' in children)
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)            
