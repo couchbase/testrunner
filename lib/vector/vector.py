@@ -48,6 +48,8 @@ class UtilVector(object):
                 accuracy_count += 1
             elif actual_vector in expected:
                 recall_count += 1
+        if recall_count == 0:
+            return 0.0, 0.0
         return recall_count / len(expected) * 100, accuracy_count / recall_count * 100
     def compare_result(self, expected, actual):
         if expected == actual:

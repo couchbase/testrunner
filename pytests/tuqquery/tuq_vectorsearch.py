@@ -435,4 +435,61 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)            
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_vector_transaction(self):
+        query_num = 41
+        query = f'SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {query}'
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            results = self.run_cbq_query(query='BEGIN WORK')
+            txid = results['results'][0]['txid']
+            explain = self.run_cbq_query(explain_query, txnid=txid)
+            result = self.run_cbq_query(query, txnid=txid)
+            self.run_cbq_query('ROLLBACK', txnid=txid)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            self.assertTrue('index_vector' in children)
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_infer(self):
+        result = self.run_cbq_query('INFER default')
+        self.log.info(result['results'])
+        # TBD MB-63532
+
+    def test_inline_udf(self):
+        query_num = 32
+        create_udf = f'CREATE OR REPLACE FUNCTION ann_query(...) {{ (SELECT RAW id FROM default WHERE size = args[0] AND brand = args[1] ORDER BY ANN(vec, args[2], "{self.distance}") LIMIT 100) }}'
+        self.run_cbq_query(create_udf)
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query(8, "adidas", {self.xq[query_num].tolist()})')
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_js_udf(self):
+        query_num = 61
+        create_udf = "CREATE or REPLACE FUNCTION ann_query_js(size, brand, vector) LANGUAGE JAVASCRIPT as 'function ann_query_js(size, brand, vector) { var query = SELECT RAW id FROM default WHERE size = $size AND brand = $brand ORDER BY ANN(vec, $vector, \"L2\") LIMIT 100; var acc = []; for (const row of query) { acc.push(row); } return acc;}'"
+        self.run_cbq_query(create_udf)
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query_js(8, "adidas", {self.xq[query_num].tolist()})')
+            explain = self.run_cbq_query(f'EXPLAIN EXECUTE FUNCTION ann_query_js(8, "adidas", {self.xq[query_num].tolist()})')
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
