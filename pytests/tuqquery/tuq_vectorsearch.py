@@ -463,7 +463,8 @@ class VectorSearchTests(QueryTests):
     def test_infer(self):
         result = self.run_cbq_query('INFER default')
         self.log.info(result['results'])
-        # TBD MB-63532
+        vector_field = result['results'][0][0]['properties']['vec']
+        self.assertEqual(vector_field['type'], 'array')
 
     def test_inline_udf(self):
         query_num = 32
@@ -491,5 +492,42 @@ class VectorSearchTests(QueryTests):
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
             self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             self.assertTrue(recall > self.recall_ann)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance)
+
+    def test_use_index(self):
+        query_num = 72
+        query = f'SELECT RAW id FROM default USE INDEX(vector_index_EUCLIDEAN) WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "L2") LIMIT 100'
+        explain_query = f'EXPLAIN {query}'
+        try:
+            self.log.info("Create Vector Indexes")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity="L2", is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity="EUCLIDEAN", is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_EUCLIDEAN')
+            self.assertTrue('index_vector' in children)
+        finally:
+            IndexVector().drop_index(self.database, similarity="L2")
+            IndexVector().drop_index(self.database, similarity="EUCLIDEAN")
+
+    def test_use_seqscan(self):
+        query_num = 17
+        query = f'SELECT RAW id FROM default USE INDEX(`#sequentialscan`) WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {query}'
+        try:
+            self.log.info("Create Vector Indexes")
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            result = self.run_cbq_query(query)
+            explain = self.run_cbq_query(explain_query)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            self.assertEqual(recall, 100.0)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'#sequentialscan')
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance)
