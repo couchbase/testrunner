@@ -2439,7 +2439,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
                                                                   num_replica=self.num_index_replicas)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=queries[:2], database=namespace,
+                self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
             self.wait_until_indexes_online()
 
@@ -2465,6 +2465,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
+                self.sleep(60)
                 if self.decrease_node_count > 0:
                     nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                     nodes_out_list = []
@@ -2524,6 +2525,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.enable_redistribute_indexes()
                 rebalance_task = True
             if rebalance_task:
+                map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, [],
                                                          services=['index'], cluster_config=self.cluster_config)
                 self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
@@ -2544,6 +2546,14 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
                 self._verify_indexes(indexes_before_backup, indexes_after_replica_repair)
+                map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+                self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+                                                               map_after_rebalance=map_after_rebalance,
+                                                               stats_map_before_rebalance=stats_before_rebalance,
+                                                               stats_map_after_rebalance=stats_after_rebalance,
+                                                               item_count_increase=False,
+                                                               per_node=True, skip_array_index_item_count=False)
                 self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair")
 
         finally:
@@ -2635,6 +2645,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
+                self.sleep(60)
                 self.rest.delete_all_buckets()
 
                 with ThreadPoolExecutor() as executor:

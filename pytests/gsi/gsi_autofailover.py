@@ -115,6 +115,10 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         except Exception as err:
             self.fail(f"error is {err.__str__()}")
 
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+
+
         # Start rebalance in
         rebalance = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
                                                       to_add=[self.servers[self.nodes_init]],
@@ -129,6 +133,15 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         self.assertEqual(len(index_meta_data_before_autofailover), len(index_meta_data_after_autofailover),
                          f"indexes dropped post recovery after autofailover meta data before {index_meta_data_before_autofailover}"
                          f"meta data after {index_meta_data_after_autofailover}")
+
+        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+                                                       map_after_rebalance=map_after_rebalance,
+                                                       stats_map_before_rebalance=stats_before_rebalance,
+                                                       stats_map_after_rebalance=stats_after_rebalance,
+                                                       item_count_increase=False,
+                                                       per_node=True, skip_array_index_item_count=False)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after adding node in post autofailover of a node")

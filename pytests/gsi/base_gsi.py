@@ -547,6 +547,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
                                     f"accuracy for query {query} is less than threshold 10")
 
+    def _return_maps(self, perNode=False, map_from_index_nodes=False):
+        if map_from_index_nodes:
+            index_map = self.get_index_map_from_index_endpoint()
+        else:
+            index_map = self.get_index_map()
+        stats_map = self.get_index_stats(perNode=perNode)
+        return index_map, stats_map
+
     def multi_create_index_using_rest(self, buckets=None, query_definitions=None, deploy_node_info=None):
         self.index_id_map = {}
         if not buckets:

@@ -21,7 +21,6 @@ from remote.remote_util import RemoteMachineShellConnection
 from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
 
-
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def setUp(self):
         super(CompositeVectorIndex, self).setUp()
@@ -378,8 +377,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_alter_index_alter_replica_count(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        if len(index_nodes) < 3:
-            self.skipTest("Can't run Alter index tests with less than 2 Index nodes")
+        if len(index_nodes) < 2:
+            self.skipTest("Can't run Alter index tests with less than 3 Index nodes")
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
         namespace_index_map = {}
@@ -446,7 +445,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_alter_replica_restricted_nodes(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        if len(index_nodes) < 3:
+        if len(index_nodes) < 2:
             self.skipTest("Can't run Alter index tests with less than  Index nodes")
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
@@ -506,7 +505,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_alter_index_alter_replica_id(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        if len(index_nodes) < 3:
+        if len(index_nodes) < 2:
             self.skipTest("Can't run Alter index tests with less than 2 Index nodes")
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
@@ -549,6 +548,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{index['indexName']}")
             self.assertEqual(index['numReplica'], self.num_index_replicas-1, "No. of replicas are not matching")
 
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
         #rebalancing in for replica repair
         index_node_in = self.servers[self.nodes_init]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node_in], [],
@@ -558,6 +559,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+
+        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+                                           map_after_rebalance=map_after_rebalance,
+                                           stats_map_before_rebalance=stats_before_rebalance,
+                                           stats_map_after_rebalance=stats_after_rebalance,
+                                           item_count_increase=False,
+                                           per_node=True, skip_array_index_item_count=False)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id")
@@ -597,7 +607,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                message="results before move index via alter query",
                                                stats_assertion=False)
 
-        nodes_targetted = [f'{nodes.ip}:{self.node_port}' for nodes in index_nodes[2:]]
+        if self.multi_move:
+            nodes_targetted = [f'{nodes.ip}:{self.node_port}' for nodes in index_nodes[2:]]
 
         for namespace in namespace_index_map:
             for definitions in namespace_index_map[namespace]:
@@ -810,6 +821,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
 
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
         # rebalancing out an indexer node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_node],
                                                  services=['index'], cluster_config=self.cluster_config)
@@ -828,6 +841,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+
+        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+                                                       map_after_rebalance=map_after_rebalance,
+                                                       stats_map_before_rebalance=stats_before_rebalance,
+                                                       stats_map_after_rebalance=stats_after_rebalance,
+                                                       item_count_increase=False,
+                                                       per_node=True, skip_array_index_item_count=False)
 
 
     def gen_table_view(self, query_stats_map, message="query stats"):
@@ -1165,20 +1187,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
 
         self.run_cbq_query(query=query)
+        data_node = self.get_nodes_from_services_map(service_type="kv")
+
+        remote_machine = RemoteMachineShellConnection(data_node)
 
         # for the scenario killing memecached during training phase
         timeout = 0
         with ThreadPoolExecutor() as executor:
             executor.submit(self.run_cbq_query, query=build_query)
-            self.sleep(5)
             while timeout < 360:
                 index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
                 if index_state == self.build_phase:
-                    data_nodes = self.get_nodes_from_services_map(service_type="kv",
-                                                                  get_all_nodes=True)
-                    for data_node in data_nodes:
-                        remote_machine = RemoteMachineShellConnection(data_node)
-                        remote_machine.kill_memcached()
+                    for i in range(100):
+                        remote_machine.kill_memcached(num_retries=0)
                     break
                 self.sleep(1)
                 timeout = timeout + 1
@@ -1268,3 +1289,39 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     'index']
             self.log.info(index_used_select_query)
             self.assertEqual(index_used_select_query, query.index_name, 'trained index not used for scans')
+
+    def test_distance_projection_scans(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        collection_namespace = self.namespaces[0]
+
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_vec2 = list(self.encoder.encode(desc_2))
+
+        scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        vector_index_L2 = QueryDefinition("vector_index_L2",
+                                          index_fields=['rating', 'descriptionVector Vector',
+                                                        'category'],
+                                          dimension=384,
+                                          description=f"IVF,{self.quantization_algo_description_vector}",
+                                          similarity="L2_SQUARED",
+                                          scan_nprobes=self.scan_nprobes,
+                                          limit=self.scan_limit,
+                                          query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                              scan_desc_vec_1,
+                                              "rating = 2 and "
+                                              "category in ['Convertible', "
+                                              "'Luxury Car', 'Supercar']",
+                                              scan_desc_vec_1))
+        create_query = vector_index_L2.generate_index_create_query(namespace=collection_namespace)
+        self.run_cbq_query(query=create_query)
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index_L2],
+                                                            namespace=collection_namespace)[0]
+        distance_list = []
+        c = self.run_cbq_query(query=select_query)['results']
+        for v in c:
+            distance_list.append(v['$1'])
+
+        copy_distance_list = distance_list[:]
+
+        self.assertEqual(sorted(copy_distance_list), distance_list, "distance projection for the query is incorrect")
+

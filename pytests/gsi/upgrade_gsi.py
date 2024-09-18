@@ -1461,6 +1461,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.gsi_util_obj.create_gsi_indexes(create_queries=[build_queries], database=namespace, query_node=self.n1ql_node)
 
         self.wait_until_indexes_online()
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             if existing_bucket_name.name != index['bucket']:
@@ -1537,8 +1538,14 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         rebalance.result()
 
+        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
-
+        self.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+                                           map_after_rebalance=map_after_rebalance,
+                                           stats_map_before_rebalance=stats_before_rebalance,
+                                           stats_map_after_rebalance=stats_after_rebalance,
+                                           item_count_increase=False,
+                                           per_node=True, skip_array_index_item_count=False)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after reducing num replica count")
 
@@ -2762,14 +2769,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 log.info(str(ex))
         msg = "Some scans did not yield the same results for partitioned index and non-partitioned indexes"
         self.assertEqual(len(failed_queries), 0, msg)
-
-    def _return_maps(self, perNode=False, map_from_index_nodes=False):
-        if map_from_index_nodes:
-            index_map = self.get_index_map_from_index_endpoint()
-        else:
-            index_map = self.get_index_map()
-        stats_map = self.get_index_stats(perNode=perNode)
-        return index_map, stats_map
 
     def disable_upgrade_to_plasma(self, indexer_node):
         rest = RestConnection(indexer_node)
