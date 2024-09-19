@@ -81,8 +81,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
-            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace)
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace, limit=self.scan_limit)
 
@@ -317,16 +319,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         query_list = []
         collection_namespace = self.namespaces[0]
         vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
+                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64,
+                                     bhive_index=self.bhive_index)
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True, 
+                                                       bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
         query_list.append(build_query)
 
         vector_idx_2 = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
                                        dimension=384, is_base64=self.base64,
-                                       description="IVF,PQ32x8", similarity="L2_SQUARED")
-        query = vector_idx_2.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+                                       description="IVF,PQ32x8", similarity="L2_SQUARED", bhive_index=self.bhive_index)
+        query = vector_idx_2.generate_index_create_query(namespace=collection_namespace, defer_build=False, 
+                                                         bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
         drop_query = vector_idx_2.generate_index_drop_query(namespace=collection_namespace)
         query_list.append(drop_query)
@@ -346,11 +351,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         vector_idx = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
                                      dimension=384, is_base64=self.base64,
-                                     description="IVF,PQ32x8", similarity="L2_SQUARED")
+                                     description="IVF,PQ32x8", similarity="L2_SQUARED", bhive_index=self.bhive_index)
         defer_build = False
         if self.build_phase == "create":
             defer_build = True
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build)
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build, 
+                                                       bhive_index=self.bhive_index)
 
         drop_query = vector_idx.generate_index_drop_query(namespace=collection_namespace)
         if self.build_phase == "create":
@@ -385,8 +391,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             idx_name = f'idx_{item}'
             vector_idx = QueryDefinition(index_name=idx_name + 'vector', index_fields=['colorRGBVector VECTOR'],
                                          dimension=3, is_base64=self.base64,
-                                         description="IVF,PQ3x8", similarity="L2_SQUARED")
-            query1 = vector_idx.generate_index_create_query(namespace=namespace)
+                                         description="IVF,PQ3x8", similarity="L2_SQUARED", bhive_index=self.bhive_index)
+            query1 = vector_idx.generate_index_create_query(namespace=namespace, bhive_index=self.bhive_index)
             self.run_cbq_query(query=query1)
             drop_query_1 = vector_idx.generate_index_drop_query(namespace=namespace)
             index_drop_list.append(drop_query_1)

@@ -317,6 +317,91 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
+    def generate_car_vector_loader_index_definition_bhive(self, index_name_prefix=None, similarity="L2", train_list=None,
+                                                    scan_nprobes=1, skip_primary=False, array_indexes=False,
+                                                    limit=10, quantization_algo_color_vector=None,quantization_algo_description_vector=None):
+
+        definitions_list = []
+        color_vec_1 = [43.0, 133.0, 178.0]
+        color_vec_2 = [90.0, 33.0, 18.0]
+
+        desc_1 = "A convertible car with red color made in 1990"
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        descVec1 = list(self.encoder.encode(desc_1))
+        descVec2 = list(self.encoder.encode(desc_2))
+
+        scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_2 = f"ANN(colorRGBVector, {color_vec_2}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_1 = f"ANN(descriptionVector, {descVec1}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{similarity}', {scan_nprobes})"
+
+        if not index_name_prefix:
+            index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
+
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color", 'colorHex like "#8f%%"'),
+                                is_primary=True))
+
+        # Single vector field - colorRGBVector
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'colorRGBVectorBhive', index_fields=['colorRGBVector VECTOR'],
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"colorRGBVector,"
+                                                                              f" {scan_color_vec_1}",
+                                                                              scan_color_vec_1)))
+
+        # Single vector field - descriptionVector
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'descriptionVectorBhive', index_fields=['descriptionVector VECTOR'],
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"descriptionVector,"
+                                                                              f" {scan_desc_vec_1}",
+                                                                              scan_desc_vec_2)))
+
+        # Single vector field + multiple scalar fields + partitioned on scalar field
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partitionedVectorBhive', index_fields=['descriptionVector VECTOR'],
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("descriptionVector",
+                                                                               "rating = 2 and "
+                                                                               "category in ['Convertible', "
+                                                                               "'Luxury Car', 'Supercar']",
+                                                                               scan_desc_vec_1),
+                            partition_by_fields=['meta().id'], include_fields=['rating', 'category']
+                            ))
+
+        # Single vector + multiple scalar fields
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'includeBhive',
+                            index_fields=['colorRGBVector VECTOR'],
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit, missing_indexes=True, missing_field_desc=True,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("colorRGBVector",
+                                                                               "year > 1980 OR "
+                                                                               "fuel = 'Diesel' ",
+                                                                               scan_desc_vec_2),
+                            include_fields=['fuel', 'year']))
+        # Partial Indexes
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partialIndexBhive',
+                            index_fields=['descriptionVector VECTOR'],
+                            index_where_clause='rating > 3',
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
+                                                                               "rating = 4 and "
+                                                                               'description like "%%Convertible%%"',
+                                                                               scan_desc_vec_2),
+                            include_fields=['description', 'rating']))
+        return definitions_list
+
 
     def generate_magma_doc_loader_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
@@ -573,7 +658,8 @@ class GSIUtils(object):
 
     def get_create_index_list(self, definition_list, namespace, defer_build_mix=False,
                               defer_build=False, num_replica=None, deploy_node_info=None, randomise_replica_count=False,
-                              trainlist=None, dimension=None, description=None, similarity=None, scan_nprobes=None):
+                              trainlist=None, dimension=None, description=None, similarity=None, scan_nprobes=None,
+                              bhive_index=False):
         create_index_list = []
         for index_gen in definition_list:
             nodes_list = None
@@ -591,7 +677,7 @@ class GSIUtils(object):
                                                           num_replica=num_replicas, deploy_node_info=nodes_list,
                                                           train_list=trainlist, dimension=dimension,
                                                           description=description, similarity=similarity,
-                                                          scan_nprobes=scan_nprobes)
+                                                          scan_nprobes=scan_nprobes, bhive_index=bhive_index)
             create_index_list.append(query)
         return create_index_list
 
@@ -762,7 +848,7 @@ class GSIUtils(object):
 
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
-                                  quantization_algo_description_vector=None, is_base64=False):
+                                  quantization_algo_description_vector=None, is_base64=False, bhive_index=False):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -776,15 +862,26 @@ class GSIUtils(object):
             definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix,
                                                                               skip_primary=skip_primary)
         elif dataset == 'Cars':
-            definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
+            if bhive_index:
+                definition_list = self.generate_car_vector_loader_index_definition_bhive(index_name_prefix=prefix,
                                                                                skip_primary=skip_primary,
                                                                                similarity=similarity,
                                                                                train_list=train_list,
                                                                                scan_nprobes=scan_nprobes,
                                                                                array_indexes=array_indexes,
-                                                                               limit=limit, is_base64=is_base64,
+                                                                               limit=limit,
                                                                                quantization_algo_color_vector=quantization_algo_color_vector,
                                                                                quantization_algo_description_vector=quantization_algo_description_vector)
+            else:
+                definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
+                                                                                skip_primary=skip_primary,
+                                                                                similarity=similarity,
+                                                                                train_list=train_list,
+                                                                                scan_nprobes=scan_nprobes,
+                                                                                array_indexes=array_indexes,
+                                                                                limit=limit, is_base64=is_base64,
+                                                                                quantization_algo_color_vector=quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=quantization_algo_description_vector)
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)

@@ -42,13 +42,15 @@ class QueryDefinition(object):
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
                  dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
-                 is_base64=False):
+                 is_base64=False, include_fields=None, bhive_index=False):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
             groups = []
         if index_fields is None:
             index_fields = []
+        if include_fields is None:
+            include_fields = []
         self.name = str(uuid.uuid4()).replace("-", "")
         self.index_name = index_name
         self.index_fields = index_fields
@@ -73,12 +75,15 @@ class QueryDefinition(object):
         self.scan_nprobes = scan_nprobes
         self.limit = limit
         self.is_base64 = is_base64
+        self.include_fields = include_fields
+        self.bhive_index = bhive_index
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
                                     num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
                                     missing_indexes=False, missing_field_desc=False, dimension=None, train_list=None,
-                                    description=None, similarity=None, scan_nprobes=None):
+                                    description=None, similarity=None, scan_nprobes=None, include_fields=None,
+                                    bhive_index=False):
         if dimension:
             self.dimension = dimension
         if train_list:
@@ -112,6 +117,7 @@ class QueryDefinition(object):
                     self.index_fields[idx] = f"DECODE_VECTOR({field_name}, false) VECTOR"
                     break
         if desc is None:
+            vector_keyword = "VECTOR" if bhive_index else ""
             if self.missing_indexes:
                 field_list = []
                 for idx, field in enumerate(self.index_fields):
@@ -123,9 +129,11 @@ class QueryDefinition(object):
                     else:
                         field_list.append(field)
 
-                query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, ",".join(field_list))
+                query = "CREATE {0} INDEX `{1}` ON {2}({3})".format(vector_keyword, self.index_name,
+                                                                    namespace, ",".join(field_list))
             else:
-                query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, ",".join(self.index_fields))
+                query = "CREATE {0} INDEX `{1}` ON {2}({3})".format(vector_keyword, self.index_name,
+                                                                    namespace, ",".join(self.index_fields))
         else:
             collations = ""
             for x, y in zip(self.index_fields, desc):
@@ -136,6 +144,8 @@ class QueryDefinition(object):
             # remove the extra comma
             collations = collations[:-1]
             query = "CREATE INDEX `{0}` ON {1}({2})".format(self.index_name, namespace, collations)
+        if self.include_fields:
+            query += " INCLUDE (" + ", ".join(self.include_fields) + ")"
         if self.partition_by_fields:
             query += " PARTITION BY HASH (" + ", ".join(self.partition_by_fields) + ")"
         if index_where_clause:

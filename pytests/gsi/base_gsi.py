@@ -161,6 +161,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.scan_limit = self.input.param("scan_limit", 100)
         self.base64 = self.input.param("base64", False)
         self.use_magma_server = self.input.param("use_magma_server", False)
+        self.bhive_index = self.input.param("bhive_index", False)
         self.namespaces = []
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
