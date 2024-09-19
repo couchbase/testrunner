@@ -1676,7 +1676,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             # run scans in a loop while docs are getting expired
             start_time = datetime.datetime.now()
-            end_time = start_time + timedelta(minutes=20)
+            end_time = start_time + datetime.timedelta(minutes=20)
 
             while datetime.datetime.now() < end_time:
                 query_stats_map = {}
