@@ -111,7 +111,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.cli_command_location = bin_path.replace('"', '') + "/"
         if self.input.param("tools_package", False):
             self.previous_cli = self.cli_command_location
-            self.cli_command_location = "/tmp/tools_package/bin/"
+            self.cli_command_location = "/tmp/tools_package/couchbase-server-dev-tools-*/bin/"
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.show_bk_list = self.input.param("show_bk_list", True)
@@ -181,7 +181,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backupset.directory = self.input.param("dir", WIN_TMP_PATH_RAW + "entbackup")
             if self.input.param("tools_package", False):
                 self.previous_cli = self.cli_command_location
-                self.cli_command_location = "/cygdrive/c/tmp/tools_package/bin/"
+                self.cli_command_location = "/cygdrive/c/tmp/tools_package/couchbase-server-dev-tools-*/bin/"
         elif info == 'mac':
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
