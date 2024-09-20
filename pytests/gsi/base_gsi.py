@@ -427,10 +427,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.s3_utils_obj.download_file(object_name=backup_filename,
                                         filename=filename)
         remote_client = RemoteMachineShellConnection(self.master)
+        type = remote_client.extract_remote_info().distribution_type.lower()
         remote_client.copy_file_local_to_remote(src_path=filename, des_path=filename)
         repo = filename.split('.')[0]
         remote_client.execute_command("rm -rf backup")
-        backup_config_cmd = f"/opt/couchbase/bin/cbbackupmgr config --archive backup/ --repo {repo}"
+        if type == 'windows':
+            couchbase_root_dir = '"C:\\Program Files\\Couchbase\\Server\\bin\\cbbackupmgr"'
+        else:
+            couchbase_root_dir = "/opt/couchbase/bin/cbbackupmgr"
+        backup_config_cmd = f"{couchbase_root_dir} config --archive backup/ --repo {repo}"
         out = remote_client.execute_command(backup_config_cmd)
         self.log.info(out)
         if "failed" in out[0]:
@@ -438,7 +443,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("unzip the backup repo before restoring it")
         unzip_cmd = f"unzip -o {filename}"
         remote_client.execute_command(command=unzip_cmd)
-        restore_cmd = f"/opt/couchbase/bin/cbbackupmgr restore --archive backup --repo {repo} " \
+        restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
                       f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
                       f"-auto-create-buckets "
         restore_out = remote_client.execute_command(restore_cmd)
@@ -454,7 +459,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 collections = self.rest.get_scope_collections(bucket=bucket, scope=scope)
                 for collection in collections:
                     self.namespaces.append(f"{bucket}.{scope}.{collection}")
-        self.log.info("namespaces created sucessfully")
+        self.log.info("namespaces created successfully")
         self.log.info(self.namespaces)
 
     def validate_scans_for_recall_and_accuracy(self, select_query):
