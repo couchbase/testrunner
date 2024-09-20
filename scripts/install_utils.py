@@ -1389,15 +1389,15 @@ def __get_build_binary_name(node, is_release_build=False):
 
 def __get_tools_package_name(node):
     cb_version = node.cb_version or params["version"]
-    # couchbase-server-dev-tools_7.1.1-3103-windows_amd64.zip
+    # couchbase-server-dev-tools-7.1.1-3103-windows_amd64.zip
     if "windows" in node.get_os():
-        return f"couchbase-server-dev-tools_{cb_version}-windows_amd64.zip"
-    # couchbase-server-dev-tools_7.1.1-3103-macos_x86_64.tar.gz
+        return f"couchbase-server-dev-tools-{cb_version}-windows_amd64.zip"
+    # couchbase-server-dev-tools-7.1.1-3103-macos_x86_64.tar.gz
     if node.get_os() in install_constants.MACOS_VERSIONS:
-        return f"couchbase-server-dev-tools_{cb_version}-macos_x86_64.tar.gz"
+        return f"couchbase-server-dev-tools-{cb_version}-macos_x86_64.tar.gz"
     # Default to linux, since we don't differentiate between x86 and amd64 distros
-    # couchbase-server-dev-tools_7.1.1-3103-linux_x86_64.tar.gz
-    return f"couchbase-server-dev-tools_{cb_version}-linux_x86_64.tar.gz"
+    # couchbase-server-dev-tools-7.1.1-3103-linux_x86_64.tar.gz
+    return f"couchbase-server-dev-tools-{cb_version}-linux_x86_64.tar.gz"
 
 def is_fatal_error(errors):
     for line in errors:
