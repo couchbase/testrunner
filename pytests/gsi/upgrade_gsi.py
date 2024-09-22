@@ -1540,7 +1540,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
-        self.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
                                            map_after_rebalance=map_after_rebalance,
                                            stats_map_before_rebalance=stats_before_rebalance,
                                            stats_map_after_rebalance=stats_after_rebalance,
@@ -1550,7 +1550,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                message="results after reducing num replica count")
 
         #drop indexes
-        self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, database=namespace)
+        self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, database=namespaces)
 
     def test_upgrade_downgrade_upgrade(self):
         self.rest.delete_all_buckets()
