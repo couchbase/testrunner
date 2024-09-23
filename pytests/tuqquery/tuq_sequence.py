@@ -425,11 +425,11 @@ class QuerySequenceTests(QueryTests):
         result = self.run_cbq_query(f'INSERT INTO {self.bucket} VALUES (uuid(),{{"num":NEXT VALUE FOR {self.bucket}.`_default`.{sequence_name}, "customer":"Sam"}}) RETURNING *')
         self.assertEqual(result['results'], expected_result)
 
-        expected_result = [{'id': f'{self.start+self.increment}', 'default': {'customer': 'Bobby', 'num': self.start+2*self.increment}}]
+        expected_result = [{'id': f'{self.start+self.increment}', 'default': {'customer': 'Bobby', 'num': self.start+self.increment}}]
         result = self.run_cbq_query(f'INSERT INTO {self.bucket} VALUES (TO_STRING(NEXTVAL FOR {self.bucket}.`_default`.{sequence_name}), {{"num":NEXTVAL FOR {self.bucket}.`_default`.{sequence_name}, "customer":"Bobby"}}) RETURNING meta().id,*')
         self.assertEqual(result['results'], expected_result)
 
-        expected_result = [{'id': f'{self.start+3*self.increment}', 'default': {'customer': 'Bobby', 'num': self.start+3*self.increment}}]
+        expected_result = [{'id': f'{self.start+2*self.increment}', 'default': {'customer': 'Bobby', 'num': self.start+2*self.increment}}]
         result = self.run_cbq_query(f'INSERT INTO {self.bucket} (KEY k, VALUE v) SELECT TO_STRING(NEXTVAL FOR {self.bucket}.`_default`.{sequence_name}) k, {{"num":NEXTVAL FOR {self.bucket}.`_default`.{sequence_name}, "customer":"Bobby"}} v RETURNING meta().id,*')
         self.assertEqual(result['results'], expected_result)
 
