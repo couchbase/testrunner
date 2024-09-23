@@ -22,6 +22,7 @@ from scripts.multilevel_dict import MultilevelDict
 from remote.remote_util import RemoteMachineShellConnection
 from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
+from threading import Thread
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -192,8 +193,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=query)
         # for the scenario where num docs less than centroids
         try:
-            query = f"BUILD INDEX ON {collection_namespace}(vector) USING GSI "
-            self.run_cbq_query(query=query)
+            build_query = f"BUILD INDEX ON {collection_namespace}(vector) USING GSI "
+            self.run_cbq_query(query=build_query)
         except Exception as err:
             err_msg = 'are less than the minimum number of documents:'
             self.assertTrue(err_msg in str(err), f"Index with less docs are created: {err}")
@@ -850,7 +851,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        self.wait_until_indexes_online()
+        self.wait_until_indexes_online(defer_build=True)
+
 
         map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
@@ -1209,11 +1211,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         timeout = 0
         with ThreadPoolExecutor() as executor:
             executor.submit(self.run_cbq_query, query=build_query)
+            self.sleep(2)
             while timeout < 360:
                 index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
                 if index_state == self.build_phase:
-                    for i in range(100):
-                        remote_machine.kill_memcached(num_retries=0)
+                    remote_machine.kill_memcached(num_retries=0)
                     break
                 self.sleep(1)
                 timeout = timeout + 1
@@ -1343,6 +1345,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.assertEqual(sorted(copy_distance_list), distance_list, "distance projection for the query is incorrect")
 
+
     def test_scans_after_vector_field_mutations(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
@@ -1362,6 +1365,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
+
 
             drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                  namespace=namespace)
@@ -1713,3 +1717,38 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # validate that number of indexed docs are zero for all the indexes
             index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             self.assertTrue(self.check_if_index_count_zero(definitions, index_nodes))
+
+    def test_run_scans_on_dgm(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        select_queries = set()
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replicas)
+            select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                       namespace=namespace, limit=self.scan_limit))
+
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                 query_node=self.n1ql_node)
+        self.wait_until_indexes_online()
+        # self.sleep(300)
+        self.run_continous_query = True
+        self.query_node = self.n1ql_node
+        query_timer = 0
+        thread = Thread(target=self._run_queries_continously, args=[select_queries])
+        thread.start()
+        while query_timer < 300:
+            query_timer += 1
+            self.sleep(1)
+        self.run_continous_query = False
+
+        self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message=f"results getting rr less than {self.desired_rr}%")

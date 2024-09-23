@@ -20,7 +20,6 @@ import numpy as np
 import requests
 from deepdiff import DeepDiff
 from requests.auth import HTTPBasicAuth
-
 from Cb_constants import CbServer
 from collection.collections_cli_client import CollectionsCLI
 from collection.collections_rest_client import CollectionsRest
@@ -35,7 +34,6 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
 from membase.api.rest_client import RestConnection, RestHelper
 from serverless.gsi_utils import GSIUtils
-from table_view import TableView
 from tasks.task import ConcurrentIndexCreateTask
 from tasks.task import SDKLoadDocumentsTask
 from .newtuq import QueryTests
@@ -49,6 +47,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         super(BaseSecondaryIndexingTests, self).setUp()
         self.ansi_join = self.input.param("ansi_join", False)
         self.index_lost_during_move_out = []
+        self.run_continous_query = False
+        self.desired_rr = self.input.param("desired_rr", 10)
         self.verify_using_index_status = self.input.param("verify_using_index_status", False)
         self.use_replica_when_active_down = self.input.param("use_replica_when_active_down", True)
         self.use_where_clause_in_index = self.input.param("use_where_clause_in_index", False)
@@ -526,6 +526,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         modified_query = re.sub(array_pattern, 'qvec', query)
 
         return modified_query
+
     def extract_vector_field_and_query_vector(self, query):
         if self.base64:
             pattern = r"ANN\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
@@ -542,27 +543,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             return vector_field, vector
         else:
             raise Exception("no fields extracted")
-
-    def gen_table_view(self, query_stats_map, message="query stats"):
-        table = TableView(self.log.info)
-        table.set_headers(['Query', 'Recall', 'Accuracy'])
-        for query in query_stats_map:
-            table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
-        table.display(message=message)
-
-    def display_recall_and_accuracy_stats(self, select_queries, message="query stats"):
-        query_stats_map = {}
-        for query in select_queries:
-            # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
-            if "ANN" not in query:
-                continue
-            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
-            query_stats_map[redacted_query] = [recall, accuracy]
-        self.gen_table_view(query_stats_map=query_stats_map, message=message)
-        for query in query_stats_map:
-            self.assertGreaterEqual(query_stats_map[query][0]*100, 80, f"recall for query {query} is less than threshold 10")
-            self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
-                                    f"accuracy for query {query} is less than threshold 10")
 
     def _return_maps(self, perNode=False, map_from_index_nodes=False):
         if map_from_index_nodes:
@@ -664,6 +644,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                                   'umount -l /data; fsck.ext4 /usr/disk-img/disk-quota.ext4 -y; '
                                   'chattr +i /data; mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 '
                                   '/data; rm -rf /data/*; chmod -R 777 /data')
+
+    def _run_queries_continously(self, select_queries):
+        while self.run_continous_query:
+            tasks_list = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
+                                                                    query_node=self.query_node)
+            for task in tasks_list:
+                task.result()
 
     def get_size_of_metastore_file(self):
         indexer_nodes = self.get_nodes_from_services_map(
@@ -1679,23 +1666,23 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         return server_index_count
 
+    def compute_cluster_avg_rr_index(self):
+        index_rr_percentages = []
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            rest = RestConnection(node)
+            all_stats = rest.get_all_index_stats()
+            index_rr_percentages.append(all_stats['avg_resident_percent'])
+            self.log.info(f"Index avg_resident_ratio for node {node.ip} is {all_stats['avg_resident_percent']}")
+        avg_avg_rr = sum(index_rr_percentages) / len(index_rr_percentages)
+        return avg_avg_rr
+
     def dataload_till_rr(self, namespaces, rr=100, json_template='Hotel', batch_size=10000, timeout=1800):
         """
         Run this method only when no Index scans are being served, otherwise reaching to desired rr won't be possible
         """
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-
-        def is_rr_achived():
-            resident_ratios = []
-            for index_node in index_nodes:
-                rest = RestConnection(index_node)
-                resident_ratios.append(rest.get_indexer_stats()['avg_resident_percent'])
-            self.log.info(f"Current Resident Ratios of Index nodes - {resident_ratios}")
-            value = any(rr >= x for x in resident_ratios)
-            return value
-
         start_time = time.time()
-        while not is_rr_achived():
+        while self.compute_cluster_avg_rr_index() > rr:
             for namespace in namespaces:
                 _, keyspace = namespace.split(':')
                 bucket, scope, collection = keyspace.split('.')
@@ -1718,6 +1705,36 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.sleep(30, "Giving some time to Resident Ratio to settle down")
             else:
                 self.log.info(f"Can't reach desired Resident Ratio in {timeout} secs.")
+
+    def index_creation_till_rr(self, rr=100, timeout=1800):
+        start_time = time.time()
+        characters = string.ascii_letters + string.digits
+        while self.compute_cluster_avg_rr_index() > rr:
+            for namespace in self.namespaces:
+                random_sequence = ''.join(random.choices(characters, k=5))
+                definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                          prefix='test_' + random_sequence,
+                                                                          similarity=self.similarity, train_list=None,
+                                                                          scan_nprobes=self.scan_nprobes,
+                                                                          array_indexes=False,
+                                                                          limit=self.scan_limit,
+                                                                          quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                         namespace=namespace,
+                                                                         num_replica=self.num_index_replicas)
+
+            for query in create_queries:
+                if self.compute_cluster_avg_rr_index() > rr:
+                    self.run_cbq_query(query)
+                else:
+                    break
+                self.wait_until_indexes_online()
+                if time.time() - start_time < timeout:
+                    self.sleep(60, "Giving some time to Resident Ratio to settle down")
+                else:
+                    self.log.info(f"Can't reach desired Resident Ratio in {timeout} secs.")
+
 
     def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False, schedule_index=False):
         rest = RestConnection(self.master)
@@ -2956,6 +2973,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         return ann[0][:limit]
 
     def gen_table_view(self, query_stats_map, message="query stats"):
+        from table_view import TableView
         table = TableView(self.log.info)
         table.set_headers(['Query', 'Recall', 'Accuracy'])
         for query in query_stats_map:
@@ -2975,7 +2993,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.assertGreaterEqual(query_stats_map[query][0]*100, 80, f"recall for query {query} is less than threshold 10")
             self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
                                     f"accuracy for query {query} is less than threshold 10")
-
     def validate_error_msg_and_doc_count_in_cbcollect(self, node, error_message):
         shell = RemoteMachineShellConnection(node)
         if shell.extract_remote_info().type.lower() == 'windows':
@@ -3101,3 +3118,5 @@ class ConCurIndexOps():
                         index_created = True
 
         return index_created, status
+
+

@@ -50,7 +50,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 1)
         self.run_mixed_mode_tests = self.input.param("run_mixed_mode_tests", False)
-        self.run_continous_query = False
+
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
         self.no_mutation_docs = self.input.param("no_mutation_docs", 75000)
@@ -2419,13 +2419,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.log.info(f'storage stats {stats}')
                 indexes_disk_size[index] = stats["MainStore"][f"{stat}"]
         return indexes_disk_size
-
-    def _run_queries_continously(self, select_queries):
-        while self.run_continous_query:
-            tasks_list = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
-                                                                    query_node=self.query_node)
-            for task in tasks_list:
-                task.result()
 
     def _verify_create_index_api(self, keyspace='default'):
         """

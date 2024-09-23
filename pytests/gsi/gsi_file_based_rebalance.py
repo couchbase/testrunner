@@ -1695,17 +1695,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 print(f"Disk output as seen on {node.ip} is {disk_output}")
                 time.sleep(60)
 
-    def compute_cluster_avg_rr_index(self):
-        index_rr_percentages = []
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for node in index_nodes:
-            rest = RestConnection(node)
-            all_stats = rest.get_all_index_stats()
-            index_rr_percentages.append(all_stats['avg_resident_percent'])
-            self.log.info(f"Index avg_resident_ratio for node {node.ip} is {all_stats['avg_resident_percent']}")
-        avg_avg_rr = sum(index_rr_percentages) / len(index_rr_percentages)
-        return avg_avg_rr
-
     def load_until_index_dgm(self, resident_ratio=50):
         rr_achieved, end_num, batch_size = False, self.num_of_docs_per_collection, 10000
         avg_avg_rr = self.compute_cluster_avg_rr_index()
