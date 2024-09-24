@@ -26,6 +26,7 @@ class VectorSearchTests(QueryTests):
         self.query_count = self.input.param("query_count", 10)
         self.index_order = self.input.param("index_order", "tail")
         self.prepare_before = self.input.param("prepare_before", False)
+        self.use_bhive = self.input.param("use_bhive", False)
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
@@ -122,7 +123,7 @@ class VectorSearchTests(QueryTests):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             begin = random.randint(0, len(self.xq) - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
@@ -136,7 +137,7 @@ class VectorSearchTests(QueryTests):
                     self.log.warn(f"Distances: {distances[i].tolist()}")
                     self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_ann_search_faiss(self):
         normalize = False
@@ -150,7 +151,7 @@ class VectorSearchTests(QueryTests):
         faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             begin = random.randint(0, len(self.xq) - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
@@ -164,7 +165,7 @@ class VectorSearchTests(QueryTests):
                     self.log.warn(f"Distances: {distances[i].tolist()}")
                     self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_normalize(self):
         vector = ast.literal_eval(self.vector)
@@ -197,7 +198,7 @@ class VectorSearchTests(QueryTests):
 
     def test_mutate(self):
         self.log.info("Create Vector Index")
-        IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+        IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
         distances, indices = QueryVector().search(self.database, self.xq[10:11], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
         # Get 2 vectors from the result set also in gt
         intersect = np.intersect1d(self.gt[10:11], indices)
@@ -225,7 +226,7 @@ class VectorSearchTests(QueryTests):
         explain_ann = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             explain = self.run_cbq_query(explain_ann)
             self.log.info(explain['results'])
             index_scan = explain['results'][0]['plan']['~children'][0]['~children'][0]
@@ -235,7 +236,7 @@ class VectorSearchTests(QueryTests):
             self.assertEqual(index_name, f'vector_index_{self.distance}')
             self.assertEqual(index_order[0]['keypos'], index_vector['index_key_pos'])
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_explain_knn_no_index(self):
         explain_knn = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
@@ -249,7 +250,7 @@ class VectorSearchTests(QueryTests):
         explain_knn = f'EXPLAIN SELECT size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             self.sleep(10)
             explain = self.run_cbq_query(explain_knn)
             self.log.info(explain['results'])
@@ -258,7 +259,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' not in index_scan)
             self.assertEqual(index_name, f'vector_index_{self.distance}')
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_advise_ann(self):
         similarity = self.distance.lower()
@@ -296,7 +297,7 @@ class VectorSearchTests(QueryTests):
     def test_catalog(self):
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             indexes = self.run_cbq_query('SELECT * FROM system:indexes')
             self.log.info(indexes['results'])
             index_info = indexes['results'][0]['indexes']
@@ -305,7 +306,7 @@ class VectorSearchTests(QueryTests):
             self.assertEqual(index_name, f'vector_index_{self.distance}')
             self.assertEqual(index_key, ['`size`', '`brand`', '`vec` VECTOR'])
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_update_stats(self):
         update_stats_field = "UPDATE STATISTICS FOR default('vec')"
@@ -313,10 +314,10 @@ class VectorSearchTests(QueryTests):
         self.run_cbq_query(update_stats_field)
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             self.run_cbq_query(update_stats_index)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)        
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_prepare(self):
         query_num = 1
@@ -329,7 +330,7 @@ class VectorSearchTests(QueryTests):
             self.log.info(prepare_ann['results'])
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             if not self.prepare_before:
                 prepare_knn= self.run_cbq_query(prepare_knn_query)
                 self.log.info(prepare_knn['results'])
@@ -353,13 +354,13 @@ class VectorSearchTests(QueryTests):
                 self.assertTrue('index_vector' in children)
                 self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_cte1(self):
         query_num = 11
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             query_cte = f'WITH query_vector AS ( SELECT embedding FROM [{self.xq[query_num].tolist()}] embedding ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, query_vector[0].embedding, "{self.distance}") LIMIT 100'
             explain_query_cte = f'EXPLAIN {query_cte}'
             explain = self.run_cbq_query(explain_query_cte)
@@ -373,13 +374,13 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
     
     def test_cte2(self):
         query_num = 15
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             query_cte = f'WITH query_vector AS ( SELECT id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100 ) SELECT RAW id FROM query_vector'
             explain_query_cte = f'EXPLAIN {query_cte}'
             explain = self.run_cbq_query(explain_query_cte)
@@ -393,7 +394,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_cte3(self):
         query_num = 11
@@ -401,7 +402,7 @@ class VectorSearchTests(QueryTests):
         explain_query_cte = f'EXPLAIN {query_cte}'
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             explain = self.run_cbq_query(explain_query_cte)
             result = self.run_cbq_query(query_cte)
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
@@ -413,7 +414,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_cte_udf(self):
         query_num = 21
@@ -423,7 +424,7 @@ class VectorSearchTests(QueryTests):
         explain_query_cte = f'EXPLAIN {query_cte}'
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             explain = self.run_cbq_query(explain_query_cte)
             result = self.run_cbq_query(query_cte)
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
@@ -435,7 +436,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_vector_transaction(self):
         query_num = 41
@@ -443,7 +444,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {query}'
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             results = self.run_cbq_query(query='BEGIN WORK')
             txid = results['results'][0]['txid']
             explain = self.run_cbq_query(explain_query, txnid=txid)
@@ -458,7 +459,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_infer(self):
         result = self.run_cbq_query('INFER default')
@@ -472,13 +473,13 @@ class VectorSearchTests(QueryTests):
         self.run_cbq_query(create_udf)
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query(8, "adidas", {self.xq[query_num].tolist()})')
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
             self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_js_udf(self):
         query_num = 61
@@ -486,14 +487,14 @@ class VectorSearchTests(QueryTests):
         self.run_cbq_query(create_udf)
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query_js(8, "adidas", {self.xq[query_num].tolist()})')
             explain = self.run_cbq_query(f'EXPLAIN EXECUTE FUNCTION ann_query_js(8, "adidas", {self.xq[query_num].tolist()})')
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
             self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             self.assertTrue(recall > self.recall_ann)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_use_index(self):
         query_num = 72
@@ -501,8 +502,8 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {query}'
         try:
             self.log.info("Create Vector Indexes")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity="L2", is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity="EUCLIDEAN", is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity="L2", is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity="EUCLIDEAN", is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             explain = self.run_cbq_query(explain_query)
             query_plan = explain['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
@@ -519,7 +520,7 @@ class VectorSearchTests(QueryTests):
         explain_query = f'EXPLAIN {query}'
         try:
             self.log.info("Create Vector Indexes")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
             result = self.run_cbq_query(query)
             explain = self.run_cbq_query(explain_query)
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'])
@@ -530,4 +531,4 @@ class VectorSearchTests(QueryTests):
             index_name = children['index']
             self.assertEqual(index_name, f'#sequentialscan')
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)

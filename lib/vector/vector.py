@@ -177,7 +177,7 @@ class LoadVector(object):
             print(e)
 
 class IndexVector(object):
-    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', index_order='tail', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3):
+    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', index_order='tail', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3, use_bhive=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         if is_xattr:
@@ -191,15 +191,19 @@ class IndexVector(object):
             'lead': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR, size, brand) WITH {vector_definition}',
         }
         index_query = index_queries[index_order]
+        if use_bhive:
+            index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
         print(index_query)
         result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
         for row in result:
             print(f"Result: {row}")
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
-    def drop_index(self, cluster, bucket='default', scope='_default', collection='_default', similarity='L2_SQUARED'):
+    def drop_index(self, cluster, bucket='default', scope='_default', collection='_default', similarity='L2_SQUARED', use_bhive=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         index_query = f'DROP INDEX vector_index_{similarity} IF EXISTS ON {collection}'
+        if use_bhive:
+            index_query = f'DROP INDEX vector_bhive_index_{similarity} IF EXISTS ON {collection}'
         print(index_query)
         result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
         for row in result:
@@ -219,8 +223,8 @@ class QueryVector(object):
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        size_predicate = ["size in $size", "size = $size[0]", "size < $size[0]+1 AND size > $size[0]-1"]
-        query = f'SELECT id, ANN({vector_field}, $qvec, "{search_function}", {nprobes}) as distance FROM {collection} WHERE {size_predicate[random.randint(0,2)]} AND brand IN $brand ORDER BY ANN({vector_field}, $qvec, "{search_function}", {nprobes}) {direction} LIMIT {k}'
+        size_predicate = ["size in $size", "size = $size[0]", "size < $size[0]+1 AND size > $size[0]-1", "size between $size[0] and $size[0]", "size <= $size[0] AND size > $size[0]-1"]
+        query = f'SELECT id, ANN({vector_field}, $qvec, "{search_function}", {nprobes}) as distance FROM {collection} WHERE {size_predicate[random.randint(0,4)]} AND brand IN $brand ORDER BY ANN({vector_field}, $qvec, "{search_function}", {nprobes}) {direction} LIMIT {k}'
         return query
     def run_queries(self, cluster, xb, qdocs, gdocs, search_function="L2", bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
         cb = cluster.bucket(bucket)
