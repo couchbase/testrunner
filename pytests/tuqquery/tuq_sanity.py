@@ -4054,6 +4054,40 @@ class QuerySanityTests(QueryTests):
             self.query = 'delete from %s use keys["f01","f02"]' % query_bucket
             self.run_cbq_query()
 
+    def test_limit_offset(self):
+        self.fail_if_no_buckets()
+        for query_bucket in self.query_buckets:
+            self.run_cbq_query(query=f'CREATE INDEX ix10 ON {query_bucket}(c0)')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
+            results1 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
+            results2 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
+            results3 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
+            self.assertEqual(results1['results'],[{'c1': '1', 'c2': 2}])
+            self.assertEqual(results2['results'],[{'c1': '1', 'c2': 3}])
+            self.assertEqual(results3['results'],[{'c1': '1', 'c2': 4}])
+    def test_limit_offset_early_order(self):
+        self.fail_if_no_buckets()
+        for query_bucket in self.query_buckets:
+            self.run_cbq_query(query=f'CREATE INDEX ix10 ON {query_bucket}(c0,c1)')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
+            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
+            results1 = self.run_cbq_query(
+                query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
+            results2 = self.run_cbq_query(
+                query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
+            results3 = self.run_cbq_query(
+                query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
+            self.assertEqual(results1['results'], [{'c1': '1', 'c2': 2}])
+            self.assertEqual(results2['results'], [{'c1': '1', 'c2': 3}])
+            self.assertEqual(results3['results'], [{'c1': '1', 'c2': 4}])
+
     ##############################################################################################
     #
     #  Number fns
