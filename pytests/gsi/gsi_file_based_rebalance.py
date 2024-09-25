@@ -1271,6 +1271,73 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.assertEqual(counter, 1,
                          f"new slot id not created for the new node for with clause stats : {slot_id_map_post_with_query}")
 
+    def test_missing_partitions_during_shard_rebalance(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes, collection_num=self.num_collections,
+                                                           scope_prefix=self.scope_prefix,
+                                                           collection_prefix=self.collection_prefix,
+                                                           bucket=self.test_bucket)
+        #creating namespaces and loading docs
+
+        scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
+        self.sleep(10, "Allowing time after collection creation")
+        for s_item in scopes:
+            collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
+            for c_item in collections:
+                self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                num_docs = 10000
+                if c_item == "test_collection_2":
+                    num_docs = 1000000
+                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=s_item,
+                                                collection=c_item, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password)
+
+                task = self.cluster.async_load_gen_docs(self.master, bucket=self.test_bucket,
+                                                        generator=self.gen_create, pause_secs=1,
+                                                        timeout_secs=300, use_magma_loader=True)
+                task.result()
+        self.enable_shard_based_rebalance()
+        self.sleep(10)
+        index_nodes_before_rebalance = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for query in ['create index idx_1 on test_bucket.test_scope_1.test_collection_1(name) partition by hash(meta().id) with {"num_partition": 64}', f'create index idx_2 on test_bucket.test_scope_1.test_collection_2(city, reviews) with {{"nodes": ["{index_nodes_before_rebalance[0].ip}:8091"]}}']:
+            self.run_cbq_query(query=query)
+
+        #swap rebalancing out the second node with the third node
+        rebalance = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[self.servers[self.nodes_init]],
+                                                 to_remove=[index_nodes_before_rebalance[1]], services=['index'])
+        time.sleep(1)
+        status, _ = self.rest._rebalance_status_and_progress()
+        while status != 'running':
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+        #loading 90k docs into collection 1
+        bucket, scope, collection = self.namespaces[0].split('.')
+        self.gen_create = SDKDataLoader(num_ops=90000, percent_create=100,
+                                        percent_update=0, percent_delete=0, scope=scope,
+                                        collection=collection, json_template=self.json_template,
+                                        output=True, username=self.username, password=self.password)
+
+        task = self.cluster.async_load_gen_docs(self.master, bucket=self.test_bucket,
+                                                    generator=self.gen_create, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=True)
+        task.result()
+
+        result = self.run_cbq_query(query="select count(name) from test_bucket.test_scope_1.test_collection_1 where name is not null;")
+        self.assertEqual(result[0]["$1"], 100000, "docs not matching")
+
     # common methods
     def _return_maps(self):
         index_map = self.get_index_map_from_index_endpoint(return_system_query_scope=False)

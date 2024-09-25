@@ -1460,6 +1460,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.sleep(30)
             self.gsi_util_obj.create_gsi_indexes(create_queries=[build_queries], database=namespace, query_node=self.n1ql_node)
 
+        self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         self.wait_until_indexes_online()
         map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_metadata = self.index_rest.get_indexer_metadata()['status']
@@ -1478,6 +1479,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.sleep(20)
 
         self.wait_until_indexes_online()
+        self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             if existing_bucket_name.name != index['bucket']:
@@ -1538,6 +1540,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         rebalance.result()
 
+        self.update_master_node()
+        self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
         self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
