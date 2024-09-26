@@ -532,3 +532,34 @@ class VectorSearchTests(QueryTests):
             self.assertEqual(index_name, f'#sequentialscan')
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+
+    def test_ann_zero(self):
+        vector_zero = np.zeros(128).tolist()
+        query = f'SELECT id, ANN(vec, {vector_zero}, "{self.distance}") distance FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {vector_zero}, "{self.distance}") LIMIT 100'
+        try:
+            self.log.info("Create Vector Index")
+            IndexVector().create_cover_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            result = self.run_cbq_query(query)
+            for item in result['results']:
+                if self.distance in ['L2', 'L2_SQUARED', 'EUCLIDEAN', 'EUCLIDEAN_SQUARED']:
+                    self.assertTrue(item['distance'] > 0)
+                if self.distance == 'DOT':
+                    self.assertEqual(item['distance'], 0)
+                if self.distance == 'COSINE':
+                    self.assertEqual(item['distance'], 1)
+                self.assertTrue(item['id'] > 0)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+
+    def test_knn_zero(self):
+        vector_zero = np.zeros(128).tolist()
+        query = f'SELECT id, KNN(vec, {vector_zero}, "{self.distance}") distance FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN(vec, {vector_zero}, "{self.distance}") LIMIT 100'
+        result = self.run_cbq_query(query)
+        for item in result['results']:
+            if self.distance in ['L2', 'L2_SQUARED', 'EUCLIDEAN', 'EUCLIDEAN_SQUARED']:
+                self.assertTrue(item['distance'] > 0)
+            if self.distance == 'DOT':
+                self.assertEqual(item['distance'], 0)
+            if self.distance == 'COSINE':
+                self.assertEqual(item['distance'], None)
+            self.assertTrue(item['id'] > 0)

@@ -198,6 +198,27 @@ class IndexVector(object):
         for row in result:
             print(f"Result: {row}")
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
+    def create_cover_index(self, cluster, bucket='default', scope='_default', collection='_default', index_order='tail', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3, use_bhive=False):
+        cb = cluster.bucket(bucket)
+        cb_scope = cb.scope(scope)
+        if is_xattr:
+            vector_field = f"meta().xattrs.{vector_field}"
+        if is_base64:
+            vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
+        vector_definition = {"dimension": dimension, "train_list": train, "description": description, "similarity": similarity, "scan_nprobes": nprobes}
+        index_queries = {
+            'tail': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, brand, {vector_field} VECTOR, id) WITH {vector_definition}',
+            'mid': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, {vector_field} VECTOR, brand, id) WITH {vector_definition}',
+            'lead': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR, size, brand, id) WITH {vector_definition}',
+        }
+        index_query = index_queries[index_order]
+        if use_bhive:
+            index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
+        print(index_query)
+        result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
+        for row in result:
+            print(f"Result: {row}")
+        print(f"Execution time: {result.metadata().metrics().execution_time()}")
     def drop_index(self, cluster, bucket='default', scope='_default', collection='_default', similarity='L2_SQUARED', use_bhive=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
