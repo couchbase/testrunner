@@ -4053,7 +4053,7 @@ class FTSBaseTest(unittest.TestCase):
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
         self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
-        self.skip_partition_validation = TestInputSingleton.input.param("skip_partition_validation", True)
+        self.skip_partition_validation = TestInputSingleton.input.param("skip_partition_validation", False)
 
         if self.capella_run and CbServer.capella_cluster_id is None:
             self.capella_servers_setup()
@@ -6587,9 +6587,9 @@ class FTSBaseTest(unittest.TestCase):
 
     def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims=128, use_cbimport=True,
                          percentages_to_resize=[], dims_to_resize=[],
-                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',python_loader_toggle = True,provideDefaultDocs = True):
-
-
+                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
+                         python_loader_toggle=True, provideDefaultDocs=True,
+                         start_key=0):
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6610,75 +6610,78 @@ class FTSBaseTest(unittest.TestCase):
                                               self.encode_base64_vector,
                                               load_invalid_vecs=load_invalid_vecs, invalid_vecs_dims=invalid_vecs_dims)
                         govl.load_data(container_name)
-                    else:
-                        if python_loader_toggle:
-                            vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
-                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset, self.capella_run, False,
-                                              use_cbimport=use_cbimport,
-                                              dims_for_resize=dims_to_resize,
-                                              percentages_to_resize=percentages_to_resize,
-                                              iterations=iterations,
-                                              update=update,
-                                              faiss_indexes=faiss_indexes,
-                                              faiss_index_node=faiss_index_node)
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            vl.load_data(container_name)
+                    if python_loader_toggle:
+                        vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
+                                          self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                          collection_name, dataset, self.capella_run, False,
+                                          use_cbimport=use_cbimport,
+                                          dims_for_resize=dims_to_resize,
+                                          percentages_to_resize=percentages_to_resize,
+                                          iterations=iterations,
+                                          update=update,
+                                          faiss_indexes=faiss_indexes,
+                                          faiss_index_node=faiss_index_node,
+                                          start_key=start_key)
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        vl.load_data(container_name)
 
-                        if self.store_in_xattr and self.encode_base64_vector:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
-
-
-                        elif self.store_in_xattr:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
-
-                        elif self.encode_base64_vector:
-                            print("self.encode_base64_vector", self.encode_base64_vector)
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], False, "vect", 0, ei, True,
-                                                  percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
+                    if self.store_in_xattr and self.encode_base64_vector:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
                         else:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], False, "vect", 0, ei, False,
-                                                  percentages_to_resize, dims_to_resize,
-                                                  provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              self.encode_base64_vector, percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+
+
+                    elif self.store_in_xattr:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              self.encode_base64_vector, percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+
+                    elif self.encode_base64_vector:
+                        print("self.encode_base64_vector", self.encode_base64_vector)
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], False, "vect", 0, ei, True,
+                                              percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+                    else:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], False, "vect", 0, ei, False,
+                                              percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
 
         return bucketvsdataset
 
@@ -6756,7 +6759,6 @@ class FTSBaseTest(unittest.TestCase):
                         ds.train_vecs[index] = vector[:dimension]
 
             self.log.info(f"Length of first doc vector to be added to faiss: {len(ds.train_vecs[0])}")
-
             if index_type == "IndexFlatL2":
                 faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
             else:

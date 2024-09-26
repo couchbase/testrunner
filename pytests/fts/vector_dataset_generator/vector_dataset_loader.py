@@ -9,7 +9,8 @@ class VectorLoader:
 
     def __init__(self, node, username, password, bucket, scope, collection, dataset, capella=False,
                  create_bucket_struct=False, use_cbimport=False, dims_for_resize=[], percentages_to_resize=[],
-                 iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1'):
+                 iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
+                 start_key=0):
 
         self.node = node
         self.username = username
@@ -33,6 +34,7 @@ class VectorLoader:
             self.use_cbimport = False
         self.faiss_indexes = faiss_indexes
         self.faiss_index_node = faiss_index_node
+        self.start_key = start_key
 
     def load_data(self, container_name=None):
         try:
@@ -41,7 +43,7 @@ class VectorLoader:
             docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
                                 f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
                                 f"-ds {dataset_name} -c {self.capella_run} -cbs {self.create_bucket_struct} -i {self.use_cbimport} " \
-                                f"-iter {self.iterations}"
+                                f"-iter {self.iterations} -sk {int(self.start_key)}"
 
             if len(self.percentages_to_resize) > 0:
                 total_percentage = 0
@@ -88,7 +90,7 @@ class VectorLoader:
 
             # Run the Docker run command
             try:
-                print(f"Running docker container {docker_image} with name {container_name}")
+                print(f"Running docker container {docker_image} with name {container_name} \n {docker_run_params}")
                 docker_output = self.docker_client.containers.run(docker_image, docker_run_params,
                                                                   name=container_name)
             except Exception as e:

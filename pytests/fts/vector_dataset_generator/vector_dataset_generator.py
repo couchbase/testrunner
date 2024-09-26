@@ -122,7 +122,6 @@ class VectorDataset:
 
         Returns: The local_base_dir where the dataset was downloaded.
         """
-        print(f"Downloading dataset {self.dataset_name}")
         if self.dataset_name not in self.supported_sift_datasets:
             print(
                 f"Error: {self.dataset_name} not supported, "
@@ -163,7 +162,7 @@ class VectorDataset:
                     print(f"Error: Unable to extract the tar file, it does not exist at {dataset_dir_path}")
                     return self.local_base_dir
                 self.change_permissions(dataset_dir_path)
-        return self.local_base_dir
+            return self.local_base_dir
 
     def set_dataset_paths(self):
         """
