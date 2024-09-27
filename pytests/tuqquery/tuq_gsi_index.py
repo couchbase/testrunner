@@ -8483,3 +8483,14 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_MB63593(self):
+        create_index = f'CREATE INDEX ix15 ON {self.buckets[0]}( ALL ARRAY r1.status FOR r1 IN a1 END,id) WHERE type = "xx"'
+        explain_query = f'EXPLAIN SELECT 1 FROM {self.buckets[0]} AS d UNNEST d.a1 AS r0 UNNEST d.a1 AS r1 WHERE d.type = "xx" AND d.id = 1 AND r1.status = 1 AND r0.sid = 5'
+        self.run_cbq_query(create_index)
+        explain = self.run_cbq_query(explain_query)
+        plan = explain['results'][0]['plan']
+        scan = plan['~children'][0]['scan']
+        self.log.info(f'scan is: {scan}')
+        self.assertTrue('filter' not in scan)
+        self.assertEqual(scan['index'], 'ix15')
