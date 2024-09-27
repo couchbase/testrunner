@@ -127,11 +127,11 @@ class GSIUtils(object):
                                                     is_base64=False):
 
         definitions_list = []
-        color_vec_1 = [43.0, 133.0, 178.0]
-        color_vec_2 = [90.0, 33.0, 18.0]
+        color_vec_1 = [82.0, 106.0, 20.0]  # camouflage green
+        color_vec_2 = [265.0, 13.0, 75.0]  # Pinkish red
 
-        desc_1 = "A convertible car with red color made in 1990"
-        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_1 = "A convertible car with shades of green color made in 1990"
+        desc_2 = "A red color car with 4 or 5 star safety rating"
         descVec1 = list(self.encoder.encode(desc_1))
         descVec2 = list(self.encoder.encode(desc_2))
 
@@ -172,27 +172,27 @@ class GSIUtils(object):
         # Single vector + single scalar field + partitioned on vector
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVector',
-                            index_fields=['description', 'descriptionVector VECTOR'],
+                            index_fields=['fuel', 'descriptionVector VECTOR'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, descriptionVector,"
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, descriptionVector,"
                                                                                f" {scan_desc_vec_1}",
-                                                                               'description like "%%CVT%%"',
+                                                                               'fuel = "LPG" ',
                                                                                scan_desc_vec_1
                                                                                ),
-                            partition_by_fields=['colorRGBVector']))
+                            partition_by_fields=['meta().id']))
 
         # Single vector (leading) + single scalar field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarOneVectorLeading',
-                            index_fields=['descriptionVector VECTOR', 'id'],
+                            index_fields=['descriptionVector VECTOR', 'category'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"id, descriptionVector",
-                                                                               'id > 1575644878',
-                                                                               scan_desc_vec_1)))
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"category, descriptionVector",
+                                                                               'category in ["Sedan", "Luxury Car"] ',
+                                                                               scan_desc_vec_2)))
 
         # Single vector + multiple scalar field
         definitions_list.append(
@@ -205,9 +205,9 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, year,"
                                                                                f" descriptionVector, {scan_desc_vec_2}",
                                                                                "year between 1950 and 1990 and "
-                                                                               "manufacturer like '%%c%%' and "
-                                                                               "(fuel = 'Gasoline' OR "
-                                                                               " fuel= 'Electric') ",
+                                                                               "manufacturer in ['Chevrolet', 'Tesla',"
+                                                                               " 'ford', 'Audi'] and (fuel = 'Gasoline'"
+                                                                               " OR fuel= 'Electric') ",
                                                                                scan_desc_vec_2)))
 
         # Single vector + multiple scalar field + Partitioned
@@ -239,14 +239,14 @@ class GSIUtils(object):
         # Partial Indexes
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'PartialIndex',
-                            index_fields=['rating ', 'description', 'colorRGBVector Vector'],
+                            index_fields=['rating ', 'color', 'colorRGBVector Vector'],
                             index_where_clause='rating > 3',
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
                                                                                "rating = 4 and "
-                                                                               'description like "%%Convertible%%"',
+                                                                               'color like "%%blue%%" ',
                                                                                scan_color_vec_2)))
 
         if array_indexes:

@@ -322,7 +322,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
                                      description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64,
                                      bhive_index=self.bhive_index)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True, 
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
                                                        bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
@@ -331,7 +331,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         vector_idx_2 = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
                                        dimension=384, is_base64=self.base64,
                                        description="IVF,PQ32x8", similarity="L2_SQUARED", bhive_index=self.bhive_index)
-        query = vector_idx_2.generate_index_create_query(namespace=collection_namespace, defer_build=False, 
+        query = vector_idx_2.generate_index_create_query(namespace=collection_namespace, defer_build=False,
                                                          bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
         drop_query = vector_idx_2.generate_index_drop_query(namespace=collection_namespace)
@@ -356,7 +356,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         defer_build = False
         if self.build_phase == "create":
             defer_build = True
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build, 
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
                                                        bhive_index=self.bhive_index)
 
         drop_query = vector_idx.generate_index_drop_query(namespace=collection_namespace)

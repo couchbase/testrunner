@@ -514,8 +514,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         faiss_db.reset()
 
         redacted_select_query = self.gen_query_without_entire_qvec(query=select_query)
-        self.log.info(f"accuracy for the query : {select_query} is {accuracy}")
-        self.log.info(f"recall for the query is : {select_query} is {recall}")
+        self.log.info(f"accuracy for the query : {select_query} is {accuracy * 100} % ")
+        self.log.info(f"recall for the query is : {select_query} is {recall * 100} %")
         return redacted_select_query, recall, accuracy
 
     def gen_query_without_entire_qvec(self, query):
@@ -3118,5 +3118,3 @@ class ConCurIndexOps():
                         index_created = True
 
         return index_created, status
-
-
