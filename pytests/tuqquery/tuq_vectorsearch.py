@@ -534,7 +534,7 @@ class VectorSearchTests(QueryTests):
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_ann_zero(self):
-        vector_zero = np.zeros(128).tolist()
+        vector_zero = np.zeros(self.dimension).tolist()
         query = f'SELECT id, ANN(vec, {vector_zero}, "{self.distance}") distance FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {vector_zero}, "{self.distance}") LIMIT 100'
         try:
             self.log.info("Create Vector Index")
@@ -552,7 +552,7 @@ class VectorSearchTests(QueryTests):
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_knn_zero(self):
-        vector_zero = np.zeros(128).tolist()
+        vector_zero = np.zeros(self.dimension).tolist()
         query = f'SELECT id, KNN(vec, {vector_zero}, "{self.distance}") distance FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN(vec, {vector_zero}, "{self.distance}") LIMIT 100'
         result = self.run_cbq_query(query)
         for item in result['results']:
@@ -563,3 +563,73 @@ class VectorSearchTests(QueryTests):
             if self.distance == 'COSINE':
                 self.assertEqual(item['distance'], None)
             self.assertTrue(item['id'] > 0)
+
+    def test_ann_zero_data(self):
+        vector_one = np.ones(self.dimension).tolist()
+        vector_scope = 'vector'
+        vector_collection = 'zero'
+        query = f'SELECT id, ANN(vec, {vector_one}, "{self.distance}") distance FROM default.{vector_scope}.{vector_collection} WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {vector_one}, "{self.distance}") LIMIT 10'
+        self.run_cbq_query(f'create scope default.{vector_scope} if not exists')
+        self.run_cbq_query(f'create collection default.{vector_scope}.{vector_collection} if not exists')
+        data = np.zeros((1000,self.dimension), "float32")
+        ones = np.array([np.ones(self.dimension)])
+        data = np.append(data,ones,axis=0)
+        try:
+            self.log.info("Load data with all [0,0,...,0] vectors and one [1,1,...,1] vector")
+            LoadVector().load_batch_documents(self.database, data, 0, self.use_xattr, self.use_base64, self.use_bigendian, scope=vector_scope, collection=vector_collection)
+            self.log.info("Create Vector Index")
+            IndexVector().create_cover_index(self.database, scope=vector_scope, collection=vector_collection, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=2000, use_bhive=self.use_bhive)
+            result = self.run_cbq_query(query)
+            result = self.run_cbq_query(query)
+            for i, item in enumerate(result['results']):
+                if i == 0:
+                    self.log.info("Let's check we got vector one vector first")
+                    self.assertEqual(item['id'], 1000, f"We got vector {data[item['id']]}")
+                    self.assertAlmostEqual(round(abs(item['distance'])), UtilVector().vector_dist(vector_one, data[item['id']], self.distance))
+                else:
+                    if self.distance in ['L2', 'EUCLIDEAN']:
+                        expected_distance = UtilVector().l2_dist(vector_one, data[item['id']])
+                        self.assertAlmostEqual(item['distance'], expected_distance)
+                    if self.distance in ['L2_SQUARED', 'EUCLIDEAN_SQUARED']:
+                        expected_distance = UtilVector().l2_dist_sq(vector_one, data[item['id']])
+                        self.assertAlmostEqual(item['distance'], expected_distance)
+                    if self.distance == 'DOT':
+                        self.assertAlmostEqual(round(item['distance']), 0)
+                    if self.distance == 'COSINE':
+                        self.assertAlmostEqual(round(item['distance']), 1)
+        finally:
+            IndexVector().drop_index(self.database, scope=vector_scope, collection=vector_collection, similarity=self.distance, use_bhive=self.use_bhive)
+            self.run_cbq_query(f'DROP COLLECTION default.{vector_scope}.{vector_collection} if exists')
+
+    def test_knn_zero_data(self):
+        vector_one = np.ones(self.dimension).tolist()
+        vector_scope = 'vector'
+        vector_collection = 'zero'
+        query = f'SELECT id, KNN(vec, {vector_one}, "{self.distance}") distance FROM default.{vector_scope}.{vector_collection} WHERE size = 8 AND brand = "adidas" ORDER BY KNN(vec, {vector_one}, "{self.distance}") LIMIT 10'
+        self.run_cbq_query(f'create scope default.{vector_scope} if not exists')
+        self.run_cbq_query(f'create collection default.{vector_scope}.{vector_collection} if not exists')
+        data = np.zeros((1000,self.dimension), "float32")
+        ones = np.array([np.ones(self.dimension)])
+        data = np.append(data,ones,axis=0)
+        try:
+            self.log.info("Load data with all [0,0,...,0] vectors and one [1,1,...,1] vector")
+            LoadVector().load_batch_documents(self.database, data, 0, self.use_xattr, self.use_base64, self.use_bigendian, scope=vector_scope, collection=vector_collection)
+            result = self.run_cbq_query(query)
+            for i, item in enumerate(result['results']):
+                if i == 0:
+                    self.log.info("Let's check we got vector one vector first")
+                    self.assertEqual(item['id'], 1000, f"We got vector {data[item['id']]}")
+                    self.assertAlmostEqual(round(abs(item['distance'])), UtilVector().vector_dist(vector_one, data[item['id']], self.distance))
+                else:
+                    if self.distance in ['L2', 'EUCLIDEAN']:
+                        expected_distance = UtilVector().l2_dist(vector_one, data[item['id']])
+                        self.assertAlmostEqual(item['distance'], expected_distance)
+                    if self.distance in ['L2_SQUARED', 'EUCLIDEAN_SQUARED']:
+                        expected_distance = UtilVector().l2_dist_sq(vector_one, data[item['id']])
+                        self.assertAlmostEqual(item['distance'], expected_distance)
+                    if self.distance == 'DOT':
+                        self.assertAlmostEqual(round(item['distance']), 0)
+                    if self.distance == 'COSINE':
+                        self.assertAlmostEqual(item['distance'], None)
+        finally:
+            self.run_cbq_query(f'DROP COLLECTION default.{vector_scope}.{vector_collection} if exists')            
