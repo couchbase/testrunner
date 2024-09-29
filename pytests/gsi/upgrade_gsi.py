@@ -1462,7 +1462,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         self.wait_until_indexes_online()
-        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             if existing_bucket_name.name != index['bucket']:
@@ -1479,8 +1479,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.sleep(20)
 
         self.wait_until_indexes_online()
+        self.sleep(30)
         self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         index_metadata = self.index_rest.get_indexer_metadata()['status']
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
         for index in index_metadata:
             if existing_bucket_name.name != index['bucket']:
                 self.assertEqual(index['numReplica'], self.num_index_replicas-1, "No. of replicas are not matching")
@@ -1491,7 +1493,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         for node in self.servers:
             if node not in nodes_in_cluster:
                 rebalance_nodes.append(node)
-                if len(rebalance_nodes) == 2:
+                if len(rebalance_nodes) == 1:
                     break
         existing_indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         nodes_for_installation = []
@@ -1541,6 +1543,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance.result()
 
         self.update_master_node()
+        self.sleep(30)
         self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
@@ -2257,16 +2260,16 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         self.validate_alternate_shard_ids_presence(node_in=swapped_in_node)
                         self.sleep(30)
 
-                        # runnning vector index queries in mixed mode
-                        try:
-                            self.run_cbq_query(
-                                query="CREATE INDEX `testcolorRGBVector` ON default:test_bucket_hotel._default._default(colorRGBVector VECTOR) USING GSI  WITH {'defer_build': True, 'num_replica': 1, 'dimension': 3, 'description': 'IVF,PQ3x8', 'similarity': 'L2_SQUARED', 'scan_nprobes': 1}",
-                                server=self.query_node)
+                    # runnning vector index queries in mixed mode
+                    try:
+                        self.run_cbq_query(
+                            query="CREATE INDEX `testcolorRGBVector` ON default:test_bucket_hotel._default._default(colorRGBVector VECTOR) USING GSI  WITH {'defer_build': True, 'num_replica': 1, 'dimension': 3, 'description': 'IVF,PQ3x8', 'similarity': 'L2_SQUARED', 'scan_nprobes': 1}",
+                            server=self.query_node)
 
-                        except Exception as e:
-                            self.log.error(f"{str(e)}")
-                        else:
-                            self.fail("vector indexes created in mixed mode state")
+                    except Exception as e:
+                        self.log.error(f"{str(e)}")
+                    else:
+                        self.fail("vector indexes created in mixed mode state")
 
                     shard_list_after = self.fetch_shard_id_list()
                     if scan_results_check and select_queries is not None:
