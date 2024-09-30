@@ -961,3 +961,14 @@ class JoinTests(QuerySanityTests):
         result = self.run_cbq_query(join_query)
         expected = [{"cid": "c01", "pid": "p01", "status": "active"}]
         self.assertEqual(expected, result['results'], f"Expect: {expected} but actual: {result['results']}")
+
+    def test_MB63673(self):
+        upsert = 'CREATE INDEX ix20 ON default(peroid.startDateTime, peroid.endDateTime)'
+        index = 'UPSERT INTO default VALUES("m01", { "peroid": { "endDateTime": "2019-10-31T05:37:00.059Z", "startDateTime": "2019-10-01T05:37:00.059Z" }, "factor":0.1})'
+        self.run_cbq_query(upsert)
+        self.run_cbq_query(index)
+        data = [{"Factor":0.5,"peroid":{"endDateTime":"2019-10-31T05:37:00.059Z","startDateTime":"2019-10-01T05:37:00.059Z"}}]
+        merge_query = f"MERGE INTO default AS m USING {data} p ON DATE_DIFF_STR(m.peroid.startDateTime, p.peroid.startDateTime, 'millisecond') = 0 AND DATE_DIFF_STR(m.peroid.endDateTime, p.peroid.endDateTime, 'millisecond') = 0 WHEN MATCHED THEN UPDATE SET m.factor = p.Factor RETURNING *"
+        result = self.run_cbq_query(merge_query)
+        self.log.info(result['metrics'])
+        self.assertTrue(result['metrics']['mutationCount'], 1)
