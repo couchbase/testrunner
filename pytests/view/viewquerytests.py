@@ -2188,7 +2188,7 @@ class QueryView:
                             threading.currentThread().tasks[0] = task
                         debug_info = task.result()
                         msg += "DEBUG INFO: %s" % debug_info["errors"]
-                    self.results.addFailure(tc, (Exception, msg, sys.exc_info()[2]))
+                    self.results.addFailure(tc, (Exception, Exception(msg), sys.exc_info()[2]))
                     tc.thread_crashed.set()
         except Exception as ex:
             tc.thread_crashed.set()
