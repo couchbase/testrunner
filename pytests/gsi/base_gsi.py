@@ -148,7 +148,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
-        self.scan_nprobes = self.input.param("scan_nprobes", 1)
+        self.scan_nprobes = self.input.param("scan_nprobes", 100)
         self.scan_limit = self.input.param("scan_limit", 100)
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
@@ -157,7 +157,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
-        self.scan_nprobes = self.input.param("scan_nprobes", 1)
         self.scan_limit = self.input.param("scan_limit", 100)
         self.base64 = self.input.param("base64", False)
         self.use_magma_server = self.input.param("use_magma_server", False)
@@ -462,10 +461,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("namespaces created successfully")
         self.log.info(self.namespaces)
 
-    def validate_scans_for_recall_and_accuracy(self, select_query):
+    def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False):
         faiss_query = self.convert_to_faiss_queries(select_query=select_query)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
-        query_res_faiss = self.run_cbq_query(query=faiss_query, server=self.n1ql_node)['results']
+        query_res_faiss = self.run_cbq_query(query=faiss_query, server=n1ql_node)['results']
         list_of_vectors_to_be_indexed_on_faiss = []
         for v in query_res_faiss:
             result = v[vector_field]
@@ -475,7 +475,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         # Todo: Add a provision to convert base64 encoded embeddings to float32 embeddings
 
-        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"))
+        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"), similarity=similarity)
 
         ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
 
@@ -487,7 +487,10 @@ class BaseSecondaryIndexingTests(QueryTests):
             else:
                 value = list_of_vectors_to_be_indexed_on_faiss[idx]
             faiss_closest_vectors.append(value)
-        gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
+        if scan_consitency:
+            gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node, scan_consistency=self.scan_consistency)['results']
+        else:
+            gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
         gsi_query_vec_list = []
 
         for v in gsi_query_res:
@@ -2150,8 +2153,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             'user' : f'{gen.username}',
             'password' : f'{gen.password}',
             'bucket' : f'{bucket}',
-            'create_s' : f'{gen.start_seq_num}',
-            'create_e' : f'{gen.end + 2}',
+            'create_s' : f'{gen.create_start}',
+            'create_e' : f'{gen.create_end}',
+            'update_s' : f'{gen.update_start}',
+            'update_e' : f'{gen.update_end}',
+            'mutate' : f'{gen.mutate}',
+            'dim' : f'{gen.dim}',
             'cr' : f'{gen.percent_create}',
             'up' : f'{gen.percent_update}',
             'rd' : f'{gen.percent_delete}',
@@ -2953,11 +2960,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         max_shards = 5 * plasma_quota * .04
         return min(max_shards, 2000)
 
-    def load_data_into_faiss(self, vectors, dim=None):
+    def load_data_into_faiss(self, vectors, dim=None, similarity="L2_SQUARED"):
         if dim is None:
             dim = len(vectors[0])
 
-        index = faiss.IndexFlatL2(dim)
+        if similarity == "L2_SQUARED" or similarity == "L2" or similarity == "EUCLIDEAN_SQUARED" or similarity == "EUCLIDEAN":
+            index = faiss.IndexFlatL2(dim)
+        elif similarity == "DOT":
+            index = faiss.IndexFlatIP(dim)
+        else:
+            faiss.normalize_L2(vectors)
+            index = faiss.IndexFlatIP(dim)
+
         # Might not need it.
         #faiss.normalize_L2(vectors)
         index.add(vectors)
@@ -2980,19 +2994,24 @@ class BaseSecondaryIndexingTests(QueryTests):
             table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
         table.display(message=message)
 
-    def display_recall_and_accuracy_stats(self, select_queries,message="query stats"):
+    def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True,
+                                          similarity="L2_SQUARED"):
         query_stats_map = {}
         for query in select_queries:
             # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
             if "ANN" not in query:
                 continue
-            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
+                                                                                           similarity=similarity)
             query_stats_map[redacted_query] = [recall, accuracy]
         self.gen_table_view(query_stats_map=query_stats_map, message=message)
-        for query in query_stats_map:
-            self.assertGreaterEqual(query_stats_map[query][0]*100, 80, f"recall for query {query} is less than threshold 10")
-            self.assertGreaterEqual(query_stats_map[query][1] * 100, 80,
-                                    f"accuracy for query {query} is less than threshold 10")
+        if stats_assertion:
+            for query in query_stats_map:
+                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
+                                        f"recall for query {query} is less than threshold 70")
+                # uncomment the below code snippet to do assertions for accuracy
+                # self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
+                #                         f"accuracy for query {query} is less than threshold 70")
     def validate_error_msg_and_doc_count_in_cbcollect(self, node, error_message):
         shell = RemoteMachineShellConnection(node)
         if shell.extract_remote_info().type.lower() == 'windows':

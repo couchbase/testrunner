@@ -2466,6 +2466,15 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
                 self.sleep(60)
+                timeout = 0
+                while timeout<=360:
+                    index_status = self.index_rest.get_indexer_metadata()['status']
+                    if len(index_status) == 0:
+                        break
+                    else:
+                        timeout = timeout + 1
+                if timeout > 360:
+                    self.fail("timeout reached for index drop to happen")
                 if self.decrease_node_count > 0:
                     nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                     nodes_out_list = []
@@ -2515,7 +2524,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                        in bucket_collection_namespaces]
                 self._build_indexes(indexes_after_restore)
                 self.wait_until_indexes_online()
-                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair")
+                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
 
             self.wait_until_indexes_online()
             rebalance_task = False
@@ -2554,7 +2563,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                stats_map_after_rebalance=stats_after_rebalance,
                                                                item_count_increase=False,
                                                                per_node=True, skip_array_index_item_count=False)
-                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair")
+                self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
 
         finally:
             if backup_client:
@@ -2696,7 +2705,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self._build_indexes(indexes_after_restore)
                 self.wait_until_indexes_online()
                 self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                                       message="recall and accuracy stats after adding back a node and post replica repair")
+                                                       message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
 
             self.wait_until_indexes_online()
 

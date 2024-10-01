@@ -53,6 +53,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
+        self.community_upgrade = self.input.param("community_upgrade", False)
         self.no_mutation_docs = self.input.param("no_mutation_docs", 75000)
         self.post_upgrade_load = self.input.param("post_upgrade_load", 10000)
         self.continuous_mutations = self.input.param("continuous_mutations", False)
@@ -1422,6 +1423,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()
         self.gsi_util_obj.set_encoder(self.encoder)
+
         if services is None:
             services = ["index"]
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -1437,6 +1439,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     namespaces.append(namespace)
 
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        index_node = self.get_nodes_from_services_map(service_type="index")
+
+        #the below setting will be reversed post the resolving of MB-63697
+        index_rest = RestConnection(index_node)
+        index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
 
         select_queries = set()
         namespace_index_map = {}
@@ -1503,11 +1510,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 nodes_for_installation.append(node)
 
         # the below functionality is used to install the desired version of cb server on the given list of nodes
-        upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=rebalance_nodes,
-                                        cluster_profile=cluster_profile)
-        for th in upgrade_th:
-            th.join()
-        self.sleep(120)
+        if self.community_upgrade:
+            self._install(rebalance_nodes, version=self.upgrade_to, community_to_enterprise=True)
+            self.sleep(30)
+        else:
+            upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=rebalance_nodes,
+                                            cluster_profile=cluster_profile)
+            for th in upgrade_th:
+                th.join()
+            self.sleep(120)
         self.log.info("==== installation Complete ====")
 
         #swap rebalance with file based rebalance enabled
@@ -1515,7 +1526,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         node_out = existing_indexer_node
 
         self.log.info("Swapping servers...")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [node_in], [node_out],
+        rebalance = self.cluster.async_rebalance(nodes_in_cluster, [node_in], [node_out],
                                                      services=services)
         node_in, node_out = node_out, node_in
         self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
@@ -1526,13 +1537,18 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         rebalance.result()
 
+        self.update_master_node()
+
         #swap rebalance with dcp rebalance
         self.disable_shard_based_rebalance()
         self.sleep(10)
 
+        self.update_master_node()
+        nodes_in_cluster = self.get_nodes_in_cluster_after_upgrade()
+
         self.log.info("Swapping servers...")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [node_in], [node_out],
-                                                 services=["index"])
+        rebalance = self.cluster.async_rebalance(nodes_in_cluster, [node_in], [node_out],
+                                                 services=services)
 
         self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
         self.sleep(3)
@@ -1554,7 +1570,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                            item_count_increase=False,
                                            per_node=True, skip_array_index_item_count=False)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after reducing num replica count")
+                                               message="results after reducing num replica count", similarity=self.similarity)
 
         #drop indexes
         self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, database=namespaces)
@@ -1858,9 +1874,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
                 self.assertGreaterEqual(len(post_rebalance_result), len(query_result[query]), "Docs not indexed post upgrade dco load")
 
+
             for node in nodes:
                 index_rest = RestConnection(node)
                 stat_map = index_rest.get_index_stats()
+                self.log.info(f"stats map : {stat_map}")
                 for bucket in stat_map:
                     for index in stat_map[bucket]:
                         for stat in stat_map[bucket][index]:

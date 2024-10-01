@@ -105,6 +105,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
 
         index_meta_data_before_autofailover = self.index_rest.get_indexer_metadata()['status']
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
         self.enable_autofailover_and_validate()
         self.sleep(5)
@@ -115,7 +116,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         except Exception as err:
             self.fail(f"error is {err.__str__()}")
 
-        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
 
 
 
@@ -144,7 +145,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                        per_node=True, skip_array_index_item_count=False)
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after adding node in post autofailover of a node")
+                                               message="results after adding node in post autofailover of a node", similarity=self.similarity)
 
     def test_failed_rebalance_with_gsi_autofailover(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
@@ -244,7 +245,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         self.assertEqual(len(index_meta_data_before_autofailover), len(index_meta_data_after_autofailover), f"indexes dropped post recovery after autofailover meta data before {index_meta_data_before_autofailover}"
                                                                                                             f"meta data after {index_meta_data_after_autofailover}")
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after recovering the node post autofailover of a node")
+                                               message="results after recovering the node post autofailover of a node", similarity=self.similarity)
 
 
     def test_autofailover_and_addback_of_node(self):

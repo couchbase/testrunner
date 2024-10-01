@@ -127,8 +127,8 @@ class GSIUtils(object):
                                                     is_base64=False):
 
         definitions_list = []
-        color_vec_1 = [82.0, 106.0, 20.0]  # camouflage green
-        color_vec_2 = [265.0, 13.0, 75.0]  # Pinkish red
+        color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
+        color_vec_2 = [265.1, 13.200001, 75.9]  # Pinkish red
 
         desc_1 = "A convertible car with shades of green color made in 1990"
         desc_2 = "A red color car with 4 or 5 star safety rating"
@@ -247,7 +247,7 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
                                                                                "rating = 4 and "
                                                                                'color like "%%blue%%" ',
-                                                                               scan_color_vec_2)))
+                                                                               scan_color_vec_1)))
 
         if array_indexes:
             # Single vector + array scalar field 1
