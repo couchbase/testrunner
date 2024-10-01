@@ -620,3 +620,9 @@ class QueryAdviseTests(QueryTests):
         result = self.run_cbq_query(f'ADVISE {query}')
         self.log.info(f"Advise result is: {result['results']}")
         self.assertTrue(result['results'][0]['query'], query)
+
+    def test_advise_regexp_contains(self):
+        # MB-63577
+        advise_query = 'ADVISE SELECT meta().id FROM default WHERE type = "xx" AND (REGEXP_CONTAINS (c1, "^[0-9;]*$") OR  c1 IS MISSING  OR  c1 is null)'
+        result = self.run_cbq_query(advise_query)
+        self.log.info(f"Advise result is: {result['results']}")
