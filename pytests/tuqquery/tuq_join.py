@@ -972,3 +972,13 @@ class JoinTests(QuerySanityTests):
         result = self.run_cbq_query(merge_query)
         self.log.info(result['metrics'])
         self.assertTrue(result['metrics']['mutationCount'], 1)
+
+    def test_MB63647(self):
+        index = 'CREATE INDEX ix31 ON default(c1,c2)'
+        upsert1 = 'UPSERT INTO default VALUES("k01",{"c1":1, "c2":1})'
+        upsert2 = 'UPSERT INTO default VALUES("k02",{"c1":2, "c2":2})'
+        self.run_cbq_query(index)
+        self.run_cbq_query(upsert1)
+        self.run_cbq_query(upsert2)
+        query = 'SELECT d2.* FROM (SELECT c2, MAX(c1) AS c1 FROM default AS d WHERE d.c1 > 0 GROUP BY c2) AS d1 JOIN default d2 ON d1.c2 = d2.c2 AND d1.c1 = d2.c1'
+        self.run_cbq_query(query)
