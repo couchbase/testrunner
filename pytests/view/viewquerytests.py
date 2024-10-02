@@ -121,6 +121,7 @@ class ViewQueryTests(BaseTestCase):
 
         #delete docs
         self.load(data_set, generator_delete, op_type='delete')
+        time.sleep(10)
         self._query_all_views(data_set.views, generator_load,
                               verify_expected_keys=True)
 
