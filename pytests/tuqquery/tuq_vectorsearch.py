@@ -3,6 +3,7 @@ import threading
 import random
 import numpy as np
 import ast
+from membase.api.exception import CBQError
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster, ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
@@ -632,4 +633,15 @@ class VectorSearchTests(QueryTests):
                     if self.distance == 'COSINE':
                         self.assertAlmostEqual(item['distance'], None)
         finally:
-            self.run_cbq_query(f'DROP COLLECTION default.{vector_scope}.{vector_collection} if exists')            
+            self.run_cbq_query(f'DROP COLLECTION default.{vector_scope}.{vector_collection} if exists')
+
+    def test_error_multi_vector(self):
+        error_code = 3402
+        error_message = "Cannot have more than one vector index key for index ix1"
+        try:
+            self.run_cbq_query("CREATE INDEX ix1 ON default(v1 VECTOR, v2 VECTOR) WITH {'dimension':3, 'similarity': 'L2', 'description':'SQ8'}")
+            self.fail(f"Create index with 2 vectors did not fail. Expected error is {error_message}")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], error_code)
+            self.assertEqual(error['msg'], error_message)
