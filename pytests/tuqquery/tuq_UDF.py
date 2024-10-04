@@ -2161,3 +2161,9 @@ class QueryUDFTests(QueryTests):
         expected_result = [[4,3,2,1,0]]
         result = self.run_cbq_query('EXECUTE FUNCTION i3()', query_params={'args': '["desc", "last"]'})
         self.assertEqual(expected_result, result['results'])
+
+    def test_letting_no_groupby(self):
+        udf = 'create or replace function mb() {(select c from [1,2,2,3,3,3,4,4,4,4,5,5,5,5,5] a letting c = count(1))}'
+        self.run_cbq_query(udf)
+        result = self.run_cbq_query('execute function mb()')
+        self.assertEqual(result['results'], [[{"c": 15}]])
