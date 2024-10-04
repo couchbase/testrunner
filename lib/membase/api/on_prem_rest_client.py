@@ -514,17 +514,24 @@ class RestConnection(object):
                 return True
         return False
 
-    def is_enterprise_edition(self):
+    def is_enterprise_edition(self, retry_count = 3):
         http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
         if http_res == 'unknown pool':
             return False
         editions = []
         community_nodes = []
-        """ get the last word in node["version"] as in "version": "2.5.1-1073-rel-enterprise" """
-        for node in http_res["nodes"]:
-            editions.extend(node["version"].split("-")[-1:])
-            if "community" in node["version"].split("-")[-1:]:
-                community_nodes.extend(node["hostname"].split(":")[:1])
+        for _ in range(retry_count):
+            """ get the last word in node["version"] as in "version": "2.5.1-1073-rel-enterprise" """
+            try:
+                for node in http_res["nodes"]:
+                    editions.extend(node["version"].split("-")[-1:])
+                    if "community" in node["version"].split("-")[-1:]:
+                        community_nodes.extend(node["hostname"].split(":")[:1])
+                break
+            except Exception as err:
+                log.error(f"Error getting response : {str(err)}. Retrying...")
+                time.sleep(10)
+                retry_count+=1
         if "community" in editions:
             log.error("IP(s) for node(s) with community edition {0}".format(community_nodes))
             return False
