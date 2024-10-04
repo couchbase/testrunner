@@ -755,6 +755,12 @@ VERSION_DATA = {
         },
         "testrunner_branch": "neo",
     },
+    "7.2.7": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "neo",
+    },
     "7.5.0": {
         "platforms": {
             "debian12": True
@@ -780,6 +786,18 @@ VERSION_DATA = {
         "testrunner_branch": "master",
     },
     "7.6.3": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "master",
+    },
+    "7.6.4": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "master",
+    },
+    "7.7.0": {
         "platforms": {
             "debian12": True
         },
