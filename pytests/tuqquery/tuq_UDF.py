@@ -2105,3 +2105,9 @@ class QueryUDFTests(QueryTests):
         }]
         result = self.run_cbq_query('SELECT `definition`.`expression`, `definition`.`text` FROM system:functions WHERE identity.name="f11"')
         self.assertEqual(expected_result, result['results'])
+
+    def test_letting_no_groupby(self):
+        udf = 'create or replace function mb() {(select c from [1,2,2,3,3,3,4,4,4,4,5,5,5,5,5] a letting c = count(1))}'
+        self.run_cbq_query(udf)
+        result = self.run_cbq_query('execute function mb()')
+        self.assertEqual(result['results'], [[{"c": 15}]])
