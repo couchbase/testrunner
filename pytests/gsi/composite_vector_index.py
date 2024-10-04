@@ -504,9 +504,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replica)
+                                                                     num_replica=self.num_index_replica, bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -574,10 +575,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False, is_base64=self.base64,
                                                                       limit=self.scan_limit,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      deploy_node_info=deploy_nodes,
-                                                                     num_replica=num_replica)
+                                                                     num_replica=num_replica, bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -704,10 +706,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      deploy_node_info=deploy_nodes,
-                                                                     num_replica=num_replica)
+                                                                     num_replica=num_replica, bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -1432,10 +1435,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 array_indexes=False,
                 limit=self.scan_limit,
                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index
             )
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                     namespace=namespace)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
@@ -1487,17 +1492,16 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 array_indexes=False,
                 limit=self.scan_limit,
                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index
             )
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                     namespace=namespace)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
 
-            # Todo: @Sujay:Remove this if it's not required
-            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
-                                                                 namespace=namespace)
             for query in create_queries:
                 self.run_cbq_query(query=query)
 
@@ -1553,16 +1557,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 array_indexes=False,
                 limit=self.scan_limit,
                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index
             )
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                     namespace=namespace)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
-            # Todo: @Sujay:Remove this if it's not required
-            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
-                                                                 namespace=namespace)
             for query in create_queries:
                 self.run_cbq_query(query=query)
 
@@ -1601,10 +1604,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 array_indexes=False,
                 limit=self.scan_limit,
                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index
             )
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                     namespace=namespace)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
@@ -1680,10 +1685,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 array_indexes=False,
                 limit=self.scan_limit,
                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index
             )
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                     namespace=namespace)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
@@ -1743,16 +1750,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 array_indexes=False,
                 limit=self.scan_limit,
                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index
             )
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                     namespace=namespace)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
-            # Todo: @Sujay:Remove this if it's not required
-            drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
-                                                                 namespace=namespace)
             for create in create_queries:
                 self.run_cbq_query(query=create)
 
