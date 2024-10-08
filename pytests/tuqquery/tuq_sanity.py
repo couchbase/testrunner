@@ -4577,3 +4577,14 @@ class QuerySanityTests(QueryTests):
                     errors_complex[str(symbols[i]) + str(symbols[j])] = query
 
         self.assertEqual(len(errors_simple) + len(errors_complex), 0)
+
+    # MB-63267
+    def test_limit_index_aggregate(self):
+        self.fail_if_no_buckets()
+        query = 'SELECT type, COUNT(1) FROM `travel-sample` GROUP BY type LIMIT 2'
+        result = self.run_cbq_query(query)
+        self.log.info(result['results'])
+        self.assertTrue(result['results'][0]['type'] in ['airline', 'airport', 'hotel', 'route'])
+        self.assertTrue(result['results'][1]['type'] in ['airline', 'airport', 'hotel', 'route'])
+        self.assertNotEqual(result['results'][0]['type'], result['results'][1]['type'])
+        self.assertTrue(result['results'][0]['$1'] > 0 and result['results'][1]['$1'] > 0)        
