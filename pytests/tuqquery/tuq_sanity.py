@@ -4603,4 +4603,22 @@ class QuerySanityTests(QueryTests):
         self.assertTrue(result['results'][0]['type'] in ['airline', 'airport', 'hotel', 'route'])
         self.assertTrue(result['results'][1]['type'] in ['airline', 'airport', 'hotel', 'route'])
         self.assertNotEqual(result['results'][0]['type'], result['results'][1]['type'])
-        self.assertTrue(result['results'][0]['$1'] > 0 and result['results'][1]['$1'] > 0)        
+        self.assertTrue(result['results'][0]['$1'] > 0 and result['results'][1]['$1'] > 0)
+
+    # MB-62824
+    def test_prepared_array_binding(self):
+        self.fail_if_no_buckets()
+        prepare = 'prepare p22 AS with aa AS ([1,2,3]) SELECT d, aa FROM [1,2] AS d'
+        expected = [
+            {"d": 1, "aa": [1, 2, 3]},
+            {"d": 2, "aa": [1, 2, 3]}
+        ]
+        self.run_cbq_query(prepare)
+        # first run
+        result = self.run_cbq_query('execute p22')
+        self.log.info(result['results'])
+        self.assertEqual(result['results'], expected)
+        # second run
+        result = self.run_cbq_query('execute p22')
+        self.log.info(result['results'])
+        self.assertEqual(result['results'], expected)
