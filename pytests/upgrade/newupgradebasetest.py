@@ -330,6 +330,12 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.sleep(20, "sleep 20 seconds before run next test")
         self.log.info("==============  NewUpgradeBaseTest tearDown has completed ==============")
 
+    def rebalance_load_setup_update(self,bucket,scope,collection):
+        self.target_bucket = bucket
+        self.target_scope = scope
+        self.target_collection = collection
+        
+
     def _install(self, servers):
         params = {}
         params['num_nodes'] = len(servers)
@@ -910,6 +916,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 """upsert (update) the first 1000 docs out of 5000 docs present in the cluster"""
                 self.fts_obj.load_data(1000)
 
+                self.sleep(10)
+
                 """upserting the vector data"""
                 try:
                     self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
@@ -928,7 +936,9 @@ class NewUpgradeBaseTest(BaseTestCase):
                     self.log.info(e)
             else:
                 self.fts_obj.load_data(1000)
-                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2)
+                self.sleep(10)
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2,
+                                                        bucket_name=self.target_bucket,scope_name=self.target_scope,collection_name=self.target_collection)
 
                 if not status:
                     self.fail("CRUD operation failed during rebalance. OPS : DELETE")
@@ -1703,11 +1713,13 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.fts_obj.delete_all()
 
     def run_fts_query_and_compare(self, queue=None):
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
         try:
             self.log.info("Verify fts via queries again")
-
+            self.fts_obj.load_data(1000)
             """delete 20% of docs"""
-            status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10005001,0.2)
+            status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10001000,0.2,
+                                                        bucket_name=self.target_bucket,scope_name=self.target_scope,collection_name=self.target_collection)
 
             if status:
                 self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
@@ -1731,10 +1743,10 @@ class NewUpgradeBaseTest(BaseTestCase):
 
             except Exception as e:
                 print(e)
-            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+
             self.update_delete_fts_data_run_queries(self.fts_obj)
         except Exception as ex:
-            print(ex)
+            self.fail(ex)
             if queue is not None:
                 queue.put(False)
         if queue is not None:

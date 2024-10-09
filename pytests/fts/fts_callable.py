@@ -294,24 +294,24 @@ class FTSCallable:
                         bucket_doc_count = index.get_src_bucket_doc_count()
                     if not self.es:
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s': %s"
-                                      % (bucket_doc_count,
-                                         index.name,
-                                         index_doc_count))
+                                    % (bucket_doc_count,
+                                        index.name,
+                                        index_doc_count))
                         if not complete_wait and bucket_doc_count > 0 and index_doc_count > 0:
                             break
                     else:
                         self.es.update_index('es_index')
                         es_index_count = self.es.get_index_count('es_index')
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
-                                      " %s, docs in ES index: %s "
-                                      % (bucket_doc_count,
-                                         index.name,
-                                         index_doc_count,
-                                         es_index_count))
+                                    " %s, docs in ES index: %s "
+                                    % (bucket_doc_count,
+                                        index.name,
+                                        index_doc_count,
+                                        es_index_count))
                     if bucket_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
-                                       "looks like docs haven't been loaded yet...")
+                                    "looks like docs haven't been loaded yet...")
                             retry_count -= 1
                             continue
 
@@ -847,13 +847,13 @@ class FTSCallable:
                                          start_index,end_index,base64Flag)
         goloader_object.load_data("upgrade")
     
-    def delete_doc_by_key(self,node,start,end,percent):
+    def delete_doc_by_key(self,node,start,end,percent,bucket_name = "default",scope_name="_default",collection_name="_default"):
         server = RestConnection(node)
         server.reduce_query_logging = True
 
         deletes = 0
         for key in range(start,start + int((end-start)*percent)):
-            if server.delete_docs(node.ip,key):
+            if server.delete_docs(node.ip,key,bucket=bucket_name,scope=scope_name,collection=collection_name):
                 deletes += 1
         server.reduce_query_logging = False
 

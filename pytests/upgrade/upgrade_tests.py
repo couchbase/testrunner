@@ -162,6 +162,17 @@ class UpgradeTests(NewUpgradeBaseTest):
             from pytests.xdcr.xdcr_callable import XDCRCallable
             # Setup XDCR src and target clusters
             self.xdcr_handle = XDCRCallable(self.servers[:self.nodes_init])
+    
+    def rebalance_load_setup(self):
+        self.log.info("Rebalance load setup")
+        bucket = self.rest.get_buckets()[0]
+        self.target_bucket = str(bucket.name)
+        self.target_scope =str(self.rest.get_bucket_scopes(self.target_bucket)[-1])
+        self.target_collection = str(self.rest.get_bucket_collections(self.target_bucket)[-1])
+
+        self.log.info(f"Rebalance load setup: target_bucket_name = {self.target_bucket}, target_scope_name = {self.target_scope}, target_collection_name = {self.target_collection}\n")
+
+        self.rebalance_load_setup_update(self.target_bucket,self.target_scope,self.target_collection)
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -221,7 +232,8 @@ class UpgradeTests(NewUpgradeBaseTest):
         while(not self.isRebalanceComplete):
             if self.vector_upgrade:
                 """delete 20% of docs"""
-                status = self.fts_obj.delete_doc_by_key(server,10000001,10005001,0.2)
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2,
+                                                        bucket_name=self.target_bucket,scope_name=self.target_scope,collection_name=self.target_collection)
 
                 if not status:
                     self.fail("CRUD operation failed during rebalance. OPS : DELETE")
@@ -230,6 +242,7 @@ class UpgradeTests(NewUpgradeBaseTest):
 
                 """upsert (update) the first 1000 docs out of 5000 docs present in the cluster"""
                 self.fts_obj.load_data(1000)
+                
 
                 """upserting the vector data"""
                 try:
@@ -249,7 +262,9 @@ class UpgradeTests(NewUpgradeBaseTest):
                     self.log.info(e)
             else:
                 self.fts_obj.load_data(1000)
-                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2)
+                self.sleep(10)
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2,
+                                                        bucket_name=self.target_bucket,scope_name=self.target_scope,collection_name=self.target_collection)
 
                 if not status:
                     self.fail("CRUD operation failed during rebalance. OPS : DELETE")
@@ -267,6 +282,7 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.after_event_threads = []
         try:
             self.log.info("\n*** Start init operations before upgrade begins ***")
+            self.rebalance_load_setup()
             if self.initialize_events:
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
@@ -1355,6 +1371,10 @@ class UpgradeTests(NewUpgradeBaseTest):
             for bucket in self.buckets:
                 name = bucket.name
                 break
+                
+            if len(self.buckets) ==0:
+                name = self.target_bucket
+            
             SOURCE_CB_PARAMS = {
                       "authUser": "default",
                       "authPassword": "",
