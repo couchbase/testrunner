@@ -243,6 +243,22 @@ class QuerySanityTests(QueryTests):
         results = self.run_cbq_query(query='select meta(default:default.test.test1).id from default:default.test.test1')
         self.assertEqual(results['results'], [{'id': 'key1'}, {'id': 'key2'}, {'id': 'key3'}, {'id': 'key4'}])
 
+    # No validation of query, just tests to see if query causes a panic in the log
+    def test_MB63281(self):
+        self.run_cbq_query(query='CREATE INDEX ix1 ON default(type, META().id)')
+        self.run_cbq_query(query='UPSERT INTO default (KEY t.id, VALUE t) '
+                                           'SELECT {"type":"doc", "id":"aa_"||TO_STR(d), '
+                                           '"a1": ARRAY {"ac0":IMOD(d1,1), "ac1":d+IMOD(d1,10), "ac2":IMOD(d1,2), '
+                                           '"ac3":IMOD(d1,3)} FOR d1 IN ARRAY_RANGE(0,50) END  } AS t '
+                                           'FROM ARRAY_RANGE(0,10000) AS d')
+        results = self.run_cbq_query(query='SELECT g.ac1, COUNT(1) FROM '
+                                           '(SELECT ARRAY v FOR v IN a1 END AS a1 FROM default AS t WHERE type = "doc" '
+                                           'AND META().id LIKE "aa_%" ) AS d UNNEST d.a1 AS u GROUP BY {u.ac1, u.ac2} AS g '
+                                           'UNION SELECT g.ac1, COUNT(1) '
+                                           'FROM (SELECT ARRAY v FOR v IN a1 END AS a1 FROM default AS t '
+                                           'WHERE type = "doc" AND META().id LIKE "aa_%" ) AS d UNNEST d.a1 AS u '
+                                           'GROUP BY {u.ac1, u.ac2} AS g;',query_params={"max_parallelism":2,"memory_quota":13000})
+        self.assertTrue(results['status'] == "success")
 
     def test_collections_meta_cas(self):
         results = self.run_cbq_query(query='select meta(d).cas from default:default.test.test1 as d')
