@@ -590,7 +590,6 @@ class IBRSpatialTests(SpatialQueryTests):
         self.default_bucket = self.input.param("default_bucket", True)
         self.sasl_buckets = self.input.param("sasl_buckets", 0)
         self.standard_buckets = self.input.param("standard_buckets", 0)
-        self.memcached_buckets = self.input.param("memcached_buckets", 0)
         self.servers = self.helper.servers
         self.shell = RemoteMachineShellConnection(self.master)
         info = self.shell.extract_remote_info()

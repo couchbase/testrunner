@@ -155,7 +155,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
                                        eviction_policy=self.eviction_policy))
 
         rest_conn_dest = RestConnection(self.dest_master)
-        rest_conn_dest.create_bucket(bucket='default', ramQuotaMB=256, bucketType='memcached')
+        rest_conn_dest.create_bucket(bucket='default', ramQuotaMB=256, bucketType='ephemeral')
         master_id = rest_conn_dest.get_nodes_self().id
         #if not cluster run use ip addresses instead of localhost
         if len({server.ip for server in self._servers}) != 1:

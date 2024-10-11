@@ -374,7 +374,7 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
-            if self.bucket_type == 'memcached' or int(self.port) in range(9091, 9991):
+            if int(self.port) in range(9091, 9991):
                 self.set_result(True)
                 self.state = FINISHED
                 return
@@ -1998,7 +1998,7 @@ class ESRunQueryCompare(Task):
                           % (fts_hits, faiss_doc_ids)
                     self.log.error(msg)
 
-                
+
                 faiss_hits_ids = list(set(faiss_doc_ids))
                 fts_hits_ids = list(set(fts_doc_ids))
 
@@ -2008,11 +2008,11 @@ class ESRunQueryCompare(Task):
                     missing_ids = [elem for elem in fts_hits_ids if elem not in faiss_hits_ids]
                     self.log.error(f"FAIL: Docs returned by FTS are not present in FAISS. Missing ids : {missing_ids}")
                     self.passed = False
-                    
-                    
 
 
-                        
+
+
+
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -2726,7 +2726,7 @@ class VerifyCollectionDocCountTask(Task):
         self.src_stats = self.src_conn.get_collection_stats(self.bucket)
         self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)
 
-    def execute(self, task_manager):        
+    def execute(self, task_manager):
         try:
             time.sleep(60)
             for map_exp in self.mapping.items():
@@ -2742,13 +2742,13 @@ class VerifyCollectionDocCountTask(Task):
                     if '.' in map_exp[0]:
                         src_scope = map_exp[0].split('.')[0]
                         src_collection = map_exp[0].split('.')[1]
-                    else:                    
+                    else:
                         src_scope = map_exp[0]
                         src_collection = "all"
                     src_count = self.src_conn.get_scope_item_count(self.bucket, src_scope,
                                                                    self.src.get_nodes(), self.src_stats)
 
-                if map_exp[1]:                                                                     
+                if map_exp[1]:
                     if map_exp[1].lower() == "null":
                         self.log.info("{} mapped to null, skipping doc count verification"
                                   .format())
@@ -2756,7 +2756,7 @@ class VerifyCollectionDocCountTask(Task):
                     if ':' in map_exp[1]:
                         dest_collection_specified = True
                         dest_scope = map_exp[1].split(':')[0]
-                        dest_collection = map_exp[1].split(':')[1]                        
+                        dest_collection = map_exp[1].split(':')[1]
                     elif "colon" in map_exp[1]:
                         dest_collection_specified = True
                         dest_scope = map_exp[1].split("colon")[0]
@@ -2777,8 +2777,8 @@ class VerifyCollectionDocCountTask(Task):
                                                                          self.dest.get_nodes(), self.dest_stats)
                 else:
                     dest_scope = None
-                    dest_count = -1                                
-                    
+                    dest_count = -1
+
                 self.log.info('-' * 100)
                 if src_count == dest_count:
                     self.log.info("Item count on src:{} {} = {} on dest:{} for "
@@ -2787,7 +2787,7 @@ class VerifyCollectionDocCountTask(Task):
                                   .format(self.src.get_master_node().ip, src_count,
                                           dest_count, self.dest.get_master_node().ip,
                                           self.bucket, src_scope, src_collection,
-                                          dest_scope, dest_collection))   
+                                          dest_scope, dest_collection))
                 elif dest_scope == None:
                     dest_scope = src_scope
                     dest_collection = src_collection
@@ -2812,7 +2812,7 @@ class VerifyCollectionDocCountTask(Task):
                                             dest_count, self.dest.get_master_node().ip,
                                             self.bucket, src_scope, src_collection,
                                             dest_scope, dest_collection))
-                else:                    
+                else:
                     self.set_exception(Exception("ERROR: Item count on src:{} {} != {} on dest:{} for "
                                   "bucket {} \nsrc : scope {}-> collection {},"
                                   "dest: scope {}-> collection {}"
@@ -6669,7 +6669,7 @@ class MagmaDocLoader(Task):
         # added following to avoid breaking existing code
         if self.sdk_docloader.op_type == "create" and self.sdk_docloader.create_end == 0:
             self.sdk_docloader.create_end = self.sdk_docloader.end + 1
-        
+
         command = f"java -jar magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
                   f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \

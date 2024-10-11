@@ -72,28 +72,6 @@ class EventingNegative(EventingBaseTest):
             if "ERR_SRC_MB_SAME" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be same")
 
-    def test_eventing_with_memcached_buckets(self):
-        # delete existing couchbase buckets which will be created as part of setup
-        for bucket in self.buckets:
-            self.rest.delete_bucket(bucket.name)
-        # create memcached bucket with the same name
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                   replicas=self.num_replicas)
-        tasks = []
-        for bucket in self.buckets:
-            tasks.append(self.cluster.async_create_memcached_bucket(name=bucket.name,
-                                                                    port=STANDARD_BUCKET_PORT + 1,
-                                                                    bucket_params=bucket_params))
-        for task in tasks:
-            task.result()
-        self.sleep(10)
-        try:
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
-        except Exception as ex:
-            if "ERR_BUCKET_MEMCACHED" not in str(ex):
-                self.fail("Eventing function allowed both source and metadata bucket to be memcached buckets")
-        self.skip_metabucket_check=True
-
     def test_src_metadata_and_dst_bucket_flush_when_eventing_is_processing_mutations(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         self.deploy_function(body)

@@ -62,21 +62,6 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_memcached_bucket(self, name, port, bucket_params):
-        """Asynchronously creates a standard bucket
-
-        Parameters:
-            bucket_params - A dictionary containing a list of bucket creation parameters. (Dict)
-
-        Returns:
-            BucketCreateTask - A task future that is a handle to the scheduled task."""
-        bucket_params['bucket_name'] = name
-        bucket_params['port'] = port
-        bucket_params['bucket_type'] = 'memcached'
-        _task = BucketCreateTask(bucket_params)
-        self.task_manager.schedule(_task)
-        return _task
-
     def async_bucket_delete(self, server, bucket='default'):
         """Asynchronously deletes a bucket
 

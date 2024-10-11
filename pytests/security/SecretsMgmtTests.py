@@ -433,12 +433,6 @@ class SecretsMgmtTests(BaseTestCase):
         elif bucket_type == 'standard':
             self.cluster.create_standard_bucket(self.master, bucket_name, STANDARD_BUCKET_PORT + 1,
                                                 bucket_size)
-        elif bucket_type == "memcached":
-            tasks.append(
-                self.cluster.async_create_memcached_bucket(self.master, bucket_name, STANDARD_BUCKET_PORT + 1,
-                                                           bucket_size))
-            for task in tasks:
-                self.assertTrue(task.result(), "Issue with bucket creation")
         else:
             self.log.error('Bucket type not specified')
             return

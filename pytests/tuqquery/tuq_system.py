@@ -77,11 +77,3 @@ class SysCatalogTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT * FROM system:keyspaces"
             self.prepared_common_body()
-
-    def test_memcached_buckets(self):
-        self.query = "SELECT * FROM system:keyspaces"
-        result = self.run_cbq_query()
-        self.assertTrue(result['metrics']['resultCount'] == 2)
-        self.query = "SELECT count(*) as count FROM system:keyspaces"
-        result = self.run_cbq_query()
-        self.assertTrue(result['results'][0]['count'] == 2)

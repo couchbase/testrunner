@@ -57,8 +57,6 @@ class CreateBucketTests(BaseTestCase):
                 self.rest.create_bucket(self.bucket_name, ramQuotaMB=200)
             elif self.bucket_type == 'standard':
                 self.rest.create_bucket(self.bucket_name, ramQuotaMB=200, proxyPort=STANDARD_BUCKET_PORT + 1)
-            elif self.bucket_type == 'memcached':
-                self.rest.create_bucket(self.bucket_name, ramQuotaMB=200, proxyPort=STANDARD_BUCKET_PORT + 1, bucketType='memcached')
             else:
                 self.log.error('Bucket type not specified')
                 return
@@ -68,7 +66,6 @@ class CreateBucketTests(BaseTestCase):
 
     # Bucket creation with names as mentioned in MB-5844(isasl.pw, ns_log)
     def test_valid_bucket_name(self, password='password'):
-            tasks = []
             shared_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                               replicas=self.num_replicas)
             if self.bucket_type == 'sasl':
@@ -80,34 +77,13 @@ class CreateBucketTests(BaseTestCase):
                                                     bucket_params=shared_params)
                 self.buckets.append(Bucket(name=self.bucket_name, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, port=STANDARD_BUCKET_PORT + 1, master_id=self.server))
-            elif self.bucket_type == "memcached":
-                tasks.append(self.cluster.async_create_memcached_bucket(name=self.bucket_name,
-                                                                        port=STANDARD_BUCKET_PORT+1,
-                                                                        bucket_params=shared_params))
-
-                self.buckets.append(Bucket(name=self.bucket_name,
-                                           num_replicas=self.num_replicas, bucket_size=self.bucket_size,
-                                           port=STANDARD_BUCKET_PORT + 1, master_id=self.server, type='memcached'))
-                for task in tasks:
-                    task.result()
             else:
                 self.log.error('Bucket type not specified')
                 return
             self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(self.bucket_name, self.rest),
                             msg='failed to start up bucket with name "{0}'.format(self.bucket_name))
-            if self.bucket_type == "memcached":
-                mc = MemcachedClient(self.master.ip, 11210)
-                mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
-                mc.bucket_select(self.bucket_name)
-                for i in range(self.num_items):
-                    Key = "key" + str(i)
-                    try:
-                        mc.set(Key, 0, 0, "value1")
-                    except MemcachedError as error:
-                        self.fail("Error on creating a doc")
-            else:
-                gen_load = BlobGenerator('buckettest', 'buckettest-', self.value_size, start=0, end=self.num_items)
-                self._load_all_buckets(self.server, gen_load, "create", 0)
+            gen_load = BlobGenerator('buckettest', 'buckettest-', self.value_size, start=0, end=self.num_items)
+            self._load_all_buckets(self.server, gen_load, "create", 0)
             self.cluster.bucket_delete(self.server, self.bucket_name)
             self.assertTrue(BucketOperationHelper.wait_for_bucket_deletion(self.bucket_name, self.rest, timeout_in_seconds=60),
                             msg='bucket "{0}" was not deleted even after waiting for 30 seconds'.format(self.bucket_name))
