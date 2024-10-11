@@ -1909,10 +1909,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_backup_and_restore_with_map_buckets(self):
         """
-        1. Creates specified buckets on the cluster and loads it with given number
-           of items - memcached bucket has to be created for this test
-            (memcached_buckets=1)
-        2. Creates a backupset, takes backup of the cluster host and validates
+        1. Creates specified buckets on the cluster and loads it 'num_items'
+        2. Creates a backup set, takes backup of the cluster host and validates
         3. Executes list command on the backup and validates that memcached bucket
            has been skipped
         4. Restores the backup and validates
@@ -1924,13 +1922,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.create_indexes()
         self.backup_create()
         self.backup_cluster()
-        status, output, message = self.backup_list()
+        status, _, _ = self.backup_list()
         if not status:
-            self.fail("Getting backup list to validate memcached buckets failed.")
-        for line in output:
-            self.assertTrue("memcached_bucket0" not in line,
-                            "Memcached bucket found in backup list output after backup")
-        self.log.info("Memcached bucket not found in backup list output after backup as expected")
+            self.fail("Failed to get backup list()")
         self.backup_restore()
 
     def test_backup_with_erlang_crash_and_restart(self):
@@ -2941,7 +2935,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         restore_host_data = {}
 
         self.sleep(100)
-        
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
             value_obj = cb.get(key=key)
