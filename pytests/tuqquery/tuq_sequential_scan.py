@@ -382,3 +382,59 @@ class QuerySeqScanTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 13014)
             self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+
+    def test_rbac_advise(self):
+        self.users = [{"id": "jackadv", "name": "Jack Advise", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        result = self.run_cbq_query(query=f"ADVISE SELECT * FROM `{self.bucket}`._default._default where a is valued", username=user_id, password=user_pwd)
+        self.log.info(result['results'])
+        advise = result['results'][0]['advice']
+        recommended_indexes = advise['adviseinfo']['recommended_indexes']['indexes']
+        self.assertEqual(recommended_indexes[0]['index_statement'], f'CREATE INDEX adv_a ON `{self.bucket}`:`default`.`_default`.`_default`(`a`)')
+
+    def test_rbac_explain(self):
+        self.users = [{"id": "jackexp", "name": "Jack Explain", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+        try:
+            self.run_cbq_query(query=f"EXPLAIN SELECT * FROM `{self.bucket}`._default._default where a is valued", username=user_id, password=user_pwd)
+            self.fail("Query did not fail as expected")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on `default`:`{self.bucket}`.`_default`.`_default` to allow the statement to run.')
+ 
+    def test_rbac_join(self):
+        query = f'SELECT META(l).id, META(r).id AS id2 FROM {self.bucket}.s1.col1 AS l LEFT JOIN {self.bucket}.s1.col2 AS r ON l.c1 = r.c1 WHERE l.c1 = 1'
+
+        self.run_cbq_query(f'DROP SCOPE {self.bucket}.s1 IF EXISTS')
+        self.run_cbq_query(f'CREATE SCOPE {self.bucket}.s1 IF not exists')
+        self.sleep(3)
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.s1.col1 IF not exists')
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.s1.col2 IF not exists')
+
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col1 VALUES("k01", {{"c1": 1}})')
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col1 VALUES("k02", {{"c1": 1}})')
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col1 VALUES("k03", {{"c10": 3}})')
+
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col2 VALUES("k01", {{"c1": 1}})')
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col2 VALUES("k02", {{"c1": 2}})')
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col2 VALUES("k03", {{"c1": 3}})')
+
+        self.run_cbq_query(f'CREATE INDEX ix1 IF NOT EXISTS ON {self.bucket}.s1.col1(c1)')
+        self.run_cbq_query(f'CREATE INDEX ix2 IF NOT EXISTS ON {self.bucket}.s1.col2(c1)')
+
+        self.users = [{"id": "jackjoin", "name": "Jack Join", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `{self.bucket}` to {user_id}")
+
+        result = self.run_cbq_query(query, username=user_id, password=user_pwd)
+        self.log.info(result['results'])
+        self.assertEqual(result['results'], [{'id': 'k01', 'id2': 'k01'}, {'id': 'k02', 'id2': 'k01'}])
+
+        explain = self.run_cbq_query(f'EXPLAIN {query}', username=user_id, password=user_pwd)
+        self.log.info(explain['results'])
