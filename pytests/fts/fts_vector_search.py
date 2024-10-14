@@ -46,6 +46,7 @@ class VectorSearch(FTSBaseTest):
         self.prefilter_query = self.input.param("prefilter_query",
                                                 {"min": int(self.start_key+1), "max": 10000 + int(self.start_key),
                                                  "field": "sno"})
+        self.conjuction_query_with_prefilter = self.input.param("conjuction_query_with_prefilter",False)
 
         fts_vector_query = {
             "query": {"match_none": {}},
@@ -75,12 +76,24 @@ class VectorSearch(FTSBaseTest):
             fts_vector_query["knn"][0]["params"] = self.knn_params
 
         if self.prefilter_docs:
-            fts_vector_query["knn"][0]["filter"] = self.prefilter_query
+            if self.conjuction_query_with_prefilter:
+                fts_vector_query["knn"][0]["filter"] = {}
+                fts_vector_query["knn"][0]["filter"]["conjuncts"] = []
+                second_query = self.prefilter_query["max"] = int(self.prefilter_query["max"]/2)
+                first_query = self.prefilter_query["min"] = int(self.prefilter_query["max"]/2 + 1)
+                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(first_query)
+                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(second_query)
+                self.log.info(f"conjunction query with prefilter is : {fts_vector_query}")
+            else:
+                fts_vector_query["knn"][0]["filter"] = self.prefilter_query
+
+
 
         self.query = fts_vector_query
 
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 85)
         self.vector_field_type = "vector_base64" if self.encode_base64_vector else "vector"
+
 
         if self.encode_base64_vector:
             if self.store_in_xattr:
