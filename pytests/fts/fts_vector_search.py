@@ -2117,7 +2117,7 @@ class VectorSearch(FTSBaseTest):
                 fts_matches = []
                 for i in range(self.k):
                     fts_matches.append(matches[i]['fields']['sno'] - 1)
-                out_of_range = [num for num in numbers if num < self.start_key or num > self.start_key+10000]
+                out_of_range = [num for num in fts_matches if num < self.start_key or num > self.start_key+10000]
                 if len(out_of_range) > 0:
                     self.log.error(f"Getting results out of specified range = {out_of_range}")
                     queries_with_failed_prefilter_condition.append(i)
