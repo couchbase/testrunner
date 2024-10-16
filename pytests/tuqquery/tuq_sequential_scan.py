@@ -272,7 +272,7 @@ class QuerySeqScanTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 13014)
-            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:default.scope1.collection2 to allow the statement to run.')
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on `default`:`{self.bucket}`.`scope1`.`collection2` to allow the statement to run.')
 
     def test_rbac_bucket(self):
         result = self.run_cbq_query(f'DROP SCOPE {self.bucket}.scope1 IF EXISTS')
@@ -367,7 +367,7 @@ class QuerySeqScanTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 13014)
-            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on `default`:`{self.bucket}` to allow the statement to run.')
 
     def test_rbac_subquery(self):
         self.run_cbq_query(f'INSERT INTO {self.bucket} (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
@@ -381,7 +381,7 @@ class QuerySeqScanTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 13014)
-            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on default:{self.bucket} to allow the statement to run.')
+            self.assertEqual(error['msg'], f'User does not have credentials to use sequential scans. Add role query_use_sequential_scans on `default`:`{self.bucket}` to allow the statement to run.')
 
     def test_rbac_advise(self):
         self.users = [{"id": "jackadv", "name": "Jack Advise", "password": "password1"}]
