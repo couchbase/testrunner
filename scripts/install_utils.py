@@ -752,10 +752,14 @@ def pre_install_steps():
 
     if "tools" in params["install_tasks"]:
         for node in NodeHelpers:
-            tools_name = __get_tools_package_name(node)
-            node.tools_name = tools_name
-            tools_url = __get_tools_url(node, tools_name)
-            node.tools_url = tools_url
+            dev_tools_name = __get_dev_tools_package_name(node)
+            admin_tools_name = __get_admin_tools_package_name(node)
+            node.dev_tools_name = dev_tools_name
+            node.admin_tools_name = admin_tools_name
+            dev_tools_name_url = __get_tools_url(node, dev_tools_name)
+            node.dev_tools_name_url = dev_tools_name_url
+            admin_tools_name_url = __get_tools_url(node, admin_tools_name)
+            node.admin_tools_name_url = admin_tools_name_url
     if "install" in params["install_tasks"]:
         if params["url"] is not None:
             if NodeHelpers[0].shell.is_url_live(params["url"]):
@@ -974,11 +978,14 @@ def install_tools():
         cmd_master = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
         download_dir = __get_download_dir(node)
         if "curl" in cmd_master:
-            cmd = cmd_master.format(node.tools_url, download_dir)
+            cmd = cmd_master.format(node.dev_tools_url, download_dir)
+            cmd1 = cmd_master.format(node.admin_tools_url, download_dir)
         elif "wget" in cmd_master:
-            cmd = cmd_master.format(download_dir, node.tools_name, node.tools_url)
+            cmd = cmd_master.format(download_dir, node.dev_tools_name, node.dev_tools_name_url)
+            cmd1 = cmd_master.format(download_dir, node.admin_tools_name, node.admin_tools_name_url)
         if cmd:
             node.shell.execute_command(cmd, debug=True)
+            node.shell.execute_command(cmd1, debug=True)
 
         if "windows" in node.get_os():
             install_cmd = "unzip {0} -d {1}"
@@ -990,9 +997,13 @@ def install_tools():
             install_dir = f"/cygdrive/c{install_dir}"
         node.shell.execute_command(f"mkdir -p {install_dir}", debug=True)
 
-        cmd = install_cmd.format(f"{download_dir}/{node.tools_name}", install_dir)
+        cmd = install_cmd.format(f"{download_dir}/{node.dev_tools_name}", install_dir)
         node.shell.execute_command(cmd, debug=True)
-        node.shell.execute_command(f"rm {download_dir}/{node.tools_name}")
+        node.shell.execute_command(f"rm {download_dir}/{node.dev_tools_name}")
+
+        cmd = install_cmd.format(f"{download_dir}/{node.admin_tools_name}", install_dir)
+        node.shell.execute_command(cmd, debug=True)
+        node.shell.execute_command(f"rm {download_dir}/{node.admin_tools_name}")
 
 def check_and_retry_download_binary_local(node):
     log.info("Downloading build binary to {0}..".format(node.build.path))
@@ -1191,7 +1202,7 @@ def __get_build_binary_name(node, is_release_build=False):
                                             "unnotarized",
                                             node.info.deliverable_type)
 
-def __get_tools_package_name(node):
+def __get_dev_tools_package_name(node):
     cb_version = params["version"]
     # couchbase-server-dev-tools-7.1.1-3103-windows_amd64.zip
     if "windows" in node.get_os():
@@ -1203,6 +1214,17 @@ def __get_tools_package_name(node):
     # couchbase-server-dev-tools-7.1.1-3103-linux_x86_64.tar.gz
     return f"couchbase-server-dev-tools-{cb_version}-linux_x86_64.tar.gz"
 
+def __get_admin_tools_package_name(node):
+    cb_version = params["version"]
+    # couchbase-server-admin-tools-7.1.1-3103-windows_amd64.zip
+    if "windows" in node.get_os():
+        return f"couchbase-server-admin-tools-{cb_version}-windows_amd64.zip"
+    # couchbase-server-admin-tools-7.1.1-3103-macos_x86_64.tar.gz
+    if node.get_os() in install_constants.MACOS_VERSIONS:
+        return f"couchbase-server-admin-tools-{cb_version}-macos_x86_64.tar.gz"
+    # Default to linux, since we don't differentiate between x86 and amd64 distros
+    # couchbase-server-admin-tools-7.1.1-3103-linux_x86_64.tar.gz
+    return f"couchbase-server-admin-tools-{cb_version}-linux_x86_64.tar.gz"
 def is_fatal_error(errors):
     for line in errors:
         for fatal_error in install_constants.FATAL_ERRORS:
