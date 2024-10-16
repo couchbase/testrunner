@@ -1077,7 +1077,8 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'no_curl:password'})" % (n1ql_query)
         curl = self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-        json_curl = self.convert_to_json(curl)
+        # http error 401 is also returned so let's split the result without it
+        json_curl = self.convert_to_json(curl.split("\x1b")[0])
         self.assertEqual(json_curl['errors'][0]['msg'], error_msg)
 
         cbqpath = '%scbq' % self.path + " -e %s:%s -u 'curl' -p 'password' -q " % (self.master.ip,
