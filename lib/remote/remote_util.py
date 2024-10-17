@@ -4578,7 +4578,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_cbstats(self, bucket, command, keyname="", vbid=0,
                                       cbadmin_user="cbadminbucket",
                                       cbadmin_password="password",
-                                      print_results=False, options=""):
+                                      print_results=False, options="", admin_tools_package=False):
         cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbstat_command = "%scbstats" % (LINUX_NONROOT_CB_BIN_PATH)
@@ -4587,6 +4587,13 @@ class RemoteMachineShellConnection(KeepRefs):
             cbstat_command = "%scbstats.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cbstat_command = "%scbstats" % (MAC_COUCHBASE_BIN_PATH)
+        if admin_tools_package:
+            os = self.info.type.lower()
+            fv, sv, bn = self.get_cbversion(os)
+            if os == "linux":
+                cbstat_command = f"/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/cbstats"
+            elif os == "windows":
+                cbstat_command = f"/cygdrive/c/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/cbstats"
 
         if command != "key" and command != "raw":
             command = "%s %s:11210 %s -u %s -p %s -b %s %s " % (cbstat_command,
@@ -4613,7 +4620,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                       cbadmin_user="cbadminbucket",
                                       cbadmin_password="password",
                                       print_results=False,
-                                      enable_ipv6=False):
+                                      enable_ipv6=False, admin_tools_package=False):
         connection_method = ""
         if enable_ipv6:
             connection_method = " -6 "
@@ -4625,6 +4632,13 @@ class RemoteMachineShellConnection(KeepRefs):
             cbstat_command = "%smcstat.exe" % (WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cbstat_command = "%smcstat" % (MAC_COUCHBASE_BIN_PATH)
+        if admin_tools_package:
+            os = self.info.type.lower()
+            fv, sv, bn = self.get_cbversion(os)
+            if os == "linux":
+                cbstat_command = f"/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/mcstat"
+            elif os == "windows":
+                cbstat_command = f"/cygdrive/c/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/mcstat"
 
         if command != "key" and command != "raw":
             command = "%s -h %s:11210 %s -u %s -P %s -b %s %s " % (cbstat_command,
@@ -4647,7 +4661,7 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(output, error)
         return output, error
 
-    def couchbase_cli(self, subcommand, cluster_host, options):
+    def couchbase_cli(self, subcommand, cluster_host, options, admin_tools_package=False):
         if CbServer.use_https:
             options += " --no-ssl-verify"
         cb_client = "{0}couchbase-cli".format(LINUX_COUCHBASE_BIN_PATH)
@@ -4658,6 +4672,13 @@ class RemoteMachineShellConnection(KeepRefs):
             cb_client = "{0}couchbase-cli.exe".format(WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "{0}couchbase-cli".format(MAC_COUCHBASE_BIN_PATH)
+        if admin_tools_package:
+            os = self.info.type.lower()
+            fv, sv, bn = self.get_cbversion(os)
+            if os == "linux":
+                cb_client = f"/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/couchbase-cli"
+            elif os == "windows":
+                cb_client = f"/cygdrive/c/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/couchbase-cli"
 
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [SUBCOMMAND] [OPTIONS]
@@ -4670,7 +4691,7 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='',
                               cluster_port=None, user='Administrator', password='password',
-                              _stdin=None):
+                              _stdin=None, admin_tools_package=False):
         if CbServer.use_https:
             options += " --no-ssl-verify"
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
@@ -4684,6 +4705,13 @@ class RemoteMachineShellConnection(KeepRefs):
         f, s, b = self.get_cbversion(os_name)
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
+        if admin_tools_package:
+            os = self.info.type.lower()
+            fv, sv, bn = self.get_cbversion(os)
+            if os == "linux":
+                cb_client = f"/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/couchbase-cli"
+            elif os == "windows":
+                cb_client = f"/cygdrive/c/tmp/tools_package/couchbase-server-admin-tools-{fv}/bin/couchbase-cli"
 
         protocol = "https" if cluster_host.split(':')[-1] == "18091" else "http"
         cluster_param = (" -c {1}://{0}".format(cluster_host, protocol),

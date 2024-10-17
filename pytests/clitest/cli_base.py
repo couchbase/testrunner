@@ -169,11 +169,9 @@ class CliBaseTest(BaseTestCase):
                 self.enable_diag_eval_on_non_local_hosts()
                 bin_path  = subprocess.check_output(cmd, shell=True).decode("utf-8")
                 if "bin" not in bin_path:
-                    self.fail("Check if cb server install on {0}"
-                                         .format(self.master.ip))
+                    self.fail("Check if cb server install on {0}".format(self.master.ip))
             else:
-                self.fail("Check if cb server install on {0}"
-                                     .format(self.master.ip))
+                self.fail("Check if cb server install on {0}".format(self.master.ip))
         self.cli_command_path = bin_path.replace('"','') + "/"
         self.root_path = LINUX_ROOT_PATH
         self.tmp_path = "/tmp/"
@@ -213,6 +211,16 @@ class CliBaseTest(BaseTestCase):
             self.base_cb_path = WIN_CB_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
+        self.admin_tools_package = self.input.param("admin_tools_package", False)
+        self.previous_cli = self.cli_command_path
+        if self.input.param("admin_tools_package", False):
+            cb_version = self.cb_version.replace("-enterprise", "")
+            if type == "linux":
+                self.cli_command_path = f"/tmp/tools_package/couchbase-server-admin-tools-{cb_version}/bin/"
+                self.linux_admin_tools_command_path = self.cli_command_path
+            elif type == "windows":
+                self.cli_command_path = f"/cygdrive/c/tmp/tools_package/couchbase-server-admin-tools-{cb_version}/bin/"
+                self.windows_admin_tools_command_path = self.cli_command_path
         shell = RemoteMachineShellConnection(self.master)
         self.full_v, self.short_v, self.build_number = shell.get_cbversion(type)
         self.couchbase_usrname = "%s" % (self.input.membase_settings.rest_username)
@@ -1072,7 +1080,8 @@ class CliBaseTest(BaseTestCase):
                 rest_client.create_scope(bucket=bucket_name, scope=scope_name,
                                               params=None)
             else:
-                cli_client.create_scope(bucket=bucket_name, scope=scope_name)
+                cli_client.create_scope(bucket=bucket_name, scope=scope_name,
+                                        admin_tools_package=self.admin_tools_package)
 
     def delete_scope(self, num_scope=2):
         bucket_name = self.buckets[0].name
@@ -1083,7 +1092,8 @@ class CliBaseTest(BaseTestCase):
             if self.use_rest:
                 self.rest_col.delete_scope(bucket_name, scope_name)
             else:
-                self.cli_col.delete_scope(scope_name, bucket=bucket_name)
+                self.cli_col.delete_scope(scope_name, bucket=bucket_name,
+                                          admin_tools_package=self.admin_tools_package)
 
     def create_collection(self, num_collection=1, rest=None, cli=None):
         bucket_name = self.buckets[0].name
@@ -1109,7 +1119,8 @@ class CliBaseTest(BaseTestCase):
                                                    collection="mycollection_{0}_{1}".format(scope, x))
                     else:
                         cli_client.create_collection(bucket=bucket_name, scope=scope,
-                                                   collection="mycollection_{0}_{1}".format(scope, x))
+                                                   collection="mycollection_{0}_{1}".format(
+                                                       scope, x), admin_tools_package=self.admin_tools_package)
         self.sleep(10, "time needs for stats up completely")
 
     def delete_collection(self, num_collection=1):
@@ -1120,7 +1131,7 @@ class CliBaseTest(BaseTestCase):
                                                    collection="_{0}".format(bucket_name))
             else:
                 self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
-                                                  collection="_{0}".format(bucket_name))
+                                                  collection="_{0}".format(bucket_name), admin_tools_package=self.admin_tools_package)
 
     def create_scope_collection(self, num_scope_collection=2):
         bucket_name = self.buckets[0].name
@@ -1133,7 +1144,8 @@ class CliBaseTest(BaseTestCase):
                                                      "mycollection{0}".format(x))
             else:
                 self.cli_col.create_scope_collection(bucket_name, scope_name,
-                                                    "mycollection{0}".format(x))
+                                                    "mycollection{0}".format(x),
+                                                     admin_tools_package=self.admin_tools_package)
 
     def get_bucket_scope(self, rest=None, cli=None):
         bucket_name = self.buckets[0].name
@@ -1148,7 +1160,7 @@ class CliBaseTest(BaseTestCase):
         if self.use_rest:
             scopes = rest_client.get_bucket_scopes(bucket_name)
         else:
-            scopes = cli_client.get_bucket_scopes(bucket_name)[0]
+            scopes = cli_client.get_bucket_scopes(bucket_name, admin_tools_package=self.admin_tools_package)[0]
         return scopes
 
     def get_bucket_scope_ex(self):
@@ -1157,7 +1169,7 @@ class CliBaseTest(BaseTestCase):
         if self.use_rest:
             scopes = self.rest_rs.get_bucket_scopes(bucket_name)
         else:
-            scopes = self.cli_rs.get_bucket_scopes(bucket_name)
+            scopes = self.cli_rs.get_bucket_scopes(bucket_name, admin_tools_package=self.admin_tools_package)
         return scopes
 
     def get_bucket_collection(self,):
@@ -1166,7 +1178,7 @@ class CliBaseTest(BaseTestCase):
         if self.use_rest:
             collections = self.rest_col.get_bucket_collections(bucket_name)
         else:
-            collections = self.cli_col.get_bucket_collections(bucket_name)
+            collections = self.cli_col.get_bucket_collections(bucket_name, admin_tools_package=self.admin_tools_package)
         return collections
 
     def get_collection_stats(self, buckets=None, cluster=None):
@@ -1192,8 +1204,9 @@ class CliBaseTest(BaseTestCase):
         #collections, error = self.get_collection_stats()
         bucket = self.buckets[0]
         output, error = shell.execute_cbstats(bucket, "collections",
-                                                   cbadmin_user="Administrator",
-                                                   options=" | grep ':name'")
+                                              cbadmin_user="Administrator",
+                                              options=" | grep ':name'",
+                                              admin_tools_package=self.admin_tools_package)
         shell.disconnect()
         collection_names = []
         if output:

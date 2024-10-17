@@ -15,7 +15,7 @@ from security.rbac_base import RbacBase
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import CLI_COMMANDS
+from lib.testconstants import CLI_COMMANDS
 from couchbase_helper.documentgenerator import BlobGenerator
 
 
@@ -323,7 +323,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
     def _get_cluster_info(self, remote_client, cluster_host="localhost", cluster_port=None, user="Administrator", password="password"):
         command = "server-info"
-        output, error = remote_client.execute_couchbase_cli(command, cluster_host=cluster_host, cluster_port=cluster_port, user=user, password=password)
+        output, error = remote_client.execute_couchbase_cli(command, cluster_host=cluster_host,
+                                                            cluster_port=cluster_port, user=user,
+                                                            password=password,
+                                                            admin_tools_package=self.admin_tools_package)
         if not error:
             content = ""
             for line in output:
@@ -346,7 +349,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                           options=options, cluster_host="localhost",
-                                          user="Administrator", password="password")
+                                          user="Administrator", password="password",
+                                          admin_tools_package=self.admin_tools_package)
         if "TIMED OUT" in output[0]:
             raise Exception("Timed out.  Could not create bucket")
         else:
@@ -356,6 +360,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
     def testHelp(self):
         command_with_error = {}
         shell = RemoteMachineShellConnection(self.master)
+        admin_cli_commands = ['couchbase-cli', 'cbstats', 'mcstat', 'mctimings']
         for cli in CLI_COMMANDS:
             """ excluded_commands should separate by ';' """
             if self.excluded_commands is not None:
@@ -371,6 +376,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 option = " -version"
             if self.os == "windows":
                 cli = '.'.join([cli, "exe"])
+            if cli not in admin_cli_commands and self.admin_tools_package:
+                self.cli_command_path = self.previous_cli
+            if cli in admin_cli_commands and self.admin_tools_package:
+                if self.shell.extract_remote_info().type.lower() == "linux":
+                    self.cli_command_path = self.linux_admin_tools_command_path
+                elif self.shell.extract_remote_info().type.lower() == "windows":
+                    self.cli_command_path = self.windows_admin_tools_command_path
             command = ''.join([self.cli_command_path, cli, option])
             self.log.info("test -h of command {0}".format(cli))
             output, error = shell.execute_command(command, use_channel=True)
@@ -389,7 +401,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         cli_command = "server-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                  cluster_host="localhost", user="Administrator", password="password")
+                  cluster_host="localhost", user="Administrator", password="password",
+                                        admin_tools_package=self.admin_tools_package)
         server_info = self._get_cluster_info(remote_client)
         """ In new single node not join any cluster yet,
             IP of node will be 127.0.0.1 """
@@ -408,7 +421,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         cli_command = "bucket-list"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
-                  cluster_host="localhost", user="Administrator", password="password")
+                  cluster_host="localhost", user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
         if output and output[0] == "\x1b[6n":
             del output[0]
         self.assertEqual([], output)
@@ -475,8 +489,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, error = \
                       remote_client.execute_couchbase_cli(cli_command=cli_command,
                                         options=options, cluster_host="localhost",
-                                          cluster_port=18091, user="Administrator",
-                                                              password="password")
+                                         cluster_port=18091, user="Administrator",
+                                                              password="password",
+                                     admin_tools_package=self.admin_tools_package)
                 server_added = False
                 output_msg = "SUCCESS: Server added"
                 if self.cb_version[:3] == "4.6":
@@ -497,15 +512,17 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli_command = "rebalance"
         for num in range(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                            options=options, cluster_host="localhost", cluster_port=8091,\
-                            user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                            options=options, cluster_host="localhost", cluster_port=8091,
+                                               user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
             self.assertTrue(self.cli_rebalance_msg in output)
         if nodes_rem == 0 and nodes_add > 0:
             cli_command = "rebalance"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                             cluster_host="localhost", cluster_port=8091,
-                                              user="Administrator", password="password")
+                                              user="Administrator", password="password",
+                                           admin_tools_package=self.admin_tools_package)
             if len(output) == 4:
                 self.assertTrue(self._check_output("SUCCESS: Rebalance complete", output))
             else:
@@ -528,7 +545,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, error = remote_client.execute_couchbase_cli(
                         cli_command=cli_command, options=options,
                         cluster_host="localhost", cluster_port=8091,
-                        user="Administrator", password="password")
+                        user="Administrator", password="password",
+                        admin_tools_package=self.admin_tools_package)
                 if len(output) == 2:
                     self.assertIn("SUCCESS: Server failed over", output[0])
                 else:
@@ -537,7 +555,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 output, error = remote_client.execute_couchbase_cli(
                         cli_command=cli_command, options=options,
                         cluster_host="localhost", cluster_port=8091,
-                        user="Administrator", password="password")
+                        user="Administrator", password="password",
+                        admin_tools_package=self.admin_tools_package)
                 RestConnection(self.master).monitorRebalance()
                 if not self._check_output("SUCCESS: Server failed over", output):
                     if output and output[0]:
@@ -557,13 +576,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                         options=options, cluster_host="localhost",
                                                           cluster_port=18091, user="Administrator",
-                                                                              password="password")
+                                                                              password="password",
+                                                    admin_tools_package=self.admin_tools_package)
             self.assertTrue(self._check_output(["DEPRECATED: Please use the recovery command ",
                                  "SUCCESS: Servers recovered"], output), "Server readd failed")
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost", cluster_port=8091,
-                                                            user="Administrator", password="password")
+                                                            user="Administrator",
+                                                            password="password",
+                                                            admin_tools_package=self.admin_tools_package)
         self.assertTrue(self._check_output(self.cli_rebalance_msg, output))
         if self.os == 'windows':
             self.sleep(10, "windows need more time to complete rebalance")
@@ -592,7 +614,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                     cluster_host="localhost",
                                                                     cluster_port=18091,
                                                                     user=cluster_user,
-                                                                    password=cluster_pwd)
+                                                                    password=cluster_pwd,
+                                                                    admin_tools_package=self.admin_tools_package)
                 self.assertTrue(self._check_output("SUCCESS: Server added", output))
         else:
              raise Exception("Node add should be smaller total number vms in ini file")
@@ -604,7 +627,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 options=options,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
-                                                                password=cluster_pwd)
+                                                                password=cluster_pwd,
+                                                                admin_tools_package=self.admin_tools_package)
             self.assertTrue(self.cli_rebalance_msg in output)
 
         if nodes_rem == 0 and nodes_add > 0:
@@ -612,7 +636,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
-                                                                password=cluster_pwd)
+                                                                password=cluster_pwd,
+                                                                admin_tools_package=self.admin_tools_package)
             self.assertTrue(self._check_output(self.cli_rebalance_msg, output))
 
         self._create_bucket(remote_client)
@@ -632,7 +657,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 options=options,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
-                                                                password=cluster_pwd)
+                                                                password=cluster_pwd,
+                                                                admin_tools_package=self.admin_tools_package)
             self.assertTrue("SUCCESS: Server failed over" in str(output),
                             "Node failover failed")
             if not force_failover:
@@ -647,7 +673,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 options=options,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
-                                                                password=cluster_pwd)
+                                                                password=cluster_pwd,
+                                                                admin_tools_package=self.admin_tools_package)
             self.assertIn("SUCCESS: Servers recovered", output[0])
 
         for num in range(nodes_recovery):
@@ -660,7 +687,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 options=options,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
-                                                                password=cluster_pwd)
+                                                                password=cluster_pwd,
+                                                                admin_tools_package=self.admin_tools_package)
             self.assertTrue(self._check_output(["DEPRECATED: Please use the recovery command ",
                                  "SUCCESS: Servers recovered"], output), "Server readd failed")
 
@@ -678,14 +706,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                     cluster_host="localhost",
                                                                     cluster_port=18091,
                                                                     user=cluster_user,
-                                                                    password=cluster_pwd)
+                                                                    password=cluster_pwd,
+                                                                    admin_tools_package=self.admin_tools_package)
                 self.assertTrue(self._check_output("SUCCESS: Server added", output))
                 self.sleep(5)
         cli_command = "rebalance"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost",
                                                             user=cluster_user,
-                                                            password=cluster_pwd)
+                                                            password=cluster_pwd,
+                                                            admin_tools_package=self.admin_tools_package)
         self.assertTrue(self.cli_rebalance_msg in output)
         remote_client.disconnect()
 
@@ -695,8 +725,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         remote_client = RemoteMachineShellConnection(self.master)
 
         cli_command = "rebalance-status"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                  cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                  cluster_host="localhost", user="Administrator", password="password",
+                                        admin_tools_package=self.admin_tools_package)
         self.assertTrue(self._check_output(self.REBALANCE_NOT_RUN, output))
 
         cli_command = "server-add"
@@ -704,28 +735,31 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = "--server-add={0} --server-add-username=Administrator \
                        --server-add-password=password  --no-ssl-verify"\
                              .format(self.servers[num + 1].ip)
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                                              options=options, cluster_host="localhost", \
-                                                user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                                              options=options, cluster_host="localhost",
+                                                user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
             output_msg = "SUCCESS: Server added"
             self.assertTrue(self._check_output(output_msg, output))
 
         cli_command = "rebalance-status"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                  cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                  cluster_host="localhost", user="Administrator", password="password",
+                                        admin_tools_package=self.admin_tools_package)
         self.assertTrue(self._check_output(self.REBALANCE_NOT_RUN, output))
 
         self._create_bucket(remote_client)
 
         cli_command = "rebalance"
         t = Thread(target=remote_client.execute_couchbase_cli, name="rebalance_after_add",
-                       args=(cli_command, "localhost", '', None, "Administrator", "password"))
+                       args=(cli_command, "localhost", '', None, "Administrator", "password", self.admin_tools_package))
         t.start()
         self.sleep(5)
 
         cli_command = "rebalance-status"
-        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                  cluster_host="localhost", user="Administrator", password="password")
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                  cluster_host="localhost", user="Administrator", password="password",
+                                        admin_tools_package=self.admin_tools_package)
         self.assertTrue(self._check_output(self.REBALANCE_RUNNING, output))
 
         t.join()
@@ -734,28 +768,32 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         for num in range(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             t = Thread(target=remote_client.execute_couchbase_cli, name="rebalance_after_add",
-                       args=(cli_command, "localhost", options, None, "Administrator", "password"))
+                       args=(cli_command, "localhost", options, None, "Administrator", "password", self.admin_tools_package))
             t.start()
             self.sleep(5)
             cli_command = "rebalance-status"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                      cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                      cluster_host="localhost", user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
             self.assertTrue(self._check_output(self.REBALANCE_RUNNING, output))
 
             cli_command = "rebalance-stop"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                      cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                      cluster_host="localhost", user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
 
             t.join()
 
             cli_command = "rebalance"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                      cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                      cluster_host="localhost", user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
             self.assertTrue(self._check_output("SUCCESS: Rebalance complete", output))
 
             cli_command = "rebalance-status"
-            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                      cluster_host="localhost", user="Administrator", password="password")
+            output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
+                      cluster_host="localhost", user="Administrator", password="password",
+                                            admin_tools_package=self.admin_tools_package)
             self.assertTrue(self._check_output(self.REBALANCE_NOT_RUN, output))
         remote_client.disconnect()
 
@@ -783,7 +821,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         stdout, _, _ = cli.cluster_init(data_ramsize, index_ramsize, fts_ramsize,
                                         services, index_storage_mode, name,
-                                        username, password, port)
+                                        username, password, port,
+                                        admin_tools_package=self.admin_tools_package)
 
         if username:
             server.rest_username = username
@@ -845,7 +884,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         options = "--cluster-username Administrator --cluster-password password " \
                   "--cluster-port 8091 --cluster-name '%s' " % cluster_name
         output, error = self.shell.couchbase_cli("cluster-init", self.master.ip,
-                                                                        options)
+                                                                        options,
+                                   admin_tools_package=self.admin_tools_package)
         if "SUCCESS: Cluster initialized" not in output[0]:
             self.fail("Failed to initialize node '%s' " % self.master.ip)
 
@@ -866,7 +906,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             options = "-u Administrator -p password --cluster-name '%s' " \
                                                         % change_hostname
             output, error = self.shell.couchbase_cli("setting-cluster",
-                                                     self.master.ip, options)
+                                                     self.master.ip, options,
+                                admin_tools_package=self.admin_tools_package)
             settings = rest.get_pools_default()
             if change_hostname not in settings["clusterName"]:
                 self.fail("Fail to set new hostname in cluster. "
@@ -886,14 +927,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self._bucket_creation()
         cli = CouchbaseCLI(server, "cbadminbucket", "password")
         output_add, error, msg = cli.server_add(add_server, "Administrator",
-                                                "password", None, "data", None)
+                                                "password", None, "data", None,
+                                                admin_tools_package=self.admin_tools_package)
         if "SUCCESS" not in output_add[0] and "Server added" not in output_add[0]:
             self.fail("Could not add node %s to cluster" % add_server.ip)
 
         reb_result = ""
 
         if not stop_rebalance:
-            output, error, msg = cli.rebalance(None)
+            output, error, msg = cli.rebalance(None, admin_tools_package=self.admin_tools_package)
         else:
             sts = rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
                                 ejectedNodes=[])
@@ -902,9 +944,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     self.sleep(3, "wait for rebalance to run")
                     break
             if sts:
-                _, _, stop_status = cli.rebalance_stop()
+                _, _, stop_status = cli.rebalance_stop(admin_tools_package=self.admin_tools_package)
                 if stop_status:
-                    output, error, msg = cli.rebalance(None)
+                    output, error, msg = cli.rebalance(None,
+                                                       admin_tools_package=self.admin_tools_package)
                 else:
                     self.fail("Fail to stop rebalance")
             else:
@@ -940,13 +983,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
         if init_start_rebalance:
            self.assertTrue(rest.rebalance(otpNodes=["%s:%s" % (add_server.ip, add_server.port)]),
                            "Rebalance failed to start")
 
-        stdout, _, _ = cli.rebalance_stop()
+        stdout, _, _ = cli.rebalance_stop(admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Rebalance stopped"),
@@ -982,10 +1026,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.setting_audit(enabled, log_path, rotate_interval)
+        stdout, _, _ = cli.setting_audit(enabled, log_path, rotate_interval,
+                                         admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Audit settings modified"),
@@ -1026,11 +1072,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         stdout, _, errored = cli.setting_compaction(db_frag_perc, db_frag_size, view_frag_perc, view_frag_size,
-                                                    from_period, to_period, abort_outside, parallel_compact, purgeInt)
+                                                    from_period, to_period, abort_outside, parallel_compact, purgeInt,
+                                                    admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -1067,13 +1115,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(self.master, username, password, self.cb_version)
         _, _, success = cli.cluster_init(256, 512, None, "data,index,query", None, None,
                                                  self.master.rest_username,
-                                                 self.master.rest_password, None)
+                                                 self.master.rest_password, None,
+                                         admin_tools_package=self.admin_tools_package)
         self.assertTrue(success, "Cluster initialization failed during test setup")
 
         if compact_interval is not None and "-" in compact_interval:
             compact_interval = compact_interval.replace("-", ",")
         stdout, _, errored = cli.setting_gsi_compaction(compact_mode, compact_percent,
-                              compact_interval, from_period, to_period, enable_abort)
+                              compact_interval, from_period, to_period, enable_abort,
+                                        admin_tools_package=self.admin_tools_package)
         self.assertTrue(errored, "Expected command to succeed")
         if not expect_error:
             self.verify_gsi_compact_settings(compact_mode, compact_percent,
@@ -1098,10 +1148,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.setting_autofailover(enabled, timeout)
+        stdout, _, _ = cli.setting_autofailover(enabled, timeout,
+                                                admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Auto-failover settings modified"),
@@ -1133,10 +1185,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.setting_autoreprovision(enabled, max_nodes)
+        stdout, _, _ = cli.setting_autoreprovision(enabled, max_nodes,
+                                                   admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             if enabled == 0:
@@ -1171,13 +1225,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         initialy_enabled = self.verifyNotificationsEnabled(server)
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.setting_notification(enable)
+        stdout, _, _ = cli.setting_notification(enable,
+                                                admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Software notification settings updated"),
@@ -1224,15 +1280,18 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(init_data_memory, init_index_memory, init_fts_memory, None, None,
-                                             init_name, server.rest_username, server.rest_password, None)
+                                             init_name, server.rest_username, server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         if cmd == "cluster-edit":
             stdout, _, _ = cli.cluster_edit(data_ramsize, index_ramsize, fts_ramsize, name, new_username,
-                                            new_password, port)
+                                            new_password, port,
+                                            admin_tools_package=self.admin_tools_package)
         else:
             stdout, _, _ = cli.setting_cluster(data_ramsize, index_ramsize, fts_ramsize, name, new_username,
-                                               new_password, port)
+                                               new_password, port,
+                                               admin_tools_package=self.admin_tools_package)
 
         if new_username and not expect_error:
                 server.rest_username = new_username
@@ -1292,11 +1351,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         stdout, _, _ = cli.setting_index(max_rollbacks, stable_snap_interval, mem_snap_interval, storage_mode, threads,
-                                         log_level)
+                                         log_level, admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Indexer settings modified"),
@@ -1331,10 +1391,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
-        stdout, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled)
+        stdout, _, _ = cli.setting_ldap(admins, ro_admins, default, enabled,
+                                        admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "LDAP settings modified"),
@@ -1381,14 +1443,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cli = CouchbaseCLI(server, username, password)
         if initialized:
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         stdout, _, _ = cli.setting_alert(enabled, email_recipients, email_sender, email_username, email_password,
                                          email_host, email_port, encrypted, alert_af_node, alert_af_max_reached,
                                          alert_af_node_down, alert_af_small, alert_af_disable, alert_ip_changed,
                                          alert_disk_space, alert_meta_overhead, alert_meta_oom, alert_write_failed,
-                                         alert_audit_dropped)
+                                         alert_audit_dropped,
+                                         admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Email alert settings modified"),
@@ -1424,15 +1488,18 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
                 _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None, None,
-                                                  None, None)
+                                                  None, None,
+                                                  admin_tools_package=self.admin_tools_package)
                 self.assertTrue(success, "Bucket not created during test setup")
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.bucket_compact(bucket_name, data_only, views_only)
+        stdout, _, _ = cli.bucket_compact(bucket_name, data_only, views_only,
+                                          admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket compaction started"),
@@ -1468,13 +1535,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized and reset_node:
             _, _, success = cli.cluster_init(512, None, None, None, None, None,
                                              server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         stdout, _, _ = cli.bucket_create(bucket_name, bucket_type, memory_quota,
                                          eviction_policy, replica_count,
                                          enable_index_replica, priority,
-                                         enable_flush, wait)
+                                         enable_flush, wait,
+                                         admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error,
@@ -1508,7 +1577,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         self.testBucketCreate()
         cli = CouchbaseCLI(server, username, password)
-        cli.bucket_delete(bucket_name)
+        cli.bucket_delete(bucket_name, admin_tools_package=self.admin_tools_package)
         self.testBucketCreate()
 
 
@@ -1534,16 +1603,19 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(512, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
                 _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
-                                                  None, 0, None)
+                                                  None, 0, None,
+                                                  admin_tools_package=self.admin_tools_package)
                 self.assertTrue(success, "Bucket not created during test setup")
 
         cli = CouchbaseCLI(server, username, password)
         stdout, _, _ = cli.bucket_edit(bucket_name, memory_quota, eviction_policy, replica_count,
-                                       priority, enable_flush)
+                                       priority, enable_flush,
+                                       admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket edited"),
@@ -1574,15 +1646,17 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(512, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
                 _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
-                                                  None, 0, None)
+                                                  None, 0, None,
+                                                  admin_tools_package=self.admin_tools_package)
                 self.assertTrue(success, "Bucket not created during test setup")
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.bucket_delete(bucket_name)
+        stdout, _, _ = cli.bucket_delete(bucket_name, admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket deleted"),
@@ -1615,11 +1689,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(512, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_bucket_type is not None:
                 _, _, success = cli.bucket_create(bucket_name, init_bucket_type, 256, None, None, None,
-                                                  None, init_enable_flush, None)
+                                                  None, init_enable_flush, None,
+                                                  admin_tools_package=self.admin_tools_package)
                 self.assertTrue(success, "Bucket not created during test setup")
                 """ Add built-in user for memcached authentication """
                 self.add_built_in_server_user(node=server)
@@ -1630,7 +1706,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 self.assertTrue(self.waitForItemCount(server, bucket_name, insert_keys))
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.bucket_flush(bucket_name, force)
+        stdout, _, _ = cli.bucket_flush(bucket_name, force,
+                                        admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Bucket flushed"),
@@ -1677,14 +1754,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             _, _, success = cli.cluster_init(256, 256, None, init_services,
                                              init_index_storage_mode, None,
                                              server.rest_username, server.rest_password,
-                                             None)
+                                             None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
         stdout, _, _ = cli.server_add(servers_to_add_url, server_username, server_password,
                                                      group, services,
-                                                     index_storage_mode)
+                                                     index_storage_mode,
+                                                     admin_tools_package=self.admin_tools_package)
 
         if not services:
             services = "kv"
@@ -1754,20 +1833,21 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             time.sleep(5)
             if initial_servers != "":
-                _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None, None)
+                _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None, None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to add initial servers")
-                _, _, errored = cli.rebalance(None)
+                _, _, errored = cli.rebalance(None, self.admin_tools_package)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
             if servers_to_add != "":
-                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to add initial servers")
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.rebalance(servers_to_remove)
+        stdout, _, _ = cli.rebalance(servers_to_remove, admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Rebalance complete"),
@@ -1791,11 +1871,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
         _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                         server.rest_password, None)
+                                         server.rest_password, None,
+                                         admin_tools_package=self.admin_tools_package)
         self.assertTrue(success, "Cluster initialization failed during test setup")
         time.sleep(5)
 
-        stdout, _, _ = cli.rebalance("invalid.server:8091")
+        stdout, _, _ = cli.rebalance("invalid.server:8091",
+                                     admin_tools_package=self.admin_tools_package)
 
         self.assertTrue(self.verifyCommandOutput(stdout, True, error_msg),
                         "Expected error message not found")
@@ -1833,22 +1915,25 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, None, None, None, None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if initial_servers != "":
                 time.sleep(5)
                 _, _, errored = cli.server_add(initial_servers, server.rest_username, server.rest_password, None, None,
-                                               None)
+                                               None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to add initial servers")
-                _, _, errored = cli.rebalance(None)
+                _, _, errored = cli.rebalance(None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
             _, _, success = cli.bucket_create("bucket", "couchbase", 256, None, None, None, None,
-                                                  None, None)
+                                                  None, None,
+                                              admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Bucket not created during test setup")
             time.sleep(10)
 
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.failover(server_to_failover, force)
+        stdout, _, _ = cli.failover(server_to_failover, force,
+                                    admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Server failed over"),
@@ -1902,7 +1987,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
                                              server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
             if init_rbac_username and init_rbac_password:
                 rest.set_user_roles(init_user, payload)
@@ -1913,7 +1999,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
         stdout, _, errored = cli.user_manage(delete, list, set, rbac_username, rbac_password,
-                                             roles, auth_domain)
+                                             roles, auth_domain,
+                                             admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             if list:
@@ -1978,19 +2065,20 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
             if init_num_servers > 1:
                 time.sleep(5)
-                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Could not add initial servers")
-                _, _, errored = cli.rebalance(None)
+                _, _, errored = cli.rebalance(None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, errored = cli.collect_logs_start(all_nodes, log_nodes, upload, upload_host, upload_customer, upload_ticket)
+        stdout, _, errored = cli.collect_logs_start(all_nodes, log_nodes, upload, upload_host, upload_customer, upload_ticket, admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -2013,11 +2101,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, errored = cli.collect_logs_stop()
+        stdout, _, errored = cli.collect_logs_stop(admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -2145,12 +2234,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
                                              server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
 
-        stdout, _, errored = cli.node_init(data_path, index_path, hostname)
+        stdout, _, errored = cli.node_init(data_path, index_path, hostname,
+                                           admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -2213,23 +2304,24 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
             if init_num_servers > 1:
                 time.sleep(5)
-                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None)
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None, None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Could not add initial servers")
-                _, _, errored = cli.rebalance(None)
+                _, _, errored = cli.rebalance(None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
 
             if init_group is not None:
                 time.sleep(5)
-                _, _, errored = cli.group_manage(True, False, False, None, None, init_group, None, None)
+                _, _, errored = cli.group_manage(True, False, False, None, None, init_group, None, None, admin_tools_package=self.admin_tools_package)
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, errored = cli.group_manage(create, delete, list, to_move, rename, name, to_group, from_group)
+        stdout, _, errored = cli.group_manage(create, delete, list, to_move, rename, name, to_group, from_group, admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -2240,7 +2332,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             elif rename:
                 self.assertTrue(self.verifyGroupExists(server, rename), "Group not renamed")
             elif move > 0:
-                _, _, errored = cli.group_manage(False, False, False, to_move, None, None, from_group, to_group)
+                _, _, errored = cli.group_manage(False, False, False, to_move, None, None, from_group, to_group, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Group reset failed")
 
         else:
@@ -2286,26 +2378,30 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
                                              server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
             if init_num_servers > 1:
                 time.sleep(5)
                 _, _, errored = cli.server_add(servers_to_add, server.rest_username,
                                                server.rest_password, None, None,
-                                               None)
+                                               None,
+                                               admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Could not add initial servers")
-                _, _, errored = cli.rebalance(None)
+                _, _, errored = cli.rebalance(None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
 
             if servers_to_recover and not skip_failover:
                 for restore_server in servers_to_recover.split(","):
-                    _, errored, status = cli.failover(restore_server, True)
+                    _, errored, status = cli.failover(restore_server, True,
+                                                      admin_tools_package=self.admin_tools_package)
                     self.assertTrue(status, "Unable to failover servers")
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, errored = cli.recovery(servers_to_recover, recovery_type)
+        stdout, _, errored = cli.recovery(servers_to_recover, recovery_type,
+                                          admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -2354,25 +2450,29 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
             _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
                                              server.rest_username,
-                                             server.rest_password, None)
+                                             server.rest_password, None,
+                                             admin_tools_package=self.admin_tools_package)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
             if init_num_servers > 1:
                 time.sleep(5)
                 _, _, errored = cli.server_add(servers_to_add, server.rest_username,
-                                               server.rest_password, None, None, None)
+                                               server.rest_password, None, None, None,
+                                               admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Could not add initial servers")
-                _, _, errored = cli.rebalance(None)
+                _, _, errored = cli.rebalance(None, admin_tools_package=self.admin_tools_package)
                 self.assertTrue(errored, "Unable to complete initial rebalance")
 
             if servers_to_recover and not skip_failover:
                 for restore_server in servers_to_recover.split(","):
-                    _, _, errored = cli.failover(restore_server, True)
+                    _, _, errored = cli.failover(restore_server, True,
+                                                 admin_tools_package=self.admin_tools_package)
                     self.assertTrue(errored, "Unable to failover servers")
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, errored = cli.server_readd(servers_to_recover)
+        stdout, _, errored = cli.server_readd(servers_to_recover,
+                                              admin_tools_package=self.admin_tools_package)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
@@ -2712,7 +2812,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                self.cb_version)
             _, _, success = cli.cluster_init(1024, 512, None, "data,index,query,eventing,backup", None, None,
                                                  self.master.rest_username,
-                                                 self.master.rest_password, None)
+                                                 self.master.rest_password, None,
+                                                 admin_tools_package=self.admin_tools_package)
             self.sleep(15)
             self.assertTrue(success, "Cluster initialization failed during test setup")
         rest = RestConnection(self.master)
@@ -2720,7 +2821,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         """ Enable audit """
         options = " --set --audit-enabled 1 "
-        output, error = self.shell.execute_couchbase_cli("setting-audit", options=options)
+        output, error = self.shell.execute_couchbase_cli("setting-audit", options=options,
+                                                         admin_tools_package=self.admin_tools_package)
         self.assertTrue(self._check_output('SUCCESS: Audit settings modified', output))
         self.sleep(5)
         options =  ' -d \'{"name": "Backuptest","options": null,"full_backup": true},{"name": "test","task_type":"MERGE","full_backup":null}\' '
@@ -2737,7 +2839,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         """ test with cli """
         options = " settings --get "
         output, error = self.shell.execute_couchbase_cli("backup-service", options=options,
-                                                         password="xxpasswo")
+                                                         password="xxpasswo",
+                                                         admin_tools_package=self.admin_tools_package)
         words_check = "\'REST operation failed due to authentication failure\'"
         cmd3 = "cat%s %s/audit.log | grep%s %s " % (self.cmd_ext, self.log_path,self.cmd_ext, words_check)
         output, error = self.shell.execute_command(cmd3)
@@ -2870,7 +2973,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             cli.bucket_create("bucket1", self.bucket_type, 256,
                                          self.eviction_policy, 1,
                                          1, self.priority,
-                                         0, True)
+                                         0, True, admin_tools_package=self.admin_tools_package)
             self.buckets = RestConnection(server).get_buckets()
             bucket_found = False
             for bucket in self.buckets:
@@ -2891,14 +2994,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 cli.bucket_create("bucket1", self.bucket_type, self.bucket_ram,
                                              self.eviction_policy, 1,
                                              1, self.priority,
-                                             self.enable_flush, True)
+                                             self.enable_flush, True,
+                                             admin_tools_package=self.admin_tools_package)
 
         self.log.info("Enable flush and flush bucket")
         bucket_edit_roles = ["admin", "cluster_admin", "bucket_admin[*]"]
         cli = CouchbaseCLI(server, user, password)
         output, _, _ = cli.bucket_edit("bucket1", self.bucket_ram,
                                                   self.eviction_policy, 1,
-                                                  self.priority, 1)
+                                                  self.priority, 1,
+                                                  admin_tools_package=self.admin_tools_package)
         if "SUCCESS: Bucket edited" not in output:
             if roles in bucket_edit_roles:
                 self.fail("Failed to edit bucket with roles {0} ".format(roles))
@@ -2908,7 +3013,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_edit("bucket1", self.bucket_ram,
                                 self.eviction_policy, 1,
-                                self.priority, 1)
+                                self.priority, 1,
+                                admin_tools_package=self.admin_tools_package)
 
         self.log.info("Load data to bucket")
         shell = RemoteMachineShellConnection(server)
@@ -2918,7 +3024,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         shell.execute_command(cmd)
         shell.disconnect()
         cli = CouchbaseCLI(server, user, password)
-        _, _, flushed = cli.bucket_flush("bucket1", True)
+        _, _, flushed = cli.bucket_flush("bucket1", True,
+                                         admin_tools_package=self.admin_tools_package)
         rest = RestConnection(server)
         count = 0
         bucket_items = rest.get_active_key_count("bucket1")
@@ -2939,7 +3046,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         try:
             self.log.info("Delete bucket 'bucket1")
             cli = CouchbaseCLI(server, user, password)
-            cli.bucket_delete("bucket1")
+            cli.bucket_delete("bucket1", admin_tools_package=self.admin_tools_package)
             self.buckets = RestConnection(server).get_buckets()
             for bucket in self.buckets:
                 if bucket.name == "bucket1":
@@ -3008,7 +3115,8 @@ class XdcrCLITest(CliBaseTest):
                                                 options=options,
                                                 cluster_host=cluster_host,
                                                 user=self.__user,
-                                                password=self.__password)
+                                                password=self.__password,
+                                                admin_tools_package=self.admin_tools_package)
 
     def __xdcr_setup_create(self):
         # xdcr_hostname=the number of server in ini file to add to master as replication
@@ -3095,17 +3203,19 @@ class XdcrCLITest(CliBaseTest):
         stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
                                          eviction_policy, replica_count,
                                          enable_index_replica, priority,
-                                         enable_flush, wait)
+                                         enable_flush, wait,
+                                         admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_s, bucket_name, bucket_type,
                                     memory_quota, eviction_policy, replica_count,
                                     enable_index_replica, priority, enable_flush,
                                     stdout_s, expect_error)
 
-        cli_s.bucket_delete(bucket_name)
+        cli_s.bucket_delete(bucket_name, admin_tools_package=self.admin_tools_package)
         stdout_s, _, _ = cli_s.bucket_create(bucket_name, bucket_type, memory_quota,
                                              eviction_policy, replica_count,
                                              enable_index_replica, priority,
-                                             enable_flush, wait)
+                                             enable_flush, wait,
+                                             admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_s, bucket_name, bucket_type,
                                     memory_quota, eviction_policy, replica_count,
                                     enable_index_replica, priority, enable_flush,
@@ -3116,17 +3226,19 @@ class XdcrCLITest(CliBaseTest):
         stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
                                          eviction_policy, replica_count,
                                          enable_index_replica, priority,
-                                         enable_flush, wait)
+                                         enable_flush, wait,
+                                         admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_r, bucket_name, bucket_type,
                                    memory_quota, eviction_policy, replica_count,
                                    enable_index_replica, priority, enable_flush,
                                    stdout_r, expect_error)
 
-        cli_r.bucket_delete(bucket_name)
+        cli_r.bucket_delete(bucket_name, admin_tools_package=self.admin_tools_package)
         stdout_r, _, _ = cli_r.bucket_create(bucket_name, bucket_type, memory_quota,
                                              eviction_policy, replica_count,
                                              enable_index_replica, priority,
-                                             enable_flush, wait)
+                                             enable_flush, wait,
+                                             admin_tools_package=self.admin_tools_package)
         self.__verify_bucket_config(server_r, bucket_name, bucket_type,
                                    memory_quota, eviction_policy, replica_count,
                                    enable_index_replica, priority, enable_flush,
