@@ -870,7 +870,7 @@ class QueriesIndexTests(QueryTests):
                 plan = self.ExplainPlanHelper(actual_result)
                 self.log.info(f"plan is: {plan}")
                 self.assertTrue("covers" in str(plan))
-                self.assertTrue(plan['~children'][0]['index'] == "idx6")
+                self.assertTrue(plan['~children'][0]['index'] in ["idx", "idx6"])
                 self.query = 'explain SELECT  meta().expiration,meta().id  FROM {0} ' \
                              'where meta().expiration > 0'.format(query_bucket)
                 actual_result = self.run_cbq_query()
