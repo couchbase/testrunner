@@ -3673,7 +3673,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
               "num1 -fields=Num1"
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
-        cli_location = self.cli_command_location if not self.input.param("tools_package", False) else self.previous_cli
+        if self.input.param("tools_package", False) or self.input.param("admin_tools_package", False):
+            cli_location = self.previous_cli
+        else:
+            cli_location = self.cli_command_location
         command = "{0}/{1}".format(cli_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)

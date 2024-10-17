@@ -995,6 +995,8 @@ def install_tools():
         install_dir = "/tmp/tools_package"
         if "windows" in node.get_os():
             install_dir = f"/cygdrive/c{install_dir}"
+        # remove install_dir if it already exists
+        node.shell.execute_command(f"rm -rf {install_dir}", debug=True)
         node.shell.execute_command(f"mkdir -p {install_dir}", debug=True)
 
         cmd = install_cmd.format(f"{download_dir}/{node.dev_tools_name}", install_dir)
