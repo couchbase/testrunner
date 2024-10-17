@@ -112,6 +112,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.input.param("tools_package", False):
             self.previous_cli = self.cli_command_location
             self.cli_command_location = "/tmp/tools_package/couchbase-server-dev-tools-*/bin/"
+        if self.input.param("admin_tools_package", False):
+            self.previous_cli = self.cli_command_location
+            self.cli_command_location = "/tmp/tools_package/couchbase-server-admin-tools-*/bin/"
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.show_bk_list = self.input.param("show_bk_list", True)
@@ -182,6 +185,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.input.param("tools_package", False):
                 self.previous_cli = self.cli_command_location
                 self.cli_command_location = "/cygdrive/c/tmp/tools_package/couchbase-server-dev-tools-*/bin/"
+            if self.input.param("admin_tools_package", False):
+                self.previous_cli = self.cli_command_location
+                self.cli_command_location = "/cygdrive/c/tmp/tools_package/couchbase-server-admin-tools-*/bin/"
         elif info == 'mac':
             self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         else:
