@@ -170,7 +170,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                     self.rest.create_scope(bucket=bucket_name, scope=scope_name,
                                            params=None, num_retries=1)
                 else:
-                    self.cli_col.create_scope(bucket=bucket_name, scope=scope_name)
+                    self.cli_col.create_scope(bucket=bucket_name, scope=scope_name,
+                                              admin_tools_package=self.admin_tools_package)
             except Exception as e:
                 error_expected = False
                 errors = ["already exists",
@@ -192,7 +193,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                                                 params=None, num_retries=1)
                 else:
                     self.cli_col.create_collection(bucket=bucket_name, scope=scope_name,
-                                                   collection="mycollection_{0}_0".format(scope_name))
+                                                   collection="mycollection_{0}_0".format(scope_name)
+                                                   ,admin_tools_package=self.admin_tools_package)
             except Exception as e:
                 error_expected = False
                 errors = ["already exists",
@@ -226,7 +228,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                                                     collection="_{0}".format(bucket_name))
                 else:
                     self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
-                                                  collection="_{0}".format(bucket_name))
+                                                   collection="_{0}".format(bucket_name),
+                                                   admin_tools_package=self.admin_tools_package)
             except Exception as e:
                 if error in str(e):
                     raise Exception("Failed to drop collection with error: {0}".format(str(e)))
@@ -235,7 +238,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 if self.use_rest:
                     self.rest_col.delete_scope(bucket_name, scope_name)
                 else:
-                    self.cli_col.delete_scope(scope_name, bucket=bucket_name)
+                    self.cli_col.delete_scope(scope_name, bucket=bucket_name,
+                                              admin_tools_package=self.admin_tools_package)
             except Exception as e:
                 if error in str(e):
                     raise Exception("Failed to drop scope with error: {0}".format(str(e)))
@@ -251,7 +255,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                                                     collection="_{0}".format(bucket_name))
                 else:
                     self.cli_col.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
-                                                  collection="_{0}".format(bucket_name))
+                                                   collection="_{0}".format(bucket_name),
+                                                   admin_tools_package=self.admin_tools_package)
             except Exception as e:
                 if error in str(e):
                     self.log.info("Test failed as expected.")
@@ -260,7 +265,8 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
                 if self.use_rest:
                     self.rest_col.delete_scope(bucket_name, scope_name)
                 else:
-                    self.cli_col.delete_scope(scope_name, bucket=bucket_name)
+                    self.cli_col.delete_scope(scope_name, bucket=bucket_name,
+                                              admin_tools_package=self.admin_tools_package)
             except Exception as e:
                 if error in str(e):
                     self.log.info("Test failed as expected.")
@@ -525,7 +531,8 @@ class XdcrCLITest(CliBaseTest):
                                                 options=options,
                                                 cluster_host=cluster_host,
                                                 user=self.__user,
-                                                password=self.__password)
+                                                password=self.__password,
+                                                admin_tools_package=self.admin_tools_package)
 
     def __xdcr_setup_create(self):
         # xdcr_hostname=the number of server in ini file to add to master as replication

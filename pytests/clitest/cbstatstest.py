@@ -42,9 +42,11 @@ class cbstatsTests(CliBaseTest):
                 for bucket in self.buckets:
                     if "allocator" in self.command:
                         output, error = self.shell.execute_mcstat(bucket,"",
-                                keyname=self.command, vbid="", enable_ipv6=self.enable_ipv6)
+                                keyname=self.command, vbid="", enable_ipv6=self.enable_ipv6,
+                                                admin_tools_package=self.admin_tools_package)
                     else:
-                        output, error = self.shell.execute_cbstats(bucket, self.command)
+                        output, error = self.shell.execute_cbstats(bucket, self.command,
+                                            admin_tools_package=self.admin_tools_package)
                     self.verify_results(output, error)
                     if self.command in ["allocator", "kvtimings", "timings"]:
                         self.log.warning("We will not verify exact values for this stat")
@@ -63,7 +65,8 @@ class cbstatsTests(CliBaseTest):
                 keys_map["test_docs-%s" % i] = vb_id
             count = 0
             for key, vb_id in keys_map.items():
-                output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
+                output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key,
+                                                           vb_id, admin_tools_package=self.admin_tools_package)
                 self.verify_results(output, error)
                 count += 1
                 if self.master.ip.endswith("amazonaws.com") and count == 10:
@@ -167,7 +170,7 @@ class cbstatsTests(CliBaseTest):
             collect_stats = ""
             commands = ["hash", "tapagg"]
             if command in commands:
-                output, error = self.shell.execute_cbstats(bucket, command)
+                output, error = self.shell.execute_cbstats(bucket, command, admin_tools_package=self.admin_tools_package)
                 d = []
                 if len(output) > 0:
                     d = dict(s.strip().rsplit(':', 1) for s in output)
