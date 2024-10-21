@@ -1299,6 +1299,24 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+    def test_covering_case(self):
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
+        rest = RestConnection(self.master)
+        rest.load_sample(self.sample_bucket)
+        time.sleep(5)
+        self.wait_for_all_indexes_online()
+        self.run_cbq_query(query="CREATE INDEX sample_index ON `default`:`travel-sample`.`inventory`.`route`"
+                      "(`id`, CASE WHEN airline='AF' THEN 1 ELSE 0 END, CASE WHEN airline<>'AF' THEN 1 ELSE 0 END)")
+        explain_results = self.run_cbq_query(query="EXPLAIN "
+                                                   "SELECT CASE WHEN airline='AF' THEN 1 ELSE 0 END AS AF_AIRLINE, "
+                                                   "CASE WHEN airline<>'AF' THEN 1 ELSE 0 END AS NOT_AF_AIRLINE "
+                                                   "FROM `travel-sample`.`inventory`.`route` WHERE id < 20000 LIMIT 10")
+        self.assertTrue('covers' in str(explain_results), f"Index is not covering please check plan {explain_results}")
+        self.assertTrue('cover ((`route`.`id`))' in str(explain_results), f"We expect this field to be covered, please check plan {explain_results}")
+        self.assertTrue('cover (case when ((`route`.`airline`) = "AF") then 1 else 0 end)' in str(explain_results), f"We expect this field to be covered, please check plan {explain_results}")
+        self.assertTrue('cover (case when (not ((`route`.`airline`) = "AF")) then 1 else 0 end)' in str(explain_results), f"We expect this field to be covered, please check plan {explain_results}")
+        self.assertTrue('cover ((meta(`route`).`id`))' in str(explain_results), f"We expect this field to be covered, please check plan {explain_results}")
 
     def test_panic_in_null(self):
         queries = dict()
