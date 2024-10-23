@@ -1700,7 +1700,8 @@ class QueriesIndexTests(QueryTests):
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
+                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan' or
+                                plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan')
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -1716,14 +1717,14 @@ class QueriesIndexTests(QueryTests):
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
                 self.assertTrue('IntersectScan' in str(plan)
-                                or 'UnionScan' in str(plan),
+                                or 'UnionScan' in str(plan) or 'DistinctScan' in str(plan),
                                 f"Intersect Scan is not being used in and query for 2 array indexes: {plan}")
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result3 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result4 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
                 else:
-                    result3 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
-                    result4 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                    result3 = plan['~children'][0]['~children'][0]['scan']['index']
+                    result4 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result3 == idx4 or result3 == idx3)
                 self.assertTrue(result4 == idx3 or result4 == idx4)
                 self.query = "select name from {0} where any v in {0}.join_yr " \
