@@ -63,7 +63,7 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                     index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace,
                                                               defer_build=self.defer_build,
-                                                              num_replica=self.num_index_replicas,
+                                                              num_replica=self.num_index_replica,
                                                               num_partition=self.num_partition)
                 index_gen_list.append(index_gen)
                 try:
@@ -78,7 +78,7 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                     if self.partitoned_index:
                         index_instance_counter += self.num_partition
                     else:
-                        index_instance_counter += self.num_index_replicas + 1
+                        index_instance_counter += self.num_index_replica + 1
                 except Exception as err:
                     expected_err = 'Limit for number of indexes that can be created per scope has been reached'
                     if expected_err in str(err):
@@ -100,7 +100,7 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                             if self.partitoned_index:
                                 index_instance_counter -= self.num_partition
                             else:
-                                index_instance_counter -= self.num_index_replicas + 1
+                                index_instance_counter -= self.num_index_replica + 1
                         elif self.alter_index_instances and not limit_updated_flag:
                             for index_name in indexes_list:
                                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -145,7 +145,7 @@ class GSIFreeTier(BaseSecondaryIndexingTests):
                     index_gen = QueryDefinition(index_name=idx, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace,
                                                               defer_build=self.defer_build,
-                                                              num_replica=self.num_index_replicas,
+                                                              num_replica=self.num_index_replica,
                                                               num_partition=self.num_partition)
                 query_list.append(query)
         with ThreadPoolExecutor() as executor:

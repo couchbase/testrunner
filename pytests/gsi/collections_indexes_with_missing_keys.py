@@ -43,11 +43,11 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
             query = index_gen_1.generate_index_create_query(namespace=collection_namespace, defer_build=False,
                                                             partition_by_fields=self.partition_fields,
                                                             num_partition=self.num_partition,
-                                                            num_replica=self.num_index_replicas,
+                                                            num_replica=self.num_index_replica,
                                                             index_where_clause=self.index_where_clause)
         else:
             query = index_gen_1.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                            num_replica=self.num_index_replicas,
+                                                            num_replica=self.num_index_replica,
                                                             index_where_clause=self.index_where_clause)
         self.run_cbq_query(query=query)
         self.wait_until_indexes_online()
@@ -88,14 +88,14 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
             self.wait_until_indexes_online()
         if self.partitoned_index:
             query = index_gen_2.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                            missing_indexes=True, num_replica=self.num_index_replicas,
+                                                            missing_indexes=True, num_replica=self.num_index_replica,
                                                             missing_field_desc=self.missing_field_desc,
                                                             partition_by_fields=self.partition_fields,
                                                             num_partition=self.num_partition,
                                                             index_where_clause=self.index_where_clause)
         else:
             query = index_gen_2.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                            missing_indexes=True, num_replica=self.num_index_replicas,
+                                                            missing_indexes=True, num_replica=self.num_index_replica,
                                                             missing_field_desc=self.missing_field_desc,
                                                             index_where_clause=self.index_where_clause)
         self.run_cbq_query(query=query)
@@ -171,14 +171,14 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         err_msg = 'No index available on keyspace'
         if self.partitoned_index:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                          missing_indexes=True, num_replica=self.num_index_replicas,
+                                                          missing_indexes=True, num_replica=self.num_index_replica,
                                                           missing_field_desc=self.missing_field_desc,
                                                           partition_by_fields=self.partition_fields,
                                                           num_partition=self.num_partition,
                                                           index_where_clause=self.index_where_clause)
         else:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                          missing_indexes=True, num_replica=self.num_index_replicas,
+                                                          missing_indexes=True, num_replica=self.num_index_replica,
                                                           missing_field_desc=self.missing_field_desc,
                                                           index_where_clause=self.index_where_clause)
         self.run_cbq_query(query=query)
@@ -234,7 +234,7 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         # This index should be placed on node one as it would be least loaded node and non-equivalent index
         index_gen4 = QueryDefinition(index_name='idx4', index_fields=['age'])
         query = index_gen4.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                       missing_indexes=True, num_replica=self.num_index_replicas,
+                                                       missing_indexes=True, num_replica=self.num_index_replica,
                                                        missing_field_desc=self.missing_field_desc,
                                                        index_where_clause=self.index_where_clause)
         self.run_cbq_query(query=query)
@@ -273,14 +273,14 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         # Checking the select query runs with where clause on non-leading key
         if self.partitoned_index:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                          missing_indexes=True, num_replica=self.num_index_replicas,
+                                                          missing_indexes=True, num_replica=self.num_index_replica,
                                                           missing_field_desc=self.missing_field_desc,
                                                           partition_by_fields=self.partition_fields,
                                                           num_partition=self.num_partition,
                                                           index_where_clause=self.index_where_clause)
         else:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                          missing_indexes=True, num_replica=self.num_index_replicas,
+                                                          missing_indexes=True, num_replica=self.num_index_replica,
                                                           missing_field_desc=self.missing_field_desc,
                                                           index_where_clause=self.index_where_clause)
         self.run_cbq_query(query=query)
@@ -309,14 +309,14 @@ class CollectionsIndexesWithMissingKeys(BaseSecondaryIndexingTests):
         # Checking the select query runs with where clause on non-leading key
         if self.partitoned_index:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                          missing_indexes=True, num_replica=self.num_index_replicas,
+                                                          missing_indexes=True, num_replica=self.num_index_replica,
                                                           missing_field_desc=self.missing_field_desc,
                                                           partition_by_fields=self.partition_fields,
                                                           num_partition=self.num_partition,
                                                           index_where_clause=self.index_where_clause)
         else:
             query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                          missing_indexes=True, num_replica=self.num_index_replicas,
+                                                          missing_indexes=True, num_replica=self.num_index_replica,
                                                           missing_field_desc=self.missing_field_desc,
                                                           index_where_clause=self.index_where_clause)
         self.run_cbq_query(query=query)

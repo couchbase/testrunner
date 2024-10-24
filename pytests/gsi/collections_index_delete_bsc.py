@@ -448,7 +448,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         self.assertTrue(result2 > 0)
         self.assertEqual(result1, self.num_of_docs_per_collection)
         index_status = self.rest.get_index_status()
-        self.assertEqual(len(index_status['test_bucket']), 2*(self.num_index_replicas+1))
+        self.assertEqual(len(index_status['test_bucket']), 2 * (self.num_index_replica + 1))
 
     def test_delete_deleted_bsc(self):
         #num_of_docs_per_collection = 10 ** 5

@@ -515,7 +515,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.rest.set_index_planner_settings("excludeNode=in")
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
@@ -525,7 +525,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_names = []
         index_names.append("idx1")
-        for i in range(1, self.num_index_replicas + 1):
+        for i in range(1, self.num_index_replica + 1):
             index_names.append("idx1 (replica {0})".format(str(i)))
 
         # Need to see if the indexes get created in the first place
@@ -549,7 +549,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                          index_name))
                     index_validated += 1
 
-        self.assertEqual(index_validated, (self.num_index_replicas + 1),
+        self.assertEqual(index_validated, (self.num_index_replica + 1),
                          "All index replicas not created")
 
     def test_partition_index_by_non_indexed_field(self):
@@ -826,7 +826,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -840,7 +840,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.log.info(index_metadata)
 
         self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
-                                                    self.num_index_replicas,
+                                                    self.num_index_replica,
                                                     self.num_index_partitions),
                         "Partition map validation failed")
 
@@ -850,7 +850,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
-            self.num_index_replicas)
+            self.num_index_replica)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -1100,9 +1100,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(name,dept,salary) partition by hash(name) USING GSI  WITH {{'num_partition': {0}, 'defer_build': true, 'num_replica':{1}}};".format(
-                self.num_index_partitions, self.num_index_replicas)
+                self.num_index_partitions, self.num_index_replica)
         else:
             create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(name,dept,salary) partition by hash(name) USING GSI  WITH {{'num_partition': {0}, 'defer_build': true}};".format(
                 self.num_index_partitions)
@@ -1132,8 +1132,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Deferred Partitioned index created not as expected")
 
         # Validation for replica indexes
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_details[
                     "index_name"] = index_name_prefix + " (replica {0})".format(
                     str(i))
@@ -1165,8 +1165,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                               index_metadata),
             "Deferred Partitioned index created not as expected")
         # Validation for replica indexes
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_details[
                     "index_name"] = index_name_prefix + " (replica {0})".format(
                     str(i))
@@ -1412,8 +1412,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         with_clause = "WITH {{'num_partition': {0} ".format(
             self.num_index_partitions)
-        if self.num_index_replicas > 0:
-            with_clause += ", 'num_replica':{0}".format(self.num_index_replicas)
+        if self.num_index_replica > 0:
+            with_clause += ", 'num_replica':{0}".format(self.num_index_replica)
         if self.defer_build:
             with_clause += ", 'defer_build':True"
         with_clause += " }"
@@ -1448,8 +1448,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Deferred Partitioned index created not as expected")
 
         # Validation for replica indexes
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_details[
                     "index_name"] = index_name_prefix + " (replica {0})".format(
                     str(i))
@@ -1483,8 +1483,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         with_clause = "WITH {{'num_partition': {0} ".format(
             self.num_index_partitions)
-        if self.num_index_replicas > 0:
-            with_clause += ", 'num_replica':{0}".format(self.num_index_replicas)
+        if self.num_index_replica > 0:
+            with_clause += ", 'num_replica':{0}".format(self.num_index_replica)
         if self.defer_build:
             with_clause += ", 'defer_build':True"
         with_clause += " }"
@@ -1523,8 +1523,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Deferred Partitioned index created not as expected")
 
         # Validation for replica indexes
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_details[
                     "index_name"] = index_name_prefix + " (replica {0})".format(
                     str(i))
@@ -1901,9 +1901,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
     def test_scan_availability(self):
         create_index_query = "CREATE INDEX idx1 ON default(name,mutated) partition by hash(BASE64(meta().id)) USING GSI"
-        if self.num_index_replicas:
+        if self.num_index_replica:
             create_index_query += " with {{'num_replica':{0}}};".format(
-                self.num_index_replicas)
+                self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -1929,7 +1929,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
         except Exception as ex:
             self.log.info(str(ex))
-            if self.num_index_replicas == 0:
+            if self.num_index_replica == 0:
                 if self.expected_err_msg in str(ex):
                     pass
                 else:
@@ -1941,9 +1941,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
     def test_scan_availability_with_network_partitioning(self):
         create_index_query = "CREATE INDEX idx1 ON default(name,mutated) partition by hash(BASE64(meta().id)) USING GSI"
-        if self.num_index_replicas:
+        if self.num_index_replica:
             create_index_query += " with {{'num_replica':{0}}};".format(
-                self.num_index_replicas)
+                self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -1976,7 +1976,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
         except Exception as ex:
             self.log.info(str(ex))
-            if self.num_index_replicas:
+            if self.num_index_replica:
                 if self.expected_err_msg in str(ex):
                     pass
                 else:
@@ -2138,7 +2138,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) partition by hash (meta().id) USING GSI  WITH {{'num_replica': {0},'num_partition':{1}}};".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
         select_query = "SELECT count(age) from default"
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -2170,7 +2170,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             "Partitioned index created not as expected")
 
         self.assertTrue(self.validate_partition_map(index_metadata, index_name_prefix,
-                                                    self.num_index_replicas,
+                                                    self.num_index_replica,
                                                     self.num_index_partitions),
                         "Partition map validation failed")
 
@@ -2181,7 +2181,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_stats = self.get_index_stats(perNode=True)
         load_balanced = True
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2641,8 +2641,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self._load_emp_dataset(end=self.num_items)
 
         with_statement = "with {{'num_partition':{0}".format(self.num_index_partitions)
-        if self.num_index_replicas > 0:
-            with_statement += ", 'num_replica':{0}".format(self.num_index_replicas)
+        if self.num_index_replica > 0:
+            with_statement += ", 'num_replica':{0}".format(self.num_index_replica)
         if self.defer_build:
             with_statement += ", 'defer_build': true"
         with_statement += " }"
@@ -2671,8 +2671,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -2742,11 +2742,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self._load_emp_dataset(end=self.num_items)
 
         # Create partitioned index
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
         else:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(
                 self.num_index_partitions)
@@ -2770,8 +2770,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -2852,9 +2852,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         with_statement = "with {{'num_partition':{0}".format(
             self.num_index_partitions)
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             with_statement += ", 'num_replica':{0}".format(
-                self.num_index_replicas)
+                self.num_index_replica)
         if self.defer_build:
             with_statement += ", 'defer_build': true"
         with_statement += " }"
@@ -2880,8 +2880,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -2948,9 +2948,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         with_statement = "with {{'num_partition':{0}".format(
             self.num_index_partitions)
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             with_statement += ", 'num_replica':{0}".format(
-                self.num_index_replicas)
+                self.num_index_replica)
         if self.defer_build:
             with_statement += ", 'defer_build': true"
         with_statement += " }"
@@ -2979,8 +2979,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -3049,16 +3049,16 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self._load_emp_dataset(end=self.num_items)
 
         # Create partitioned index
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
         else:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3077,8 +3077,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -3151,16 +3151,16 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self._load_emp_dataset(end=self.num_items)
 
         # Create partitioned index
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
         else:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3179,8 +3179,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -3258,16 +3258,16 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self._load_emp_dataset(end=self.num_items)
 
         # Create partitioned index
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
         else:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
             create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{1}}}".format(
-                self.num_index_replicas, self.num_index_partitions)
+                self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3286,8 +3286,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -3350,7 +3350,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3366,8 +3366,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
 
         self.log.info(index_names)
@@ -3434,8 +3434,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
 
         self.log.info(index_names)
@@ -3543,8 +3543,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
 
         self.log.info(index_names)
@@ -3632,7 +3632,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.rest.set_index_planner_settings("excludeNode=in")
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
-            self.num_index_replicas)
+            self.num_index_replica)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3646,7 +3646,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.log.info(index_metadata)
 
         self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
-                                                    self.num_index_replicas,
+                                                    self.num_index_replica,
                                                     self.num_index_partitions),
                         "Partition map validation failed")
 
@@ -3655,7 +3655,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         expected_hosts.sort()
         index_names = []
         index_names.append("idx1")
-        for i in range(1, self.num_index_replicas + 1):
+        for i in range(1, self.num_index_replica + 1):
             index_names.append("idx1 (replica {0})".format(str(i)))
 
         index_metadata = self.rest.get_indexer_metadata()
@@ -3673,7 +3673,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                          index_name))
                     index_validated += 1
 
-        self.assertEqual(index_validated, (self.num_index_replicas + 1),
+        self.assertEqual(index_validated, (self.num_index_replica + 1),
                          "All index replicas not created")
 
         node_out = self.servers[self.node_out]
@@ -3730,7 +3730,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.rest.set_index_planner_settings("excludeNode=in")
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}}}".format(
-            self.num_index_replicas)
+            self.num_index_replica)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3744,7 +3744,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.log.info(index_metadata)
 
         self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
-                                                    self.num_index_replicas,
+                                                    self.num_index_replica,
                                                     self.num_index_partitions),
                         "Partition map validation failed")
 
@@ -3753,7 +3753,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         expected_hosts.sort()
         index_names = []
         index_names.append("idx1")
-        for i in range(1, self.num_index_replicas + 1):
+        for i in range(1, self.num_index_replica + 1):
             index_names.append("idx1 (replica {0})".format(str(i)))
 
         # Need to see if the indexes get created in the first place
@@ -3780,7 +3780,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                              index_name))
                     index_validated += 1
 
-        self.assertEqual(index_validated, (self.num_index_replicas + 1),
+        self.assertEqual(index_validated, (self.num_index_replica + 1),
                          "All index replicas not created")
 
         node_out = self.servers[self.node_out]
@@ -3814,7 +3814,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.log.info(index_metadata)
 
         self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
-                                                    self.num_index_replicas,
+                                                    self.num_index_replica,
                                                     self.num_index_partitions),
                         "Partition map validation failed")
 
@@ -3949,9 +3949,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
         create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -3967,8 +3967,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -4041,9 +4041,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Create partitioned index
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
         create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_replica':{0}, 'num_partition':{1}}}".format(
-            self.num_index_replicas, self.num_index_partitions)
+            self.num_index_replica, self.num_index_partitions)
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -4059,8 +4059,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Get Index Names
         index_names = ["idx1", "pidx1"]
-        if self.num_index_replicas > 0:
-            for i in range(1, self.num_index_replicas + 1):
+        if self.num_index_replica > 0:
+            for i in range(1, self.num_index_replica + 1):
                 index_names.append("idx1 (replica {0})".format(str(i)))
                 index_names.append("pidx1 (replica {0})".format(str(i)))
 
@@ -4137,9 +4137,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
     def test_partitioned_index_recoverability(self):
         node_out = self.servers[self.node_out]
         create_index_query = "CREATE INDEX idx1 ON default(name,mutated) partition by hash(meta().id) USING GSI"
-        if self.num_index_replicas:
+        if self.num_index_replica:
             create_index_query += " with {{'num_replica':{0}}};".format(
-                self.num_index_replicas)
+                self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)

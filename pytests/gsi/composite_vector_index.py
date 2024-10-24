@@ -506,7 +506,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replicas)
+                                                                     num_replica=self.num_index_replica)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -520,27 +520,27 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
         for namespace in namespace_index_map:
             definition_list = namespace_index_map[namespace]
             for definitions in definition_list:
                 # to reduce the no of replicas
                 self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
-                                          action='replica_count', num_replicas=self.num_index_replicas - 1)
+                                          action='replica_count', num_replicas=self.num_index_replica - 1)
                 self.wait_until_indexes_online()
                 self.sleep(20)
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replicas - 1,
+            self.assertEqual(index['numReplica'], self.num_index_replica - 1,
                              "No. of replicas are not matching post alter query")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after reducing num replica count", similarity=self.similarity)
 
         # increasing replica count
-        self.num_index_replicas = self.num_index_replicas - 1
+        self.num_index_replicas = self.num_index_replica - 1
         for namespace in namespace_index_map:
             definition_list = namespace_index_map[namespace]
             for definitions in definition_list:

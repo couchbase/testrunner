@@ -168,11 +168,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             self._load_doc_data_all_buckets(gen_load=self.gens_load)
         self.gsi_thread = Cluster()
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
-        self.num_index_replicas = self.input.param("num_index_replicas", 0)
+        self.num_index_replica = self.input.param("num_index_replica", 0)
         self.redistribute_nodes = self.input.param("redistribute_nodes", False)
         if self.capella_run:
-            if self.num_index_replicas == 0:
-                self.num_index_replicas = 1
+            if self.num_index_replica == 0:
+                self.num_index_replica = 1
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
         if self.use_https:
             self.node_port = '18091'
@@ -375,7 +375,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                   deploy_node_info=deploy_node_info,
                                                                   defer_build=self.defer_build,
                                                                   index_where_clause=index_where_clause,
-                                                                  num_replica=self.num_index_replicas, desc=desc)
+                                                                  num_replica=self.num_index_replica, desc=desc)
         create_index_task = self.gsi_thread.async_create_index(server=self.n1ql_node, bucket=bucket,
                                                                query=self.query, n1ql_helper=self.n1ql_helper,
                                                                index_name=query_definition.index_name,
@@ -1725,7 +1725,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
 
             for query in create_queries:
                 if self.compute_cluster_avg_rr_index() > rr:
@@ -2851,7 +2851,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for namespace in self.namespaces:
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace, defer_build=True,
-                                                              num_replica=self.num_index_replicas)
+                                                              num_replica=self.num_index_replica)
             for query in queries:
                 create_queries.append(query)
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

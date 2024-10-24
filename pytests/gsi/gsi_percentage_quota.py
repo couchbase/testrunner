@@ -132,7 +132,7 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace, defer_build=True,
-                                                              num_replica=self.num_index_replicas)
+                                                              num_replica=self.num_index_replica)
             drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=query_definitions,
                                                                  namespace=namespace)
 
@@ -259,7 +259,7 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
-                                                                  num_replica=self.num_index_replicas)
+                                                                  num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -338,7 +338,7 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
-                                                                  num_replica=self.num_index_replicas)
+                                                                  num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         self.wait_until_indexes_online()
         self.dataload_till_rr(namespaces=self.namespaces, rr=self.resident_ratio, json_template=self.json_template)
@@ -430,7 +430,7 @@ class GSIPercentageQuota(BaseSecondaryIndexingTests):
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
-                                                                  num_replica=self.num_index_replicas)
+                                                                  num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

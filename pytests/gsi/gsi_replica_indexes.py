@@ -64,7 +64,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -82,7 +82,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_create_replica_index_one_failed_node_num_replica(self):
         node_out = self.servers[self.node_out]
@@ -96,7 +96,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -114,14 +114,14 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_failover_during_create_index_with_replica(self):
         node_out = self.servers[self.node_out]
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': true}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
 
         threads = [
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
@@ -140,7 +140,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
@@ -218,7 +218,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0},'nodes': {1}}};".format(
-            self.num_index_replicas, nodes)
+            self.num_index_replica, nodes)
         self.log.info(create_index_query)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -237,7 +237,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas,
+                                                    self.num_index_replica,
                                                     nodes)
 
     def test_rebalance_of_failed_server_group(self):
@@ -435,7 +435,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         self.log.info(create_index_query)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -451,7 +451,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_create_index_while_another_index_building(self):
         index_name_age = "age_index_" + str(
@@ -459,9 +459,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_name = "name_index_" + str(
             random.randint(100000, 999999))
         create_index_query_age = "CREATE INDEX " + index_name_age + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': true}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         create_index_query_name = "CREATE INDEX " + index_name_name + " ON default(name) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
 
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query_age,
@@ -492,10 +492,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.verify_replica_indexes([index_name_age],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
             self.n1ql_helper.verify_replica_indexes([index_name_name],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
@@ -506,7 +506,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.log.info("Index creation failed as expected")
 
     def test_default_num_indexes(self):
-        self.rest.set_indexer_num_replica(self.num_index_replicas)
+        self.rest.set_indexer_num_replica(self.num_index_replica)
         nodes = self._get_node_list()
         self.log.info(nodes)
         index_name_prefix = "random_index_" + str(
@@ -540,7 +540,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.sleep(30)
         index_map = self.get_index_map()
         self.log.info(index_map)
-        expected_num_replicas = self.num_index_replicas
+        expected_num_replicas = self.num_index_replica
         if self.override_default_num_replica_with_num > 0:
             expected_num_replicas = self.override_default_num_replica_with_num
         if not self.expected_err_msg:
@@ -556,7 +556,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': true}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -574,10 +574,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         self.n1ql_helper.verify_replica_indexes_build_status(index_map,
-                                                             self.num_index_replicas,
+                                                             self.num_index_replica,
                                                              defer_build=True)
 
         build_index_query = "BUILD INDEX on `default`(" + index_name_prefix + ")"
@@ -597,7 +597,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.sleep(30)
         index_map = self.get_index_map()
         self.n1ql_helper.verify_replica_indexes_build_status(index_map,
-                                                             self.num_index_replicas,
+                                                             self.num_index_replica,
                                                              defer_build=False)
 
     def test_build_index_with_replica_one_failed_node(self):
@@ -871,9 +871,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_name = "name_index_" + str(
             random.randint(100000, 999999))
         create_index_query_age = "CREATE INDEX " + index_name_age + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build':true}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         create_index_query_name = "CREATE INDEX " + index_name_name + " ON default(name) USING GSI  WITH {{'num_replica': {0}, 'defer_build':true}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
 
         self.n1ql_helper.run_cbq_query(query=create_index_query_age,
                                        server=self.n1ql_node)
@@ -888,10 +888,10 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.verify_replica_indexes([index_name_age],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
             self.n1ql_helper.verify_replica_indexes([index_name_name],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
@@ -924,7 +924,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             index_map = self.get_index_map()
             self.log.info(index_map)
             self.n1ql_helper.verify_replica_indexes_build_status(index_map,
-                                                                 self.num_index_replicas,
+                                                                 self.num_index_replica,
                                                                  defer_build=False)
         except Exception as ex:
             self.log.info(str(ex))
@@ -939,7 +939,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': {1}}};".format(
-            self.num_index_replicas, self.defer_build)
+            self.num_index_replica, self.defer_build)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -957,7 +957,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         drop_index_query = "DROP INDEX `default`." + index_name_prefix
 
@@ -983,7 +983,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': {1}}};".format(
-            self.num_index_replicas, self.defer_build)
+            self.num_index_replica, self.defer_build)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -1001,7 +1001,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         node_out = self.servers[self.node_out]
         failover_task = self.cluster.async_failover(
@@ -1035,7 +1035,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -1053,7 +1053,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         node_out = self.servers[self.node_out]
         drop_index_query = "DROP INDEX `default`." + index_name_prefix
@@ -1082,7 +1082,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': {1}}};".format(
-            self.num_index_replicas, self.defer_build)
+            self.num_index_replica, self.defer_build)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -1100,7 +1100,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         node_out = self.servers[self.node_out]
         failover_task = self.cluster.async_failover(
@@ -1154,7 +1154,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}, 'defer_build': {1}}};".format(
-            self.num_index_replicas, self.defer_build)
+            self.num_index_replica, self.defer_build)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -1172,7 +1172,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         node_out = self.servers[self.node_out]
         drop_index_query = "DROP INDEX `default`." + index_name_prefix
@@ -1965,7 +1965,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         select_query = "SELECT count(age) from default"
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -1984,7 +1984,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         # Run select query 100 times
         for i in range(0, 100):
@@ -1994,7 +1994,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_stats = self.get_index_stats(perNode=True)
 
         load_balanced = True
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2024,7 +2024,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         select_query = "SELECT count(age) from default USE INDEX ({0} USING GSI) where age > 10".format(
             index_name_prefix)
         try:
@@ -2044,7 +2044,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         # Run select query 100 times
         for i in range(0, 100):
@@ -2054,7 +2054,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_stats = self.get_index_stats(perNode=True)
 
         load_balanced = True
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2084,7 +2084,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         prepared_statement = "PREPARE prep_stmt AS SELECT count(age) from default USE INDEX ({0} USING GSI) where age > 10".format(
             index_name_prefix)
         try:
@@ -2104,7 +2104,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         prepared_statement = "PREPARE prep_stmt AS SELECT count(age) from default USE INDEX ({0} USING GSI) where age > 10".format(
             index_name_prefix)
@@ -2120,7 +2120,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_stats = self.get_index_stats(perNode=True)
 
         load_balanced = True
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2316,7 +2316,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2329,7 +2329,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info(index_map)
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map,
-                                                self.num_index_replicas)
+                                                self.num_index_replica)
 
         index_metadata = None
         for i in range(0, self.nodes_init - 1):
@@ -2354,12 +2354,12 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         for index_name in index_names:
             self.n1ql_helper.verify_replica_indexes([index_name], index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         self.run_operation(phase="after")
 
     def test_replica_for_primary_index(self):
         create_index_query = "CREATE PRIMARY INDEX primary_index on default USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2377,11 +2377,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes(["primary_index"],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_replica_for_dynamic_index(self):
         create_index_query = "CREATE INDEX dynamic ON default(DISTINCT PAIRS({{name, age}})) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2399,13 +2399,13 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes(["dynamic"],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_rollback_to_zero_with_replicas(self):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2423,14 +2423,14 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         self.cluster.bucket_flush(self.master)
         self.sleep(60)
 
         index_stats = self.get_index_stats(perNode=True)
 
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2457,7 +2457,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2475,7 +2475,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         # Stop Persistence on Node A & Node B
         self.log.info("Stopping persistence on NodeA & NodeB")
@@ -2498,7 +2498,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_stats = self.get_index_stats(perNode=True)
         num_docs_processed_before_rollback = {}
 
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2560,7 +2560,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if bucket_count_before_rollback == bucket_count_after_rollback:
             self.log.info("Looks like KV rollback did not happen at all.")
 
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -2581,7 +2581,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2599,7 +2599,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map_before_backup,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         kv_node = self.get_nodes_from_services_map(service_type="kv",
                                                    get_all_nodes=False)
@@ -2611,13 +2611,13 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map_after_restore,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_backup_restore_with_replica_one_node_less(self):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2635,7 +2635,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map_before_backup,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         kv_node = self.get_nodes_from_services_map(service_type="kv",
                                                    get_all_nodes=False)
@@ -2678,7 +2678,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2696,7 +2696,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map_before_backup,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         # Rebalance out one node so that one index replica drops
         node_out = self.servers[self.node_out]
@@ -2756,7 +2756,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         self.log.info(create_index_query)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -2772,7 +2772,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         kv_node = self.get_nodes_from_services_map(service_type="kv",
                                                    get_all_nodes=False)
@@ -2785,7 +2785,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map_after_restore,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
     def test_backup_restore_with_server_groups_one_node_less(self):
         nodes = self._get_node_list()
@@ -2870,7 +2870,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.fail("Index creation Failed : %s", str(ex))
 
         output, error, json = self._cbindexplan_plan(self.servers[0],
-                                                     self.num_index_replicas,
+                                                     self.num_index_replica,
                                                      "age")
 
         if error:
@@ -2888,7 +2888,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + \
-                             " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
+                             " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2906,7 +2906,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         # start querying using USE index
         t1 = Thread(target=self._run_use_index,
@@ -2947,7 +2947,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + \
-                             " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
+                             " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -2969,7 +2969,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         # start querying using prepared statement
         t1 = Thread(target=self._run_prepare_statement,
@@ -3032,7 +3032,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         # Create replicas
         index_name_prefix = "random_index_" + str(random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + \
-                             " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
+                             " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replica)
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
@@ -3050,7 +3050,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         # start querying using prepared statement
         t1 = Thread(target=self._run_prepare_statement,
@@ -3105,7 +3105,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         select_query = "SELECT count(age) from default"
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -3124,7 +3124,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         # Run select query 100 times
         for i in range(0, 100):
@@ -3134,7 +3134,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_stats = self.get_index_stats(perNode=True)
 
         load_balanced = True
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -3175,7 +3175,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         load_balanced = True
         count = 0
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             try:
                 if i == 0:
                     index_name = index_name_prefix
@@ -3214,7 +3214,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         load_balanced = True
         count = 0
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -3242,7 +3242,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(
-            self.num_index_replicas)
+            self.num_index_replica)
         select_query = "SELECT count(age) from default"
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -3261,7 +3261,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         if not self.expected_err_msg:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
-                                                    self.num_index_replicas)
+                                                    self.num_index_replica)
 
         # start querying
         t1 = Thread(target=self._run_use_index,
@@ -3272,7 +3272,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         # Get num_requests_completed per index before failover
         self.log.info("======BEFORE=====")
         index_stats = self.get_index_stats(perNode=True)
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -3300,7 +3300,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info("======AFTER=====")
         hash_after = {}
         index_stats = self.get_index_stats(perNode=True)
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -3318,7 +3318,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         # Validate
         load_balanced = True
-        for i in range(0, self.num_index_replicas + 1):
+        for i in range(0, self.num_index_replica + 1):
             if i == 0:
                 index_name = index_name_prefix
             else:
@@ -3549,7 +3549,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                         num_recommended_nodes += 1
                         actual_node_list.append(str(node["nodeId"]))
 
-                expected_num_recommended_nodes = self.num_index_replicas + 1
+                expected_num_recommended_nodes = self.num_index_replica + 1
                 if self.eq_index_node:
                     expected_num_recommended_nodes += 1
                     if expected_node_list:

@@ -66,7 +66,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = query_gen_1.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             if self.defer_build:
@@ -84,7 +84,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = query_gen_2.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = query_gen_2.generate_build_query(collection_namespace)
@@ -135,7 +135,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
@@ -260,7 +260,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             if self.defer_build:
@@ -386,7 +386,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             if self.defer_build:
@@ -466,7 +466,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             if self.defer_build:
@@ -569,7 +569,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
                                                                     defer_build=self.defer_build,
-                                                                    num_replica=self.num_index_replicas)
+                                                                    num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             if self.defer_build:
@@ -854,25 +854,25 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = index_gen_1.generate_index_create_query(namespace=collection_namespace,
                                                             deploy_node_info=self.deploy_node_info,
                                                             defer_build=True,
-                                                            num_replica=self.num_index_replicas)
+                                                            num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             query = index_gen_2.generate_index_create_query(namespace=collection_namespace,
                                                             deploy_node_info=self.deploy_node_info,
                                                             defer_build=True,
-                                                            num_replica=self.num_index_replicas)
+                                                            num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             query = index_gen_3.generate_index_create_query(namespace=collection_namespace,
                                                             deploy_node_info=self.deploy_node_info,
                                                             defer_build=True,
-                                                            num_replica=self.num_index_replicas)
+                                                            num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
             query = index_gen_4.generate_index_create_query(namespace=collection_namespace,
                                                             deploy_node_info=self.deploy_node_info,
                                                             defer_build=True,
-                                                            num_replica=self.num_index_replicas)
+                                                            num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
 
@@ -943,7 +943,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = index_gen.generate_index_create_query(namespace=collection_namespace,
                                                           deploy_node_info=self.deploy_node_info,
                                                           defer_build=False,
-                                                          num_replica=self.num_index_replicas)
+                                                          num_replica=self.num_index_replica)
 
             self.run_cbq_query(query=query)
 

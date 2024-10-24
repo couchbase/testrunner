@@ -115,7 +115,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                     index_gen = QueryDefinition(index_name=index_name, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace,
                                                               defer_build=self.defer_build,
-                                                              num_replica=self.num_index_replicas)
+                                                              num_replica=self.num_index_replica)
                 self.run_cbq_query(query)
                 index_gens.append(index_gen)
                 indexes_list.append(index_name)
@@ -251,7 +251,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                 index_gen = QueryDefinition(index_name=index_name, index_fields=index_field)
                 query = index_gen.generate_index_create_query(namespace=collection_namespace,
                                                               defer_build=self.defer_build,
-                                                              num_replica=self.num_index_replicas)
+                                                              num_replica=self.num_index_replica)
                 self.run_cbq_query(query)
                 self.wait_until_indexes_online()
 
@@ -384,7 +384,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
             index_name = f'idx_{item}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_field)
             query = index_gen.generate_index_create_query(namespace=self.namespaces[0], defer_build=True,
-                                                          num_replica=self.num_index_replicas)
+                                                          num_replica=self.num_index_replica)
             query_list.append(query)
         with ThreadPoolExecutor() as executor:
             tasks = []
@@ -433,7 +433,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
             index_name = f'idx_{item}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_field)
             query = index_gen.generate_index_create_query(namespace=self.namespaces[0], defer_build=True,
-                                                          num_replica=self.num_index_replicas)
+                                                          num_replica=self.num_index_replica)
             query_list.append(query)
         with ThreadPoolExecutor() as executor:
             tasks = []
@@ -487,7 +487,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
             index_name = f'idx_{item}'
             index_gen = QueryDefinition(index_name=index_name, index_fields=index_field)
             query = index_gen.generate_index_create_query(namespace=self.namespaces[0], defer_build=True,
-                                                          num_replica=self.num_index_replicas)
+                                                          num_replica=self.num_index_replica)
             self.run_cbq_query(query=query)
             drop_query = index_gen.generate_index_drop_query(namespace=collection_namespace)
             drop_indexes_query.append(drop_query)

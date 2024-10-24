@@ -83,7 +83,7 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -123,7 +123,7 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -163,7 +163,7 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -220,7 +220,7 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -292,7 +292,7 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.wait_until_indexes_online()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

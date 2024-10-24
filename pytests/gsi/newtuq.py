@@ -65,7 +65,7 @@ class QueryTests(BaseTestCase):
         self.expiry_ops_per = self.input.param("expiry_ops_per", 0)
         self.delete_ops_per = self.input.param("delete_ops_per", 0)
         self.update_ops_per = self.input.param("update_ops_per", 0)
-        self.num_index_replicas = self.input.param("num_index_replica", 0)
+        self.num_index_replica = self.input.param("num_index_replica", 0)
         if self.input.param("gomaxprocs", None):
             self.n1ql_helper.configure_gomaxprocs()
 
@@ -103,7 +103,7 @@ class QueryTests(BaseTestCase):
         if self.create_primary_index:
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
-                                                      server=self.n1ql_node, num_index_replicas=self.num_index_replicas)
+                                                      server=self.n1ql_node, num_index_replica=self.num_index_replica)
             except Exception as ex:
                 self.log.info(ex)
                 raise ex

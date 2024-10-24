@@ -153,7 +153,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
                                 stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             if len(index_nodes) > 1:
                 self._post_upgrade_task(task='auto_failover')
@@ -413,7 +413,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             index_gen = QueryDefinition(index_name=index_name, index_fields=['age'])
             query = index_gen.generate_index_create_query(namespace=self.namespaces[0],
                                                           defer_build=self.defer_build,
-                                                          num_replica=self.num_index_replicas)
+                                                          num_replica=self.num_index_replica)
             self.run_cbq_query(server=self.n1ql_node, query=query)
             indexer_metadata = self.index_rest.get_indexer_metadata()['status']
             nodes_uuids = self.get_nodes_uuids()
@@ -1039,7 +1039,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self._post_upgrade_task(task='stats_comparison', stats_before_upgrade=pre_upgrade_index_stats,
                                 stats_after_upgrade=post_upgrade_index_stats)
         self._post_upgrade_task(task='create_collection')
-        if self.num_index_replicas > 0:
+        if self.num_index_replica > 0:
             index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             if len(index_nodes) > 1:
                 self._post_upgrade_task(task='auto_failover')
@@ -1456,7 +1456,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                       limit=self.scan_limit,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
-            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, defer_build=True, num_replica=self.num_index_replicas)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, defer_build=True, num_replica=self.num_index_replica)
             build_queries = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
@@ -1473,7 +1473,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             if existing_bucket_name.name != index['bucket']:
-                self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+                self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
         for namespace in namespace_index_map:
             definition_list = namespace_index_map[namespace]
@@ -1481,7 +1481,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
                 # to reduce the no of replicas
                 self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
-                                          action='replica_count', num_replicas=self.num_index_replicas - 1)
+                                          action='replica_count', num_replicas=self.num_index_replica - 1)
                 self.wait_until_indexes_online()
                 self.sleep(20)
 
@@ -1492,7 +1492,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
         for index in index_metadata:
             if existing_bucket_name.name != index['bucket']:
-                self.assertEqual(index['numReplica'], self.num_index_replicas-1, "No. of replicas are not matching")
+                self.assertEqual(index['numReplica'], self.num_index_replica - 1, "No. of replicas are not matching")
 
 
         nodes_in_cluster = self.get_nodes_in_cluster_after_upgrade(master_node=self.master)
@@ -2745,9 +2745,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                               f"partition by hash(name, age, join_yr) "
             create_index1_query = f"CREATE INDEX non_partitioned_idx1 ON {bucket.name}(name, age, join_yr) "
 
-            if self.num_index_replicas > 0:
-                create_partitioned_index1_query += f' with {{"num_replica": {self.num_index_replicas} }}'
-                create_index1_query += f' with {{"num_replica": {self.num_index_replicas} }}'
+            if self.num_index_replica > 0:
+                create_partitioned_index1_query += f' with {{"num_replica": {self.num_index_replica} }}'
+                create_index1_query += f' with {{"num_replica": {self.num_index_replica} }}'
 
             try:
                 self.n1ql_helper.run_cbq_query(query=create_partitioned_index1_query, server=self.n1ql_node)

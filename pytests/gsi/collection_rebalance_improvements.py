@@ -206,7 +206,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -271,7 +271,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -332,7 +332,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -417,7 +417,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -503,7 +503,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -569,7 +569,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -662,7 +662,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -750,7 +750,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replicas)
+                                                                         num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                       namespace=namespace, limit=10)
@@ -855,7 +855,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                                                                            namespace=namespace, limit=10))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
-                                                                  num_replica=self.num_index_replicas)
+                                                                  num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
                 defer_query = (f"CREATE INDEX defer_idx_{batch} on {namespace}(url) "
                                f"with {{'defer_build': true, 'num_replica': 1}}")

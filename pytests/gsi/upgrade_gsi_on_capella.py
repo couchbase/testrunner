@@ -104,7 +104,7 @@ class UpgradeGSIOnCapella(BaseSecondaryIndexingTests):
             query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace, defer_build_mix=True,
-                                                              num_replica=self.num_index_replicas)
+                                                              num_replica=self.num_index_replica)
             self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
 
             _, keyspace = namespace.split(':')
@@ -146,7 +146,7 @@ class UpgradeGSIOnCapella(BaseSecondaryIndexingTests):
                                                                        namespace=namespace))
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace,
-                                                              num_replica=self.num_index_replicas)
+                                                              num_replica=self.num_index_replica)
             self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace, query_node=query_node)
         self.wait_until_indexes_online()
         self.dataload_till_rr(namespaces=self.namespaces, rr=self.resident_ratio, json_template=self.json_template)

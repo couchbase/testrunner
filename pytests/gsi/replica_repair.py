@@ -59,7 +59,7 @@ class ReplicaRepair(BaseSecondaryIndexingTests):
         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
         for namespace in self.namespaces:
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                              namespace=namespace, num_replica=self.num_index_replicas)
+                                                              namespace=namespace, num_replica=self.num_index_replica)
             self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace)
         self.wait_until_indexes_online()
 
