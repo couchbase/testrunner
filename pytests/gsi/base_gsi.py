@@ -115,6 +115,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.rebalance_type = self.input.param("rebalance_type", None)
         self.use_shard_based_rebalance = self.input.param("use_shard_based_rebalance", False)
         self.use_cbo = self.input.param("use_cbo", False)
+        self.xattr_indexes = self.input.param("xattr_indexes", False)
         self.create_query_node_pattern = r"create .*?index (.*?) on .*?nodes':.*?\[(.*?)].*?$"
         # current value of n1ql_feat_ctrl disables sequential scan. To enable it set value to 0x4c
         self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "16460")
@@ -468,6 +469,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
         query_res_faiss = self.run_cbq_query(query=faiss_query, server=n1ql_node)['results']
         list_of_vectors_to_be_indexed_on_faiss = []
+        if self.xattr_indexes:
+            vector_field = vector_field.split('.')[-1]
         for v in query_res_faiss:
             result = v[vector_field]
             if self.base64:
@@ -535,7 +538,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if self.base64:
             pattern = r"ANN\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
         else:
-            pattern = r"ANN\(\s*(\w+),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
+            pattern = r"ANN\(\s*(.*?),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
         matches = re.search(pattern, query)
 
         if matches:

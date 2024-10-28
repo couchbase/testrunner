@@ -958,7 +958,7 @@ class OnPremBaseTestCase(unittest.TestCase):
                               password=None,
                               bucket_type='membase', enable_replica_index=1, eviction_policy='fullEviction',
                               bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
-                              compression_mode='passive'):
+                              compression_mode='passive', bucket_storage=None):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -994,7 +994,10 @@ class OnPremBaseTestCase(unittest.TestCase):
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
         bucket_params['compressionMode'] = compression_mode
-        bucket_params['bucket_storage'] = self.bucket_storage
+        if not bucket_storage:
+            bucket_params['bucket_storage'] = self.bucket_storage
+        else:
+            bucket_params['bucket_storage'] = bucket_storage
         if bucket_type == "ephemeral":
             bucket_params['bucket_storage'] = "couchstore"
 

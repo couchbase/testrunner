@@ -8,9 +8,12 @@ __created_on__ = "19/06/24 03:27 pm"
 
 """
 import datetime
+import json
 
+import requests
 from concurrent.futures import ThreadPoolExecutor
 
+from requests.auth import HTTPBasicAuth
 from sentence_transformers import SentenceTransformer
 
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -62,9 +65,101 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             table.add_row([query, query_stats_map[query][0]*100, query_stats_map[query][1]*100])
         table.display(message=message)
 
+    def populate_vectors_in_xattr(self, bucket, scope):
+        self.buckets = self.rest.get_buckets()
+        metadata_bucket = "metadata_bucket"
+        for iter_bucket in self.buckets:
+            if iter_bucket.name == metadata_bucket:
+                break
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=100, bucket_storage="couchstore",
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=metadata_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing")
+        eventing_endpoint = f"http://{eventing_node.ip}:8096"
+
+        # Define the eventing function details
+        function_name = f"GenVectors_{bucket}_{scope}"
+        app_code = """function OnUpdate(doc, meta, xattrs) {
+                                  log("Doc created/updated", meta.id);
+                                  // all user _xattrs in metadata KEY <= 16 chars, no long names
+                                  if("descriptionVector" in doc && "colorRGBVector" in doc){
+                                      try {
+                                          couchbase.mutateIn(upsert_xattr, meta, [couchbase.MutateInSpec.insert("descVector", doc.descriptionVector, {"xattrs": true}), couchbase.MutateInSpec.insert("colorVector", doc.colorRGBVector, {"xattrs": true})]);
+                                      } catch (e) {
+                                          log("xattrs", e)
+                                      }
+                                      log("updated descVector and colorVector in " + meta.id + " of length " + doc.descriptionVector.length + " and " + doc.colorRGBVector.length);
+                                  } else if("descriptionVector" in doc){
+                                  try {
+                                          couchbase.mutateIn(upsert_xattr, meta, [couchbase.MutateInSpec.insert("descVector", doc.descriptionVector, {"xattrs": true})]);
+                                      } catch (e) {
+                                          log("xattrs", e)
+                                      }
+                                      log("updated descVector in " + meta.id + " of length " + doc.descriptionVector.length);
+                                  } else if("colorRGBVector" in doc){
+                                  try {
+                                          couchbase.mutateIn(upsert_xattr, meta, [couchbase.MutateInSpec.insert("colorVector", doc.colorRGBVector, {"xattrs": true})]);
+                                      } catch (e) {
+                                          log("xattrs", e)
+                                      }
+                                      log("updated colorVector in " + meta.id + " of length " + doc.colorRGBVector.length);
+                                  }
+                              }
+                             """
+
+        eventing_function = {
+            "appname": function_name,
+            "appcode": app_code,
+            "depcfg": {
+                "buckets": [{
+                    "alias": "upsert_xattr",
+                    "bucket_name": bucket,
+                    "scope_name": scope,
+                    "collection_name": "*",
+                    "access": "rw"
+                }],
+                "source_bucket": bucket,
+                "source_scope": scope,
+                "source_collection": "*",
+                "metadata_bucket": metadata_bucket,
+                "metadata_scope": "_default",
+                "metadata_collection": "_default",
+            },
+            "settings": {
+                "dcp_stream_boundary": "everything",
+                "deployment_status": True,
+                "processing_status": True,
+                "log_level": "INFO",
+            },
+            "function_scope": {
+                "bucket": bucket,
+                "scope": scope
+            }
+        }
+        url = f"{eventing_endpoint}/api/v1/functions/{function_name}"
+        headers = {'Content-Type': 'application/json'}
+
+        # Send request to Couchbase REST API
+        response = requests.post(url, data=json.dumps(eventing_function), headers=headers,
+                                 auth=HTTPBasicAuth("Administrator", "password"))
+
+        if response.status_code == 200:
+            self.log.info(f"Eventing function '{function_name}' deployed successfully!")
+        else:
+            raise Exception(f"Failed to deploy eventing function: {response.status_code}, {response.text}")
+
     def test_composite_vector_sanity(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         query_stats_map = {}
+        if self.xattr_indexes:
+            for namespace in self.namespaces:
+                bucket, scope, _ = namespace.split('.')
+                self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
 
         for similarity in ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]:
             for namespace in self.namespaces:
@@ -73,6 +168,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           similarity=similarity, train_list=None,
                                                                           scan_nprobes=self.scan_nprobes,
                                                                           array_indexes=False,
+                                                                          xattr_indexes=self.xattr_indexes,
                                                                           limit=self.scan_limit, is_base64=self.base64,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
@@ -91,7 +187,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     # self.run_cbq_query(query=create)
                     if "DISTINCT" in query:
                         continue
-                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query, similarity=similarity, scan_consitency=True)
+                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
+                                                                                          similarity=similarity,
+                                                                                          scan_consitency=True)
                     query_stats_map[query] = [recall, accuracy]
                     # todo validate indexer metadata for indexes
 
@@ -108,6 +206,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
             #                         f"accuracy for query {query} is less than threshold 70")
 
+        self.rest.delete_bucket(bucket='metadata_bucket')
 
     def test_create_index_negative_scenarios(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)

@@ -124,30 +124,35 @@ class GSIUtils(object):
                                                     scan_nprobes=1, skip_primary=False, array_indexes=False,
                                                     limit=10, quantization_algo_color_vector=None,
                                                     quantization_algo_description_vector=None,
-                                                    is_base64=False):
+                                                    is_base64=False, xattr_indexes=False):
 
         definitions_list = []
         color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
         color_vec_2 = [265.1, 13.200001, 75.9]  # Pinkish red
+        color_vecfield = "colorRGBVector"
+        desc_vecfield = "descriptionVector"
+        if xattr_indexes:
+            color_vecfield = "meta().xattrs.colorVector"
+            desc_vecfield = "meta().xattrs.descVector"
 
         desc_1 = "A convertible car with shades of green color made in 1990"
         desc_2 = "A red color car with 4 or 5 star safety rating"
-        descVec1 = list(self.encoder.encode(desc_1))
-        descVec2 = list(self.encoder.encode(desc_2))
+        desc_vec1 = list(self.encoder.encode(desc_1))
+        desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{similarity}', {scan_nprobes})"
-        scan_color_vec_2 = f"ANN(colorRGBVector, {color_vec_2}, '{similarity}', {scan_nprobes})"
-        scan_desc_vec_1 = f"ANN(descriptionVector, {descVec1}, '{similarity}', {scan_nprobes})"
-        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_1 = f"ANN({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_2 = f"ANN({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_1 = f"ANN({desc_vecfield}, {desc_vec1}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_2 = f"ANN({desc_vecfield}, {desc_vec2}, '{similarity}', {scan_nprobes})"
 
         if is_base64:
-            scan_color_vec_1 = (f"ANN(DECODE_VECTOR(colorRGBVector, false), {color_vec_1},"
+            scan_color_vec_1 = (f"ANN(DECODE_VECTOR({color_vecfield}, false), {color_vec_1},"
                                 f" '{similarity}', {scan_nprobes})")
-            scan_color_vec_2 = (f"ANN(DECODE_VECTOR(colorRGBVector, false), {color_vec_2},"
+            scan_color_vec_2 = (f"ANN(DECODE_VECTOR({color_vecfield}, false), {color_vec_2},"
                                 f" '{similarity}', {scan_nprobes})")
-            scan_desc_vec_1 = (f"ANN(DECODE_VECTOR(descriptionVector, false), {descVec1},"
+            scan_desc_vec_1 = (f"ANN(DECODE_VECTOR({desc_vecfield}, false), {desc_vec1},"
                                f" '{similarity}', {scan_nprobes})")
-            scan_desc_vec_2 = (f"ANN(DECODE_VECTOR(descriptionVector,false), {descVec2},"
+            scan_desc_vec_2 = (f"ANN(DECODE_VECTOR({desc_vecfield},false), {desc_vec2},"
                                f" '{similarity}', {scan_nprobes})")
 
         if not index_name_prefix:
@@ -162,21 +167,21 @@ class GSIUtils(object):
                                 is_primary=True))
         # Single vector field
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'colorRGBVector', index_fields=['colorRGBVector VECTOR'],
+            QueryDefinition(index_name=index_name_prefix + 'colorRGBVector', index_fields=[f'{color_vecfield} VECTOR'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
                             scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"colorRGBVector, {scan_color_vec_1}",
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{color_vecfield}, {scan_color_vec_1}",
                                                                               scan_color_vec_1)))
 
         # Single vector + single scalar field + partitioned on vector
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVector',
-                            index_fields=['fuel', 'descriptionVector VECTOR'],
+                            index_fields=['fuel', f'{desc_vecfield} VECTOR'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, descriptionVector,"
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, {desc_vecfield},"
                                                                                f" {scan_desc_vec_1}",
                                                                                'fuel = "LPG" ',
                                                                                scan_desc_vec_1
@@ -186,11 +191,11 @@ class GSIUtils(object):
         # Single vector (leading) + single scalar field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarOneVectorLeading',
-                            index_fields=['descriptionVector VECTOR', 'category'],
+                            index_fields=[f'{desc_vecfield} VECTOR', 'category'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"category, descriptionVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"category, {desc_vecfield}",
                                                                                'category in ["Sedan", "Luxury Car"] ',
                                                                                scan_desc_vec_2)))
 
@@ -198,12 +203,12 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
 
-                            index_fields=['year', 'descriptionVector Vector', 'manufacturer', 'fuel'],
+                            index_fields=['year', f'{desc_vecfield} Vector', 'manufacturer', 'fuel'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, year,"
-                                                                               f" descriptionVector, {scan_desc_vec_2}",
+                                                                               f" {desc_vecfield}, {scan_desc_vec_2}",
                                                                                "year between 1950 and 1990 and "
                                                                                "manufacturer in ['Chevrolet', 'Tesla',"
                                                                                " 'ford', 'Audi'] and (fuel = 'Gasoline'"
@@ -213,11 +218,11 @@ class GSIUtils(object):
         # Single vector + multiple scalar field + Partitioned
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_2',
-                            index_fields=['rating', 'colorRGBVector Vector', 'category'],
+                            index_fields=['rating', f'{color_vecfield} Vector', 'category'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("color, colorRGBVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"color, {color_vecfield}",
                                                                                "rating = 2 and "
                                                                                "category in ['Convertible', "
                                                                                "'Luxury Car', 'Supercar']",
@@ -228,23 +233,23 @@ class GSIUtils(object):
         # Single vector + multiple scalar field with Include clause
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'includeMissing',
-                            index_fields=['colorHex ', 'year', 'fuel', 'descriptionVector Vector'],
+                            index_fields=['colorHex ', 'year', 'fuel', f'{desc_vecfield} Vector'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes, is_base64=is_base64,
                             train_list=train_list, limit=limit, missing_indexes=True, missing_field_desc=True,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("fuel, year, descriptionVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, year, {desc_vecfield}",
                                                                                "year > 1980 OR "
                                                                                "fuel = 'Diesel' ",
                                                                                scan_desc_vec_2)))
         # Partial Indexes
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'PartialIndex',
-                            index_fields=['rating ', 'color', 'colorRGBVector Vector'],
+                            index_fields=['rating ', 'color', f'{color_vecfield} Vector'],
                             index_where_clause='rating > 3',
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {color_vecfield}",
                                                                                "rating = 4 and "
                                                                                'color like "%%blue%%" ',
                                                                                scan_color_vec_1)))
@@ -255,39 +260,39 @@ class GSIUtils(object):
                 QueryDefinition(index_name=index_name_prefix + 'arrayScalarOneVector',
                                 index_fields=['model',
                                               'ALL ARRAY cv.`smart features` FOR cv in evaluation.`smart features` END, ',
-                                              'colorRGBVector Vector'],
+                                              f'{color_vecfield} Vector'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
                                 scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "model = Atlas and "
                                                                                    'ANY cv in evaluation SATISFIES cv.`smart features` like "%%lights%%" ',
-                                                                                   f'APPROX_L2_DIST colorRGBVector vectorValue')))
+                                                                                   f'APPROX_L2_DIST {color_vecfield} vectorValue')))
 
             # Single vector + array scalar field 2
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'flatenScalarOneVector',
                                 index_fields=['rating', 'ALL ARRAY  cv.variant FOR cv in evaluation END ',
-                                              'descriptionVector Vector'],
+                                              f'{desc_vecfield} Vector'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
                                 scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "rating BETWEEN 1 and 3 AND"
                                                                                    "ANY cv in evaluation SATISFIES cv.variant = Prestige ",
-                                                                                   f'APPROX_L2_DIST descriptionVector vectorValue')))
+                                                                                   f'APPROX_L2_DIST {desc_vecfield} vectorValue')))
 
             # Single vector + flatten array scalar field
             definitions_list.append(
                 QueryDefinition(index_name=index_name_prefix + 'arrayScalarOneVector',
                                 index_fields=['year',
                                               'ALL ARRAY FLATTEN_KEYS(cv.comfort DESC, cv.performance) FOR cv in evaluation END ',
-                                              'descriptionVector Vector'],
+                                              f'{desc_vecfield} Vector'],
                                 dimension=384, description="IVF,PQ8x8", similarity=similarity,
                                 scan_nprobes=scan_nprobes, train_list=train_list, limit=limit, is_base64=is_base64,
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "year BETWEEN 1970 and 1990 AND"
                                                                                    "ANY cv in evaluation SATISFIES cv.comfort = 'Panoramic sunroof' OR "
                                                                                    "cv.performance = 'Hybrid and electric powertrains' ",
-                                                                                   f'APPROX_L2_DIST descriptionVector vectorValue')))
+                                                                                   f'APPROX_L2_DIST {desc_vecfield} vectorValue')))
 
             # array vector +  multi scalar field
             definitions_list.append(
@@ -300,7 +305,7 @@ class GSIUtils(object):
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "fuel = Ethanol"
                                                                                    "AND year BETWEEN 1990 and 2000 ",
-                                                                                   f'APPROX_L2_DIST descriptionVector vectorValue')))
+                                                                                   f'APPROX_L2_DIST {desc_vecfield} vectorValue')))
 
             # flatten array vector +  multi scalar field
             definitions_list.append(
@@ -313,27 +318,34 @@ class GSIUtils(object):
                                 query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("*",
                                                                                    "fuel = Ethanol"
                                                                                    "AND year BETWEEN 1990 and 2000 ",
-                                                                                   f'APPROX_L2_DIST descriptionVector vectorValue')))
+                                                                                   f'APPROX_L2_DIST {desc_vecfield} vectorValue')))
         self.batch_size = len(definitions_list)
         return definitions_list
 
-    def generate_car_vector_loader_index_definition_bhive(self, index_name_prefix=None, similarity="L2", train_list=None,
-                                                    scan_nprobes=1, skip_primary=False, array_indexes=False,
-                                                    limit=10, quantization_algo_color_vector=None,quantization_algo_description_vector=None):
+    def generate_car_vector_loader_index_definition_bhive(self, index_name_prefix=None, similarity="L2",
+                                                          train_list=None, xattr_indexes=False,
+                                                          scan_nprobes=1, skip_primary=False, array_indexes=False,
+                                                          limit=10, quantization_algo_color_vector=None,
+                                                          quantization_algo_description_vector=None):
 
         definitions_list = []
         color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
         color_vec_2 = [265.1, 13.200001, 75.9]  # Pinkish red
+        color_vecfield = "colorRGBVector"
+        desc_vecfield = "descriptionVector"
+        if xattr_indexes:
+            color_vecfield = "meta().xattrs.colorVector"
+            desc_vecfield = "meta().xattrs.descVector"
 
         desc_1 = "A convertible car with red color made in 1990"
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
         descVec1 = list(self.encoder.encode(desc_1))
         descVec2 = list(self.encoder.encode(desc_2))
 
-        scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{similarity}', {scan_nprobes})"
-        scan_color_vec_2 = f"ANN(colorRGBVector, {color_vec_2}, '{similarity}', {scan_nprobes})"
-        scan_desc_vec_1 = f"ANN(descriptionVector, {descVec1}, '{similarity}', {scan_nprobes})"
-        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_1 = f"ANN({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_2 = f"ANN({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_1 = f"ANN({desc_vecfield}, {descVec1}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_2 = f"ANN({desc_vecfield}, {descVec2}, '{similarity}', {scan_nprobes})"
 
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
@@ -348,29 +360,34 @@ class GSIUtils(object):
 
         # Single vector field - colorRGBVector
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'colorRGBVectorBhive', index_fields=['colorRGBVector VECTOR'],
+            QueryDefinition(index_name=index_name_prefix + 'colorRGBVectorBhive',
+                            index_fields=[f'{color_vecfield} VECTOR'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
                             scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"colorRGBVector,"
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{color_vecfield},"
                                                                               f" {scan_color_vec_1}",
                                                                               scan_color_vec_1)))
 
         # Single vector field - descriptionVector
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'descriptionVectorBhive', index_fields=['descriptionVector VECTOR'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+            QueryDefinition(index_name=index_name_prefix + 'descriptionVectorBhive',
+                            index_fields=[f'{desc_vecfield} VECTOR'],
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"descriptionVector,"
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield},"
                                                                               f" {scan_desc_vec_1}",
                                                                               scan_desc_vec_2)))
 
         # Single vector field + multiple scalar fields + partitioned on scalar field
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'partitionedVectorBhive', index_fields=['descriptionVector VECTOR'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+            QueryDefinition(index_name=index_name_prefix + 'partitionedVectorBhive',
+                            index_fields=[f'{desc_vecfield} VECTOR'],
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("descriptionVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield}",
                                                                                "rating = 2 and "
                                                                                "category in ['Convertible', "
                                                                                "'Luxury Car', 'Supercar']",
@@ -381,10 +398,11 @@ class GSIUtils(object):
         # Single vector + multiple scalar fields
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'includeBhive',
-                            index_fields=['colorRGBVector VECTOR'],
-                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            index_fields=[f'{color_vecfield} VECTOR'],
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
+                            scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("colorRGBVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"{color_vecfield}",
                                                                                "year > 1980 OR "
                                                                                "fuel = 'Diesel' ",
                                                                                scan_color_vec_2),
@@ -392,17 +410,17 @@ class GSIUtils(object):
         # Partial Indexes
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partialIndexBhive',
-                            index_fields=['descriptionVector VECTOR'],
+                            index_fields=[f'{desc_vecfield} VECTOR'],
                             index_where_clause='rating > 3',
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("descriptionVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {color_vecfield}",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
                                                                                scan_desc_vec_2),
                             include_fields=['description', 'rating']))
         return definitions_list
-
 
     def generate_magma_doc_loader_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
@@ -849,7 +867,8 @@ class GSIUtils(object):
 
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
-                                  quantization_algo_description_vector=None, is_base64=False, bhive_index=False):
+                                  quantization_algo_description_vector=None, is_base64=False, bhive_index=False,
+                                  xattr_indexes=False):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -865,24 +884,26 @@ class GSIUtils(object):
         elif dataset == 'Cars':
             if bhive_index:
                 definition_list = self.generate_car_vector_loader_index_definition_bhive(index_name_prefix=prefix,
-                                                                               skip_primary=skip_primary,
-                                                                               similarity=similarity,
-                                                                               train_list=train_list,
-                                                                               scan_nprobes=scan_nprobes,
-                                                                               array_indexes=array_indexes,
-                                                                               limit=limit,
-                                                                               quantization_algo_color_vector=quantization_algo_color_vector,
-                                                                               quantization_algo_description_vector=quantization_algo_description_vector)
+                                                                                         skip_primary=skip_primary,
+                                                                                         similarity=similarity,
+                                                                                         train_list=train_list,
+                                                                                         scan_nprobes=scan_nprobes,
+                                                                                         array_indexes=array_indexes,
+                                                                                         limit=limit,
+                                                                                         xattr_indexes=xattr_indexes,
+                                                                                         quantization_algo_color_vector=quantization_algo_color_vector,
+                                                                                         quantization_algo_description_vector=quantization_algo_description_vector)
             else:
                 definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
-                                                                                skip_primary=skip_primary,
-                                                                                similarity=similarity,
-                                                                                train_list=train_list,
-                                                                                scan_nprobes=scan_nprobes,
-                                                                                array_indexes=array_indexes,
-                                                                                limit=limit, is_base64=is_base64,
-                                                                                quantization_algo_color_vector=quantization_algo_color_vector,
-                                                                                quantization_algo_description_vector=quantization_algo_description_vector)
+                                                                                   skip_primary=skip_primary,
+                                                                                   similarity=similarity,
+                                                                                   train_list=train_list,
+                                                                                   scan_nprobes=scan_nprobes,
+                                                                                   array_indexes=array_indexes,
+                                                                                   limit=limit, is_base64=is_base64,
+                                                                                   xattr_indexes=xattr_indexes,
+                                                                                   quantization_algo_color_vector=quantization_algo_color_vector,
+                                                                                   quantization_algo_description_vector=quantization_algo_description_vector)
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)
