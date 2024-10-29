@@ -35,7 +35,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("bucket-create",
-                                                     self.hostname.split(":")[0], options, admin_tools_package)
+                                                     self.hostname.split(":")[0], options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket created")
 
@@ -50,7 +51,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("bucket-compact",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "Bucket compaction started")
@@ -63,7 +65,7 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("bucket-delete",
                                                      self.hostname, options,
-                                                     admin_tools_package)
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket deleted")
 
@@ -85,7 +87,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("bucket-edit",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket edited")
 
@@ -98,7 +101,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("bucket-flush",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Bucket flushed")
 
@@ -108,7 +112,7 @@ class CouchbaseCLI:
         return self._setting_cluster("cluster-edit", data_ramsize,
                                      index_ramsize, fts_ramsize, cluster_name,
                                      cluster_username, cluster_password,
-                                     cluster_port, admin_tools_package)
+                                     cluster_port, admin_tools_package=admin_tools_package)
 
     def cluster_init(self, data_ramsize, index_ramsize, fts_ramsize, services,
                      index_storage_mode, cluster_name,
@@ -135,7 +139,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("cluster-init",
-                                                     self.hostname.split(":")[0], options, admin_tools_package)
+                                                     self.hostname.split(":")[0], options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         print_msg = "Cluster initialized"
         if self.cb_version is not None and \
@@ -161,7 +166,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("collect-logs-start",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "Log collection started")
@@ -170,7 +176,8 @@ class CouchbaseCLI:
         options = self._get_default_options()
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("collect-logs-stop",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "Log collection stopped")
@@ -179,7 +186,8 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         options = f" --bucket {str(bucket)} --create-scope {str(scope)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -187,7 +195,8 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         options = f" --bucket {str(bucket)} --create-collection {str(scope)}.{str(collection)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -195,7 +204,8 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         options = f" --bucket {str(bucket)} --drop-collection {str(scope)}.{str(collection)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -204,7 +214,8 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         options = f" --bucket {str(bucket)} --drop-scope {str(scope)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -212,7 +223,8 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         options = f" --bucket {str(bucket)} --list-scopes"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -221,7 +233,8 @@ class CouchbaseCLI:
         options = " --bucket " + str(bucket)
         options += " --list-collections"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -230,7 +243,8 @@ class CouchbaseCLI:
         options = " --bucket " + str(bucket)
         options += " --list-collections " + str(scope)
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
-                                                             options, admin_tools_package)
+                                                             options,
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
@@ -252,7 +266,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("failover", self.hostname,
-                                                     options, admin_tools_package)
+                                                     options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server failed over")
 
@@ -278,7 +293,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("group-manage",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
 
         success = False
@@ -306,7 +322,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("node-init",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Node initialized")
 
@@ -317,7 +334,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("rebalance",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Rebalance complete")
 
@@ -325,7 +343,8 @@ class CouchbaseCLI:
         options = self._get_default_options()
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("rebalance-stop",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Rebalance stopped")
 
@@ -338,7 +357,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("recovery", self.hostname,
-                                                     options, admin_tools_package)
+                                                     options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Servers recovered")
 
@@ -360,7 +380,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("server-add",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Server added")
 
@@ -372,7 +393,8 @@ class CouchbaseCLI:
         hostname = "https://{0}:1{1} --no-ssl-verify ".format(self.server.cluster_ip, self.server.port)
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("server-readd",
-                                                     hostname, options, admin_tools_package)
+                                                     hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Servers recovered")
 
@@ -387,7 +409,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-audit",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "Audit settings modified")
@@ -442,7 +465,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-alert",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Email alert "
                                                          "settings modified")
@@ -456,7 +480,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-autofailover",
-                                                     self.server.ip, options, admin_tools_package)
+                                                     self.server.ip, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Auto-failover "
                                                          "settings modified")
@@ -470,7 +495,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-autoreprovision",
-                                                     self.server.ip, options, admin_tools_package)
+                                                     self.server.ip, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Auto-reprovision "
                                                          "settings modified")
@@ -481,7 +507,7 @@ class CouchbaseCLI:
         return self._setting_cluster("setting-cluster", data_ramsize,
                                      index_ramsize, fts_ramsize, cluster_name,
                                      cluster_username, cluster_password,
-                                     cluster_port, admin_tools_package)
+                                     cluster_port, admin_tools_package=admin_tools_package)
 
     def setting_compaction(self, db_frag_perc, db_frag_size, view_frag_perc,
                            view_frag_size, from_period, to_period,
@@ -508,7 +534,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-compaction",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Compaction "
                                                          "settings modified")
@@ -535,7 +562,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-compaction",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Compaction settings modified")
 
@@ -560,7 +588,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-index",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "Indexer settings modified")
@@ -578,7 +607,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-ldap",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "LDAP settings modified")
@@ -590,7 +620,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-notification",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Notification "
                                                          "settings updated")
@@ -615,7 +646,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("user-manage",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
 
         if delete:
@@ -633,7 +665,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("ip-family",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "SUCCESS: "
                                                          "Switched IP family of the cluster")
@@ -644,7 +677,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("ip-family",
-                                                     self.hostname, options, admin_tools_package)
+                                                     self.hostname, options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Cluster using ")
 
@@ -671,7 +705,8 @@ class CouchbaseCLI:
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli(cmd, self.hostname,
-                                                     options, admin_tools_package)
+                                                     options,
+                                                     admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout,
                                                  "Cluster settings modified")

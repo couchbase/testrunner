@@ -20,7 +20,7 @@ class CouchbaseCliTestWithCollections(CliBaseTest):
 
     def test_cbstats_with_collection_status(self):
         if self.custom_scopes:
-            self.create_scope_cluster_host()
+            self.create_scope_cluster_host(admin_tools_package=self.admin_tools_package)
         if self.custom_collections:
             self.create_collection(self.col_per_scope)
         shell = RemoteMachineShellConnection(self.master)
