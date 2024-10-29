@@ -877,7 +877,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         system_keyspaces = [
             "system:active_requests","system:all_indexes","system:all_keyspaces","system:all_keyspaces_info",
             "system:all_scopes","system:all_sequences","system:applicable_roles","system:buckets",
-            "system:completed_requests","system:datastores","system:dictionary","system:dictionary_cache",
+            "system:completed_requests","system:completed_requests_history","system:datastores","system:dictionary","system:dictionary_cache",
             "system:dual","system:functions","system:functions_cache","system:indexes","system:keyspaces","system:keyspaces_info",
             "system:my_user_info","system:namespaces","system:nodes","system:prepareds","system:scopes",
             "system:sequences","system:tasks_cache","system:transactions","system:user_info","system:vitals"]
