@@ -79,10 +79,12 @@ class VectorSearch(FTSBaseTest):
             if self.conjuction_query_with_prefilter:
                 fts_vector_query["knn"][0]["filter"] = {}
                 fts_vector_query["knn"][0]["filter"]["conjuncts"] = []
-                second_query = self.prefilter_query["max"] = int(self.prefilter_query["max"]/2)
-                first_query = self.prefilter_query["min"] = int(self.prefilter_query["max"]/2 + 1)
+                first_query = self.prefilter_query.copy()
+                first_query["max"] = int(first_query["max"] / 2)
+
+                self.prefilter_query["min"] = int(self.prefilter_query["max"]/2 + 1)
                 fts_vector_query["knn"][0]["filter"]["conjuncts"].append(first_query)
-                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(second_query)
+                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(self.prefilter_query)
                 self.log.info(f"conjunction query with prefilter is : {fts_vector_query}")
             else:
                 fts_vector_query["knn"][0]["filter"] = self.prefilter_query
