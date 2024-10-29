@@ -465,7 +465,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 else:
                     self.fail(e)
 
-    def create_scope_cluster_host(self, num_scope=2):
+    def create_scope_cluster_host(self, num_scope=2, admin_tools_package=False):
         bucket_name = self.buckets[0].name
         for x in range(num_scope):
             scope_name = "scope{0}".format(x)
@@ -475,7 +475,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 self.rest_bk.create_scope(bucket=bucket_name, scope=scope_name,
                                               params=None)
             else:
-                self.cli_bk.create_scope(bucket=bucket_name, scope=scope_name)
+                self.cli_bk.create_scope(bucket=bucket_name, scope=scope_name,
+                                         admin_tools_package=admin_tools_package)
 
     def delete_scope_cluster_host(self, num_scope=2):
         bucket_name = self.buckets[0].name
