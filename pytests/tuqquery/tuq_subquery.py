@@ -1,6 +1,7 @@
 from .tuq import QueryTests
 from membase.api.exception import CBQError
 from remote.remote_util import RemoteMachineShellConnection
+from deepdiff import DeepDiff
 import json
 
 
@@ -54,6 +55,25 @@ class QuerySubqueryTests(QueryTests):
         self.query = 'SELECT s FROM {"p":[{"x":11},{"x":12}],"q":"abc","r":null}.s'
         actual_result = self.run_cbq_query()
         self.assertTrue(actual_result['results'] == [])
+
+    def test_MB63274(self):
+        self.run_cbq_query('CREATE INDEX ix1 ON default(type, META().id)')
+        self.run_cbq_query('UPSERT INTO default (KEY t.id, VALUE t) '
+                           'SELECT {"type":"doc", "id":"aa_"||TO_STR(d), "a1": ARRAY {"ac0":IMOD(d1,1), '
+                           '"ac1":IMOD(d1,10), "ac2":IMOD(d1,2), "ac3":IMOD(d1,3)} FOR d1 IN ARRAY_RANGE(0,5) END  } AS t '
+                           'FROM ARRAY_RANGE(0,5) AS d')
+        expected_results = self.run_cbq_query(query='SELECT u.ac1, COUNT(1) AS cnt FROM (SELECT a1 FROM default AS t '
+                                                    'WHERE type = "doc" AND META().id LIKE "aa_%" ) AS d UNNEST d.a1 AS u '
+                                                    'GROUP BY u.ac1')
+        actual_results = self.run_cbq_query(query='SELECT u.ac1, COUNT(1) AS cnt FROM '
+                                                  '(SELECT a1 FROM default AS t WHERE type = "doc" AND META().id LIKE "aa_%" ) AS d '
+                                                  'UNNEST d.a1 AS u GROUP BY u.ac1 '
+                                                  'UNION SELECT u.ac1, COUNT(1) AS cnt '
+                                                  'FROM (SELECT a1 FROM default AS t WHERE type = "doc" AND META().id LIKE "aa_%" ) AS d '
+                                                  'UNNEST d.a1 AS u GROUP BY u.ac1')
+        diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     ''' When a cte is killed, the subquery it runs should also be killed'''
     def test_cte_subquery_cancel(self):
