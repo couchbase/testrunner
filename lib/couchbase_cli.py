@@ -239,7 +239,7 @@ class CouchbaseCLI:
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.execute_couchbase_cli("enable-developer-preview", self.hostname,
                                                              "--enable", _stdin="y",
-                                                             admin_tools_package=True)
+                                                             admin_tools_package=admin_tools_package)
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout, "Developer mode enabled")
 
