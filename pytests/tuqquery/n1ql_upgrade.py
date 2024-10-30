@@ -888,7 +888,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query_all_indexes = "select array_agg(distinct keyspace_id) from system:all_indexes where all_indexes.`namespace_id` = '#system'"
         system_all_indexes = [
             "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "all_sequences", "applicable_roles", "buckets",
-            "completed_requests", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
+            "completed_requests", "completed_requests_history", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
             "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "sequences", "tasks_cache", "transactions",
             "user_info", "vitals"]
         results = self.run_cbq_query(query=query_all_indexes)
@@ -898,7 +898,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query_all_keyspaces_info = "select array_agg(id) from system:all_keyspaces_info where all_keyspaces_info.datastore_id = 'system'"
         system_keyspaces_info = [
             "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "all_sequences", "applicable_roles", "buckets",
-            "completed_requests", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
+            "completed_requests", "completed_requests_history", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
             "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "sequences", "tasks_cache", "transactions",
             "user_info", "vitals"
         ]
