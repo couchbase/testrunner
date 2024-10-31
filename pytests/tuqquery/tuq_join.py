@@ -982,3 +982,42 @@ class JoinTests(QuerySanityTests):
         self.run_cbq_query(upsert2)
         query = 'SELECT d2.* FROM (SELECT c2, MAX(c1) AS c1 FROM default AS d WHERE d.c1 > 0 GROUP BY c2) AS d1 JOIN default d2 ON d1.c2 = d2.c2 AND d1.c1 = d2.c1'
         self.run_cbq_query(query)
+
+    # MB-63947
+    def test_leftjoin_subquery(self):
+        left_join = 'SELECT c1.c11, sub.c32 FROM default.s1.c1 LEFT JOIN ( SELECT c2.c21, c3.c32 FROM default.s1.c2 LEFT JOIN default.s1.c3 ON c2.c22 = c3.c32 ) AS sub ON c1.c11 = sub.c21 WHERE c1.c11 > 0 ORDER BY c1.c11, sub.c32'
+        index1 = 'CREATE INDEX ix1 ON default.s1.c1(c11, c12)'
+        index2 = 'CREATE INDEX ix2 ON default.s1.c2(c21 INCLUDE MISSING)'
+        index3 = 'CREATE INDEX ix3 ON default.s1.c3(c32, c31)'
+        insert1 = 'INSERT INTO default.s1.c1 (key _k, value _v) SELECT "k1" || lpad(tostring(i), 3, "0") as _k, {"c11": i, "c12": i+10, "s11": lpad(tostring(i), 1024, "0"), "s12": lpad(tostring(i), 1024, "0")} as _v FROM array_range(0,3) as i'
+        insert2 = 'INSERT INTO default.s1.c2 (key _k, value _v) SELECT "k2" || lpad(tostring(i), 3, "0") as _k, {"c21": i, "c22": i+20, "s21": lpad(tostring(i), 1024, "0"), "s22": lpad(tostring(i), 1024, "0")} as _v FROM array_range(0,5) as i'
+        insert3 = 'INSERT INTO default.s1.c3 (key _k, value _v) SELECT "k3" || lpad(tostring(i), 4, "0") as _k, {"c31": i, "c32": IMod(i,211), "s31": lpad(tostring(i), 1024, "0"), "s32": lpad(tostring(i), 1024, "0")} as _v FROM array_range(0,1005) as i'
+        # create scope and collections
+        self.run_cbq_query('CREATE SCOPE default.s1 IF not exists')
+        self.sleep(3)
+        self.run_cbq_query('CREATE COLLECTION default.s1.c1 IF not exists')
+        self.run_cbq_query('CREATE COLLECTION default.s1.c2 IF not exists')
+        self.run_cbq_query('CREATE COLLECTION default.s1.c3 IF not exists')
+        # insert documents
+        self.run_cbq_query(insert1)
+        self.run_cbq_query(insert2)
+        self.run_cbq_query(insert3)
+        # create indexes
+        self.run_cbq_query(index1)
+        self.run_cbq_query(index2)
+        self.run_cbq_query(index3)
+        # run query
+        expected = [
+            {"c11": 1,"c32": 21},
+            {"c11": 1,"c32": 21},
+            {"c11": 1,"c32": 21},
+            {"c11": 1,"c32": 21},
+            {"c11": 1,"c32": 21},
+            {"c11": 2,"c32": 22},
+            {"c11": 2,"c32": 22},
+            {"c11": 2,"c32": 22},
+            {"c11": 2,"c32": 22},
+            {"c11": 2,"c32": 22}
+        ]
+        result = self.run_cbq_query(left_join)
+        self.assertEqual(result['results'], expected)
