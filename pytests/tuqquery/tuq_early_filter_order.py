@@ -528,12 +528,12 @@ class QueryEarlyFilterTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query, query_context='default:`travel-sample`.inventory')
             self.assertTrue("ix_landmark_city_name_2" in str(explain_plan),
                             f"Query is not using the correct index! check explain plan {explain_plan}")
-            self.assertTrue("index_keys" in str(explain_plan),
-                            f"We expect early filter to take place here but it does not, please check plan {explain_plan}")
-            self.assertTrue("'_index_key ((`landmark`.`city`))'" in str(explain_plan),
-                            f"The wrong key is being early filtered! please check explain plan {explain_plan}")
+            self.assertTrue("index_keys" not in str(explain_plan),
+                            f"We expect early filter not to take place here but it does, please check plan {explain_plan}")
+            self.assertTrue("'_index_key ((`landmark`.`city`))'" not in str(explain_plan),
+                            f"The key is being early filtered! please check explain plan {explain_plan}")
             self.assertTrue("'_index_key ((`landmark`.`name`))'" not in str(explain_plan),
-                            f"The wrong key is being early filtered! please check explain plan {explain_plan}")
+                            f"The key is being early filtered! please check explain plan {explain_plan}")
             # we need to make sure the order is being applied in the correct sequence idx -> order -> offset -> fetch
             self.assertTrue(explain_plan['results'][0]['plan']['~children'][1]['#operator'] == 'Order', f"Order is not being applied after fetch, it should be. please check explain plan {explain_plan}")
 
