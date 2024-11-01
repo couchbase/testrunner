@@ -61,6 +61,18 @@ class QuerySanityTests(QueryTests):
     #   SIMPLE CHECKS
     ##############################################################################################
 
+    def test_MB63998(self):
+        self.run_cbq_query(query='UPSERT INTO default VALUES("k01", {"c1":10, "c3":30})')
+        self.run_cbq_query(query='CREATE INDEX ix100 ON default (c1,IFMISSING(c2,"abc"), c2, c3)')
+        explain_results = self.run_cbq_query(query= 'EXPLAIN SELECT META().id '
+                                           'FROM default '
+                                           'WHERE c1 = 10 AND IFMISSING(c2,"abc") > "" AND c3 = 30')
+        self.assertTrue( "'low': 'null'" not in str(explain_results), f"Null should not be in the explain plan attached to c2 please check {explain_results}")
+        results = self.run_cbq_query(query='SELECT META().id '
+                                           'FROM default '
+                                           'WHERE c1 = 10 AND IFMISSING(c2,"abc") > "" AND c3 = 30')
+        self.assertEqual(results['results'],[{'id': 'k01'}])
+
     def test_error_message_collections_full(self):
         try:
             self.run_cbq_query(query="SELECT * FROM default:default.test.tes")
