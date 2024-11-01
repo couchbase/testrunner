@@ -1,5 +1,6 @@
 import logging
 import random
+from dateutil import parser
 
 from .tuq import QueryTests
 
@@ -375,3 +376,20 @@ class DateTimeFunctionClass(QueryTests):
             with self.subTest(f'Date part: {date_part}'):
                 result = self.run_cbq_query(f"SELECT DATE_TRUNC_STR('{date}', '{date_part}')")
                 self.assertEqual(result['results'][0]['$1'], expected[date_part], f"Failed to truncate to {date_part}. We got {result['results'][0]['$1']} instead of {expected[date_part]}")
+
+    def test_str_utc_minus(self):
+        date = '2024-09-01T08:32:56.123'
+        result = self.run_cbq_query(f"SELECT STR_TO_UTC('{date}-02:00') d1, STR_TO_UTC('{date}-01:00') d2, STR_TO_UTC('{date}+00:00') d3, STR_TO_UTC('{date}+01:00') d4")
+        dates = result['results'][0]
+        date1 = parser.parse(dates["d1"])
+        date2 = parser.parse(dates["d2"])
+        date3 = parser.parse(dates["d3"])
+        date4 = parser.parse(dates["d4"])
+        self.log.info(f"date1: {date1}, date2: {date2} and date3: {date3}")
+        td1 = date1 - date2
+        td2 = date2 - date3
+        td3 = date3 - date4
+        # check difference between dates is 1 hour
+        self.assertEqual(td1.total_seconds()/3600, 1.0)
+        self.assertEqual(td2.total_seconds()/3600, 1.0)
+        self.assertEqual(td3.total_seconds()/3600, 1.0)
