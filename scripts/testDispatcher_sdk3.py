@@ -1,5 +1,6 @@
 import base64
 import logging
+import os
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -15,6 +16,7 @@ import ipaddress
 import subprocess
 import configparser
 
+import requests
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster, ClusterOptions
 import get_jenkins_params
@@ -493,17 +495,29 @@ def main():
                         else:
                             jenkins_server_url = options.jenkins_server_url
 
-                        if not repo_pulled:
-                            if options.branch != "master":
-                                try:
-                                    subprocess.run(["git", "checkout", "origin/" + options.branch, "--", data['config']], check=True)
-                                except Exception:
-                                    print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
-                            try:
-                                subprocess.run(["git", "pull"], check=True)
-                            except Exception:
-                                print("Git pull failed !!!")
-                            repo_pulled = True
+                        # Get ini file from the target repo/branch
+                        raw_github_url = "https://raw.githubusercontent.com"
+                        if framework == "testrunner":
+                            raw_github_url += f"/couchbase/testrunner/refs/heads/{options.branch}/{data['config']}"
+                        elif framework == "TAF":
+                            raw_github_url += f"/couchbaselabs/TAF/refs/heads/{options.branch}/{data['config']}"
+                        else:
+                            raise Exception(
+                                f"Unsupported framework: {framework}")
+
+                        # Create dir structure similar to the one given
+                        # This avoids maintaining ini paths locally
+                        ini_dir = "/".join(data["config"].split('/')[:-1])
+                        os.makedirs(ini_dir, exist_ok=True)
+
+                        # Create the ini file as similar to the one existing in the target repo
+                        response = requests.get(raw_github_url)
+                        if response.status_code == 200:
+                            with open(data['config'], "w") as fp:
+                                fp.write(response.text)
+                        else:
+                            raise Exception(
+                                f"Get file failed. Code: {response.status_code}")
 
                         addPoolId = options.addPoolId
 
