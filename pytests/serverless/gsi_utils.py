@@ -386,7 +386,7 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("colorRGBVector",
                                                                                "year > 1980 OR "
                                                                                "fuel = 'Diesel' ",
-                                                                               scan_desc_vec_2),
+                                                                               scan_color_vec_1),
                             include_fields=['fuel', 'year']))
         # Partial Indexes
         definitions_list.append(
@@ -395,7 +395,7 @@ class GSIUtils(object):
                             index_where_clause='rating > 3',
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("description, colorRGBVector",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("descriptionVector",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
                                                                                scan_desc_vec_2),
