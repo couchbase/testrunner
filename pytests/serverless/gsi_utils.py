@@ -382,7 +382,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'includeBhive',
                             index_fields=['colorRGBVector VECTOR'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, missing_indexes=True, missing_field_desc=True,
+                            train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("colorRGBVector",
                                                                                "year > 1980 OR "
                                                                                "fuel = 'Diesel' ",
