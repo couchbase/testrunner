@@ -2168,6 +2168,7 @@ class CouchbaseCluster:
         self.__bypass_fts_nodes = []
         self.__bypass_n1ql_nodes = []
         self.capella_run = TestInputSingleton.input.param("capella_run", False)
+        self.modify_memory_quotas = TestInputSingleton.input.param("modify_memory_quotas", False)
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
@@ -2183,8 +2184,15 @@ class CouchbaseCluster:
 
     def __set_fts_ram_quota(self):
         fts_quota = TestInputSingleton.input.param("fts_quota", None)
+        kv_quota = TestInputSingleton.input.param("kv_mem", None)
         if fts_quota:
-            RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
+            if self.modify_memory_quotas:
+                if kv_quota:
+                    RestConnection(self.__master_node).modify_memory_quota(kv_quota = int(kv_quota), fts_quota = fts_quota)
+                else:
+                    RestConnection(self.__master_node).modify_memory_quota(fts_quota = fts_quota)
+            else:
+                RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
 
     def get_node(self, ip, port):
         for node in self.__nodes:
@@ -4045,7 +4053,7 @@ class FTSBaseTest(unittest.TestCase):
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
         self.num_index_partitions = TestInputSingleton.input.param("num_partitions", 1)
-        self.skip_partition_validation = TestInputSingleton.input.param("skip_partition_validation", True)
+        self.skip_partition_validation = TestInputSingleton.input.param("skip_partition_validation", False)
 
         if self.capella_run and CbServer.capella_cluster_id is None:
             self.capella_servers_setup()
@@ -6579,9 +6587,9 @@ class FTSBaseTest(unittest.TestCase):
 
     def load_vector_data(self, containers, dataset, load_invalid_vecs=False, invalid_vecs_dims=128, use_cbimport=True,
                          percentages_to_resize=[], dims_to_resize=[],
-                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',python_loader_toggle = True,provideDefaultDocs = True):
-
-
+                         iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
+                         python_loader_toggle=True, provideDefaultDocs=True,
+                         start_key=0):
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6602,74 +6610,78 @@ class FTSBaseTest(unittest.TestCase):
                                               self.encode_base64_vector,
                                               load_invalid_vecs=load_invalid_vecs, invalid_vecs_dims=invalid_vecs_dims)
                         govl.load_data(container_name)
-                    else:
-                        if python_loader_toggle:
-                            vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
-                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset, self.capella_run, False,
-                                              use_cbimport=use_cbimport,
-                                              dims_for_resize=dims_to_resize,
-                                              percentages_to_resize=percentages_to_resize,
-                                              iterations=iterations,
-                                              update=update,
-                                              faiss_indexes=faiss_indexes,
-                                              faiss_index_node=faiss_index_node)
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            vl.load_data(container_name)
+                    if python_loader_toggle:
+                        vl = VectorLoader(self.master, self._input.membase_settings.rest_username,
+                                          self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                          collection_name, dataset, self.capella_run, False,
+                                          use_cbimport=use_cbimport,
+                                          dims_for_resize=dims_to_resize,
+                                          percentages_to_resize=percentages_to_resize,
+                                          iterations=iterations,
+                                          update=update,
+                                          faiss_indexes=faiss_indexes,
+                                          faiss_index_node=faiss_index_node,
+                                          start_key=start_key)
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        vl.load_data(container_name)
 
-                        if self.store_in_xattr and self.encode_base64_vector:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
-
-
-                        elif self.store_in_xattr:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], True, "vect", 0, ei,
-                                                  self.encode_base64_vector, percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
-
-                        elif self.encode_base64_vector:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], False, "vect", 0, ei, True,
-                                                  percentages_to_resize, dims_to_resize,provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
+                    if self.store_in_xattr and self.encode_base64_vector:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
                         else:
-                            container_name = self.generate_random_container_name()
-                            self.docker_containers.append(container_name)
-                            if dataset[0] == "sift":
-                                ei = 1000000
-                            else:
-                                ei = 10000
-                            govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
-                                                  self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                                  collection_name, dataset[0], False, "vect", 0, ei, False,
-                                                  percentages_to_resize, dims_to_resize,
-                                                  provideDefaultDocs=provideDefaultDocs)
-                            govl.load_data(container_name)
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              self.encode_base64_vector, percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+
+
+                    elif self.store_in_xattr:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              self.encode_base64_vector, percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+
+                    elif self.encode_base64_vector:
+                        print("self.encode_base64_vector", self.encode_base64_vector)
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], False, "vect", 0, ei, True,
+                                              percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+                    else:
+                        container_name = self.generate_random_container_name()
+                        self.docker_containers.append(container_name)
+                        if dataset[0] == "sift":
+                            ei = 1000000
+                        else:
+                            ei = 10000
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], False, "vect", 0, ei, False,
+                                              percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
 
         return bucketvsdataset
 
@@ -6747,7 +6759,6 @@ class FTSBaseTest(unittest.TestCase):
                         ds.train_vecs[index] = vector[:dimension]
 
             self.log.info(f"Length of first doc vector to be added to faiss: {len(ds.train_vecs[0])}")
-
             if index_type == "IndexFlatL2":
                 faiss_index = faiss.IndexFlatL2(len(ds.train_vecs[0]))
             else:
@@ -6845,13 +6856,12 @@ class FTSBaseTest(unittest.TestCase):
 
     def validate_partition_distribution(self, rest):
         ###TODO : validate that replica parititons and active paritions reside in different server groups if any
-
         if self.skip_partition_validation:
             return []
 
         _, payload = rest.get_cfg_stats()
         fts_nodes = self._cb_cluster.get_fts_nodes()
-        print(f"FTS NODES: {fts_nodes}")
+        self.log.info(f"FTS NODES: {fts_nodes}")
 
         _, payload = rest.get_cfg_stats()
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
@@ -6879,15 +6889,15 @@ class FTSBaseTest(unittest.TestCase):
 
         actual_partition_count = sum(node_active_count.values()) + sum(node_replica_count.values())
 
-        print("Actives:")
+        self.log.info("Actives:")
         for k, v in node_active_count.items():
-            print(f"\t{node_defs_known[k]} : {v}")
+            self.log.info(f"\t{node_defs_known[k]} : {v}")
 
-        print("Replicas:")
+        self.log.info("Replicas:")
         for k, v in node_replica_count.items():
-            print(f"\t{node_defs_known[k]} : {v}")
+            self.log.info(f"\t{node_defs_known[k]} : {v}")
 
-        print(f"Actual number of index partitions in cluster: {actual_partition_count}")
+        self.log.info(f"Actual number of index partitions in cluster: {actual_partition_count}")
 
         try:
             indexes_map = {}
@@ -6905,28 +6915,28 @@ class FTSBaseTest(unittest.TestCase):
                     curr_replica_partitions = curr_active_partitions * num_rep
                     expected_partition_count += curr_active_partitions + curr_replica_partitions
 
-            print(f"Expected number of index partitions in cluster: {expected_partition_count}")
-            print(f"Indexes: {len(indexes_map)}")
+            self.log.info(f"Expected number of index partitions in cluster: {expected_partition_count}")
+            self.log.info(f"Indexes: {len(indexes_map)}")
         except Exception as ex:
-            print(ex)
+            self.log.error(ex)
 
         pindexes_count = []
         for k, v in indexes_map.items():
-            print(f"\t{k} :: {v}")
+            self.log.info(f"\t{k} :: {v}")
             parts = v.split(", ")
             for part in parts:
                 if part.startswith("indexPartitions"):
                     index_partitions = part.split(": ")[1]
                     pindexes_count.append(index_partitions)
-        print("Index actives distribution:")
+        self.log.info("Index actives distribution:")
         error = []
         count = 0
         for k, v in index_active_count.items():
-            print(f"\tIndex: {k}")
+            self.log.info(f"\tIndex: {k}")
             index_distribution = []
             current_partition_count = 0
             for k1, v1 in v.items():
-                print(f"\t\t{node_defs_known[k1]} : {v1}")
+                self.log.info(f"\t\t{node_defs_known[k1]} : {v1}")
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
             if current_partition_count != int(pindexes_count[count]):
@@ -6940,14 +6950,14 @@ class FTSBaseTest(unittest.TestCase):
                 error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
         if num_rep != 0:
-            print("Index replicas distribution:")
+            self.log.info("Index replicas distribution:")
             count = 0
             for k, v in index_replica_count.items():
-                print(f"\tIndex: {k}")
+                self.log.info(f"\tIndex: {k}")
                 index_distribution = []
                 current_partition_count = 0
                 for k1, v1 in v.items():
-                    print(f"\t\t{node_defs_known[k1]} : {v1}")
+                    self.log.info(f"\t\t{node_defs_known[k1]} : {v1}")
                     index_distribution.append(int(v1))
                     current_partition_count += int(v1)
                 if current_partition_count != int(pindexes_count[count]):
@@ -6959,4 +6969,6 @@ class FTSBaseTest(unittest.TestCase):
                 if index_distribution != self.get_ideal_index_distribution(current_partition_count, len(v)):
                     error.append(f'index {k} has faulty distribution. index distribution : {index_distribution}')
 
+        if len(error) != 0:
+            self.log.info(payload)
         return error

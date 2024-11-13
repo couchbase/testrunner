@@ -514,17 +514,24 @@ class RestConnection(object):
                 return True
         return False
 
-    def is_enterprise_edition(self):
+    def is_enterprise_edition(self, retry_count = 3):
         http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
         if http_res == 'unknown pool':
             return False
         editions = []
         community_nodes = []
-        """ get the last word in node["version"] as in "version": "2.5.1-1073-rel-enterprise" """
-        for node in http_res["nodes"]:
-            editions.extend(node["version"].split("-")[-1:])
-            if "community" in node["version"].split("-")[-1:]:
-                community_nodes.extend(node["hostname"].split(":")[:1])
+        for _ in range(retry_count):
+            """ get the last word in node["version"] as in "version": "2.5.1-1073-rel-enterprise" """
+            try:
+                for node in http_res["nodes"]:
+                    editions.extend(node["version"].split("-")[-1:])
+                    if "community" in node["version"].split("-")[-1:]:
+                        community_nodes.extend(node["hostname"].split(":")[:1])
+                break
+            except Exception as err:
+                log.error(f"Error getting response : {str(err)}. Retrying...")
+                time.sleep(10)
+                retry_count+=1
         if "community" in editions:
             log.error("IP(s) for node(s) with community edition {0}".format(community_nodes))
             return False
@@ -3753,7 +3760,7 @@ class RestConnection(object):
         return status
 
     @not_for_capella
-    def modify_memory_quota(self, kv_quota=512,index_quota=400,fts_quota=600,cbas_quota=1024,eventing_quota=256):
+    def modify_memory_quota(self, kv_quota=512,index_quota=256,fts_quota=2000,cbas_quota=1024,eventing_quota=256):
         api = self.baseUrl + "pools/default"
         params = urllib.parse.urlencode({"memoryQuota": kv_quota, "indexMemoryQuota":index_quota,"ftsMemoryQuota":fts_quota,"cbasMemoryQuota":cbas_quota,"eventingMemoryQuota":eventing_quota})
         headers = self._create_headers()
@@ -3769,6 +3776,14 @@ class RestConnection(object):
             raise Exception("Error setting the RAM quota for each services")
         return status
 
+
+    @not_for_capella
+    def delete_docs(self,node_ip,key,bucket = "default", scope = "_default", collection = "_default",prefix = "emp"):
+        api = self.baseUrl + "pools/default/buckets/{0}/scopes/{1}/collections/{2}/docs/{3}".format(bucket,scope,collection,prefix) + str(key)
+        status, content, header = self.urllib_request(
+            api,
+            verb='DELETE')
+        return status
 
 
     def set_maxConcurrentPartitionMovesPerNode(self, value):

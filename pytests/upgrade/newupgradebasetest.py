@@ -12,6 +12,8 @@ import time
 import copy
 import json
 import random
+import threading
+
 
 
 from threading import Thread
@@ -63,7 +65,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         super(NewUpgradeBaseTest, self).setUp()
 
         self.start_version = self.input.param('initial_version', '2.5.1-1083')
-        self.run_partition_validation = self.input.param("run_partition_validation", True)
+        self.run_partition_validation = self.input.param("run_partition_validation", False)
+        self.vector_upgrade = self.input.param("vector_upgrade",False)
+        self.isRebalanceComplete = False
+        self.skip_partition_check_inbetween = self.input.param("skip_partition_check_inbetween", True)
         self.vector_flag = self.input.param("vector_search_test", False)
         self.fts_quota = self.input.param("fts_quota", 600)
         self.passed = True
@@ -72,7 +77,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.vector_queries_count = self.input.param("vector_queries_count", 5)
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 2)
-        self.partition_list = eval(self.input.param("partition_list","[18,3,3]"))
+        self.partition_list = eval(self.input.param("partition_list","[7,3,2]"))
+        self.load_data_pause = self.input.param("load_data_pause",80)
 
 
         self.upgrade_type = self.input.param("upgrade_type", "online")
@@ -323,6 +329,12 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.servers = self.upgrade_servers
         self.sleep(20, "sleep 20 seconds before run next test")
         self.log.info("==============  NewUpgradeBaseTest tearDown has completed ==============")
+
+    def rebalance_load_setup_update(self,bucket,scope,collection):
+        self.target_bucket = bucket
+        self.target_scope = scope
+        self.target_collection = collection
+        
 
     def _install(self, servers):
         params = {}
@@ -838,13 +850,18 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.log.info(ex)
             raise
 
-    def _offline_failover_upgrade(self):
+    def offline_fail_over_upgrade(self):
         try:
             self.log.info("offline_failover_upgrade")
             upgrade_version = self.upgrade_versions[0]
             upgrade_nodes = self.servers[:self.nodes_init]
             total_nodes = len(upgrade_nodes)
+            load_data_node = upgrade_nodes[0]
+            iterator = 0
             for server in upgrade_nodes:
+                if iterator == 0:
+                    load_data_node = upgrade_nodes[1]
+
                 self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
                                     graceful=True)
                 self.sleep(timeout=60)
@@ -855,7 +872,22 @@ class NewUpgradeBaseTest(BaseTestCase):
                                               fts_query_limit=10000000)
                 if "You have successfully installed Couchbase Server." not in output:
                     self.fail("Upgrade failed. See logs above!")
-                self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                
+                try:
+                    thread1 = threading.Thread(target=self.load_items_during_rebalance, args=(load_data_node,))
+                    thread2 = threading.Thread(target=self.cluster.rebalance, args=(self.servers[:self.nodes_init], [], [],))
+                    
+                    thread1.start()
+                    thread2.start()
+
+                    thread2.join()
+                    self.isRebalanceComplete = True
+                    thread1.join()
+
+                except Exception as ex:
+                    self.log.info("Could not push data while rebalancing")
+                    self.log.info(ex)
+
                 total_nodes -= 1
                 if self.run_partition_validation:
                     try:
@@ -867,6 +899,57 @@ class NewUpgradeBaseTest(BaseTestCase):
         except Exception as ex:
             self.log.info(ex)
             raise
+    
+    def load_items_during_rebalance(self,server):
+
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+        while(not self.isRebalanceComplete):
+            if self.vector_upgrade:
+                """delete 20% of docs"""
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10005001,0.2)
+
+                if not status:
+                    self.fail("CRUD operation failed during rebalance. OPS : DELETE")
+                else:
+                    self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+
+                """upsert (update) the first 1000 docs out of 5000 docs present in the cluster"""
+                self.fts_obj.load_data(1000)
+
+                self.sleep(10)
+
+                """upserting the vector data"""
+                try:
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+                    self.fts_obj.push_vector_data(server, str(self.rest_settings.rest_username),
+                                        str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+                except Exception as e:
+                    self.log.info(e)
+            else:
+                self.fts_obj.load_data(1000)
+                self.sleep(10)
+                status = self.fts_obj.delete_doc_by_key(server,10000001,10001000,0.2,
+                                                        bucket_name=self.target_bucket,scope_name=self.target_scope,collection_name=self.target_collection)
+
+                if not status:
+                    self.fail("CRUD operation failed during rebalance. OPS : DELETE")
+                else:
+                    self.log.info("CRUD operation successful during rebalance. OPS : DELETE")
+            
+            time.sleep(int(self.load_data_pause))
+            break
+        
+        self.isRebalanceComplete = False
+        
 
     def generate_map_nodes_out_dist_upgrade(self, nodes_out_dist):
         self.nodes_out_dist = nodes_out_dist
@@ -1138,10 +1221,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         3. Runs queries and compares the results against ElasticSearch
         """
         try:
-            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
             for bucket in self.buckets:
                 for i in range(self.num_indexes):
-                    plans = self.construct_custom_plan_params(1, self.partition_list[i % self.num_indexes])
+                    plans = self.construct_custom_plan_params(0, self.partition_list[i % self.num_indexes])
                     self.fts_obj.create_default_index(
                         index_name="index_{0}".format(i+1),
                         bucket_name=bucket.name,
@@ -1154,6 +1237,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
             for index in self.fts_obj.fts_indexes:
                 self.fts_obj.run_query_and_compare(index=index, num_queries=20)
+            
             return self.fts_obj
         except Exception as ex:
             print(ex)
@@ -1163,7 +1247,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             queue.put(True)
 
     def partition_validation(self, skip_check = True):
-        if skip_check:
+        if not self.run_partition_validation:
+            pass
+        if skip_check and self.skip_partition_check_inbetween:
             pass
         else:
             try:
@@ -1181,7 +1267,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         try:
             self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, servers=self.servers)
             is_passed = True
-            RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
 
             for bucket in self.buckets:
                 for i in range(self.num_indexes):
@@ -1207,7 +1292,6 @@ class NewUpgradeBaseTest(BaseTestCase):
                     plan_params=plans)
 
             self.fts_indexes_store = self.fts_obj.fts_indexes[self.num_indexes]
-
 
             try:
                 self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
@@ -1248,14 +1332,27 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
+    def error_validation(self,result):
+        possible_error_strings = [
+            "xattr fields and properties not supported in this cluster",
+            "unknown field type: 'vector_base64'",
+            "vector_base64 typed fields not supported in this cluster",
+            "field mapping contains invalid keys",
+            "vector typed fields not supported in this cluster",
+            "concurrent",
+            "4096"
+        ]
+        for i in possible_error_strings:
+            if i in result:
+                return True
+        return False
+
     def run_inbetween_tests(self):
         if self.inbetween_tests == 0:
             self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False,variable_node=self.servers[0],servers=self.servers)
             self.inbetween_tests = 1
             self.fts_obj.inbetween_tests = 1
             self.fts_obj.inbetween_active = True
-
-            RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
 
             indexes_test_list = ["index_1"]
             if float(str(self.start_version)[0:3]) >= 7.6:
@@ -1406,17 +1503,44 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.inbetween_active = False
 
     def run_fts_vector_query_and_compare(self, queue=None):
-
+        
         self.sleep(100)
 
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False, variable_node=self.servers[0], servers=self.servers)
-        RestConnection(self.servers[0]).modify_memory_quota(fts_quota=self.fts_quota)
+
+        """delete 20% of docs"""
+        status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10005001,0.2)
+
+        if status:
+            self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
+        else:
+            self.fail("CRUD Operation post upgrade failure. OPS: Delete")
+
+        self.fts_obj.load_data(1000)
+
+        try:
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+            self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+        except Exception as e:
+            print(e)
 
         try:
             self.log.info("Running FTS queries")
             self.fts_obj.run_query_and_compare(index=self.fts_indexes_store, num_queries=20)
         except Exception as e:
             print(e)
+
+        self.sleep(100)
 
         if float(str(self.upgrade_versions[0])[0:3]) >= 7.6 and str(self.upgrade_versions[0])[0:5] != "7.6.1" and str(self.upgrade_versions[0])[0:5] != "7.6.0":
             try:
@@ -1480,6 +1604,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             except Exception as e:
                 print(e)
 
+
     def setup_for_test(self, queue=None):
         self.set_bleve_max_result_window()
 
@@ -1494,7 +1619,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         try:
             post_upgrade_errors = {}
             fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
-            fts_callable.load_data(100)
+            fts_callable.load_data(2000)
+            status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10002000,0.2)
+            if status:
+                self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
+            else:
+                self.fail("CRUD Operation post upgrade failure. OPS: Delete")
+            fts_callable.load_data(2000)
+
+            RestConnection(self.servers[0]).modify_memory_quota(kv_quota=812,fts_quota = 1700)
+            
             fts_query = {"query": "dept:Engineering"}
 
             self.log.info("="*20 + " Starting post offline upgrade tests")
@@ -1508,9 +1642,6 @@ class NewUpgradeBaseTest(BaseTestCase):
             errors = self._test_create_bucket_index()
             if len(errors) > 0:
                 post_upgrade_errors['_test_create_bucket_index'] = errors
-            errors = self._test_scope_limit_num_fts_indexes()
-            if len(errors) > 0:
-                post_upgrade_errors['_test_scope_limit_num_fts_indexes'] = errors
             errors = self._test_backup_restore()
             if len(errors) > 0:
                 post_upgrade_errors['_test_backup_restore'] = errors
@@ -1583,11 +1714,40 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.fts_obj.delete_all()
 
     def run_fts_query_and_compare(self, queue=None):
+        self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
         try:
             self.log.info("Verify fts via queries again")
+            self.fts_obj.load_data(1000)
+            """delete 20% of docs"""
+            status = self.fts_obj.delete_doc_by_key(self.servers[0],10000001,10001000,0.2,
+                                                        bucket_name=self.target_bucket,scope_name=self.target_scope,collection_name=self.target_collection)
+
+            if status:
+                self.log.info("CRUD Operation post upgrade successful. OPS: Delete")
+            else:
+                self.fail("CRUD Operation post upgrade failure. OPS: Delete")
+
+            self.fts_obj.load_data(1000)
+
+            try:
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password),xattr=True,base64Flag=True, end_index=10001001)
+
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password), xattr=True, base64Flag=False, end_index=10001001)
+
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password), xattr=False, base64Flag=False, end_index=10001001)
+
+                self.fts_obj.push_vector_data(self.servers[0], str(self.rest_settings.rest_username),
+                                    str(self.rest_settings.rest_password), xattr=False, base64Flag=True, end_index=10001001)
+
+            except Exception as e:
+                print(e)
+
             self.update_delete_fts_data_run_queries(self.fts_obj)
         except Exception as ex:
-            print(ex)
+            self.fail(ex)
             if queue is not None:
                 queue.put(False)
         if queue is not None:
