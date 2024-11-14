@@ -69,7 +69,7 @@ class OnPremBaseTestCase(unittest.TestCase):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(level=getattr(logging, self.log_level))
+                    hd.setLevel(level=getattr(logging, self.log_level.upper()))
         self.cluster_config = None
         self.servers = self.input.servers
         self.buckets = []
