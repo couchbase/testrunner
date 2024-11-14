@@ -61,13 +61,14 @@ class BaseTestCase(unittest.TestCase):
         self.primary_index_created = False
         self.use_sdk_client = self.input.param("use_sdk_client", False)
         self.analytics = self.input.param("analytics", False)
-        if self.input.param("log_level", None):
+        log_level = self.input.param("log_level", None)
+        if log_level:
             self.log.setLevel(level=0)
             for hd in self.log.handlers:
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(level=getattr(logging, self.input.param("log_level", None)))
+                    hd.setLevel(level=getattr(logging, log_level.upper()))
         self.servers = self.input.servers
         self.buckets = []
         self.bucket_base_params = {'membase': {}}
