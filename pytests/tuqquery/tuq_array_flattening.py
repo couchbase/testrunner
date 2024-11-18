@@ -485,8 +485,10 @@ class QueryArrayFlatteningTests(QueryTests):
             self.assertTrue(False, diffs)
 
     def test_flatten_or(self):
+        self.run_cbq_query(query='DROP INDEX `default`.`#primary` IF EXISTS USING GSI')
         self.run_cbq_query(
             query="CREATE INDEX idx1 ON default(public_likes, DISTINCT ARRAY flatten_keys(r.ratings.Cleanliness,r.ratings.Rooms,r.author) FOR r IN reviews END, free_parking)")
+        self.run_cbq_query(query='CREATE PRIMARY INDEX ON default')
 
         query = "SELECT * FROM default AS d UNNEST d.public_likes p WHERE p " \
                 "LIKE 'R%' AND ANY r IN d.reviews SATISFIES r.author LIKE '%m' AND " \
@@ -494,7 +496,7 @@ class QueryArrayFlatteningTests(QueryTests):
         primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) UNNEST d.public_likes p WHERE p " \
                         "LIKE 'R%' AND ANY r IN d.reviews SATISFIES r.author LIKE '%m' AND " \
                         "(r.ratings.Cleanliness >= 1 OR r.ratings.Rooms <= 3) END OR d.free_parking = TRUE"
-
+        self.sleep(30)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
         self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
