@@ -249,6 +249,7 @@ class EventingBaseTest(QueryHelperTests):
         body['function_scope'] = self.function_scope
         content1 = self.rest.create_function(body['appname'], body, self.function_scope, username, password)
         self.log.info("saving function {}".format(content1))
+        self.wait_for_handler_state(body['appname'], "undeployed")
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=120):
