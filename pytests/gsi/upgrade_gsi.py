@@ -40,6 +40,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
         self.upgrade_to = self.input.param("upgrade_to")
+        self.single_index_node = self.input.param("single_index_node", True)
         self.index_batch_size = self.input.param("index_batch_size", -1)
         self.drop_all_indexes = self.input.param("drop_all_indexes", True)
         self.toggle_disable_upgrade = self.input.param("toggle_disable_upgrade", False)
@@ -1898,6 +1899,87 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         self.capture_lsof_output_of_indexer()
 
+    def test_offline_online_swap_upgrade_shard_dealer(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        collection_namespace = self.namespaces[0]
+        if self.index_load_three_pass == "soft_limit":
+            scalar_idx_1 = QueryDefinition(index_name='scalar_rgb', index_fields=['color'],
+                                           partition_by_fields=['meta().id'])
+            scalar_query_1 = scalar_idx_1.generate_index_create_query(namespace=collection_namespace, num_partition=3)
+            scalar_idx_2 = QueryDefinition(index_name='scalar_fuel', index_fields=['fuel'],
+                                           partition_by_fields=['meta().id'])
+            scalar_query_2 = scalar_idx_2.generate_index_create_query(namespace=collection_namespace, num_partition=10)
+            for query in [scalar_query_1, scalar_query_2]:
+                self.run_cbq_query(query=query, server=self.n1ql_node)
+
+        elif self.index_load_three_pass == "shard_capacity":
+            #for multi node tests the shard capacity is just an indicative shard capacity not the the actual shard capacity
+            scalar_idx_1 = QueryDefinition(index_name='scalar_rgb', index_fields=['color'])
+            scalar_query_1 = scalar_idx_1.generate_index_create_query(namespace=collection_namespace)
+            scalar_idx_2 = QueryDefinition(index_name='scalar_fuel', index_fields=['fuel'],
+                                           partition_by_fields=['meta().id'])
+            scalar_query_2 = scalar_idx_2.generate_index_create_query(namespace=collection_namespace, num_partition=4, num_replica=self.num_index_replica)
+            scalar_idx_3 = QueryDefinition(index_name='scalar_manufacturer', index_fields=['manufacturer'],
+                                           partition_by_fields=['meta().id'])
+            scalar_query_3 = scalar_idx_3.generate_index_create_query(namespace=collection_namespace, num_partition=4, num_replica=self.num_index_replica)
+            scalar_idx_4 = QueryDefinition(index_name='scalar_manufacturer_1', index_fields=['manufacturer'],
+                                           partition_by_fields=['meta().id'])
+            scalar_query_4 = scalar_idx_4.generate_index_create_query(namespace=collection_namespace, num_partition=36, num_replica=self.num_index_replica)
+            for query in [scalar_query_1, scalar_query_2, scalar_query_3, scalar_query_4]:
+                self.run_cbq_query(query=query, server=self.n1ql_node)
+
+        shard_index_map_before_upgrade = self.get_shards_index_map()
+
+        self.upgrade_and_validate(scan_results_check=False)
+        if self.upgrade_mode == 'offline':
+            cluster_profile = "provisioned"
+            if self.initial_version[:3] == "7.6":
+                cluster_profile = None
+            nodes_to_be_swapped_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+            nodes_to_be_swapped_in = self.servers[self.nodes_init:][:len(nodes_to_be_swapped_out)]
+            upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=nodes_to_be_swapped_in,
+                                            cluster_profile=cluster_profile)
+            for th in upgrade_th:
+                th.join()
+            self.sleep(120)
+            self.log.info("Swapping servers...")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     nodes_to_be_swapped_in,
+                                                     nodes_to_be_swapped_out, services=['index']*len(nodes_to_be_swapped_in))
+
+            rebalance.result()
+
+
+        scalar_idx = QueryDefinition(index_name='scalar_rgb_2', index_fields=['color'],
+                                     partition_by_fields=['meta().id'])
+        scalar_query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_partition=2,
+                                                              defer_build=self.defer_build, num_replica=self.num_index_replica)
+        self.run_cbq_query(query=scalar_query, server=self.n1ql_node)
+
+        shard_index_map_after_upgrade = self.get_shards_index_map()
+
+        #to check if existing shards were used while creating scalar index
+        self.assertEqual(len(shard_index_map_before_upgrade), len(shard_index_map_after_upgrade), f"map before {shard_index_map_before_upgrade}, map after {shard_index_map_after_upgrade}")
+
+        vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'],
+                                     dimension=3,
+                                     description="IVF,PQ3x8", similarity="L2_SQUARED",
+                                     partition_by_fields=['meta().id'])
+        vector_query = vector_idx.generate_index_create_query(namespace=collection_namespace, num_partition=2,
+                                                              defer_build=self.defer_build, num_replica=self.num_index_replica)
+        bhive_idx = QueryDefinition(index_name='bhive_description_2',
+                                    index_fields=['descriptionVector VECTOR'],
+                                    dimension=384, description=f"IVF,PQ32x8",
+                                    similarity="L2_SQUARED", partition_by_fields=['meta().id'])
+        bhive_query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True,
+                                                            num_partition=2,
+                                                            defer_build=self.defer_build, num_replica=self.num_index_replica)
+        for query in [vector_query, bhive_query]:
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+
+        shard_index_map_post_index_creation = self.get_shards_index_map()
+        self.validate_shard_seggregation(shard_index_map=shard_index_map_post_index_creation)
 
     def capture_lsof_output_of_indexer(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -2199,9 +2281,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     if active_node.ip != node.ip:
                         active_nodes.append(active_node)
 
-                self.run_continous_query = True
-                thread = Thread(target=self._run_queries_continously, args=[select_queries])
-                thread.start()
+                if select_queries is not None:
+                    self.run_continous_query = True
+                    thread = Thread(target=self._run_queries_continously, args=[select_queries])
+                    thread.start()
                 if self.upgrade_mode == 'online':
                     self.log.info("Rebalancing the node out...")
                     rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
@@ -2258,7 +2341,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     rebalance.result()
                     node_to_be_swapped_in = node_to_upgrade
                     self.update_master_node()
-                self.run_continous_query = False
+                if select_queries is not None:
+                    self.run_continous_query = False
                 self.sleep(60)
                 if self.upgrade_mode == 'swap_rebalance':
                     #self.rest = self.master

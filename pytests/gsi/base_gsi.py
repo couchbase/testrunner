@@ -68,6 +68,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.bucket_name = self.input.param("bucket_name", "default")
         self.num_scopes = self.input.param("num_scopes", 1)
+        self.index_load_three_pass = self.input.param("index_load_three_pass", "shard_capacity")
         self.num_collections = self.input.param("num_collections", 1)
         self.item_to_delete = self.input.param('item_to_delete', None)
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
@@ -546,6 +547,38 @@ class BaseSecondaryIndexingTests(QueryTests):
             return vector_field, vector
         else:
             raise Exception("no fields extracted")
+
+    def validate_shard_seggregation(self, shard_index_map):
+        index_categories = ['scalar', 'vector', 'bhive']
+        for shard, indices in shard_index_map.items():
+            categories_found = set()
+
+            for index in indices:
+                for category in index_categories:
+                    if category in index:
+                        categories_found.add(category)
+
+            # To check if exactly more than one category is found for this shard
+            self.assertEqual(len(categories_found), 1, f"More than category of index found for the shard specific shard {indices}. The shard mapping to index is {shard_index_map}")
+
+    def get_shards_index_map(self):
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        metadata = rest.get_indexer_metadata()
+        shard_index_map = {}
+        for index_metadata in metadata['status']:
+            if 'alternateShardIds' in index_metadata:
+                for host in index_metadata['alternateShardIds']:
+                    for partition in index_metadata['alternateShardIds'][host]:
+                        shards = index_metadata['alternateShardIds'][host][partition][0][:-2]
+                        if shards in shard_index_map:
+                            shard_index_map[shards].append(index_metadata['indexName'])
+                        else:
+                            shard_index_map[shards] = [index_metadata['indexName']]
+
+        for key, value in shard_index_map.items():
+            shard_index_map[key] = list(set(shard_index_map[key]))
+        return shard_index_map
 
     def _return_maps(self, perNode=False, map_from_index_nodes=False):
         if map_from_index_nodes:
@@ -2718,6 +2751,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.settings.enable_corrupt_index_backup": True})
 
+    def enable_shard_seggregation(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.planner.use_shard_dealer": True})
+
+    def disable_shard_seggregation(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.planner.use_shard_dealer": False})
+
     def enable_corrupt_index_backup(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
@@ -2839,7 +2882,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         max_shard_count = settings['indexer.plasma.shardLimitPerTenant']
         flush_buffer_quota = settings['indexer.plasma.flushBufferQuota']
         mem_quota = self.get_indexer_mem_quota()
-        shard_limit = math.ceil(mem_quota * 0.9 * flush_buffer_quota / 100)
+        shard_limit = math.floor(mem_quota * 0.9 * flush_buffer_quota / 100)
         if shard_limit % 2 != 0:
             shard_limit += 1
         return min(max_shard_count, shard_limit)

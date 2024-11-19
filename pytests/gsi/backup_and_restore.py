@@ -2726,3 +2726,131 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     shell.disconnect()
                 if self.use_cbbackupmgr:
                     backup_client.remove_backup()
+
+    def test_shard_seggregation_backup_restore(self):
+        try:
+            backup_client = None
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+            time.sleep(10)
+            collection_namespace = self.namespaces[0]
+
+            # creating scalar index
+            scalar_idx = QueryDefinition(index_name='scalar_rgb', index_fields=['color'])
+            query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_replica=self.num_index_replica)
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+
+            # creating vector index
+            vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
+                                         description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
+            query = vector_idx.generate_index_create_query(namespace=collection_namespace, num_replica=self.num_index_replica)
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+
+            # creating bhive index
+            bhive_idx = QueryDefinition(index_name='bhive_description',
+                                        index_fields=['descriptionVector VECTOR'],
+                                        dimension=384, description=f"IVF,PQ32x8",
+                                        similarity="L2_SQUARED")
+            query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_replica=self.num_index_replica)
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+
+
+            for bucket in self.buckets:
+                backup_client = IndexBackupClient(self.master,
+                                                  self.use_cbbackupmgr,
+                                                  bucket.name)
+                bucket_collection_namespaces = [
+                    namespace.split(".", 1)[1] for namespace
+                    in self.namespaces
+                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
+                indexes_before_backup = [
+                    index
+                    for index in indexer_stats_before_backup['status']
+                    if bucket.name == index['bucket']
+                       and "{0}.{1}".format(index['scope'], index['collection'])
+                       in bucket_collection_namespaces]
+                self.log.info(f"indexes before backup {indexes_before_backup}")
+                backup_result = backup_client.backup(bucket_collection_namespaces, use_https=self.use_https)
+                self.assertTrue(
+                    backup_result[0],
+                    "backup failed for {0} with {1}".format(
+                        bucket_collection_namespaces, backup_result[1]))
+                self._drop_indexes(indexes_before_backup)
+                self.sleep(60)
+                timeout = 0
+                while timeout <= 360:
+                    index_status = self.index_rest.get_indexer_metadata()['status']
+                    if len(index_status) == 0:
+                        break
+                    else:
+                        timeout = timeout + 1
+                if timeout > 360:
+                    self.fail("timeout reached for index drop to happen")
+                restore_result = backup_client.restore(use_https=self.use_https, restore_args="--auto-create-buckets")
+                self.assertTrue(
+                    restore_result[0],
+                    "restore failed for {0} with {1}".format(
+                        bucket_collection_namespaces, restore_result[1]))
+                self.log.info("Will copy restore log from backup client node to logs folder")
+                logs_path = self.input.param("logs_folder", "/tmp")
+                logs_path_final = os.path.join(logs_path, 'restore.log')
+                backup_log_path_src = os.path.join(backup_client.backup_path, 'logs', 'backup-0.log')
+                shell = RemoteMachineShellConnection(backup_client.backup_node)
+                try:
+                    shell.copy_file_remote_to_local(backup_log_path_src, logs_path_final)
+                    self.log.info("restore log copy complete")
+                except Exception as e:
+                    err_msg = e.__str__()
+                    self.log.error(err_msg)
+                finally:
+                    shell.disconnect()
+                index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+                self.index_rest = RestConnection(index_node)
+                indexer_stats_after_restore = self.index_rest.get_indexer_metadata()
+                indexes_after_restore = [
+                    index
+                    for index in indexer_stats_after_restore['status']
+                    if bucket.name == index['bucket']
+                       and "{0}.{1}".format(index['scope'], index['collection'])
+                       in bucket_collection_namespaces]
+                self._build_indexes(indexes_after_restore)
+                self.wait_until_indexes_online()
+                #doing a swap rebalance operation post restore
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                self.enable_shard_seggregation()
+                self.sleep(20)
+                counter = 0
+                for nodes in index_nodes:
+                    nodes_to_remove = [nodes]
+
+                    nodes_to_add = [self.servers[self.nodes_init+counter]]
+                    task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=nodes_to_add,
+                                                        to_remove=nodes_to_remove, services=['index'])
+                    task.result()
+                    rebalance_status = RestHelper(self.rest).rebalance_reached()
+                    self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+                    self.sleep(10)
+                    counter += 1
+
+
+                shard_index_map = self.get_shards_index_map()
+                self.validate_shard_seggregation(shard_index_map=shard_index_map)
+
+
+        finally:
+            if backup_client:
+                logs_path = self.input.param("logs_folder", "/tmp")
+                logs_path_final = os.path.join(logs_path, 'backup.log')
+                backup_log_path_src = os.path.join(backup_client.backup_path, 'logs', 'backup-0.log')
+                shell = RemoteMachineShellConnection(backup_client.backup_node)
+                self.log.info("Will copy backup log from backup client node to logs folder")
+                try:
+                    shell.copy_file_remote_to_local(backup_log_path_src, logs_path_final)
+                    self.log.info("backup log copy complete")
+                except Exception as e:
+                    err_msg = e.__str__()
+                    self.log.error(err_msg)
+                finally:
+                    shell.disconnect()
+                if self.use_cbbackupmgr:
+                    backup_client.remove_backup()
