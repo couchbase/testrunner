@@ -8546,3 +8546,25 @@ class QueriesIndexTests(QueryTests):
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+
+    def test_include_keyword(self):
+        index_name = "def_test"
+        query_bucket = self.buckets[0]
+        try:
+            # Create index with INCLUDE MISSING
+            self.query = f"CREATE INDEX {index_name} ON {query_bucket}(`click` INCLUDE MISSING)"
+            self.run_cbq_query()
+
+            # Query system:indexes to verify the index
+            self.query = f"SELECT * FROM system:indexes WHERE name = '{index_name}'"
+            result = self.run_cbq_query()
+            self.log.info(f"Query result: {result}")
+
+            # Assert the index_key
+            self.assertEqual(result['results'][0]['indexes']['index_key'], ["`click` INCLUDE MISSING"], 
+                             f"Expected ['`click` INCLUDE MISSING'], but got {result['results'][0]['indexes']['index_key']}")
+
+        finally:
+            # Drop the index
+            self.query = f"DROP INDEX {index_name} ON {query_bucket} USING GSI"
+            self.run_cbq_query()
