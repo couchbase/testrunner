@@ -223,7 +223,7 @@ class QueryMonitoringTests(QueryTests):
         logging.info('parallel query is active')
         query = "(select * from " + self.query_buckets[0] + ") union (select d from " + self.query_buckets[
             0] + " d JOIN " + self.query_buckets[0] + " def ON KEYS d.name) union (select * from " + self.query_buckets[
-                    0] + ")"
+                    0] + ")" + " union (select d from " + self.query_buckets[0] + ")"
         self.run_cbq_query(query, server=server)
 
     def run_parallel_query_collections(self):
@@ -269,7 +269,7 @@ class QueryMonitoringTests(QueryTests):
                 t52.start()
                 t53.start()
             e.set()
-            query = '(select * from %s ) union (select * from %s )' % (query_bucket, query_bucket)
+            query = f'(select * from {query_bucket} ) union (select * from {query_bucket} ) union (select * from {query_bucket})'
             self.run_cbq_query(query, server=self.servers[1])
             logging.debug('event is set')
             t50.join(100)
@@ -936,16 +936,15 @@ class QueryMonitoringTests(QueryTests):
         self.run_cbq_query('delete from system:completed_requests')
 
         # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 8 seconds
-        min_duration = 5000
+        min_duration = 3500
         # Change the collection setting
         response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], min_duration)
         # Construct nonsense queries that run for 5 seconds
-        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' union select * from ' + self.query_buckets[
-            0] + ' union select * from ' + self.query_buckets[0])
-        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' union select * from ' + self.query_buckets[
-            0] + ' union select * from ' + self.query_buckets[0])
+        long_query = f'select * from {self.query_buckets[0]} union select * from {self.query_buckets[0]} union select * from {self.query_buckets[0]} union select * from {self.query_buckets[0]}'
+        self.run_cbq_query(long_query)
+        self.run_cbq_query(long_query)
         # Run a query that runs for a normal amount of time ~2 seconds
         self.run_cbq_query('select * from ' + self.query_buckets[0] + ' limit 1000')
         self.run_cbq_query('select * from ' + self.query_buckets[0] + ' limit 1000')
