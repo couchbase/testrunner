@@ -5340,12 +5340,16 @@ class FTSBaseTest(unittest.TestCase):
         3. if index is distributed - present on all fts nodes, almost equally?
         4. if index balanced - every fts node services almost equal num of vbs?
         """
+        rest = RestConnection(self.master)
+        self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))  
+
         validate_index_partition = TestInputSingleton.input.param("validate_index_partition", True)
         if not validate_index_partition:
             self.sleep(10, "giving sometime for index partition to be created")
             return True
 
         self.log.info("Validating index distribution for %s ..." % index.name)
+
         nodes_partitions = self.populate_node_partition_map(index)
 
         # check 1 - test number of pindexes
@@ -5355,14 +5359,15 @@ class FTSBaseTest(unittest.TestCase):
             import math
             exp_num_pindexes = math.ceil(
                 self._num_vbuckets // partitions_per_pindex + 0.5)
+
         total_pindexes = 0
         for node in list(nodes_partitions.keys()):
             total_pindexes += nodes_partitions[node]['pindex_count']
         if total_pindexes != exp_num_pindexes:
             self.fail("Number of pindexes for %s is %s while"
-                      " expected value is %s" % (index.name,
-                                                 total_pindexes,
-                                                 exp_num_pindexes))
+                        " expected value is %s" % (index.name,
+                                                    total_pindexes,
+                                                    exp_num_pindexes))
         self.log.info("Validated: Number of PIndexes = %s" % total_pindexes)
         index.num_pindexes = total_pindexes
 
@@ -5372,10 +5377,10 @@ class FTSBaseTest(unittest.TestCase):
             for uuid, partitions in list(nodes_partitions[node]['pindexes'].items()):
                 if len(partitions) > partitions_per_pindex:
                     self.fail("sourcePartitions for pindex %s more than "
-                              "max_partitions_per_pindex %s" %
-                              (uuid, partitions_per_pindex))
+                                "max_partitions_per_pindex %s" %
+                                (uuid, partitions_per_pindex))
         self.log.info("Validated: Every pIndex serves %s partitions or lesser"
-                      % partitions_per_pindex)
+                        % partitions_per_pindex)
 
         # check 3 - distributed - pindex present on all fts nodes?
         count = 0
@@ -5385,22 +5390,22 @@ class FTSBaseTest(unittest.TestCase):
                 count += 10
                 if count == 60:
                     self.fail("Even after 60s of waiting, index is not properly"
-                              " distributed,pindexes spread across %s while "
-                              "fts nodes are %s" % (list(nodes_partitions.keys()),
+                                " distributed,pindexes spread across %s while "
+                                "fts nodes are %s" % (list(nodes_partitions.keys()),
                                                     self._cb_cluster.get_fts_nodes()))
                 self.sleep(10, "pIndexes not distributed across %s nodes yet"
-                           % num_fts_nodes)
+                            % num_fts_nodes)
                 nodes_partitions = self.populate_node_partition_map(index)
                 nodes_with_pindexes = len(list(nodes_partitions.keys()))
             else:
                 self.log.info("Validated: pIndexes are distributed across %s "
-                              % list(nodes_partitions.keys()))
+                                % list(nodes_partitions.keys()))
 
         # check 4 - balance check(almost equal no of pindexes on all fts nodes)
         exp_partitions_per_node = self._num_vbuckets // num_fts_nodes
         self.log.info("Expecting num of partitions in each node in range %s-%s"
-                      % (exp_partitions_per_node - partitions_per_pindex,
-                         min(1024, exp_partitions_per_node + partitions_per_pindex)))
+                        % (exp_partitions_per_node - partitions_per_pindex,
+                            min(1024, exp_partitions_per_node + partitions_per_pindex)))
 
         for node in list(nodes_partitions.keys()):
             num_node_partitions = 0
@@ -5409,13 +5414,13 @@ class FTSBaseTest(unittest.TestCase):
             if abs(num_node_partitions - exp_partitions_per_node) > \
                     partitions_per_pindex:
                 self.fail("The source partitions are not evenly distributed "
-                          "among nodes, seeing %s on %s"
-                          % (num_node_partitions, node))
+                            "among nodes, seeing %s on %s"
+                            % (num_node_partitions, node))
             self.log.info("Validated: Node %s houses %s pindexes which serve"
-                          " %s partitions" %
-                          (node,
-                           nodes_partitions[node]['pindex_count'],
-                           num_node_partitions))
+                            " %s partitions" %
+                            (node,
+                            nodes_partitions[node]['pindex_count'],
+                            num_node_partitions))
         return True
 
     def get_partition_replica_map(self):
