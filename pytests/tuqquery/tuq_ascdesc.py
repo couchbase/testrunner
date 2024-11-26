@@ -73,7 +73,7 @@ class AscDescTests(QueryTests):
         assert_2 = lambda x: self.compare("do_not_test_against_hardcode", query_2, static_res_2)
         assert_4 = lambda x: self.compare("test_asc_desc_composite_index", query_4, static_res_4, alias="default")
         assert_6 = lambda x: self.compare("test_asc_desc_composite_index", query_6, static_res_6, alias="default")
-        assert_7 = lambda x: self.assertTrue('idx' in str(x['post_q_res'][0]),"Index should be in plan! plan is: {0}".format(x['post_q_res'][0]))
+        assert_7 = lambda x: self.assertTrue('primary' in str(x['post_q_res'][0]),"Index should be in plan! plan is: {0}".format(x['post_q_res'][0]))
         assert_8 = lambda x: self.compare("test_asc_desc_composite_index", query_8, static_res_6, alias="default")
         assert_9 = lambda x: self.compare("test_asc_desc_composite_index", query_9, static_res_4, alias="default")
 
