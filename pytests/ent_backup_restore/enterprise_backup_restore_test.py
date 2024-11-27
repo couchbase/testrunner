@@ -2885,7 +2885,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.backupset.end = 1
 
             """ restore back to cluster """
-            self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
             if self.create_gsi:
                 self.verify_gsi()
 
