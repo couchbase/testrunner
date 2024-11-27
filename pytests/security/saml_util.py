@@ -16,7 +16,7 @@ class SAMLUtils:
 
     def initialize_file_paths(self):
         bucket_name = "saml_tests_resources"
-        ip = "172.23.124.12"
+        ip = "172.23.216.60"
         username = "saml_test_user"
         password = "password"
         url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
