@@ -2427,7 +2427,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
 
             for namespace in self.namespaces:
                 query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                          prefix='test',
+                                                                          prefix='test', bhive_index=self.bhive_index,
                                                                           similarity=self.similarity, train_list=None,
                                                                           scan_nprobes=self.scan_nprobes,
                                                                           array_indexes=False,
@@ -2437,7 +2437,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                  namespace=namespace,
+                                                                  namespace=namespace, bhive_index=self.bhive_index,
                                                                   num_replica=self.num_index_replicas)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
@@ -2604,12 +2604,13 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                                 scan_nprobes=self.scan_nprobes,
                                                                                 array_indexes=False,
                                                                                 limit=self.scan_limit,
+                                                                                bhive_index=self.bhive_index,
                                                                                 quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                                 quantization_algo_description_vector=self.quantization_algo_description_vector)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                  namespace=namespace,
+                                                                  namespace=namespace, bhive_index=self.bhive_index,
                                                                   num_replica=self.num_index_replicas)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)

@@ -89,7 +89,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         select_queries = set()
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                      prefix='test',
+                                                                      prefix='test', bhive_index=self.bhive_index,
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
@@ -97,7 +97,8 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replicas)
+                                                                     num_replica=self.num_index_replicas,
+                                                                     bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
 
@@ -115,10 +116,6 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
             self.disable_autofailover_and_validate()
         except Exception as err:
             self.fail(f"error is {err.__str__()}")
-
-
-
-
 
         # Start rebalance in
         rebalance = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init],
@@ -204,7 +201,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
         namespace_index_map = {}
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                      prefix='test',
+                                                                      prefix='test', bhive_index=self.bhive_index,
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
                                                                       array_indexes=False,
@@ -212,6 +209,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     bhive_index=self.bhive_index,
                                                                      num_replica=self.num_index_replicas)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))

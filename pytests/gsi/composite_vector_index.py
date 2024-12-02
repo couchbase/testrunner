@@ -73,8 +73,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           array_indexes=False,
                                                                           limit=self.scan_limit, is_base64=self.base64,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector, bhive_index=self.bhive_index)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, bhive_index=self.bhive_index)
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          bhive_index=self.bhive_index)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                         namespace=namespace,
+                                                                         bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                       namespace=namespace, limit=self.scan_limit)
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
@@ -216,8 +219,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF204800,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
+                                     description="IVF204800,PQ3x8", similarity="L2_SQUARED",
+                                     bhive_index=self.bhive_index, is_base64=self.base64)
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
+                                                       bhive_index=self.bhive_index)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
         # for the scenario where num docs less than centroids
@@ -235,8 +240,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         vector_idx = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
-                                     description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+                                     description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64,
+                                     bhive_index=self.bhive_index)
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False,
+                                                       bhive_index=self.bhive_index)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         timeout = 0
         with ThreadPoolExecutor() as executor:
@@ -294,12 +301,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
-                                                                      array_indexes=False,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=1)
+                                                                     num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
@@ -631,12 +638,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       prefix='test',
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
-                                                                      array_indexes=False,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replicas)
+                                                                     num_replica=self.num_index_replicas,
+                                                                     bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -1020,12 +1028,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
-                                                                      array_indexes=False,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=1)
+                                                                     num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
@@ -1094,12 +1102,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       prefix='test',
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
-                                                                      array_indexes=False,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replicas)
+                                                                     num_replica=self.num_index_replicas,
+                                                                     bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
 
@@ -1239,13 +1248,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       prefix='test',
                                                                       similarity=self.similarity, train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
-                                                                      array_indexes=False,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector)
             create_queries.update(
                 self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                        num_replica=self.num_index_replicas))
+                                                        num_replica=self.num_index_replicas,
+                                                        bhive_index=self.bhive_index))
             drop_queries.update(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
@@ -1271,8 +1281,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
-                                     description="IVF,PQ8x8", similarity="L2_SQUARED", is_base64=self.base64)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
+                                     description="IVF,PQ8x8", similarity="L2_SQUARED", is_base64=self.base64,
+                                     bhive_index=self.bhive_index)
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
+                                                       bhive_index=self.bhive_index)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -1288,17 +1300,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             remote_machine.stop_memcached()
             self.sleep(60)
             remote_machine.start_memcached()
-
-        #             remote_machine.kill_memcached(num_retries=0)
-        #     while timeout < 360:
-        #         index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
-        #         for i in range(10):
-        #             remote_machine.kill_memcached(num_retries=0)
-        #         self.sleep(1)
-        #         timeout = timeout + 1
-        # if timeout > 360:
-        #     self.fail("timeout exceeded")
-
         meta_data = self.index_rest.get_indexer_metadata()['status']
 
         for data in meta_data:

@@ -322,8 +322,8 @@ class GSIUtils(object):
                                                     limit=10, quantization_algo_color_vector=None,quantization_algo_description_vector=None):
 
         definitions_list = []
-        color_vec_1 = [43.0, 133.0, 178.0]
-        color_vec_2 = [90.0, 33.0, 18.0]
+        color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
+        color_vec_2 = [265.1, 13.200001, 75.9]  # Pinkish red
 
         desc_1 = "A convertible car with red color made in 1990"
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
@@ -349,7 +349,8 @@ class GSIUtils(object):
         # Single vector field - colorRGBVector
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'colorRGBVectorBhive', index_fields=['colorRGBVector VECTOR'],
-                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity, scan_nprobes=scan_nprobes,
+                            dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
+                            scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"colorRGBVector,"
                                                                               f" {scan_color_vec_1}",
@@ -386,7 +387,7 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format("colorRGBVector",
                                                                                "year > 1980 OR "
                                                                                "fuel = 'Diesel' ",
-                                                                               scan_color_vec_1),
+                                                                               scan_color_vec_2),
                             include_fields=['fuel', 'year']))
         # Partial Indexes
         definitions_list.append(
