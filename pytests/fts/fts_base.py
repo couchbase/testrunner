@@ -6640,7 +6640,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              collection_name, dataset[0], True, "vect", start_key, ei+start_key,
                                               self.encode_base64_vector, percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
@@ -6655,7 +6655,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              collection_name, dataset[0], True, "vect", start_key, ei+start_key,
                                               self.encode_base64_vector, percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
@@ -6670,7 +6670,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", 0, ei, True,
+                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, True,
                                               percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
@@ -6683,7 +6683,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", 0, ei, False,
+                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, False,
                                               percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
