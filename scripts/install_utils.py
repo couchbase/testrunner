@@ -994,6 +994,7 @@ def __get_columnar_build_url(node, build_binary):
     major_version = cb_version.split('-')[0]
     build_number = cb_version.split('-')[1]
 
+    build_folder_name = None
     for folder_name, major_versions in COLUMNAR_VERSION_NAME.items():
         if major_version in major_versions:
             build_folder_name = folder_name
