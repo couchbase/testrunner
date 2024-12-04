@@ -6077,8 +6077,8 @@ class RestConnection(object):
     '''
     def enable_eventing_debugger(self):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/api/v1/config"
-        api = self.baseUrl + url
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         body="{\"enable_debugger\": true}"
         status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
@@ -6092,8 +6092,8 @@ class RestConnection(object):
 
     def disable_eventing_debugger(self):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/api/v1/config"
-        api = self.baseUrl + url
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         body = "{\"enable_debugger\": false}"
         status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
@@ -6106,15 +6106,11 @@ class RestConnection(object):
     '''
     def start_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url="pools/default"
-        api = self.baseUrl + url
-        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        status, content, header = self._http_request(api, 'GET', headers=headers)
-        url = "_p/event/startDebugger/?name=" + name
+        url = "startDebugger?name=" + name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
-        api = self.baseUrl + url
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers, params=content)
         if not status:
@@ -6126,11 +6122,11 @@ class RestConnection(object):
     '''
     def stop_eventing_debugger(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/stopDebugger/?name=" + name
+        url = "stopDebugger?name=" + name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
-        api = self.baseUrl + url
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers)
         if not status:
@@ -6142,11 +6138,11 @@ class RestConnection(object):
     '''
     def get_eventing_debugger_url(self, name, function_scope=None):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/getDebuggerUrl/?name=" + name
+        url = "getDebuggerUrl?name=" + name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
-        api = self.baseUrl + url
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers)
         if not status:
@@ -6158,8 +6154,8 @@ class RestConnection(object):
     '''
     def allow_interbucket_recursion(self):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/api/v1/config"
-        api = self.baseUrl + url
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         body = "{\"allow_interbucket_recursion\": true}"
         status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
@@ -6172,8 +6168,8 @@ class RestConnection(object):
     '''
     def update_eventing_config(self,body):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/api/v1/config"
-        api = self.baseUrl + url
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
         if not status:
@@ -6185,8 +6181,8 @@ class RestConnection(object):
     '''
     def get_eventing_config(self):
         authorization = self.get_authorization(self.username, self.password)
-        url = "_p/event/api/v1/config"
-        api = self.baseUrl + url
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers, params='')
         if not status:
