@@ -362,8 +362,8 @@ class QueryLMKTests(QueryTests):
             # technically non missing index is a superior index and will be picked up, we need to drop it
             self.run_cbq_query("drop index default:`travel-sample`.inventory.airport.def_inventory_airport_city")
             explain_plan = self.run_cbq_query("EXPLAIN " + query, query_context= "default:`travel-sample`.inventory")
-            self.assertTrue("idx1" in str(explain_plan),
-                            f"idx1 is not being picked up, it should be, please check explain {explain_plan}")
+            self.assertTrue("def_inventory_landmark_primary" in str(explain_plan),
+                            f"def_inventory_landmark_primary is not being picked up, it should be, please check explain {explain_plan}")
 
             actual_results = self.run_cbq_query(query, query_context= "default:`travel-sample`.inventory")
             diffs = DeepDiff(actual_results['results'], non_missing_query_results['results'])
