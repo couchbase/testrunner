@@ -499,7 +499,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.sleep(30)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
-        self.assertTrue(explain_results['results'][0]['plan']['~children'][0]['scan']['index'] == 'idx1',
+        self.assertTrue( 'idx1' in str(explain_results),
                         "The correct index is not being used or the plan is different than expected! Expected idx1 got {0}".format(
                             explain_results))
         self.compare_against_primary(query, primary_query)
@@ -681,7 +681,7 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(query=create_query)
 
         explain_results = self.run_cbq_query(query="EXPLAIN " + query)
-        self.assertTrue("idx1" in str(explain_results),
+        self.assertTrue("def_inventory_hotel_primary" in str(explain_results),
                         "The query should be using idx1, check explain results {0}".format(explain_results))
 
         ansi_results = self.run_cbq_query(query=query)

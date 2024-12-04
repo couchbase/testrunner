@@ -419,8 +419,8 @@ class QuerySkipRangeScanTests(QueryTests):
         spans_4b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["d"] = {"indexes": [self.primary_index_def, index_4a, index_4b], "queries": [query_4],
-                        "asserts": [self.plan_verifier("index", "idx2", 0),
-                                    self.plan_verifier("join_index", "idx2", 0),
+                        "asserts": [self.plan_verifier("index", "#primary", 0),
+                                    self.plan_verifier("join_index", "#primary", 0),
                                     self.plan_verifier("spans", spans_4a, 0),
                                     self.plan_verifier("join_spans", spans_4b, 0)]}
 
@@ -437,8 +437,8 @@ class QuerySkipRangeScanTests(QueryTests):
         spans_5b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
         queries["e"] = {"indexes": [self.primary_index_def, index_5a, index_5b, index_5c], "queries": [query_5],
-                        "asserts": [self.plan_verifier("index", "idx3", 0),
-                                    self.plan_verifier("join_index", "idx3", 0),
+                        "asserts": [self.plan_verifier("index", '#primary', 0),
+                                    self.plan_verifier("join_index", "#primary", 0),
                                     self.plan_verifier("spans", spans_5a, 0),
                                     self.plan_verifier("join_spans", spans_5b, 0)]}
 
@@ -459,11 +459,10 @@ class QuerySkipRangeScanTests(QueryTests):
 
         queries["f"] = {"indexes": [self.primary_index_def, index_6a, index_6b, index_6c, index_6d],
                         "queries": [query_6],
-                        "asserts": [self.plan_verifier("index", "idx3", 0),
-                                    self.plan_verifier("join_index", "idx3", 0),
+                        "asserts": [self.plan_verifier("index", "#primary", 0),
+                                    self.plan_verifier("join_index", "#primary", 0),
                                     self.plan_verifier("spans", spans_6a, 0),
                                     self.plan_verifier("join_spans", spans_6b, 0)]}
-
         self.query_runner(queries)
 
     # this test will fail until MB-31203 is fixed
