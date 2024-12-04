@@ -17,7 +17,7 @@ import logging.config
 import os.path
 import urllib.request
 
-from testconstants import CB_RELEASE_BUILDS
+from testconstants import CB_RELEASE_BUILDS, COLUMNAR_VERSION_NAME
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
@@ -987,10 +987,10 @@ def __get_columnar_build_url(node, build_binary):
 
     major_version = cb_version.split('-')[0]
     build_number = cb_version.split('-')[1]
-    if major_version in ["1.0.1", "1.0.2"]:
-        build_folder_name = "goldfish"
-    else:
-        build_folder_name = major_version
+    for folder_name, major_versions in COLUMNAR_VERSION_NAME.items():
+        if major_version in major_versions:
+            build_folder_name = folder_name
+            break
 
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
         testconstants.CB_COLUMNAR_REPO, build_folder_name, build_number,
