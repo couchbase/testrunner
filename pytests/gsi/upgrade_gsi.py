@@ -14,6 +14,8 @@ from SystemEventLogLib.gsi_events import IndexingServiceEvents
 from failover.AutoFailoverBaseTest import AutoFailoverBaseTest
 from couchbase_helper.documentgenerator import SDKDataLoader
 from serverless.gsi_utils import GSIUtils
+from gsi_utils.gsi_upgrade_workflow.gsi_upgrade_workflow import UpgradeWorkload
+from gsi_utils.gsi_kv_data_comparison.gsi_kv_data_comparison import KvIndexDataValidation
 
 from .base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
@@ -1382,7 +1384,16 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     future = executor_main.submit(self.perform_continuous_kv_mutations, event)
                     scan_results_check = False
                 select_queries = self.create_index_in_batches(replica_count=1)
+                hotel_data_set_index_fields = ['price', 'free_breakfast,avg_rating', 'city,avg_rating,country', 'name']
                 self.wait_until_indexes_online()
+                uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=300)
+                uwl_before_obj.run_workload()
+
+                indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
+                indexer_pprof_before_upgrade = uwl_before_obj.download_upload_pprof_s3()
+                self.log.info(f"indexer_stats_before_upgrade : {indexer_stats_before_upgrade}")
+
+
                 if self.upgrade_mode == 'offline':
                     index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
                 self.upgrade_and_validate(select_queries, scan_results_check)
@@ -1390,6 +1401,21 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.initial_version[:3] == "7.6":
                     self.enable_shard_based_rebalance()
                     self.sleep(10)
+                uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=300, result_bucket="gsi_upgrade_test_bucket")
+                uwl_after_obj.run_workload()
+                indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
+                indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
+                status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade, stats_after=indexer_stats_after_upgrade, pprof_list_before=indexer_pprof_before_upgrade, pprof_list_after=indexer_pprof_after_upgrade)
+                self.assertTrue(status)
+                for namespace in self.namespaces:
+                    _, keyspace = namespace.split(':')
+                    bucket, scope, collection = keyspace.split('.')
+                    for field in hotel_data_set_index_fields:
+                        kv_gsi_validation = KvIndexDataValidation(cluster_ip=self.master.ip, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', scope=scope, collection=collection, bucket=bucket, index_fields=field)
+                        kv_gsi_validation.compare_data_between_kv_and_index()
+                        self.assertLess(len(kv_gsi_validation.result['failed_docs']), 1, 'Some docs of kv gsi verification failed')
+
+
                 self.create_index_in_batches(num_batches=1, replica_count=1)
                 self.wait_until_indexes_online()
                 if self.upgrade_mode == 'offline':

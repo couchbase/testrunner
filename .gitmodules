@@ -8,6 +8,7 @@
 	path = magma_loader/DocLoader
 	url = https://github.com/couchbaselabs/DocLoader.git
 	branch = main
-[submodule "gsi-utils"]
-	path = gsi-utils
-	url = https://github.com/couchbaselabs/gsi-utils.git
+[submodule "gsi_utils"]
+	path = gsi_utils
+	url = https://github.com/couchbaselabs/gsi_utils.git
+	branch = master
