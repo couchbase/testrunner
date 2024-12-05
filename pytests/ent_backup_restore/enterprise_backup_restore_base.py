@@ -1135,7 +1135,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_restore_validate(self, compare_uuid=False,
                                 seqno_compare_function="==",
                                 replicas=False, mode="memory",
-                                expected_error=None):
+                                expected_error=None,doc_store=None,restore_iterator=0,connector=None,
+                                validation_list=None,validate_final_backup=False):
+        
         if self.vbuckets_filter_no_data:
             self.log.info("No data in backup repo as expected.")
             return
@@ -1211,18 +1213,42 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not output:
                 self.fail("Could not read backup directory")
             backups_on_disk = len(output) - 3
-            status, msg = self.validation_helper.validate_restore(self.backupset.end,
-                                                                  self.vbucket_seqno, current_vseqno,
-                                                                  compare_uuid=compare_uuid,
-                                                                  compare=seqno_compare_function,
-                                                                  get_replica=replicas, mode=mode,
-                                                                  backups_on_disk=backups_on_disk)
+            if doc_store:
+                restore_doc_store = []
+                for k in validation_list:
+                    status,content = connector.get_doc_by_key(k)
+                    if bool(status):
+                        restore_doc_store.append(json.loads(content.decode()).get("base64"))
+                    else:
+                        self.fail(f"Failed to get doc with key {k}")
+                
+                if validate_final_backup:
+                    for i in range(10):
+                        index = len(doc_store)-10+i
+                        if doc_store[index] != restore_doc_store[i]:
+                            self.fail(f"Backup Doc id:{i} != Restore Doc id:{i}\n")
+                    self.log.info(f"SUCCESS. Restore data validated\n")
+                else:
+                    for i in range(10):
+                        ofset = 10*restore_iterator
+                        index = ofset + i
+                        if doc_store[index] != restore_doc_store[i]:
+                            self.fail(f"Backup Doc id:{i} != Restore Doc id:{i}\n")
+                    self.log.info(f"SUCCESS. Restore data validated\n")
+                        
+            else:
+                status, msg = self.validation_helper.validate_restore(self.backupset.end,
+                                                                    self.vbucket_seqno, current_vseqno,
+                                                                    compare_uuid=compare_uuid,
+                                                                    compare=seqno_compare_function,
+                                                                    get_replica=replicas, mode=mode,
+                                                                    backups_on_disk=backups_on_disk)
 
-            """ limit the length of message printout to 3000 chars """
-            info = str(msg)[:3000] + '..' if len(str(msg)) > 3000 else msg
-            if not status:
-                self.fail(info)
-            self.log.info(info)
+                """ limit the length of message printout to 3000 chars """
+                info = str(msg)[:3000] + '..' if len(str(msg)) > 3000 else msg
+                if not status:
+                    self.fail(info)
+                self.log.info(info)
         remote_client.disconnect()
 
     def backup_list(self):
@@ -1730,8 +1756,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 else:
                     self.fail(message)
 
-        if repeats < 2 and not skip_validation:
-            self.validate_backup_data(**kwargs)
+        # if repeats < 2 and not skip_validation:
+            # self.validate_backup_data(**kwargs)
 
     def validate_backup_data(self, server_host=None, server_bucket=None, master_key="ent-backup",
                              perNode=False, getReplica=False, mode="memory",

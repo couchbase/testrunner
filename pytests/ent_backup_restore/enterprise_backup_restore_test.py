@@ -1,7 +1,6 @@
 import os, re, copy, json, subprocess, datetime
 from random import randrange, randint, choice
 from threading import Thread
-
 from couchbase_helper.cluster import Cluster
 from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
@@ -2704,6 +2703,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             5. Operation after upgrade cluster
             6. Restores data and validates
         """
+        self.restore_final_backup = False
+        if self.after_upgrade_merged:
+            self.restore_final_backup = True
+        prefix = "ent-backup"
+        cursor = 100
+        validation_list = []
+        doc_store = []
+        for i in range(10):
+            validation_list.append(prefix + str(randrange(cursor-100,cursor)))
+            cursor += 100
+        self.validation_list = validation_list
+
         if self.initial_version[:1] == "5" and self.upgrade_versions[0][:1] >= "7":
             self.log.error("\n\n\n*** ERROR: Direct upgrade from {0} to {1} does not support.\
                             Test will skip\n\n"\
@@ -2777,6 +2788,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("Start doing multiple backup")
             for i in range(1, self.backupset.number_of_backups + 1):
                 self._backup_restore_with_ops()
+                for k in validation_list:
+                    status,content = rest.get_doc_by_key(k)
+                    if bool(status):
+                        doc_store.append(json.loads(content.decode()).get("base64"))
+                    else:
+                        self.fail(f"Failed to get doc with key {k}")
         else:
             self.backup_cluster_validate()
         start = randrange(1, self.backupset.number_of_backups + 1)
@@ -2850,6 +2867,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     validate_dir_struct = False
                 self._backup_restore_with_ops(node=self.backupset.cluster_host, repeats=1,
                                               validate_directory_structure=validate_dir_struct)
+ 
+                for k in validation_list:
+                    status,content = RestConnection(servers[2]).get_doc_by_key(k)
+                    if bool(status):
+                        doc_store.append(json.loads(content.decode()).get("base64"))
+                    else:
+                        self.fail(f"Failed to get doc with key {k}")
             self.backup_list()
 
         """ merged after upgrade """
@@ -2865,6 +2889,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 new_backupset = copy.deepcopy(self.backupset)
                 new_backupset.restore_cluster_host_username = user.replace('[', '_').replace(']', '_')
                 backupsets.append(new_backupset)
+        restore_iterator = 0
         for backupset in backupsets:
             self.backupset = backupset
             if self.bucket_flush:
@@ -2883,11 +2908,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
             if self.after_upgrade_merged:
                 self.backupset.end = 1
-
+            
+            
             """ restore back to cluster """
-            self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
+            self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=",
+                                         doc_store=doc_store,restore_iterator=restore_iterator,connector=RestConnection(servers[2]),
+                                         validation_list=validation_list,validate_final_backup=self.restore_final_backup)
+            restore_iterator += 1
             if self.create_gsi:
                 self.verify_gsi()
+            
 
     def test_backup_restore_with_python_sdk(self):
         """

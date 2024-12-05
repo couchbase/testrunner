@@ -3785,6 +3785,14 @@ class RestConnection(object):
             verb='DELETE')
         return status
 
+    @not_for_capella
+    def get_doc_by_key(self,key,bucket = "default", scope = "_default", collection = "_default"):
+        api = self.baseUrl + "pools/default/buckets/{0}/scopes/{1}/collections/{2}/docs/{3}".format(bucket,scope,collection,key)
+        status, content, header = self.urllib_request(
+            api,
+            verb='GET')
+        return status,content
+
 
     def set_maxConcurrentPartitionMovesPerNode(self, value):
         api = self.fts_baseUrl + "api/managerOptions"
