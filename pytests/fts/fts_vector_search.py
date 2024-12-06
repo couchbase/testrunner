@@ -20,6 +20,7 @@ from .fts_base import FTSBaseTest
 class VectorSearch(FTSBaseTest):
 
     def setUp(self):
+        os.environ['OPENBLAS_NUM_THREADS'] = '1'
         super(VectorSearch, self).setUp()
 
         self.input = TestInputSingleton.input
@@ -27,6 +28,7 @@ class VectorSearch(FTSBaseTest):
         self.__init_logger()
         self.run_n1ql_search_function = self.input.param("run_n1ql_search_function", True)
         self.k = self.input.param("k", 10)
+        self.perform_k_validation = self.input.param("perform_k_validation", False)
         self.vector_dataset = self.input.param("vector_dataset", "siftsmall")
         if not isinstance(self.vector_dataset, list):
             self.vector_dataset = [self.vector_dataset]
@@ -36,26 +38,64 @@ class VectorSearch(FTSBaseTest):
         self.count = 0
         self.store_in_xattr = self.input.param("store_in_xattr", False)
         self.encode_base64_vector = self.input.param("encode_base64_vector", False)
-        if self.store_in_xattr and self.encode_base64_vector:
-            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
-                          "knn": [{"field": "_$xattrs.vector_encoded", "k": self.k,
-                                   "vector_base64": ""}]}
-        elif self.store_in_xattr:
-            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
-                          "knn": [{"field": "_$xattrs.vector_data", "k": self.k,
-                                   "vector": []}]}
-        elif self.encode_base64_vector:
-            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
-                          "knn": [{"field": "vector_data_base64", "k": self.k,
-                                   "vector_base64": ""}]}
+        self.change_nprobe_settings = self.input.param("change_nprobe_settings", False)
+        self.knn_params = self.input.param("knn_params", {"ivf_nprobe_pct": 100, "ivf_max_codes_pct": 100})
+        self.prefilter_docs = self.input.param("prefilter_docs", False)
+
+        self.start_key = self.input.param("start_key", 0)
+        self.prefilter_query = self.input.param("prefilter_query",
+                                                {"min": int(self.start_key+1), "max": 10000 + int(self.start_key),
+                                                 "field": "sno"})
+        self.conjuction_query_with_prefilter = self.input.param("conjuction_query_with_prefilter",False)
+
+        fts_vector_query = {
+            "query": {"match_none": {}},
+            "explain": True,
+            "fields": ["*"],
+            "knn": [{
+                "k": self.k
+            }]
+        }
+
+        if self.store_in_xattr:
+            if self.encode_base64_vector:
+                fts_vector_query["knn"][0]["field"] = "_$xattrs.vector_encoded"
+                fts_vector_query["knn"][0]["vector_base64"] = ""
+            else:
+                fts_vector_query["knn"][0]["field"] = "_$xattrs.vector_data"
+                fts_vector_query["knn"][0]["vector"] = []
         else:
-            self.query = {"query": {"match_none": {}}, "explain": True, "fields": ["*"],
-                          "knn": [{"field": "vector_data", "k": self.k,
-                                   "vector": []}]}
+            if self.encode_base64_vector:
+                fts_vector_query["knn"][0]["field"] = "vector_data_base64"
+                fts_vector_query["knn"][0]["vector_base64"] = ""
+            else:
+                fts_vector_query["knn"][0]["field"] = "vector_data"
+                fts_vector_query["knn"][0]["vector"] = []
+
+        if self.change_nprobe_settings:
+            fts_vector_query["knn"][0]["params"] = self.knn_params
+
+        if self.prefilter_docs:
+            if self.conjuction_query_with_prefilter:
+                fts_vector_query["knn"][0]["filter"] = {}
+                fts_vector_query["knn"][0]["filter"]["conjuncts"] = []
+                first_query = self.prefilter_query.copy()
+                first_query["max"] = int(first_query["max"] / 2)
+
+                self.prefilter_query["min"] = int(self.prefilter_query["max"]/2 + 1)
+                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(first_query)
+                fts_vector_query["knn"][0]["filter"]["conjuncts"].append(self.prefilter_query)
+                self.log.info(f"conjunction query with prefilter is : {fts_vector_query}")
+            else:
+                fts_vector_query["knn"][0]["filter"] = self.prefilter_query
+
+
+
+        self.query = fts_vector_query
+
         self.expected_accuracy_and_recall = self.input.param("expected_accuracy_and_recall", 85)
-        # self.vector_field_type = self.input.param("vector_field_type", "vector")
         self.vector_field_type = "vector_base64" if self.encode_base64_vector else "vector"
-        # self.vector_field_name = "vector_data_base64" if self.encode_base64_vector else "vector_data"
+
 
         if self.encode_base64_vector:
             if self.store_in_xattr:
@@ -157,7 +197,7 @@ class VectorSearch(FTSBaseTest):
             faiss_query_vector = np.array([query_vector]).astype('float32')
             faiss.normalize_L2(faiss_query_vector)
             distances, ann = faiss_index.search(faiss_query_vector, k=self.k)
-            faiss_doc_ids = [i for i in ann[0]]
+            faiss_doc_ids = [i + int(self.start_key) for i in ann[0]]
 
             fts_doc_ids = [matches[i]['fields']['sno'] - 1 for i in range(self.k)]
 
@@ -284,8 +324,13 @@ class VectorSearch(FTSBaseTest):
 
         if hits == 0:
             hits = -1
+        if self.perform_k_validation and hits!=int(self.k):
+            self.fail(f"Less than K hits; Hits :{hits} && k = {k}")
 
         self.log.info("FTS Hits for Search query: %s" % hits)
+
+
+
         # compare fts and n1ql results if required
         if self.run_n1ql_search_function:
             if n1ql_hits == hits:  #
@@ -353,7 +398,7 @@ class VectorSearch(FTSBaseTest):
             self.log.info("*" * 30)
 
         # validate no of results are k only
-        if self.run_n1ql_search_function and not continue_on_failure:
+        if (self.run_n1ql_search_function and not continue_on_failure):
             if validate_result_count:
                 if len(matches) != self.k and n1ql_hits != self.k:
                     self.fail(
@@ -1880,3 +1925,244 @@ class VectorSearch(FTSBaseTest):
             for count, q in enumerate(queries[:5]):
                 self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
                                       neighbours=neighbours[count])
+    def test_nprobe_settings(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
+        indexes = []
+
+        # create index i1 with self.similarity similarity
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+
+        # create index i2 with dot product similarity
+        idx = [("i2", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'], index_type="IndexFlatIP")
+
+        all_stats = []
+        bad_indexes = []
+        for index in indexes:
+            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                           'faiss_recall': 0}
+            index['dataset'] = bucketvsdataset['bucket_name']
+            queries = self.get_query_vectors(index['dataset'])
+            neighbours = self.get_groundtruth_file(index['dataset'])
+            fts_accuracy = []
+            fts_recall = []
+            faiss_accuracy = []
+            faiss_recall = []
+            perform_faiss_validation = True
+            for count, q in enumerate(queries[:self.num_queries]):
+
+                _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
+                                                                     neighbours=neighbours[count],
+                                                                     perform_faiss_validation=perform_faiss_validation)
+                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
+                fts_recall.append(recall_and_accuracy['fts_recall'])
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['faiss_recall'])
+
+            self.log.info(f"fts_accuracy: {fts_accuracy}")
+            self.log.info(f"fts_recall: {fts_recall}")
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            index_stats['index_name'] = index['index_obj'].name
+            index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
+            index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+
+            if perform_faiss_validation:
+                index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+            if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
+                'fts_recall'] < self.expected_accuracy_and_recall:
+                bad_indexes.append(index_stats)
+            all_stats.append(index_stats)
+
+        self.query["knn"][0]["params"]["ivf_nprobe_pct"] = 50
+
+        for index in indexes:
+            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                           'faiss_recall': 0}
+            index['dataset'] = bucketvsdataset['bucket_name']
+            queries = self.get_query_vectors(index['dataset'])
+            neighbours = self.get_groundtruth_file(index['dataset'])
+            fts_accuracy = []
+            fts_recall = []
+            faiss_accuracy = []
+            faiss_recall = []
+            perform_faiss_validation = True
+            for count, q in enumerate(queries[:self.num_queries]):
+
+                _, _, _, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
+                                                                     neighbours=neighbours[count],
+                                                                     perform_faiss_validation=perform_faiss_validation)
+                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
+                fts_recall.append(recall_and_accuracy['fts_recall'])
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['faiss_recall'])
+
+            self.log.info(f"fts_accuracy: {fts_accuracy}")
+            self.log.info(f"fts_recall: {fts_recall}")
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            index_stats['index_name'] = index['index_obj'].name
+            index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
+            index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+
+            if perform_faiss_validation:
+                index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+            if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
+                'fts_recall'] < self.expected_accuracy_and_recall:
+                bad_indexes.append(index_stats)
+            all_stats.append(index_stats)
+
+        print(all_stats)
+
+    def test_nprobe_settings_negative(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
+        indexes = []
+
+        # create index i1 with self.similarity similarity
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data(index[0]['dataset'])
+
+        for index in indexes:
+            queries = self.get_query_vectors(index['dataset'])
+            for count, q in enumerate(queries[:self.num_queries]):
+
+                hits, n1ql, _, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'], continue_on_failure=True)
+                self.assertEqual(hits, -1)
+                self.assertEqual(n1ql, -1)
+
+    def test_prefiltering(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+        bucketvsdataset = self.load_vector_data(containers, dataset=["sift"])
+        _ = self.load_vector_data(containers, dataset=["siftsmall"], start_key=self.start_key)
+
+        indexes = []
+
+        # create index i1 with self.similarity similarity
+        idx = [("i1", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data("siftsmall")
+
+        # create index i2 with dot product similarity
+        idx = [("i2", "b1.s1.c1")]
+        vector_fields = {"dims": self.dimension, "similarity": "dot_product"}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"sno": "number"}])
+        indexes.append(index[0])
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i2"), None)['index_obj']
+        index_obj.faiss_index = self.create_faiss_index_from_train_data("siftsmall", index_type="IndexFlatIP")
+        all_stats = []
+        bad_indexes = []
+        for index in indexes:
+            index_stats = {'index_name': '', 'fts_accuracy': 0, 'fts_recall': 0, 'faiss_accuracy': 0,
+                           'faiss_recall': 0}
+            index['dataset'] = bucketvsdataset['bucket_name']
+            queries = self.get_query_vectors("siftsmall")
+            neighbours = self.get_groundtruth_file("siftsmall")
+            fts_accuracy = []
+            fts_recall = []
+            faiss_accuracy = []
+            faiss_recall = []
+            perform_faiss_validation = True
+            queries_with_failed_prefilter_condition  = []
+            for count, q in enumerate(queries[:self.num_queries]):
+                groundTruth_at_start_key = neighbours[count]
+                for i in range(len(groundTruth_at_start_key)):
+                    groundTruth_at_start_key[i] += self.start_key
+                _, _, matches, recall_and_accuracy = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
+                                                                     neighbours=groundTruth_at_start_key,
+                                                                     perform_faiss_validation=perform_faiss_validation,
+                                                                     validate_fts_with_faiss=True)
+                fts_matches = []
+                for i in range(self.k):
+                    fts_matches.append(matches[i]['fields']['sno'] - 1)
+                out_of_range = [num for num in fts_matches if num < self.start_key or num > self.start_key+10000]
+                if len(out_of_range) > 0:
+                    self.log.error(f"Getting results out of specified range = {out_of_range}")
+                    queries_with_failed_prefilter_condition.append(i)
+                fts_accuracy.append(recall_and_accuracy['fts_accuracy'])
+                fts_recall.append(recall_and_accuracy['fts_recall'])
+                if perform_faiss_validation:
+                    faiss_accuracy.append(recall_and_accuracy['faiss_accuracy'])
+                    faiss_recall.append(recall_and_accuracy['faiss_recall'])
+
+            self.log.info(f"fts_accuracy: {fts_accuracy}")
+            self.log.info(f"fts_recall: {fts_recall}")
+            if perform_faiss_validation:
+                self.log.info(f"faiss_accuracy: {faiss_accuracy}")
+                self.log.info(f"faiss_recall: {faiss_recall}")
+
+            index_stats['index_name'] = index['index_obj'].name
+            index_stats['fts_accuracy'] = (sum(fts_accuracy) / len(fts_accuracy)) * 100
+            index_stats['fts_recall'] = (sum(fts_recall) / len(fts_recall))
+            index_stats['failed_prefilter_conditions'] = queries_with_failed_prefilter_condition
+
+            if perform_faiss_validation:
+                index_stats['faiss_accuracy'] = (sum(faiss_accuracy) / len(faiss_accuracy)) * 100
+                index_stats['faiss_recall'] = (sum(faiss_recall) / len(faiss_recall))
+
+            if index_stats['fts_accuracy'] < self.expected_accuracy_and_recall or index_stats[
+                'fts_recall'] < self.expected_accuracy_and_recall or len(queries_with_failed_prefilter_condition) > 0:
+                bad_indexes.append(index_stats)
+            all_stats.append(index_stats)
+
+
+        self.log.info(f"Accuracy and recall for queries run on each index : {all_stats}")
+        if len(bad_indexes) != 0:
+            self.fail(f"Indexes have poor accuracy and recall or failed prefilter condition: {bad_indexes}")
