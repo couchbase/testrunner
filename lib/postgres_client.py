@@ -5,7 +5,7 @@ class PostgresClient(object):
 
     """Python PostgresClient Client Implementation for testrunner"""
     def __init__(self):
-        self.connection = self.connect("dbname='test' user='root' password='password'")
+        self.connection = self.connect("dbname='test' user='rqg' password='password'")
 
     def connect(self, connstr):
         connection = None
