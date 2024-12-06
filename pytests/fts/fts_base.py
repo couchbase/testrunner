@@ -5341,7 +5341,7 @@ class FTSBaseTest(unittest.TestCase):
         4. if index balanced - every fts node services almost equal num of vbs?
         """
         rest = RestConnection(self.master)
-        self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))
+        self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))  
 
         validate_index_partition = TestInputSingleton.input.param("validate_index_partition", True)
         if not validate_index_partition:
@@ -6366,7 +6366,7 @@ class FTSBaseTest(unittest.TestCase):
                 failed_queries.append(task.query_index + 1)
 
         if fail_count:
-
+            
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))
@@ -6640,7 +6640,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              collection_name, dataset[0], True, "vect", start_key, ei+start_key,
                                               self.encode_base64_vector, percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
@@ -6655,7 +6655,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", 0, ei,
+                                              collection_name, dataset[0], True, "vect", start_key, ei+start_key,
                                               self.encode_base64_vector, percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
@@ -6670,7 +6670,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", 0, ei, True,
+                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, True,
                                               percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)
@@ -6683,7 +6683,7 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", 0, ei, False,
+                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, False,
                                               percentages_to_resize, dims_to_resize,
                                               provideDefaultDocs=provideDefaultDocs)
                         govl.load_data(container_name)

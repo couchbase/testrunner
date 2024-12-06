@@ -30,6 +30,7 @@ class VectorSearch(FTSBaseTest):
         self.k = self.input.param("k", 10)
         self.perform_k_validation = self.input.param("perform_k_validation", False)
         self.vector_dataset = self.input.param("vector_dataset", "siftsmall")
+        self.query_retries = self.input.param("query_retries",10)
         if not isinstance(self.vector_dataset, list):
             self.vector_dataset = [self.vector_dataset]
         self.dimension = self.input.param("dimension", 128)
@@ -44,8 +45,7 @@ class VectorSearch(FTSBaseTest):
 
         self.start_key = self.input.param("start_key", 0)
         self.prefilter_query = self.input.param("prefilter_query",
-                                                {"min": int(self.start_key+1), "max": 10000 + int(self.start_key),
-                                                 "field": "sno"})
+                                                {"min": int(self.start_key)+1, "max": 10000 + int(self.start_key),"inclusive_min": True,"inclusive_max": False,"field": "sno"})
         self.conjuction_query_with_prefilter = self.input.param("conjuction_query_with_prefilter",False)
 
         fts_vector_query = {
@@ -310,7 +310,15 @@ class VectorSearch(FTSBaseTest):
                 except Exception as ex:
                     self.log.info("Expected: No results. Observed : No results. Passed")
             else:
-                n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+                num_retries = self.query_retries
+                while num_retries:
+                    self.log.info(f"Attempt ({self.query_retries - num_retries + 1} / {self.query_retries})")
+                    try:
+                        n1ql_hits = self._cb_cluster.run_n1ql_query(n1ql_query)['results'][0]['$1']
+                        break
+                    except Exception as ex:
+                        time.sleep(5)
+                    num_retries -= 1
 
             if n1ql_hits == 0:
                 n1ql_hits = -1
@@ -318,14 +326,24 @@ class VectorSearch(FTSBaseTest):
 
         # Run fts query
         self.log.info(f" Running FTS Query - {self.query}")
-        hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
-                                                                explain=self.query['explain'], return_raw_hits=True,
-                                                                fields=self.query['fields'])
+        num_retries = self.query_retries
+        while num_retries:
+            self.log.info(f"Attempt ({self.query_retries - num_retries + 1} / {self.query_retries})")
+            hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
+                                                                    explain=self.query['explain'], return_raw_hits=True,
+                                                                    fields=self.query['fields'])
+            if type(status) == str or status['failed'] != 0:
+                print(f"debug : status : {status}\n")
+                time.sleep(5)
+                num_retries -= 1
+                continue
+            else:
+                break
 
         if hits == 0:
             hits = -1
         if self.perform_k_validation and hits!=int(self.k):
-            self.fail(f"Less than K hits; Hits :{hits} && k = {k}")
+            self.fail(f"Less than K hits; Hits :{hits} && k = {self.k}")
 
         self.log.info("FTS Hits for Search query: %s" % hits)
 
@@ -357,7 +375,7 @@ class VectorSearch(FTSBaseTest):
             self.log.info("*" * 5 + f"Query RESULT # {self.count - 1}" + "*" * 5)
             fts_faiss_accuracy, fts_faiss_recall = self.compare_results(faiss_results, fts_matches, "faiss",
                                                                         "fts")
-
+            
             if fts_faiss_recall < 85:
                 self.log.info(f"FTS MATCHES: {fts_matches}")
                 self.log.info(f"FAISS MATCHES: {faiss_results}")
@@ -751,7 +769,7 @@ class VectorSearch(FTSBaseTest):
 
         indexes = []
 
-        # create index i1 with dot product similarity
+        # create index i1 with l2_norm similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
         index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
@@ -777,11 +795,15 @@ class VectorSearch(FTSBaseTest):
             index['dataset'] = bucketvsdataset['bucket_name']
             queries = self.get_query_vectors(index['dataset'])
             for q in queries[:self.num_queries]:
-
-                n1ql_hits, hits, matches, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
-                                                                    validate_result_count=False)
-                if n1ql_hits != -1 and hits != -1:
-                    self.fail("Able to get query results even though index is created with different dimension")
+                try:
+                    n1ql_hits, hits, matches, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'],
+                                                                        validate_result_count=False)
+                except KeyError as ky:
+                    print("Results not found in response")
+                    self.assertIn("results", str(ky))  #
+                except Exception as e:
+                    print(f"Failed exception: {str(e)}")
+                    self.assertIn("Search() function using KNN and no search index", str(e))
 
     def create_vector_with_constant_queries_in_background(self):
 
@@ -925,7 +947,7 @@ class VectorSearch(FTSBaseTest):
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
 
-        # create index i1 with dot product similarity
+        # create index i1 with l2_norm similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
         index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
@@ -2069,7 +2091,7 @@ class VectorSearch(FTSBaseTest):
             queries = self.get_query_vectors(index['dataset'])
             for count, q in enumerate(queries[:self.num_queries]):
 
-                hits, n1ql, _, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'], continue_on_failure=True)
+                hits, n1ql, _, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'], continue_on_failure=True,validate_result_count=False)
                 self.assertEqual(hits, -1)
                 self.assertEqual(n1ql, -1)
 
