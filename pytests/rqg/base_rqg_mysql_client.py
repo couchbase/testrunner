@@ -478,13 +478,18 @@ class BaseRQGMySQLClient(MySQLClient):
     def reset_database_add_data(self, database="", items=1000, sql_file_definiton_path="/tmp/definition.sql", populate_data=True, number_of_tables=None):
         sqls = self._read_from_file(sql_file_definiton_path)
         sqls = " ".join(sqls).replace("DATABASE_NAME", database).replace("\n", "")
+        print(f"The number of tables is {number_of_tables}")
+        print("Loading tables")
         self._db_execute_query(sqls)
         self.database = database
         self._reset_client_connection()
         if number_of_tables is not None:
+            print(f"Number of tables is : {number_of_tables}")
             table_list = self._get_table_list()
+            print(f'{table_list[number_of_tables:]}')
             for table_name in table_list[number_of_tables:]:
                 query = "DROP TABLE {0}.{1}".format(database, table_name)
+                print(f'{query}')
                 self._db_execute_query(query)
         if populate_data:
             self._gen_data_simple_table(number_of_rows=items)

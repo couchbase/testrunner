@@ -330,9 +330,12 @@ class BaseRQGTests(BaseTestCase):
             thread_list = []
             start_test_case_number = 1
             if self.crud_ops:
+                i = 1
                 for table_name in table_list:
-                    if len(batches[table_name]) > 0:
-                        self._crud_ops_worker(batches[table_name], table_name, table_map, result_queue, failure_queue)
+                    if i < self.number_of_buckets:
+                        if len(batches[table_name]) > 0:
+                            self._crud_ops_worker(batches[table_name], table_name, table_map, result_queue, failure_queue)
+                    i = i + 1
             elif self.use_txns:
                 for x in range(0, self.num_txns):
                     rollback_exists = False
@@ -465,11 +468,13 @@ class BaseRQGTests(BaseTestCase):
                     input_queue.put({"start_test_case_number": start_test_case_number,
                                      "query_template_list": test_query_template_list})
                     start_test_case_number += len(test_query_template_list)
-
+                i = 1
                 for table_name in table_list:
-                    # Create threads based on number of tables (each table has its own thread)
-                    self._rqg_worker(table_name, table_map, input_queue, result_queue,
-                                               failure_queue)
+                    if i < self.number_of_buckets:
+                        # Create threads based on number of tables (each table has its own thread)
+                        self._rqg_worker(table_name, table_map, input_queue, result_queue,
+                                                   failure_queue)
+                    i = i + 1
             if not self.use_txns:
                 # Analyze the results for the failure and assert on the run
                 self.analyze_test(result_queue, failure_queue)
@@ -489,6 +494,7 @@ class BaseRQGTests(BaseTestCase):
     def _rqg_worker(self, table_name, table_map, input_queue, result_queue, failure_record_queue=None):
         count = 0
         table_name_description_map = {table_name: table_map[table_name]}
+        print(f'{table_name_description_map}')
 
         while True:
             if self.total_queries <= self.query_count:
@@ -1847,13 +1853,16 @@ class BaseRQGTests(BaseTestCase):
         bucket_list = list(table_key_map.keys())
         self.log.info("database used is {0}".format(self.database))
         new_bucket_list = []
+        i = 1
         for bucket in bucket_list:
             if bucket.find("copy_simple_table") > 0:
                 new_bucket_list.append(self.database+"_"+"copy_simple_table")
             else:
-                new_bucket_list.append(self.database + "_" + bucket)
-                if self.subquery:
-                    break
+                if i <= self.number_of_buckets:
+                    new_bucket_list.append(self.database + "_" + bucket)
+                    if self.subquery:
+                        break
+                i = i + 1
         # Create New Buckets
         self.fill_advise_dict(new_bucket_list)
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
