@@ -600,7 +600,7 @@ class BaseRQGTests(BaseTestCase):
             if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
                 self.log.info("No advise for index")
                 return
-            if "index recommendation at this time" not in str(advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]):
+            if "index recommendation at this time" not in str(advise_result):
                 if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
                     "recommended_indexes"].keys():
                     for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
