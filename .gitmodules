@@ -1,3 +1,7 @@
 [submodule "lib/capellaAPI"]
 	path = lib/capellaAPI
 	url = https://github.com/couchbaselabs/CapellaRESTAPIs
+[submodule "py_constants"]
+	path = py_constants
+	url = https://github.com/couchbaselabs/py_constants.git
+	branch = master

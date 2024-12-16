@@ -5,6 +5,7 @@ httplib2
 decorator
 deepdiff
 paramiko
+python-jenkins
 couchbase==4.3.0
 
 # Dispatcher deps
