@@ -37,8 +37,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.build_phase = self.input.param("build_phase", "create")
         self.skip_default = self.input.param("skip_default", True)
         self.post_rebalance_action = self.input.param("post_rebalance_action", "data_load")
+        self.partitioned_index_action = self.input.param("partitioned_index_action", "rebalance_out")
         # the below setting will be reversed post the resolving of MB-63697
         self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
+        self.num_centroids = self.input.param("num_centroids", 256)
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
@@ -1136,7 +1138,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
                                             start_seq_num=self.num_of_docs_per_collection,
                                             end=self.num_of_docs_per_collection + 10000)
-            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
 
         self.sleep(30)
         # Get count before rollback
@@ -1233,7 +1235,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
                                             start_seq_num=self.num_of_docs_per_collection,
                                             end=self.num_of_docs_per_collection + 10000)
-            self.load_docs_via_magma_server(server=data_node.ip, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1,
@@ -1819,6 +1821,81 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results getting rr less than {self.desired_rr}%", similarity=self.similarity)
+
+    def test_partitioned_index_vector_fields_mutation(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_vec2 = list(self.encoder.encode(desc_2))
+        collection_namespace = self.namespaces[0]
+
+        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                               index_fields=['rating', 'descriptionVector Vector',
+                                                                             'category'],
+                                                               dimension=384,
+                                                               description=f"IVF,{self.quantization_algo_description_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_use_index_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                   "description, descriptionVector",
+                                                                   "rating = 2 and "
+                                                                   "category in ['Convertible', "
+                                                                   "'Luxury Car', 'Supercar']",
+                                                                   scan_desc_vec_2),
+                                                               partition_by_fields=['meta().id']
+                                                               )
+
+        create_idx_query = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
+        self.run_cbq_query(query=create_idx_query)
+        # The below query is to ensure that all the vector fields are made into scalar fields
+        update_query = f"update {collection_namespace} set descriptionVector = 'abcd' where rating is not null"
+        self.run_cbq_query(query=update_query)
+
+        # a node is rebalanced out and all the partitions go to another indexer node and the index should not error out because it used code book from the existing instance
+        if self.partitioned_index_action == "rebalance_out":
+            index_node = self.get_nodes_from_services_map(service_type="index")
+            #rebalancing out the above indexer node
+            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                                to_remove=[index_node], services=['index'])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+
+        # a replica is added so new partitions get built and the index should not error out because it used code book from the existing instance
+        elif self.partitioned_index_action == "alter_index":
+            alter_index_query = f'ALTER INDEX `{partitioned_index_description_vector.index_name}` on {collection_namespace} WITH {{"action":"replica_count","num_replica": 1}}'
+            try:
+                self.run_cbq_query(query=alter_index_query)
+            except Exception as e:
+                self.fail(f"test failed with reason {e}")
+
+        status = self.wait_until_indexes_online()
+        self.assertTrue(status)
+
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector],
+                                                            namespace=collection_namespace)[0]
+        self.run_cbq_query(query=select_query)
+
+    def test_retry_index_training(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        collection_namespace = self.namespaces[0]
+
+        primary_index_query = f"CREATE PRIMARY INDEX `#primary` ON {collection_namespace}"
+        self.run_cbq_query(query=primary_index_query)
+
+        #query to ensure only 256 docs have vector fields
+        modification_query = f"UPDATE {collection_namespace} SET descriptionVector = \"hello\" WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
+        self.run_cbq_query(query=modification_query)
+
+        #creating index
+        vector_idx = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
+                                     description=f"{self.description}", similarity="L2_SQUARED", is_base64=self.base64)
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+        self.run_cbq_query(query=query)
+
+        status = self.wait_until_indexes_online()
+        self.assertTrue(status)
 
     def test_rebalance_operation_with_errored_out_indexes(self):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
