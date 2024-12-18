@@ -28,22 +28,44 @@ component = {
             "serverPoolId": "regression",
             "executor_job_parameters": "installParameters=edition=community",
             "token": "extended_sanity",
-        }
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
     ],
 
-    "analytics": [{
-        "suite": ["12hour", "weekly", "12hr_weekly"],
-        "serverPoolId": "regression",
-        "extraParameters": "get-cbcollect-info=True",
-        "token": "extended_sanity",
-    }],
+    "analytics": [
+        {
+            "suite": ["12hour", "weekly", "12hr_weekly"],
+            "serverPoolId": "regression",
+            "extraParameters": "get-cbcollect-info=True",
+            "token": "extended_sanity",
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
+    ],
 
-    "backup_recovery": [{
-        "suite": ["12hour", "weekly", "12hr_weekly"],
-        "serverPoolId": "regression",
-        "extraParameters": "get-cbcollect-info=True",
-        "token": "extended_sanity",
-    }],
+    "backup_recovery": [
+        {
+            "suite": ["12hour", "weekly", "12hr_weekly"],
+            "serverPoolId": "regression",
+            "extraParameters": "get-cbcollect-info=True",
+            "token": "extended_sanity",
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
+    ],
 
     "ce_only": [{
         "suite": ["12hour", "weekly", "12hr_weekly"],
@@ -53,12 +75,20 @@ component = {
         "token": "extended_sanity",
     }],
 
-    "cli": [{
-        "suite": ["12hour", "weekly", "12hr_weekly"],
-        "serverPoolId": "regression",
-        "extraParameters": "get-cbcollect-info=True",
-        "token": "extended_sanity",
-    }],
+    "cli": [
+        {
+            "suite": ["12hour", "weekly", "12hr_weekly"],
+            "serverPoolId": "regression",
+            "extraParameters": "get-cbcollect-info=True",
+            "token": "extended_sanity",
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
+    ],
 
     "cli_imex": [{
         "suite": ["12hour", "weekly", "12hr_weekly"],
@@ -123,7 +153,13 @@ component = {
             "addPoolId": "None",
             "extraParameters": "get-cbcollect-info=True",
             "token": "extended_sanity",
-        }
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
     ],
 
     "geo": [{
@@ -166,7 +202,13 @@ component = {
             "serverPoolId": "regression",
             "executor_job_parameters": "installParameters=edition=community",
             "token": "extended_sanity",
-        }
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
     ],
 
     "rbac": [{
@@ -210,6 +252,21 @@ component = {
         "token": "extended_sanity",
     }],
 
+    "upgrade": [
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
+        {
+            "suite": ["12hr_upgrade_TAF"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        }
+    ],
+
     "view": [{
         "suite": ["12hour", "weekly", "12hr_weekly"],
         "serverPoolId": "regression",
@@ -217,11 +274,19 @@ component = {
         "token": "extended_sanity",
     }],
 
-    "xdcr": [{
-        "suite": ["12hour", "weekly", "12hr_weekly"],
-        "retries": 2,
-        "serverPoolId": "regression",
-        "extraParameters": "get-cbcollect-info=True",
-        "token": "extended_sanity",
-    }],
+    "xdcr": [
+        {
+            "suite": ["12hour", "weekly", "12hr_weekly"],
+            "retries": 2,
+            "serverPoolId": "regression",
+            "extraParameters": "get-cbcollect-info=True",
+            "token": "extended_sanity",
+        },
+        {
+            "suite": ["12hr_upgrade"],
+            "serverPoolId": "upgrade",
+            "addPoolId": "elastic-fts",
+            "token": "extended_sanity",
+        },
+    ],
 }
