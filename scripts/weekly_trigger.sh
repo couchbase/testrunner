@@ -164,7 +164,7 @@ echo "### Triggering Windows jobs ###"
 wget "http://qa.sc.couchbase.com/job/test_suite_dispatcher_dynvm/buildWithParameters?token=extended_sanity&version_number=$version_number&suite=mustpass&serverPoolId=regression&branch=$branch&extraParameters=get-cbcollect-info=True" -O trigger.log
 
 # Following block is from 'trigger_upgrade_jobs' job
-if [ 0 ]; then
+if [ 0 == 1 ]; then
   day=`date '+%a'`
 
   echo version=${version_number}
