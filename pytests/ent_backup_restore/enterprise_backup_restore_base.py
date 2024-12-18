@@ -3162,6 +3162,69 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         # Flag that backup has been made read_only
         self.backupset.read_only = True
 
+    def set_default_retention_repo(self, period, retroactive=False):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        subcommand = f"retention-settings -d --period {period} --archive" \
+                     f" {self.backupset.directory} --repo {self.backupset.name}"
+        if retroactive:
+            subcommand = subcommand + " --retroactive"
+
+        output, error = remote_client.execute_command("{0}cbbackupmgr {1}".format(
+                        self.cli_command_location, subcommand))
+
+        return output, error
+
+    def get_default_retention_period_repo(self):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        subcommand = f"info --json -a {self.backupset.directory} -r {self.backupset.name}"
+        output, error = remote_client.execute_command("{0}cbbackupmgr {1}".format(
+            self.cli_command_location, subcommand))
+
+        return output, error
+
+    def get_retention_info_file(self):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        subcommand = f"cat {self.backupset.directory}/{self.backupset.name}/.retention_info.json"
+        output, error = remote_client.execute_command("{}".format(subcommand))
+
+        return output, error
+
+    def set_retention_period_backup(self, backup_name, period):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        subcommand = f"retention-settings --backup {backup_name} -a {self.backupset.directory}" \
+                     f" -r {self.backupset.name} --period {period}"
+        output, error = remote_client.execute_command("{0}cbbackupmgr {1}".format(
+                        self.cli_command_location, subcommand))
+
+        return output, error
+
+    def remove_expired_backup(self, dry_run=False):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        subcommand = f"remove --expired-only -a {self.backupset.directory} -r {self.backupset.name}"
+
+        if dry_run:
+            subcommand = subcommand + " --dry-run"
+
+        output, error = remote_client.execute_command("{0}cbbackupmgr {1}".format(
+            self.cli_command_location, subcommand))
+
+        return output, error
+
+    def merge_backups(self, backup_start, backup_end):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        subcomand = "merge --archive {} --repo {} --start {} --end {}" \
+                    .format(self.backupset.directory, self.backupset.name, backup_start, backup_end)
+
+        output, error = remote_client.execute_command("{}cbbackupmgr {}".format(
+             self.cli_command_location, subcomand))
+
+        return output, error
 
 class Backupset:
     def __init__(self):

@@ -1,4 +1,5 @@
 import os, re, copy, json, subprocess, datetime
+import time
 from random import randrange, randint, choice
 from threading import Thread
 
@@ -22,6 +23,7 @@ from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
                           ENT_BKRS, ENT_BKRS_FTS
+from datetime import datetime, timedelta
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID = 20485
@@ -5509,3 +5511,610 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         print_tree(buck)
                         if use_json:
                             check_buck(buck)
+
+    def test_default_retention_period(self):
+
+        self.log.info("Testing info command outputs the retention policy for the archive")
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        self.log.info("Creating backup archive and repo")
+        self.backup_create()
+
+        subcommand = f"info --json -a {self.backupset.directory} -r {self.backupset.name}"
+        output, error = remote_client.execute_command("{0}cbbackupmgr {1}".format(
+            self.cli_command_location, subcommand))
+
+        output = json.loads(output[0])
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup")
+
+        self.log.info("Creating backup archive and repo")
+        self.backup_create()
+
+        # Setting the default retention period to 10 days for the repo
+        output, error = self.set_default_retention_repo(10, retroactive=True)
+        self.log.info("The output for retention-settings command is - {}".format(output))
+
+        if error:
+            self.fail("Failed to set the retention settings with error as - {}".format(error))
+
+        self.log.info("Testing the value of default retention period in range[0, 36500]")
+
+        # Setting the default retention period to 36501 days which should fail
+        output, error = self.set_default_retention_repo(36501, retroactive=True)
+
+        self.log.info("The output for retention-settings command is -{}".format(output))
+
+        if "Expected an integer between 0 and 36500 (inclusive) for the --period flag" not in \
+                output[0]:
+            self.fail("Setting retention policy outside range [0, 36500] should have failed")
+
+    def calculate_date(self, input_date, days):
+
+        l = input_date.split("T")
+        input_date = l[0]
+
+        # Parse the input string into a datetime object
+        date_object = datetime.strptime(input_date, "%Y-%m-%d")
+
+        # Subtract days days from the given input date
+        one_day_before = date_object - timedelta(days=days)
+
+        # Format the result back to a string
+        result = one_day_before.strftime("%Y-%m-%d")
+
+        result = result + "T" + l[1]
+        return result
+
+    def create_backup_for_retention_tests(self):
+        self.log.info("Creating backup archive and repo")
+        self.backup_create()
+
+        # Taking 4 backups. First full backup and rest are incremental
+        self.log.info("Taking 4 backups")
+        self._take_n_backups(n=4)
+
+        # Taking one full backup
+        self.backupset.full_backup = True
+        self.log.info("Taking 1 full backup")
+        self._take_n_backups(n=1)
+
+        # 3 incremental backups
+        self.backupset.full_backup = False
+        self.log.info("Taking 3 more backup")
+        self._take_n_backups(n=3)
+
+        # 1 full backup
+        self.backupset.full_backup = True
+        self.log.info("Taking 1 full backup")
+        self._take_n_backups(n=1)
+
+        self.log.info("Listing down the backups present in the repository")
+        error, output, _ = self.backup_list()
+        return output, error
+
+    def test_retention_non_default_backups(self):
+        self.log.info("Testing the retention policy for number of backups including full and "
+                      "incremental backups")
+
+        # Creating multiple backups forming few cycles (full -> incr -> full)
+        output, error = self.create_backup_for_retention_tests()
+        output = json.loads(output[0])
+
+        # backup_lists contains the name of all the backup taken in the above step. This would be
+        # referenced further in the test
+        backup_lists = []
+        for backup in output["repos"][0]["backups"]:
+            backup_lists.append(backup["date"])
+
+        self.log.info("The backups in the archive repo are - {}".format(backup_lists))
+
+        self.log.info("Setting the default retention period to 1 day for the backup repo")
+        output, error = self.set_default_retention_repo(1, retroactive=True)
+
+        if len(error) is not 0:
+            self.fail("Setting retention policy for the repo failed with error as {}".format(error))
+
+        self.log.info("Checking whether the default retention is 1 day for the backup repo")
+
+        # Validating the default retention for the repo
+        output, error = self.get_default_retention_period_repo()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup")
+        elif output["default_retention"] != 1:
+            self.fail("The default retention period is not 1. It is {}".format(output["default_retention"]))
+
+        self.log.info("Checking the default retention in the retention_info.json file")
+
+        # Validating the default retention for the repo with retention_info.json file
+        output, error = self.get_retention_info_file()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup "
+                      "- {}".format(output))
+        elif output["default_retention"] != 1:
+            self.fail("The retention_info.json file default retention period is wrong. The output"
+                        " - {}".format(output))
+        # Commented due to bug - MB-64780
+        # elif len(output["non_default_backups"]) != 0:
+        #     self.fail("The non default backup field is not empty - {}".format(output[
+        #                                                                 "non_default_backups"]))
+
+        self.log.info("Setting retention policy for a backup to 2 days and make sure that the "
+                      "non_default_backup field in the retention_info.json file gets populated")
+
+        # Testing the non_default_backups field in retention_info.json file
+        output, error = self.set_retention_period_backup(backup_lists[0], 2)
+        self.log.info("The subcommand output is - {}".format(output))
+
+        if len(error) != 0:
+            self.fail("Setting retention policy to 2 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The subcommand output is - {}".format(output))
+
+        output = json.loads(output[0])
+
+        if backup_lists[0] not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][backup_lists[0]] != 2:
+            self.fail(
+                "The retention_info.json file default retention period is wrong. The output is - "
+                "{}".format(output))
+
+        output, error = self.set_retention_period_backup(backup_lists[1], 3)
+        self.log.info("The subcommand output is - {}".format(output))
+
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The subcommand output is - {}".format(output))
+
+        output = json.loads(output[0])
+
+        if backup_lists[1] not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][backup_lists[1]] != 3:
+            self.fail(
+                "The retention_info.json file default retention period is wrong. The output is - "
+                "{}".format(output))
+
+        self.log.info("Setting the default retention period to 10 days for the backup repo")
+
+        output, error = self.set_default_retention_repo(10)
+        self.log.info("The output for retention-settings command is - {}".format(output))
+
+        if len(error) != 0:
+            self.fail("Setting retention policy for the repo failed with error as {}".format(error))
+
+        self.log.info("Checking whether the default retention is 10 day for the backup repo")
+
+        output, error = self.get_default_retention_period_repo()
+        output = json.loads(output[0])
+
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup")
+        elif output["default_retention"] != 10:
+            self.fail("The default retention period is not 10. It is {}".format(
+                output["default_retention"]))
+
+        self.log.info("Checking the default retention in the retention_info.json file")
+
+        output, error = self.get_retention_info_file()
+        output = json.loads(output[0])
+
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup")
+        elif output["default_retention"] != 10:
+            self.fail(
+                "The retention_info.json file default retention period is wrong. The output is"
+                " - {}".format(output))
+
+        # Validating the case where setting default retention equal to non default value of backup
+        self.log.info("Store the non default backup field")
+        non_default_backups = output["non_default_backups"]
+
+        self.log.info("Setting default retention period to 2 days")
+        output, error = self.set_default_retention_repo(2)
+
+        if len(error) != 0:
+            self.fail("Setting retention policy for the repo failed with error as {}".format(error))
+
+        self.log.info("Get the retention_info file and validate the non_default_backups")
+        output, error = self.get_retention_info_file()
+        self.log.info("The output is = {}".format(output))
+
+        output = json.loads(output[0])
+
+        if "non_default_backups" not in output:
+            self.fail("Command didn't run correctly. The output is - {}".format(output))
+        else:
+            for backup in output["non_default_backups"]:
+                if output["non_default_backups"][backup] == 2:
+                    self.fail("The default retention is 2 days. The field non_default_backups "
+                              "contain a backup which has retention period as 2 days")
+
+        # Validating that setting the default retention for a repo with retroactive flag empties
+        # the non_default_backup field
+        output, error = self.set_default_retention_repo(5, retroactive=True)
+
+        if len(error) != 0:
+            self.fail("Setting retention policy for the repo failed with error as {}".format(error))
+
+        self.log.info("Validating the --retroactive flag via the retention_info file")
+        output, error = self.get_retention_info_file()
+        self.log.info("The output of retention_info.json file is -{}".format(output))
+
+        output = json.loads(output[0])
+
+        if len(output["non_default_backups"]) != 0:
+            self.fail("The non default backup field is not empty - {}".format(
+                                                output["non_default_backups"]))
+        elif output["default_retention"] != 5:
+            self.fail("The default retention for the repo is not equal to 5")
+
+    def test_retention_cycles_expired(self):
+        self.log.info("Testing the retention once the backups are expired")
+
+        output, error = self.create_backup_for_retention_tests()
+        output = json.loads(output[0])
+        backup_lists = []
+        for backup in output["repos"][0]["backups"]:
+            backup_lists.append(backup["date"])
+
+        self.log.info("The backups in the archive repo are - {}".format(backup_lists))
+
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        new_name_1 = self.calculate_date(backup_lists[3], 1)
+        subcommand = f"mv {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{backup_lists[3]} {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{new_name_1}"
+        output, error = remote_client.execute_command("{}".format(subcommand))
+        self.log.info("The output of the mv command is - {}".format(output))
+        self.log.info("The error of the mv command is - {}".format(error))
+
+        new_name_2 = self.calculate_date(backup_lists[4], 2)
+        subcommand = f"mv {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{backup_lists[4]} {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{new_name_2}"
+        output, error = remote_client.execute_command("{}".format(subcommand))
+        self.log.info("The output of the mv command is - {}".format(output))
+        self.log.info("The error of the mv command is - {}".format(error))
+
+        new_name_3 = self.calculate_date(backup_lists[6], 3)
+        subcommand = f"mv {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{backup_lists[6]} {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{new_name_3}"
+        output, error = remote_client.execute_command("{}".format(subcommand))
+        self.log.info("The output of the mv command is - {}".format(output))
+        self.log.info("The error of the mv command is - {}".format(error))
+
+        new_name_4 = self.calculate_date(backup_lists[8], 4)
+        subcommand = f"mv {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{backup_lists[8]} {self.backupset.directory}/" \
+                     f"{self.backupset.name}/{new_name_4}"
+        output, error = remote_client.execute_command("{}".format(subcommand))
+        self.log.info("The output of the mv command is - {}".format(output))
+        self.log.info("The error of the mv command is - {}".format(error))
+
+        self.log.info("Expiring the backups and removing them with the help of remove command")
+
+        output, error = self.set_retention_period_backup(new_name_1, 1)
+        self.log.info("The subcommand output is - {}".format(output))
+        self.log.info("The subcommand error is - {}".format(error))
+        if len(error) != 0:
+            self.fail("Setting retention policy to 1 day failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The subcommand retention_info output is - {}".format(output))
+        self.log.info("The subcommand retention_info error is - {}".format(error))
+        output = json.loads(output[0])
+        if new_name_1 not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][new_name_1] != 1:
+            self.fail(
+                "The retention_info.json file non default retention period is wrong. The output "
+                "is - {}".format(output))
+
+        output, error = self.set_retention_period_backup(new_name_2, 2)
+        self.log.info("The subcommand output is - {}".format(output))
+        self.log.info("The subcommand error is - {}".format(error))
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        output = json.loads(output[0])
+        if new_name_2 not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][new_name_2] != 2:
+            self.fail(
+                "The retention_info.json file non default retention period is wrong. The output "
+                "is - {}".format(output))
+
+        output, error = self.set_retention_period_backup(new_name_3, 3)
+        self.log.info("The subcommand output is - {}".format(output))
+        self.log.info("The subcommand error is - {}".format(error))
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        output = json.loads(output[0])
+        if new_name_3 not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][new_name_3] != 3:
+            self.fail(
+                "The retention_info.json file non default retention period is wrong. The output "
+                "is - {}".format(output))
+
+        output, error = self.set_retention_period_backup(new_name_4, 4)
+        self.log.info("The subcommand output is - {}".format(output))
+        self.log.info("The subcommand error is - {}".format(error))
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        output = json.loads(output[0])
+        if new_name_4 not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][new_name_4] != 4:
+            self.fail(
+                "The retention_info.json file non default retention period is wrong. The output "
+                "is - {}".format(output))
+
+        output, error = self.remove_expired_backup(dry_run=True)
+        self.log.info("The output of the dry run remove command is - {}".format(output))
+        self.log.info("The error of the dry run remove command is - {}".format(error))
+
+        output = json.loads(output[0])
+        expired_backups = output["expired_backups"]
+        expired_backups_with_non_expired_dependents = output["expired_backups_with_non_expired_dependents"]
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The output of the retention info after dry run remove command is - {}".format(output))
+        self.log.info("The error of the retention info after dry run remove command is - {}".format(error))
+
+        output, error = self.remove_expired_backup()
+        self.log.info("The output of the remove command is - {}".format(output))
+        self.log.info("The error of the remove command is - {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The output of the retention info after remove command is - {}".format(output))
+        self.log.info("The error of the retention info after remove command is - {}".format(error))
+
+        error, backups_after_expiry, _ = self.backup_list()
+        for backup in expired_backups:
+            if backup in backups_after_expiry:
+                self.fail("Backup {} not deleted. Still present in the archive".format(backup))
+
+        for backup in expired_backups_with_non_expired_dependents:
+            if backup not in backups_after_expiry:
+                self.fail("Backup {} is deleted. Should be present in the archive".format(backup))
+
+    def test_merged_backups_retention(self):
+
+        self.log.info("Testing the behaviour for the retention policy of merged backups")
+
+        output, error = self.create_backup_for_retention_tests()
+        output = json.loads(output[0])
+        backup_lists = []
+        for backup in output["repos"][0]["backups"]:
+            backup_lists.append(backup["date"])
+
+        self.log.info("The backups in the archive repo are - {}".format(backup_lists))
+
+        self.log.info("Setting default retention for the repo")
+        output, error = self.set_default_retention_repo(0, retroactive=True)
+        if len(error) != 0:
+            self.fail("Setting default retention policy failed with error as : {}".format(error))
+
+        output, error = self.set_default_retention_repo(0, retroactive=True)
+        if len(error) != 0:
+            self.fail("Setting default retention policy failed with error as : {}".format(error))
+
+        output, error = self.set_retention_period_backup(backup_lists[2], 1)
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.set_retention_period_backup(backup_lists[3], 2)
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.set_retention_period_backup(backup_lists[7], 3)
+        if len(error) != 0:
+            self.fail("Setting retention policy to 3 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        output = json.loads(output[0])
+
+        if backup_lists[2] not in output["non_default_backups"]:
+            self.fail("{} backup is not in non_default_backups - {}".format(backup_lists[2],
+                                                                    output["non_default_backups"]))
+        elif backup_lists[3] not in output["non_default_backups"]:
+            self.fail("{} backup is not in non_default_backups - {}".format(backup_lists[3],
+                                                                    output["non_default_backups"]))
+        elif backup_lists[7] not in output["non_default_backups"]:
+            self.fail("{} backup is not in non_default_backups - {}".format(backup_lists[7],
+                                                                    output["non_default_backups"]))
+
+        backup_start = 1
+        backup_end = 4
+        output, error = self.merge_backups(backup_start, backup_end)
+        self.log.info("The output of merge operation is - {}".format(output))
+
+        if len(error) != 0:
+            self.fail("Merge operation failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        output = json.loads(output[0])
+
+        if backup_lists[2] in output["non_default_backups"]:
+            self.fail("{} backup is still in non_default_backups - {}".format(backup_lists[2],
+                                                                    output["non_default_backups"]))
+        elif backup_lists[3] in output["non_default_backups"]:
+            self.fail("{} backup is still in non_default_backups - {}".format(backup_lists[3],
+                                                                    output["non_default_backups"]))
+        elif backup_lists[7] not in output["non_default_backups"]:
+            self.fail("{} backup is not in non_default_backups - {}".format(backup_lists[7],
+                                                                    output["non_default_backups"]))
+
+    def test_retention_with_mixed_server_versions(self):
+        self.log.info("Test retention with mixed server versions - 7.6.x and 8.0.x")
+
+        self.log.info("Creating backup archive and repo")
+        self.backup_create()
+
+        self.log.info("Getting the default retention for the created repo before mix version")
+        output, error = self.get_default_retention_period_repo()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup")
+
+        self.sleep(5, "Waiting for 5 seconds before installing 7.6 version on all node - "
+                        "{}".format(self.input.servers))
+
+        # Installs the self.initial_version of Couchbase on the all servers
+        self.product = 'couchbase-server'
+        self._install(self.input.servers[:])
+
+        for server in self.input.servers:
+            self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(60),
+                            f"ns_server is not running on {server}")
+
+        self.log.info("Installed initial version {} on nodes - {}".format(self.initial_version,
+                                                                          self.input.servers))
+
+        # Installs the self.initial_version of Couchbase on the all servers
+        self.initial_version = self.upgrade_versions[0]
+        self.product = 'couchbase-server'
+        self._install(self.input.servers[1:2])
+
+        for server in self.input.servers:
+            self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(60),
+                            f"ns_server is not running on {server}")
+
+        self.log.info("Installed upgraded version {} on node - {}".format(self.initial_version,
+                                                                         self.input.servers[1]))
+        self.sleep(10, "Waiting for 10 seconds")
+
+        self.log.info("The self.servers is - {}".format(self.servers))
+        success = self.cluster.rebalance(self.servers, self.servers[1:], [], use_hostnames=False)
+
+        if not success:
+            self.log.info("Rebalance failed. Refer to the logs")
+
+        self.log.info("Getting the default retention for the created repo after mixed version")
+        output, error = self.get_default_retention_period_repo()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" in output:
+            self.fail("The info command included the Default Retention period for a mixed version cluster")
+
+    def test_retention_with_upgrades(self):
+        self.log.info("Test backup retention post upgrade")
+
+        # Creating multiple backups forming few cycles (full -> incr -> full)
+        output, error = self.create_backup_for_retention_tests()
+        output = json.loads(output[0])
+
+        # backup_lists contains the name of all the backup taken in the above step. This would be
+        # referenced further in the test
+        backup_lists = []
+        for backup in output["repos"][0]["backups"]:
+            backup_lists.append(backup["date"])
+
+        self.log.info("The backups in the archive repo are - {}".format(backup_lists))
+
+        # Installs the self.initial_version of Couchbase on the first two servers
+        self.product = 'couchbase-server'
+        self._install(self.input.servers[:])
+
+        self.cluster.rebalance(self.servers, self.servers[1:], [], use_hostnames=False)
+
+        # Check Couchbase is running post installation
+        for server in self.input.servers:
+            self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(60),
+                            f"ns_server is not running on {server}")
+
+        self.log.info("Getting the default retention for the created repo pre upgrade")
+        output, error = self.get_default_retention_period_repo()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" in output:
+            self.fail(
+                "The info command included the Default Retention period for a mixed version cluster")
+
+        self.initial_version = self.upgrade_versions[0]
+
+        # Installs the self.initial_version of Couchbase on the first two servers
+        self.product = 'couchbase-server'
+        self._install(self.input.servers[:])
+
+        # Check Couchbase is running post installation
+        for server in self.input.servers:
+            self.assertTrue(RestHelper(RestConnection(server)).is_ns_server_running(60),
+                            f"ns_server is not running on {server}")
+
+        self.cluster.rebalance(self.servers, self.servers[1:], [], use_hostnames=False)
+
+        self.log.info("Getting the default retention for the created repo post upgrade")
+        output, error = self.get_default_retention_period_repo()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup")
+
+        self.log.info("Setting the default retention period to 1 day for the backup repo")
+        output, error = self.set_default_retention_repo(1, retroactive=True)
+
+        if len(error) is not 0:
+            self.fail(
+                "Setting retention policy for the repo failed with error as {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The output is - {}".format(output))
+
+        output = json.loads(output[0])
+        if "default_retention" not in output:
+            self.fail("The info command didn't include the Default Retention period for a backup "
+                      "- {}".format(output))
+        elif output["default_retention"] != 1:
+            self.fail("The retention_info.json file default retention period is wrong. The output"
+                      " - {}".format(output))
+        # Commented due to bug - MB-64780
+        # elif len(output["non_default_backups"]) != 0:
+        #     self.fail("The non default backup field is not empty - {}".format(output[
+        #                                                                 "non_default_backups"]))
+
+        self.log.info("Setting retention policy for a backup to 2 days and make sure that the "
+                      "non_default_backup field in the retention_info.json file gets populated")
+
+        # Testing the non_default_backups field in retention_info.json file
+        output, error = self.set_retention_period_backup(backup_lists[0], 2)
+        self.log.info("The subcommand output is - {}".format(output))
+
+        if len(error) != 0:
+            self.fail("Setting retention policy to 2 days failed with error as : {}".format(error))
+
+        output, error = self.get_retention_info_file()
+        self.log.info("The subcommand output is - {}".format(output))
+
+        output = json.loads(output[0])
+
+        if backup_lists[0] not in output["non_default_backups"]:
+            self.fail("The non default backups didn't include the backup")
+        elif output["non_default_backups"][backup_lists[0]] != 2:
+            self.fail(
+                "The retention_info.json file default retention period is wrong. The output is - "
+                "{}".format(output))
