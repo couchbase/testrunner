@@ -1,5 +1,7 @@
 from argparse import ArgumentParser
 
+import sys
+
 
 class TestCaseParserCmdLineArgs(object):
     @staticmethod
@@ -28,4 +30,4 @@ class TestCaseParserCmdLineArgs(object):
         parser.add_argument("--job_name", dest="job_name", default=None,
                             help="Job_name used in creating the greenboard entry")
 
-        return parser.parse_args()
+        return parser.parse_args(sys.argv[1:])

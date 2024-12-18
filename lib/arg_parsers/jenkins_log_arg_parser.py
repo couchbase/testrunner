@@ -1,5 +1,7 @@
 from argparse import ArgumentParser
 
+import sys
+
 
 class JenkinsLogParserCmdLineArgs(object):
     @staticmethod
@@ -46,4 +48,4 @@ class JenkinsLogParserCmdLineArgs(object):
                             default=False, action="store_true",
                             help="Parse only best run logs and discard other "
                                  "other runs for the sub-component")
-        return parser.parse_args()
+        return parser.parse_args(sys.argv[1:])
