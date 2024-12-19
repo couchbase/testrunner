@@ -393,3 +393,15 @@ class DateTimeFunctionClass(QueryTests):
         self.assertEqual(td1.total_seconds()/3600, 1.0)
         self.assertEqual(td2.total_seconds()/3600, 1.0)
         self.assertEqual(td3.total_seconds()/3600, 1.0)
+
+    def test_date_range_str_step(self):
+        date1 = "2024-12-10T00:00:00Z"
+        date2 = "2025-01-04T00:00:00Z"
+        query = f'SELECT d FROM (DATE_RANGE_STR("{date1}", "{date2}", "millisecond", 10000)) d limit 3'
+        expected = [
+            {"d": "2024-12-10T00:00:00Z"},
+            {"d": "2024-12-10T00:00:10Z"},
+            {"d": "2024-12-10T00:00:20Z"}
+        ]
+        result = self.run_cbq_query(query)
+        self.assertEqual(expected, result['results'], f"Got wrong results: {result['results']}")
