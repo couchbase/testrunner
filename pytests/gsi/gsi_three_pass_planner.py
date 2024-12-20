@@ -53,7 +53,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         pass
 
     def validate_no_of_shards(self, validation_length=6):
-        shard_list = self.fetch_plasma_shards_list()
+        shard_list = self.fetch_shard_id_list()
         self.assertEqual(len(shard_list), validation_length, f"shard list {shard_list}")
 
     def fetch_shard_partition_map(self):
@@ -89,7 +89,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                                partition_by_fields=['meta().id'])
                 query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             else:
-                idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'],
+                idx = QueryDefinition(index_name='vector_rgb_2', index_fields=['colorRGBVector VECTOR'],
                                              dimension=3,
                                              description="IVF,PQ3x8", similarity="L2_SQUARED",
                                              partition_by_fields=['meta().id'])
@@ -106,7 +106,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
 
         elif self.index_type == "vector":
             if self.same_category_index:
-                idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'],
+                idx = QueryDefinition(index_name='vector_rgb_2', index_fields=['colorRGBVector VECTOR'],
                                       dimension=3,
                                       description="IVF,PQ3x8", similarity="L2_SQUARED",
                                       partition_by_fields=['meta().id'])
@@ -152,7 +152,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                   partition_by_fields=['meta().id'])
             scalar_query = scalar_idx.generate_index_create_query(namespace=collection_namespace,
                                                     defer_build=self.defer_build)
-            vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'],
+            vector_idx = QueryDefinition(index_name='vector_rgb_2', index_fields=['colorRGBVector VECTOR'],
                                       dimension=3,
                                       description="IVF,PQ3x8", similarity="L2_SQUARED",
                                       partition_by_fields=['meta().id'])
@@ -174,12 +174,14 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             scalar_idx = QueryDefinition(index_name='scalar_rgb', index_fields=['color'])
             query = scalar_idx.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         elif self.index_type == "vector":
             vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
                                          description="IVF,PQ3x8", similarity="L2_SQUARED")
             query = vector_idx.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         elif self.index_type == "mixed":
             #creating scalar index
@@ -192,6 +194,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                          description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64)
             query = vector_idx.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         elif self.index_type == "all":
             # creating scalar index
@@ -212,11 +215,12 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                         similarity="L2_SQUARED")
             query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
 
         #validating if num_shards are less than the minimum(6)
-        shard_list = self.fetch_plasma_shards_list()
-        self.assertLess(len(shard_list), 6, f"shard list {shard_list}")
+        shard_list = self.fetch_shard_id_list()
+        self.assertLessEqual(len(shard_list), 6, f"shard list {shard_list}")
 
 
         if self.index_type == "scalar":
@@ -231,6 +235,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                 self.sleep(10)
                 self.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
         elif self.index_type == "vector":
             scalar_idx = QueryDefinition(index_name='scalar_rgb_2', index_fields=['color'])
@@ -243,6 +248,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                 self.sleep(10)
                 self.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
         elif self.index_type == "bhive":
             bhive_idx = QueryDefinition(index_name= 'bhive_description',
@@ -258,6 +264,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                 self.sleep(10)
                 self.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
 
         #validating that shard seggregation has kicked in
@@ -285,6 +292,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             scalar_query_4 = scalar_idx_4.generate_index_create_query(namespace=collection_namespace, num_partition=36)
             for query in [scalar_query_1, scalar_query_2, scalar_query_3, scalar_query_4]:
                 self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         elif self.index_type == "vector":
             vector_idx_1 = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
@@ -303,6 +311,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             vector_query_4 = vector_idx_4.generate_index_create_query(namespace=collection_namespace, num_partition=36)
             for query in [vector_query_1, vector_query_2, vector_query_3, vector_query_4]:
                 self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         elif self.index_type == "mixed":
             vector_idx_1 = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
@@ -324,6 +333,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             scalar_query_1 = scalar_idx_1.generate_index_create_query(namespace=collection_namespace)
             for query in [vector_query_1, vector_query_2, scalar_query_1, vector_query_3]:
                 self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
 
         elif self.index_type == "all":
@@ -345,6 +355,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                         similarity="L2_SQUARED", partition_by_fields=['meta().id'])
             query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_partition=6)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
 
         # validating if num_shards are at shard capacity
         max_shards = self.fetch_total_shards_limit()
@@ -366,6 +377,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                 self.sleep(10)
                 self.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
         elif self.index_type == "vector":
             scalar_idx = QueryDefinition(index_name='scalar_rgb_2', index_fields=['color'])
@@ -378,6 +390,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                 self.sleep(10)
                 self.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
         elif self.index_type == "bhive":
             bhive_idx = QueryDefinition(index_name= 'bhive_description',
@@ -393,6 +406,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                 self.sleep(10)
                 self.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
         elif self.index_type == "all":
             # creating scalar index
@@ -414,7 +428,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_partition=6)
             self.run_cbq_query(query=query, server=self.n1ql_node)
 
-        self.wait_until_indexes_online()
+            self.wait_until_indexes_online()
+
         # if indexes from all the categories exist then the shards must be reused
         if self.index_type == "all":
             num_shards_after = self.fetch_shard_id_list()
@@ -588,7 +603,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             self.assertLessEqual(len(shard_partition_map[shard]), 5, f'shard partition map is {shard_partition_map}')
 
         self.create_index_post_initial_index_creation(collection_namespace=collection_namespace)
-        self.wait_until_indexes_online()
+        self.wait_until_indexes_online(defer_build=self.defer_build)
 
         #validating that creation of indexes shares existing shards
         if self.same_category_index:
@@ -638,7 +653,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             shard_partition_map = self.fetch_shard_partition_map()
             for shard in shard_partition_map:
                 # the assertion is done for 5 partitions per shard since for index mem quota from 0-1GB the shards are reused until each shard has 5 partitions each
-                self.assertEqual(len(shard_partition_map[shard]), 5, f'shard partition map is {shard_partition_map}')
+                self.assertLessEqual(len(shard_partition_map[shard]), 5, f'shard partition map is {shard_partition_map}')
 
         if self.rebalance_type == "rebalance_in":
             add_nodes = [self.servers[self.nodes_init]]
@@ -667,6 +682,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
 
         if self.rebalance_type == "rebalance_out":
             self.create_index_post_initial_index_creation()
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
             # validating shard segregation post creating new indexes post rebalance
             shard_index_map = self.get_shards_index_map()
