@@ -1508,6 +1508,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         os.system(f'pgrep -f .*{self.key_prefix}*')
         os.system(f'pkill -f .*{self.key_prefix}*')
 
+    def kill_pillow_fight(self):
+        self.log.info("killing java doc loader process")
+        os.system(f'pkill cbc-pillowfight')
+
     def _kill_all_processes_index_with_sleep(self, server, sleep_time, timeout=1200):
         self.log.info(threading.currentThread().getName() + " Started")
         endtime = time.time() + timeout

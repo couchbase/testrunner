@@ -6670,7 +6670,7 @@ class MagmaDocLoader(Task):
         if self.sdk_docloader.op_type == "create" and self.sdk_docloader.create_end == 0:
             self.sdk_docloader.create_end = self.sdk_docloader.end + 1
 
-        command = f"java -jar magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar -n {self.server.ip} " \
+        command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
                   f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \
                   f"-update_s {self.sdk_docloader.update_start} -update_e {self.sdk_docloader.update_end} " \
