@@ -6112,7 +6112,7 @@ class RestConnection(object):
                                                   function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        status, content, header = self._http_request(api, 'POST', headers=headers, params=content)
+        status, content, header = self._http_request(api, 'POST', headers=headers)
         if not status:
             raise Exception(content)
         return content
