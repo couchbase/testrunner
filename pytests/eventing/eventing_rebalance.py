@@ -766,11 +766,9 @@ class EventingRebalance(EventingBaseTest):
                                          wait_for_loading=False)
         if self.pause_resume:
             self.resume_function(body)
-        # fail over the kv node
+        # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
-        self.wait_for_failover_or_rebalance()
-        self.sleep(120)
         # do a recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
         self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
