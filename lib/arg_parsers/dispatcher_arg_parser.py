@@ -56,7 +56,6 @@ class DispatcherCommandLineArgs(object):
                             help="Pass sub component regex like %tls%")
         parser.add_argument("--serverPoolId",
                             dest="serverPoolId",
-                            required=True,
                             choices=["regression", "plasma_new",
                                      "12hour", "12hrreg",
                                      "failover", "upgrade", "dev", "durability",
@@ -146,6 +145,9 @@ class DispatcherCommandLineArgs(object):
                             default=DispatcherDefaults.USE_DOCKERIZED_DISPATCHER,
                             choices=[True, False],
                             help="To run dispatcher as docker (py3 version)")
+        parser.add_argument("--use_predefined_params",
+                            dest="use_predefined_params",
+                            action="store_true")
         parser.add_argument("--no_confirm",
                             dest="no_confirm",
                             action="store_true")

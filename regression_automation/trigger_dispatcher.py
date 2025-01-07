@@ -6,6 +6,7 @@ from pprint import pprint
 sys.path = ["..", "../py_constants"] + sys.path
 
 from regression_automation.defaults import DispatcherDefaults
+from regression_automation import component_dispatcher_params
 from lib.arg_parsers.dispatcher_arg_parser import DispatcherCommandLineArgs
 from cb_constants.jenkins import JenkinsConstants
 from cb_constants.rel_branch_map import CB_VERSION_NAME
@@ -40,31 +41,11 @@ class RegressionDispatcher(object):
                  no_confirm=False):
         if cmd_args:
             # If the script is called directly from cmd-line
-            self.os = cmd_args.os
-            self.version_number = cmd_args.version
-            self.columnar_version_number = cmd_args.columnar_version_number
-            self.suite = cmd_args.suite
-            self.component = cmd_args.component
-            self.subcomponent = cmd_args.subcomponent
-            self.subcomponent_regex = cmd_args.subcomponent_regex
-            self.serverPoolId = cmd_args.serverPoolId
-            self.addPoolId = cmd_args.addPoolId
-            self.extraParameters = cmd_args.extraParameters
-            self.url = cmd_args.url
-            self.branch = cmd_args.branch
-            self.cherrypick = cmd_args.cherrypick
-            self.retries = cmd_args.retries
-            self.fresh_run = cmd_args.fresh_run
-            self.rerun_condition = cmd_args.rerun_condition
-            self.rerun_params = cmd_args.rerun_params
-            self.executor_suffix = cmd_args.executor_suffix
-            self.executor_job_parameters = cmd_args.executor_job_parameters
-            self.check_vm = cmd_args.check_vm
-            self.initial_version = cmd_args.initial_version
-            self.serverType = cmd_args.serverType
-            self.skip_install = cmd_args.skip_install
-            self.use_dockerized_dispatcher = cmd_args.use_dockerized_dispatcher
-            self.no_confirm = cmd_args.no_confirm
+            self.__populate_values_from_arg_parser(cmd_args)
+            if self.serverPoolId is None:
+                # This check is required since serverPoolId is optional
+                # and can be read from component_dispatcher_params as well
+                raise Exception("ServerPoolId is not selected")
         else:
             # If the script is called from other scripts
             self.os = os
@@ -94,6 +75,55 @@ class RegressionDispatcher(object):
             self.no_confirm = no_confirm
         if not self.version_number:
             raise Exception(f"Invalid version_number '{self.version_number}'")
+
+    def __populate_values_from_arg_parser(self, cmd_args):
+        self.os = cmd_args.os
+        self.version_number = cmd_args.version
+        self.columnar_version_number = cmd_args.columnar_version_number
+        self.suite = cmd_args.suite
+        self.component = cmd_args.component
+        self.subcomponent = cmd_args.subcomponent
+        self.subcomponent_regex = cmd_args.subcomponent_regex
+        self.serverPoolId = cmd_args.serverPoolId
+        self.addPoolId = cmd_args.addPoolId
+        self.extraParameters = cmd_args.extraParameters
+        self.url = cmd_args.url
+        self.branch = cmd_args.branch
+        self.cherrypick = cmd_args.cherrypick
+        self.retries = cmd_args.retries
+        self.fresh_run = cmd_args.fresh_run
+        self.rerun_condition = cmd_args.rerun_condition
+        self.rerun_params = cmd_args.rerun_params
+        self.executor_suffix = cmd_args.executor_suffix
+        self.executor_job_parameters = cmd_args.executor_job_parameters
+        self.check_vm = cmd_args.check_vm
+        self.initial_version = cmd_args.initial_version
+        self.serverType = cmd_args.serverType
+        self.skip_install = cmd_args.skip_install
+        self.use_dockerized_dispatcher = cmd_args.use_dockerized_dispatcher
+        self.no_confirm = cmd_args.no_confirm
+
+        if cmd_args.use_predefined_params:
+            components = str(self.component).split(",")
+            # If more than once component is given, then iterate over them
+            for comp in components:
+                if comp not in component_dispatcher_params.component:
+                    raise Exception(f"Component '{comp}' not present in predefined_params")
+                for suite_group in component_dispatcher_params.component[comp]:
+                    if self.suite in suite_group["suite"]:
+                        self.serverPoolId = suite_group["serverPoolId"]
+                        if "addPoolId" in suite_group:
+                            self.addPoolId = suite_group["addPoolId"]
+                        if "extraParameters" in suite_group:
+                            if self.extraParameters:
+                                self.extraParameters += f",{suite_group['extraParameters']}"
+                            else:
+                                self.extraParameters += suite_group['extraParameters']
+                        if "executor_job_parameters" in suite_group:
+                            self.executor_job_parameters = suite_group["executor_job_parameters"]
+                        if "retries" in suite_group:
+                            self.retries = suite_group["retries"]
+                        break
 
     def confirm_params(self):
         if self.no_confirm or str(input("\nIs the params okay ? [y/n] ")).lower() == "y":
