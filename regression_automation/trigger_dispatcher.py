@@ -192,9 +192,9 @@ class RegressionDispatcher(object):
 
         params_to_check = [
             "OS", "version_number", "columnar_version_number",
-            "suite", "component", "subcomponent",
-            "branch", "cherrypick", "fresh_run",
-            "rerun_condition", "rerun_params",
+            "suite", "component", "subcomponent", "serverPoolId", "addPoolId",
+            "extraParameters", "branch", "cherrypick", "fresh_run",
+            "rerun_condition", "rerun_params", "executor_job_parameters",
             "serverType", "use_dockerized_dispatcher"]
         for t_build in possible_builds:
             # print(f"Possible build: {t_build}")
