@@ -1,4 +1,6 @@
 import sys
+from time import sleep
+
 import requests
 from jenkins import Jenkins
 from pprint import pprint
@@ -175,6 +177,8 @@ class RegressionDispatcher(object):
 
         possible_builds = list()
         req_result = requests.get(f"{JenkinsConstants.OLD_JENKINS_URL}/job/{JenkinsConstants.DEFAULT_DISPATCHER_JOB}/buildWithParameters?", params=build_params)
+        # Sleep to make sure we get a new build after the last known build
+        sleep(2)
         if 200 <= int(req_result.status_code) <= 210:
             last_5_builds = jenkins_obj.get_job_info(JenkinsConstants.DEFAULT_DISPATCHER_JOB)["builds"][:5]
             for t_build in last_5_builds:
