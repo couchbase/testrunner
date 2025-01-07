@@ -27,6 +27,7 @@ usage: trigger_dispatcher.py
     [--skip_install]
     [--use_dockerized_dispatcher {True,False}]
     [--fresh_run]
+    [--use_predefined_params]
     [--no_confirm]
     [-h]
 ```
@@ -35,3 +36,4 @@ usage: trigger_dispatcher.py
 - Default values for the above optional params are in [default.py](/regression_automation/defaults.py)
 - If `--branch` is 'default', the target branch is auto-selected from [py_constants repo rel_branch_map.py](https://github.com/couchbaselabs/py_constants/blob/master/cb_constants/rel_branch_map.py)
 - `--no_confirm` flag is useful for triggering the script from other shell scripts. Avoid this flag in manual mode to confirm the params before the trigger
+- `--use_predefined_params` is useful to run regression with predefined extraParams / executor specific params during CE / addPoolId details
