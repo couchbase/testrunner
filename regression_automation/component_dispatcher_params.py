@@ -238,6 +238,13 @@ component = {
         "token": "extended_sanity",
     }],
 
+    "subdoc": [{
+        "suite": ["12hour", "weekly", "12hr_weekly"],
+        "serverPoolId": "regression",
+        "extraParameters": "get-cbcollect-info=True",
+        "token": "extended_sanity",
+    }],
+
     "transaction": [{
         "suite": ["12hour", "weekly", "12hr_weekly"],
         "serverPoolId": "regression",
