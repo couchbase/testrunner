@@ -124,6 +124,7 @@ class DispatcherCommandLineArgs(object):
                             help="Send the any job parameters to the executor job. "
                                  "Eg: username=nonroot&password=couchbase&installParameters=timeout=1200,skip_local_download=True")
         parser.add_argument("--check_vm",
+                            type=bool,
                             dest="check_vm",
                             default=DispatcherDefaults.CHECK_VM,
                             choices=[True, False],
@@ -140,6 +141,7 @@ class DispatcherCommandLineArgs(object):
                             dest="skip_install",
                             action="store_true")
         parser.add_argument("--use_dockerized_dispatcher",
+                            type=bool,
                             dest="use_dockerized_dispatcher",
                             default=DispatcherDefaults.USE_DOCKERIZED_DISPATCHER,
                             choices=[True, False],
