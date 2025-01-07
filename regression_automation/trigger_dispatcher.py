@@ -118,7 +118,7 @@ class RegressionDispatcher(object):
                             if self.extraParameters:
                                 self.extraParameters += f",{suite_group['extraParameters']}"
                             else:
-                                self.extraParameters += suite_group['extraParameters']
+                                self.extraParameters = suite_group['extraParameters']
                         if "executor_job_parameters" in suite_group:
                             self.executor_job_parameters = suite_group["executor_job_parameters"]
                         if "retries" in suite_group:
@@ -188,9 +188,9 @@ class RegressionDispatcher(object):
 
         params_to_check = [
             "OS", "version_number", "columnar_version_number",
-            "suite", "component", "subcomponent", "serverPoolId", "addPoolId",
-            "extraParameters", "branch", "cherrypick", "fresh_run",
-            "rerun_condition", "rerun_params", "executor_job_parameters",
+            "suite", "component", "subcomponent",
+            "branch", "cherrypick", "fresh_run",
+            "rerun_condition", "rerun_params",
             "serverType", "use_dockerized_dispatcher"]
         for t_build in possible_builds:
             # print(f"Possible build: {t_build}")
