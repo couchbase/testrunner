@@ -104,7 +104,7 @@ class RegressionDispatcher(object):
     def run(self):
         if self.branch == "default":
             self.branch = CB_VERSION_NAME[self.version_number[:3]]
-            print(f"Auto selected branch: {self.branch}")
+            # print(f"Auto selected branch: {self.branch}")
 
         result_data = dict()
         build_params = {
@@ -156,7 +156,6 @@ class RegressionDispatcher(object):
             result_data["status"] = False
             result_data["info"] = "Failed to dispatch the job"
 
-        build_triggered = None
         params_to_check = [
             "OS", "version_number", "columnar_version_number",
             "suite", "component", "subcomponent", "serverPoolId", "addPoolId",
@@ -164,7 +163,7 @@ class RegressionDispatcher(object):
             "rerun_condition", "rerun_params", "executor_job_parameters",
             "serverType", "use_dockerized_dispatcher"]
         for t_build in possible_builds:
-            print(f"Possible build: {t_build}")
+            # print(f"Possible build: {t_build}")
             b_num = t_build.split('/')[-2]
             build_info = jenkins_obj.get_build_info(JenkinsConstants.DEFAULT_DISPATCHER_JOB, b_num)
             found_cause_action = False
@@ -180,7 +179,7 @@ class RegressionDispatcher(object):
                     for param in action["parameters"]:
                         if param["name"] in params_to_check:
                             if param["value"] != build_params[param["name"]]:
-                                print(f"Mismatch in {param['name']}")
+                                # print(f"Mismatch in {param['name']}")
                                 break
                     else:
                         found_param_match = True
