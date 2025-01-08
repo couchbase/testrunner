@@ -429,3 +429,10 @@ class DateTimeFunctionClass(QueryTests):
         for fmt in expected:
             result = self.run_cbq_query(f"SELECT DATE_FORMAT_STR('{date}', '{fmt}')")
             self.assertEqual(result['results'][0]['$1'], expected[fmt], f"Failed to format date with {fmt}. We got {result['results'][0]['$1']} instead of {expected[fmt]}")
+
+    def test_date_common_format(self):
+        date = "2025-01-28T14:37:23-08:00"
+        result = self.run_cbq_query(f"SELECT DATE_FORMAT_STR('{date}', 'Dy DD Month HH24:MI AM SS')")
+        self.assertEqual(result['results'][0]['$1'], "Tue 28 January 14:37 PM 23", f"Failed to format date. We got {result['results'][0]['$1']} instead of Tue 28 January 14:37 PM 23")
+        result = self.run_cbq_query(f"SELECT DATE_FORMAT_STR('{date}', 'Day DD Mon HH:mm:SS PP')")
+        self.assertEqual(result['results'][0]['$1'], "Tuesday 28 Jan 02:37:23 PM", f"Failed to format date. We got {result['results'][0]['$1']} instead of Tuesday 28 Jan 02:37:23 PM")
