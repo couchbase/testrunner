@@ -3126,26 +3126,35 @@ class QueryTests(BaseTestCase):
     '''Convert output of remote_util.execute_commands_inside to json'''
 
     def convert_to_json(self, output_curl):
-        new_curl = "{" + output_curl
-        json_curl = json.loads(new_curl)
-        return json_curl
+        try:
+            new_curl = "{" + output_curl
+            json_curl = json.loads(new_curl)
+            return json_curl
+        except Exception as ex:
+            self.info.log(output_curl)
 
     '''Convert output of remote_util.execute_command to json
        (stripping all white space to match execute_command_inside output)'''
 
     def convert_list_to_json(self, output_of_curl):
-        new_list = [string.replace(" ", "") for string in output_of_curl]
-        concat_string = ''.join(new_list)
-        json_output = json.loads(concat_string)
-        return json_output
+        try:
+            new_list = [string.replace(" ", "") for string in output_of_curl]
+            concat_string = ''.join(new_list)
+            json_output = json.loads(concat_string)
+            return json_output
+        except Exception as ex:
+            self.info.log(output_of_curl)
 
     '''Convert output of remote_util.execute_command to json to match the output of run_cbq_query'''
 
     def convert_list_to_json_with_spacing(self, output_of_curl):
-        new_list = [string.strip() for string in output_of_curl]
-        concat_string = ''.join(new_list)
-        json_output = json.loads(concat_string)
-        return json_output
+        try:
+            new_list = [string.strip() for string in output_of_curl]
+            concat_string = ''.join(new_list)
+            json_output = json.loads(concat_string)
+            return json_output
+        except Exception as ex:
+            self.info.log(output_of_curl)
 
     ##############################################################################################
     #
