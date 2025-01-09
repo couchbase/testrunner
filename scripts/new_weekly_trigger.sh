@@ -186,8 +186,6 @@ echo "### Triggering Upgrade jobs ###"
 # wget  "http://qa.sc.couchbase.com/job/trigger_upgrade_jobs/buildWithParameters?token=trigger_all&version_number=$version_number&url=$url&branch=$branch&addPoolId=elastic-fts" -O trigger.log
 ## wget  "http://qa.sc.couchbase.com/job/test_suite_dispatcher/buildWithParameters?token=extended_sanity&OS=centos&version_number=$version_number&suite=weekly&component=upgrade&url=$url&serverPoolId=regression&branch=$branch&extraParameters=get-cbcollect-info=True"
 
-wget  "http://qa.sc.couchbase.com/job/cen006-p0-security-vset01-00-secrets/buildWithParameters?token=trigger&version_number=$version_number&branch=$branch" -O trigger.log
-
 echo "### Triggering Alternate Address jobs ###"
 wget  "http://qa.sc.couchbase.com/job/centos-nserv_alternate-address-feature/buildWithParameters?token=trigger_all&version_number=$version_number&url=$url&branch=$branch" -O trigger.log
 
@@ -215,15 +213,16 @@ sleep 60
 
 # SDK situational tests
 # java situational tests
-#wget --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/JAVA/job/sdk-java-situational-release/job/sdk-java-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number" -O trigger.log
+# wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/JAVA/job/sdk-java-situational-release/job/sdk-java-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 
-wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/JAVA/job/sdk-java-situational-release/job/sdk-java-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 # LCB situational tests
-wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "https://sdk.jenkins.couchbase.com/view/Situational/job/c-cpp/job/lcb/job/centos-lcb-sdk-server-situational-tests/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
+# wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "https://sdk.jenkins.couchbase.com/view/Situational/job/c-cpp/job/lcb/job/centos-lcb-sdk-server-situational-tests/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
+
 # .NET situational tests
 wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/.NET/job/sdk-net-situational-release/job/dotnet-situational-all//buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
+
 # Go situational tests
-wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/GO/job/sdk-go-situational-release/job/go-sdk-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
+# wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/GO/job/sdk-go-situational-release/job/go-sdk-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 
 echo "### Triggering Windows jobs ###"
 wget "http://qa.sc.couchbase.com/job/test_suite_dispatcher_dynvm/buildWithParameters?token=extended_sanity&version_number=$version_number&suite=mustpass&serverPoolId=regression&branch=$branch&extraParameters=get-cbcollect-info=True" -O trigger.log
