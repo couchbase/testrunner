@@ -1,18 +1,20 @@
 set +e     # keep going even if there is a shell error e.g. bad wget
 
 sleep_func() {
-  date
-  echo "Sleep $1..."
+  echo "`date`: Sleep $1 .."
   sleep $1
 }
 
 set_os_to_run() {
   os_to_run=$1
-  echo "### OS :: $os_to_run ###"
 }
 
 trigger_old_dispatcher_call() {
-  echo "### Triggering component :: '$components_to_trigger' ###"
+  echo "############# Triggering #############"
+  echo "  OS :: $os_to_run"
+  echo "  Suite :: $suite_to_use"
+  echo "  Component :: $components_to_trigger"
+  echo "  subcomponent :: $subcomponent_to_use"
   output=$(set -x ; python3 trigger_dispatcher.py \
     -v $version_number \
     --os $os_to_run \
@@ -27,7 +29,11 @@ trigger_old_dispatcher_call() {
     --fresh_run \
     --no_confirm)
   triggered_build_num=$(echo $output | sed -n "s/.*'number': \([0-9]\{1,\}\).*/\1/p")
-  echo "     Dispatcher build_num :: '$triggered_build_num'"
+  if [ "$triggered_build_num" = "" ]; then
+    triggered_build_num=NA
+  fi
+  echo "  Dispatcher build_num :: '$triggered_build_num'"
+  echo ""
   triggered_builds_arr+=($components_to_trigger)
   triggered_builds_arr+=($triggered_build_num)
 }
