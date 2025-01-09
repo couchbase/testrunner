@@ -2466,6 +2466,15 @@ class RestConnection(object):
                 return json_parsed_final
         return json_parsed
 
+    # build bhive graph
+    def build_bhive_graph(self, timeout=120):
+        api = self.index_baseUrl + 'bhiveDiag'
+        command = {'Cmd':'buildGraphAll'}
+        status, content, header = self._http_request(api, 'POST', json.dumps(command), timeout=timeout)
+        if not status:
+            raise Exception(content)
+        return content
+
     # returns node data for this host
     def get_nodes_self(self, timeout=120):
         if CbServer.capella_run:

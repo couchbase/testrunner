@@ -186,6 +186,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.index_rest.set_index_settings({"indexer.allowScheduleCreateRebal": self.scheduled_index_create_rebal})
             if self.use_shard_based_rebalance:
                 self.enable_shard_based_rebalance()
+        if self.bhive_index:
+            self.index_rest.build_bhive_graph()
 
         # Disabling CBO and Sequential Scans for GSI tests
 
