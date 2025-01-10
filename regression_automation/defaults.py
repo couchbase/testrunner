@@ -22,3 +22,4 @@ class DispatcherDefaults(object):
     SERVER_TYPE = "ON_PREM"
     SKIP_INSTALL = "False"
     USE_DOCKERIZED_DISPATCHER = True
+    USE_PREDEFINED_PARAMS = False

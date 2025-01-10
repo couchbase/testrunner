@@ -39,6 +39,7 @@ class RegressionDispatcher(object):
                  server_type=DispatcherDefaults.SERVER_TYPE,
                  initial_version=DispatcherDefaults.INITIAL_VERSION,
                  skip_install=DispatcherDefaults.SKIP_INSTALL,
+                 use_predefined_params=DispatcherDefaults.USE_PREDEFINED_PARAMS,
                  use_dockerized_dispatcher=DispatcherDefaults.USE_DOCKERIZED_DISPATCHER,
                  no_confirm=False):
         if cmd_args:
@@ -74,6 +75,7 @@ class RegressionDispatcher(object):
             self.serverType = server_type
             self.skip_install = skip_install
             self.use_dockerized_dispatcher = use_dockerized_dispatcher
+            self.use_predefined_params = use_predefined_params
             self.no_confirm = no_confirm
         if not self.version_number:
             raise Exception(f"Invalid version_number '{self.version_number}'")
@@ -103,9 +105,10 @@ class RegressionDispatcher(object):
         self.serverType = cmd_args.serverType
         self.skip_install = cmd_args.skip_install
         self.use_dockerized_dispatcher = cmd_args.use_dockerized_dispatcher
+        self.use_predefined_params = cmd_args.use_predefined_params
         self.no_confirm = cmd_args.no_confirm
 
-        if cmd_args.use_predefined_params:
+        if self.use_predefined_params:
             components = str(self.component).split(",")
             # If more than once component is given, then iterate over them
             for comp in components:
