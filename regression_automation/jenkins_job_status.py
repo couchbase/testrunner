@@ -1,6 +1,6 @@
 import sys
 
-from jenkins import Jenkins
+from jenkins import Jenkins, JenkinsException
 
 sys.path = ["..", "../py_constants"] + sys.path
 from cb_constants.jenkins import JenkinsConstants
@@ -12,13 +12,21 @@ class JenkinsJobStatus:
         self.jenkins = Jenkins(jenkins_url)
 
     def job_status(self, job_num):
-        info = self.jenkins.get_build_info(self.job_name, job_num)
         status = "NA"
-        if info["building"]:
-            status = "RUNNING"
-        elif 'result' in info:
-            status = info["result"]
-        print(f"Desc: {info['description']}")
+        try:
+            info = self.jenkins.get_build_info(self.job_name, job_num)
+            if info["building"]:
+                status = "RUNNING"
+            elif 'result' in info:
+                status = info["result"]
+            desc = f"Desc: {info['description']}"
+        except JenkinsException as e:
+            if f"number[{job_num}] does not exist" in str(e):
+                desc = f"Job: {job_num}"
+                status = "NOT_FOUND"
+            else:
+                raise e
+        print(desc)
         print(f"Status: {status}")
         print("")
 
