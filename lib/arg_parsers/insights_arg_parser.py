@@ -20,4 +20,6 @@ class InsightsCmdLineArgs(object):
                             help="Runs the script only on the last run of each subcomponent")
         parser.add_argument("--rerun_failed_install", action="store_true",
                             help="If set, will rerun all failed install run")
+        parser.add_argument("--rerun_failed_jobs", action="store_true",
+                            help="If set, will rerun all jobs with test failures")
         return parser.parse_args(custom_args or sys.argv[1:])

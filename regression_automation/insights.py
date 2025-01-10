@@ -35,12 +35,24 @@ def get_rerun_jobs_for_failed_runs(t_install_failed_jobs):
     :param t_install_failed_jobs: List of failed jobs data
     :return rerun_dict: Format:
       {
-        {"component_1": {
-            {"sub_comp_1": 8281},
-            {"sub_comp_2": 9281}}
-        {"component_2": {
-            {"sub_comp_1": 8241},
-            {"sub_comp_2": 5281}}}
+        "component_1": {
+          "sub_comp_1": {
+            <branch>: {
+              "db_doc_key": <doc_key>,
+              "jenkins_job_num": <jenkins_job_num>,
+              "automation_action": <bool>
+            }
+          }
+        },
+        "component_2": {
+          "sub_comp_1": {
+            <branch>: {
+              "db_doc_key": <doc_key>,
+              "jenkins_job_num": <jenkins_job_num>,
+              "automation_action": <bool>
+            }
+          }
+        }
       }
     """
     rerun_dict = dict()
@@ -67,9 +79,9 @@ def get_rerun_jobs_for_failed_runs(t_install_failed_jobs):
             rerun_dict[component][subcomponent]["automation_action"] = True
             continue
 
-        rerun_dict[component][subcomponent]["db_doc_key"] = db_doc_key
-        rerun_dict[component][subcomponent]["jenkins_job_num"] = jenkins_job_id
-        rerun_dict[component][subcomponent]["branch"] = job_run_branch
+        rerun_dict[component][subcomponent][job_run_branch] = dict()
+        rerun_dict[component][subcomponent][job_run_branch]["db_doc_key"] = db_doc_key
+        rerun_dict[component][subcomponent][job_run_branch]["jenkins_job_num"] = jenkins_job_id
         if automation_action == "rerun_triggered":
             # Set this so that other failures for the same subcomponent
             # won't be taken any action (Assumption here is,
@@ -87,7 +99,6 @@ def update_automation_action_field(sdk_connection, docs_info, action_val):
                 t_run["automation_action"] = action_val
                 sdk_connection.upsert_doc(doc_key, res_doc)
                 break
-        break
 
 
 def trigger_rerun(rerun_dict):
@@ -97,39 +108,53 @@ def trigger_rerun(rerun_dict):
     run_analyzer["sdk_client"].select_collection(
         run_analyzer["scope"], run_analyzer["collection"])
 
+    run_map = dict()
     for component_name, components_dict in rerun_dict.items():
-        rerun_sub_components = list()
-        rerun_sub_comp_info_dict = list()
-        os = set()
-        branch = set()
         for subcomponent_name, sub_comp_dict in components_dict.items():
-            if "db_doc_key" in sub_comp_dict:
-                rerun_sub_components.append(subcomponent_name)
-                rerun_sub_comp_info_dict.append(sub_comp_dict)
-                os.add(sub_comp_dict["db_doc_key"].split('_')[1].split("-")[0])
-                branch.add(sub_comp_dict["branch"])
+            for branch_to_run, job_info_dict in sub_comp_dict.items():
+                if "db_doc_key" in job_info_dict:
+                    os_to_run = job_info_dict["db_doc_key"].split('_')[1].split("-")[0]
+                    if os_to_run not in run_map:
+                        run_map[os_to_run] = dict()
+                    if branch_to_run not in run_map[os_to_run]:
+                        run_map[os_to_run][branch_to_run] = dict()
+                    if component_name not in run_map[os_to_run][branch_to_run]:
+                        run_map[os_to_run][branch_to_run][
+                            component_name] = dict()
+                    run_map[os_to_run][branch_to_run][component_name][
+                        subcomponent_name] = job_info_dict
 
-        if len(os) != 1:
-            raise Exception(f"Mixed OS present: {os}")
-        if len(branch) != 1:
-            raise Exception(f"Mixed branch to run present: {branch}")
-        os = os.pop()
-        branch = branch.pop()
-        update_automation_action_field(run_analyzer["sdk_client"],
-                                       rerun_sub_comp_info_dict,
-                                       action_val="rerun_triggered")
-        # Trigger the rerun now
-        dispatcher_trigger_result = RegressionDispatcher(
-            os=os,
-            version_number=arguments.version,
-            suite="12hr_weekly",
-            component=component_name,
-            subcomponent=",".join(rerun_sub_components),
-            branch=branch,
-            use_dockerized_dispatcher=True,
-            no_confirm=True).run()
-        print(f"Rerun triggered: ")
-        pprint(dispatcher_trigger_result)
+    for os_name, os_dict in run_map.items():
+        for branch_name, branch_dict in os_dict.items():
+            for component_name, comp_dict in branch_dict.items():
+                subcomponents = list()
+                job_info_dicts = list()
+                for sub_comp_name, job_info in comp_dict.items():
+                    subcomponents.append(sub_comp_name)
+                    job_info_dicts.append(job_info)
+
+                prefix = f"{os_name} :: {branch_name} :: {component_name}"
+                if not subcomponents:
+                    print(f"{prefix} - Nothing to trigger")
+                    continue
+
+                print(f"{prefix} :: {subcomponents}")
+                # Below two lines should be a transaction
+                update_automation_action_field(run_analyzer["sdk_client"],
+                                               job_info_dicts,
+                                               action_val="rerun_triggered")
+                # Trigger the rerun now
+                dispatcher_trigger_result = RegressionDispatcher(
+                    os=os_name,
+                    version_number=arguments.version,
+                    suite="12hr_weekly",
+                    component=component_name,
+                    subcomponent=",".join(subcomponents),
+                    branch=branch_name,
+                    use_dockerized_dispatcher=True,
+                    no_confirm=True).run()
+                print(f"Rerun triggered: ")
+                pprint(dispatcher_trigger_result)
 
 
 print("Parsing command line args")
@@ -162,6 +187,7 @@ rows = run_analyzer["sdk_client"].cluster.query(query_str)
 data = list()
 error_data = dict()
 backtraces_hash_map = dict()
+tests_failed_jobs = list()
 install_failed_jobs = list()
 subcomponents_to_rerun = set()
 other_warnings = list()
@@ -182,7 +208,7 @@ for row in rows:
                 run.get("run_note", "install_failed"),  # 7
                 run.get("job_id", "NA"),                # 8
                 run.get("tests", []),                   # 9
-                row.get("automation_action", "NA"),     # 10
+                run.get("automation_action", "NA"),     # 10
                 row['id'],                              # 11
             ])
     else:
@@ -201,7 +227,7 @@ for row in rows:
                 run.get("run_note", "install_failed"),  # 7
                 run.get("job_id", "NA"),                # 8
                 run.get("tests", []),                   # 9
-                row.get("automation_action", "NA"),     # 10
+                run.get("automation_action", "NA"),     # 10
                 row['id'],                              # 11
             ]
             # If run_note == "PASS", we can break without validating other runs
@@ -237,6 +263,8 @@ for run in data:
     if run[7] == "install_failed":
         install_failed_jobs.append(run)
         continue
+
+    tests_failed_jobs.append(run)
     # run[9] is the list the individual tests run in the given run
     for test_num, test in enumerate(run[9]):
         if 'backtrace' not in test:
@@ -316,9 +344,14 @@ if other_warnings:
     for warning_str in other_warnings:
         print(warning_str)
 
+jobs_to_rerun = list()
+if arguments.rerun_failed_jobs:
+    jobs_to_rerun.extend(tests_failed_jobs)
 if arguments.rerun_failed_install:
-    rerun_jobs = get_rerun_jobs_for_failed_runs(install_failed_jobs)
-    trigger_rerun(rerun_jobs)
+    jobs_to_rerun.extend(install_failed_jobs)
+
+rerun_jobs = get_rerun_jobs_for_failed_runs(jobs_to_rerun)
+trigger_rerun(rerun_jobs)
 
 print("Closing SDK clients")
 run_analyzer["sdk_client"].close()
