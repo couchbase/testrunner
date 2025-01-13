@@ -1622,7 +1622,7 @@ class QueryTests(BaseTestCase):
                     try:
                         result = json.loads(output1)
                     except Exception as ex:
-                        self.log.error("CANNOT LOAD QUERY RESULT IN JSON: %s" % ex.message)
+                        self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {str(ex)}")
                         self.log.error("INCORRECT DOCUMENT IS: " + str(output1))
         try:
             if isinstance(result, str) or 'errors' in result:
