@@ -4520,4 +4520,19 @@ class QuerySanityTests(QueryTests):
         self.assertTrue(result['results'][0]['type'] in ['airline', 'airport', 'hotel', 'route'])
         self.assertTrue(result['results'][1]['type'] in ['airline', 'airport', 'hotel', 'route'])
         self.assertNotEqual(result['results'][0]['type'], result['results'][1]['type'])
-        self.assertTrue(result['results'][0]['$1'] > 0 and result['results'][1]['$1'] > 0)        
+        self.assertTrue(result['results'][0]['$1'] > 0 and result['results'][1]['$1'] > 0)
+
+    # MB-64484
+    def test_prepared_hints(self):
+        self.fail_if_no_buckets()
+        prepare = 'prepare prepared_hint FROM SELECT * FROM `travel-sample` USE INDEX (def_city) WHERE city = "Los Angeles";'
+        expected = 'SELECT * FROM `travel-sample` USE INDEX (def_city) WHERE city = "Los Angeles";'
+        self.run_cbq_query(prepare)
+        # We are looking to see that the hints followed section does not display any syntax errors in a 2 node environment
+        hints_followed = self.run_cbq_query('select * from system:prepareds')
+        self.assertTrue("['INDEX(`travel-sample` `def_city`)']" in str(hints_followed), f"We expect the indexer hint to be backticked, please check the plan: {hints_followed}")
+        actual_result = self.run_cbq_query('execute prepared_hint')
+        expected_result = self.run_cbq_query(expected)
+        diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
