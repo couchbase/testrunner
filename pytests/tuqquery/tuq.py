@@ -1620,6 +1620,8 @@ class QueryTests(BaseTestCase):
                     else:
                         output1 = output
                     try:
+                        if "\x04" in output1:
+                            output1 = output1.replace("\x04","")
                         result = json.loads(output1)
                     except Exception as ex:
                         self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {str(ex)}")
@@ -3128,6 +3130,8 @@ class QueryTests(BaseTestCase):
     def convert_to_json(self, output_curl):
         try:
             new_curl = "{" + output_curl
+            if "\x04" in new_curl:
+                new_curl = new_curl.replace("\x04", "")
             json_curl = json.loads(new_curl)
             return json_curl
         except Exception as ex:
