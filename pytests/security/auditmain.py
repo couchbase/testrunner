@@ -21,7 +21,7 @@ log = logger.Logger.get_logger()
 import socket
 
 class audit:
-    AUDITLOGFILENAME = 'audit.log'
+    AUDITLOGFILENAME = 'current-audit.log'
     AUDITCONFIGFILENAME = 'audit.json'
     AUDITDESCFILE = 'audit_events.json'
     WINLOGFILEPATH = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs"
