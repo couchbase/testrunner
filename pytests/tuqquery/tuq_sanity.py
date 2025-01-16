@@ -272,6 +272,18 @@ class QuerySanityTests(QueryTests):
                                            'GROUP BY {u.ac1, u.ac2} AS g;',query_params={"max_parallelism":2,"memory_quota":13000})
         self.assertTrue(results['status'] == "success")
 
+    #MB-55851
+    def test_mem_quota_join_subquery(self):
+        for i in range(100):
+            results = self.run_cbq_query(query=' SELECT COUNT(*) FROM '
+                                               '(SELECT DISTINCT route.destinationairport, route.stops, route.airline, airline.name, airline.callsign '
+                                               'FROM `travel-sample`.inventory.route '
+                                               'LEFT JOIN `travel-sample`.inventory.airline ON route.airlineid = META(airline).id '
+                                               'WHERE route.sourceairport = "SFO" AND route.stops = 0) t ;',
+                                         query_params={"memory_quota": 100})
+            self.assertTrue(results['status'] == "success")
+            self.assertTrue(results['results'] == [{"$1": 249}])
+
     def test_collections_meta_cas(self):
         results = self.run_cbq_query(query='select meta(d).cas from default:default.test.test1 as d')
         self.assertEqual(results['metrics']['resultCount'], 4)
