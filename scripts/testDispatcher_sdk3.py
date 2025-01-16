@@ -214,6 +214,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             #ssh.auth_password()
             ssh.connect(hostname=server, username=ssh_username, password=ssh_password)
+            ssh.close()
             print("Successfully established test ssh connection to {0}. VM is recognized as valid.".format(server))
             return True
         except Exception as e:
