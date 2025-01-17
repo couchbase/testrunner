@@ -269,6 +269,14 @@ class QueryTimeSeriesTests(QueryTests):
         result = self.run_cbq_query(ts_query)
         self.assertEqual(result['results'], [])
 
-    
+    def test_static_constants(self):
+        ts_query = '''
+            WITH docs AS ( [ ] ), range_start AS (1375056000000), range_end AS (1375574400000)
+                SELECT MILLIS_TO_TZ(t._t,"UTC") AS day, t._v0 AS low, t._v1 AS high
+                FROM docs AS d
+                UNNEST _timeseries(d, {"ts_ranges": [range_start, range_end]}) AS t
+        '''
+        result = self.run_cbq_query(ts_query)
+        self.assertEqual(result['results'], [])
 
 
