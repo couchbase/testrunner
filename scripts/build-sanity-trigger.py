@@ -803,7 +803,7 @@ VERSION_DATA = {
         },
         "testrunner_branch": "master",
     },
-    "7.7.0": {
+    "7.6.6": {
         "platforms": {
             "debian12": True
         },
