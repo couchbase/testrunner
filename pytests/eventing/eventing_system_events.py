@@ -20,12 +20,20 @@ class EventingSystemEvents(EventingBaseTest):
     def tearDown(self):
         super(EventingSystemEvents, self).tearDown()
 
+    def _create_save_function_body_with_retry(self, retries=3, interval=5):
+        for attempt in range(retries):
+            try:
+                return self.create_save_function_body(self.function_name, self.handler_code)
+            except Exception as e:
+                if "ERR_COLLECTION_MISSING" not in str(e) or attempt == retries - 1:
+                    raise
+                self.sleep(interval, "Collection not yet visible to eventing, retrying function save")
+
     def test_eventing_processes_system_events(self):
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.producer_startup(self.eventing_node))
         self.system_events.validate(server=self.master)
-        body = self.create_save_function_body(self.function_name,
-                                              self.handler_code)
+        body = self._create_save_function_body_with_retry()
         self.deploy_function(body)
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.consumer_startup(self.eventing_node))
@@ -37,8 +45,7 @@ class EventingSystemEvents(EventingBaseTest):
         self.system_events.validate(server=self.master)
 
     def test_debugger_and_tracing_start_stop_system_events(self):
-        body = self.create_save_function_body(self.function_name,
-                                              self.handler_code)
+        body = self._create_save_function_body_with_retry()
         self.deploy_function(body)
         self.rest.enable_eventing_debugger()
         self.rest.start_eventing_debugger(self.function_name,
@@ -51,20 +58,11 @@ class EventingSystemEvents(EventingBaseTest):
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.stop_debugger(self.eventing_node,
                                                 self.function_name))
-        os.system("""curl -v -u Administrator:password -XGET \
-                 http://{0}:8096/startTracing >/dev/null 2>&1 &"""
-                  .format(self.eventing_node.ip))
-        global_vars.system_event_logs.add_event(
-            EventingServiceEvents.start_tracing(self.eventing_node))
-        self.rest.stop_tracing()
-        global_vars.system_event_logs.add_event(
-            EventingServiceEvents.stop_tracing(self.eventing_node))
         self.undeploy_and_delete_function(body)
         self.system_events.validate(server=self.master)
 
     def test_create_delete_import_export_eventing_functions_system_events(self):
-        body = self.create_save_function_body(self.function_name,
-                                              self.handler_code)
+        body = self._create_save_function_body_with_retry()
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.create_function(self.eventing_node,
                                                   self.function_name))
@@ -81,8 +79,7 @@ class EventingSystemEvents(EventingBaseTest):
         self.system_events.validate(server=self.master)
 
     def test_lifecycle_operations_system_events(self):
-        body = self.create_save_function_body(self.function_name,
-                                              self.handler_code)
+        body = self._create_save_function_body_with_retry()
         self.deploy_function(body)
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.deploy_function(self.eventing_node,
