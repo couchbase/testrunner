@@ -797,6 +797,12 @@ VERSION_DATA = {
         },
         "testrunner_branch": "master",
     },
+    "7.6.5": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "master",
+    },
     "7.7.0": {
         "platforms": {
             "debian12": True
