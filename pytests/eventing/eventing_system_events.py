@@ -51,14 +51,6 @@ class EventingSystemEvents(EventingBaseTest):
         global_vars.system_event_logs.add_event(
             EventingServiceEvents.stop_debugger(self.eventing_node,
                                                 self.function_name))
-        os.system("""curl -v -u Administrator:password -XGET \
-                 http://{0}:8096/startTracing >/dev/null 2>&1 &"""
-                  .format(self.eventing_node.ip))
-        global_vars.system_event_logs.add_event(
-            EventingServiceEvents.start_tracing(self.eventing_node))
-        self.rest.stop_tracing()
-        global_vars.system_event_logs.add_event(
-            EventingServiceEvents.stop_tracing(self.eventing_node))
         self.undeploy_and_delete_function(body)
         self.system_events.validate(server=self.master)
 
