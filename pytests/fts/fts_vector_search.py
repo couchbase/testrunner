@@ -71,6 +71,8 @@ class VectorSearch(FTSBaseTest):
             else:
                 fts_vector_query["knn"][0]["field"] = "vector_data"
                 fts_vector_query["knn"][0]["vector"] = []
+        
+        self.raw_query = copy.deepcopy(fts_vector_query)
 
         if self.change_nprobe_settings:
             fts_vector_query["knn"][0]["params"] = self.knn_params
@@ -280,13 +282,31 @@ class VectorSearch(FTSBaseTest):
     def run_vector_query(self, vector, index, neighbours=None,
                          validate_result_count=True, perform_faiss_validation=False,
                          validate_fts_with_faiss=False, load_invalid_base64_string=False, base64Flag=True,
-                         store_all_flag=False, continue_on_failure=False):
-
-        if store_all_flag:
-            self.encode_base64_vector = base64Flag
+                         store_all_flag=False, continue_on_failure=False,doc_filter_index = None):
 
         if isinstance(self.query, str):
             self.query = json.loads(self.query)
+            self.raw_query = json.loads(self.raw_query)
+        
+        if doc_filter_index:
+
+            self.query['knn'][0]['vector'] = vector
+            self.raw_query['knn'][0]['vector'] = vector
+            self.query["knn"][0]["filter"] = self.prefilter_query
+            
+            hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
+                                                                    explain=self.query['explain'], return_raw_hits=True,
+                                                                    fields=self.query['fields'])
+
+            hits_d,matches_d,time_taken_d,status_d = doc_filter_index.execute_query(query=self.raw_query['query'], knn=self.raw_query['knn'],
+                                                                    explain=self.query['explain'], return_raw_hits=True,
+                                                                    fields=self.query['fields'])
+            
+            return hits, hits_d, matches, matches_d, status, status_d
+
+
+        if store_all_flag:
+            self.encode_base64_vector = base64Flag
 
         if self.encode_base64_vector:
             if load_invalid_base64_string:
@@ -296,6 +316,7 @@ class VectorSearch(FTSBaseTest):
                 self.query['knn'][0]['vector_base64'] = self.get_base64_encoding(vector)
         else:
             self.query['knn'][0]['vector'] = vector
+
         self.log.info("*" * 20 + f" Running Query # {self.count} - on index {index.name} " + "*" * 20)
         self.count += 1
         # Run fts query via n1ql
@@ -2094,6 +2115,267 @@ class VectorSearch(FTSBaseTest):
                 hits, n1ql, _, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'], continue_on_failure=True,validate_result_count=False)
                 self.assertEqual(hits, -1)
                 self.assertEqual(n1ql, -1)
+    
+    def test_docfilter(self):
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+
+        collection_list =  eval(TestInputSingleton.input.param("collection", ["c1"]))
+        #docilter docloader
+        result = None
+        try:
+            result = self.docfilter_data("b1","s1",collection_list[0],prefix="vect")
+        except Exception as ex:
+            self.fail(ex)
+
+        #vector data loader
+        bucketvsdataset = self.load_vector_data(containers, dataset=["siftsmall"], start_key=self.start_key,provideDefaultDocs=False,doc_filter_test=True)
+
+
+        res_ = result.decode('utf-8')
+        res = json.loads(res_)
+
+        #defining filters and groundtruth values
+        term_filter = res["term_filter"]
+        bool_filter = res["bool_filter"]
+        numeric_filter = res["numeric_filter"]
+        date_filter = res["date_filter"]
+        conjunction_filter = res["conjunction_filter"]
+        disjunction_filter = res["disjunction_filter"]
+
+        term_filter_match = res["term_filter_match"]
+        bool_filter_match = res["bool_filter_match"]
+        numeric_filter_match = res["numeric_filter_match"]
+        date_filter_match = res["date_filter_match"]
+        conjunction_res = res["conjunction_filter_docs"]
+        disjunction_res = res["disjunction_filter_docs"]
+
+        min_pass = res["min_pass"]
+
+        queries = self.get_query_vectors("siftsmall")
+
+        #term filter
+        term_query = term_filter.copy()
+        term_query.pop('order',None)
+        self.prefilter_query = term_query
+
+        self.log.info(f"Assigned Prefilter Query : {self.prefilter_query}\n")
+
+        index_ = self.construct_docfilter_index([("term_filter",term_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index.index_definition['uuid'] = doc_index.get_uuid()
+
+        idx = [("i1", f"b1.s1.{collection_list[0]}")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"term_string": "text"}])
+        
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+
+
+        for count, q in enumerate(queries[:self.num_queries]):
+            hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
+                                                                    perform_faiss_validation=False,
+                                                                    validate_fts_with_faiss=False,doc_filter_index=doc_index)
+
+            self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
+            self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
+
+            fts_matches = []
+            for i in range(int(hits_fts)):
+                fts_matches.append(int(matches_fts[i]['id'][4:]))
+            
+            fts_matches.sort()
+            
+            doc_filter_matches = []
+            for i in range(int(hits_doc)):
+                doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
+            
+            doc_filter_matches.sort()
+
+            self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
+            self.log.info(f"Doc Hits (doc filter) : {doc_filter_matches}\n")
+
+            if fts_matches != doc_filter_matches:
+                self.fail("Doc hits with prefiltering and doc filter are not equal")
+
+
+        #bool filter
+        bool_query = bool_filter.copy()
+        bool_query.pop('order',None)
+
+        self.prefilter_query = bool_query
+
+        self.log.info(f"Assigned Prefilter Query : {self.prefilter_query}\n")
+
+        self._cb_cluster.delete_fts_index("i0")
+        self._cb_cluster.delete_fts_index("i1")
+
+        time.sleep(10)
+
+        index_ = self.construct_docfilter_index([("bool_filter",bool_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index.index_definition['uuid'] = doc_index.get_uuid()
+
+        idx = [("i1", f"b1.s1.{collection_list[0]}")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"bool_string": "boolean"}])
+        
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+
+        time.sleep(30)
+        for count, q in enumerate(queries[:self.num_queries]):
+            hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
+                                                                    perform_faiss_validation=False,
+                                                                    validate_fts_with_faiss=False,doc_filter_index=doc_index)
+            
+            self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
+            self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
+
+            fts_matches = []
+            for i in range(int(hits_fts)):
+                fts_matches.append(int(matches_fts[i]['id'][4:]))
+            
+            fts_matches.sort()
+            
+            doc_filter_matches = []
+            for i in range(int(hits_doc)):
+                doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
+            
+            doc_filter_matches.sort()
+
+            self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
+            self.log.info(f"Doc Hits (doc filter) : {doc_filter_matches}\n")
+
+            if fts_matches != doc_filter_matches:
+                self.fail("Doc hits with prefiltering and doc filter are not equal")
+        
+        #numeric filter
+        numeric_query = numeric_filter.copy()
+        numeric_query.pop('order',None)
+        self.prefilter_query = numeric_query
+
+        self.log.info(f"Assigned Prefilter Query : {self.prefilter_query}\n")
+
+        self._cb_cluster.delete_fts_index("i0")
+        self._cb_cluster.delete_fts_index("i1")
+
+        time.sleep(10)
+
+        index_ = self.construct_docfilter_index([("numeric_filter",numeric_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index.index_definition['uuid'] = doc_index.get_uuid()
+
+        idx = [("i1", f"b1.s1.{collection_list[0]}")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"num_val": "number"}])
+        
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+
+        time.sleep(30)
+        for count, q in enumerate(queries[:self.num_queries]):
+            hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
+                                                                    perform_faiss_validation=False,
+                                                                    validate_fts_with_faiss=False,doc_filter_index=doc_index)
+            
+            self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
+            self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
+
+            if hits_doc != hits_fts:
+                self.fail("Doc hits with doc filter and prefiltering are not equal")
+
+            fts_matches = []
+            for i in range(int(hits_fts)):
+                fts_matches.append(int(matches_fts[i]['id'][4:]))
+            
+            fts_matches.sort()
+            
+            doc_filter_matches = []
+            for i in range(int(hits_doc)):
+                doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
+            
+            doc_filter_matches.sort()
+
+            self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
+            self.log.info(f"Doc Hits (doc filter) : {doc_filter_matches}\n")
+
+            if fts_matches != doc_filter_matches:
+                self.fail("Doc hits with prefiltering and doc filter are not equal")
+        
+
+        #datetime filter
+        date_query = date_filter.copy()
+        date_query.pop('order',None)
+        self.prefilter_query = date_query
+
+        self.log.info(f"Assigned Prefilter Query : {self.prefilter_query}\n")
+
+        self._cb_cluster.delete_fts_index("i0")
+        self._cb_cluster.delete_fts_index("i1")
+
+        time.sleep(10)
+
+        index_ = self.construct_docfilter_index([("date_filter",date_filter)],"b1","s1",collection_list[0],"i0",is_vector=True)
+        doc_index = self._cb_cluster.create_fts_index(name="i0",source_name="b1",scope="s1",payload=index_)
+        doc_index.index_definition['uuid'] = doc_index.get_uuid()
+
+        idx = [("i1", f"b1.s1.{collection_list[0]}")]
+        vector_fields = {"dims": self.dimension, "similarity": self.similarity}
+        index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
+                                                     field_type=self.vector_field_type,
+                                                     test_indexes=idx,
+                                                     vector_fields=vector_fields,
+                                                     create_vector_index=True,
+                                                     extra_fields=[{"date_string": "datetime"}])
+        
+        index[0]['dataset'] = bucketvsdataset['bucket_name']
+        index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
+
+        time.sleep(30)
+        for count, q in enumerate(queries[:self.num_queries]):
+            hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
+                                                                    perform_faiss_validation=False,
+                                                                    validate_fts_with_faiss=False,doc_filter_index=doc_index)
+            
+            self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
+            self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
+
+            fts_matches = []
+            for i in range(int(hits_fts)):
+                fts_matches.append(int(matches_fts[i]['id'][4:]))
+            
+            fts_matches.sort()
+            
+            doc_filter_matches = []
+            for i in range(int(hits_doc)):
+                doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
+            
+            doc_filter_matches.sort()
+
+            self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
+            self.log.info(f"Doc Hits (doc filter) : {doc_filter_matches}\n")
+
+            if fts_matches != doc_filter_matches:
+                self.fail("Doc hits with prefiltering and doc filter are not equal")
+        
+        self.log.info("SUCCESS : DocFilter vector sanity tests passed")
+        
 
     def test_prefiltering(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)

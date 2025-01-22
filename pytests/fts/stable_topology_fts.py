@@ -5,6 +5,7 @@ import json
 import random
 import time
 from threading import Thread
+import docker
 
 import Geohash
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -30,6 +31,8 @@ class StableTopFTS(FTSBaseTest):
             RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
         except Exception as e:
             print(e)
+        self.doc_filter_query = {"match": "search", "field": "search_string"}
+        self.index_wait_time = 20
 
 
     def tearDown(self):
@@ -647,6 +650,198 @@ class StableTopFTS(FTSBaseTest):
                                          zero_results_ok=False,
                                          expected_hits=10)
         self.log.info("Hits: %s" % hits)
+
+
+    def document_filter(self):
+        #create scope and collection
+        collection_list = eval(TestInputSingleton.input.param("collection", ["c1"]))
+        self._cb_cluster.create_scope_using_rest(bucket="default",scope="s1")
+        self._cb_cluster.create_collection_using_rest(bucket="default",scope="s1",collection=collection_list[0])
+        result = None
+            
+        try:
+            result = self.docfilter_data("default","s1",collection_list[0])
+        except Exception as ex:
+            self.fail(ex)
+
+        res_ = result.decode('utf-8')
+        res = json.loads(res_)
+
+        #defining filters and groundtruth values
+        term_filter = res["term_filter"]
+        bool_filter = res["bool_filter"]
+        numeric_filter = res["numeric_filter"]
+        date_filter = res["date_filter"]
+        conjunction_filter = res["conjunction_filter"]
+        disjunction_filter = res["disjunction_filter"]
+
+        term_filter_match = res["term_filter_match"]
+        bool_filter_match = res["bool_filter_match"]
+        numeric_filter_match = res["numeric_filter_match"]
+        date_filter_match = res["date_filter_match"]
+        conjunction_res = res["conjunction_filter_docs"]
+        disjunction_res = res["disjunction_filter_docs"]
+
+        filter_1 = res["filter_1"]
+        filter_2 = res["filter_2"]
+        filter_3 = res["filter_3"]
+
+        filter_1_docs = res["filter_1_docs"]
+        filter_2_docs = res["filter_2_docs"]
+        filter_3_docs = res["filter_3_docs"]
+
+        min_pass = res["min_pass"]
+        
+        """ individual filter tests """
+        #only term filter
+        index_ = self.construct_docfilter_index([("term_filter",term_filter)],"default","s1",collection_list[0],"i1")
+        index = self._cb_cluster.create_fts_index(name="i1",source_name="default",scope="s1",payload=index_)
+        index.index_definition['uuid'] = index.get_uuid()
+
+        time.sleep(self.index_wait_time)
+
+        term_data = term_filter_match #groundtruth
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(term_data) != hits:
+            self.fail(f"term filter failed. Expected Hits : {len(term_data)} , Actual Hits : {hits}")
+        
+        if term_data != self.set_groundtruth(matches):
+            self.fail(f"term filter failed. Expected Matches : {term_data} , Actual Matches : {matches}")
+        
+        self.log.info("Term filter test successful")
+
+        #bool filter
+        self.update_index_def(index,"bool_filter",bool_filter,collection_name=collection_list[0])   
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(bool_filter_match) != hits:
+            self.fail(f"Bool filter failed. Expected Hits : {len(bool_filter_match)} , Actual Hits : {hits}")
+        
+        if bool_filter_match  != self.set_groundtruth(matches):
+            self.fail(f"Bool filter failed. Expected Matches : {bool_filter_match} , Actual Matches : {matches}")
+        
+        self.log.info("Bool filter test successful")
+
+        #numeric filter
+        self.update_index_def(index,"numeric_filter",numeric_filter,collection_name=collection_list[0])
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(numeric_filter_match) != hits:
+            self.fail(f"Numeric filter failed. Expected Hits : {len(numeric_filter_match)} , Actual Hits : {hits}")
+        
+        if numeric_filter_match  != self.set_groundtruth(matches):
+            self.fail(f"Numeric filter failed. Expected Matches : {numeric_filter_match} , Actual Matches : {matches}")
+        
+        self.log.info("Numeric filter test successful")
+
+
+        #date time filter
+        self.update_index_def(index,"date_filter",date_filter,collection_name=collection_list[0])   
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(date_filter_match) != hits:
+            self.fail(f"Date time filter failed. Expected Hits : {len(date_filter_match)} , Actual Hits : {hits}")
+        
+        if date_filter_match  != self.set_groundtruth(matches):
+            self.fail(f"Date time filter failed. Expected Matches : {date_filter_match} , Actual Matches : {matches}")
+        
+        self.log.info("Date filter test successful")
+
+        #conjunction filter
+        self.update_index_def(index,"conjunction_filter",conjunction_filter,collection_name=collection_list[0])
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(conjunction_res) != hits:
+            self.fail(f"Conjunction filter failed. Expected Hits : {len(conjunction_res)} , Actual Hits : {hits}")
+        
+        if conjunction_res  != self.set_groundtruth(matches):
+            self.fail(f"Conjunction filter failed. Expected Matches : {conjunction_res} , Actual Matches : {matches}")
+        
+        self.log.info("Conjunction filter test successful")
+
+        #disjunction filter
+        self.update_index_def(index,"disjunction_filter",disjunction_filter,min_pass=min_pass,collection_name=collection_list[0])
+        index.index_definition['uuid'] = index.get_uuid() 
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(disjunction_res) != hits:
+            self.fail(f"Disjuntion filter failed. Expected Hits : {len(disjunction_res)} , Actual Hits : {hits}")
+        
+        if disjunction_res  != self.set_groundtruth(matches):
+            self.fail(f"Disjuntion filter failed. Expected Matches : {disjunction_res} , Actual Matches : {matches}")
+        
+        self.log.info("Disjunction filter test successful")
+
+
+        """ multiple filter tests """
+
+        #filter1
+        self.update_index_def(index,"filter_1",filter_1,collection_name=collection_list[0])
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(filter_1_docs) != hits:
+            self.fail(f"Filter 1 failed. Expected Hits : {len(filter_1_docs)} , Actual Hits : {hits}")
+        
+        if filter_1_docs  != self.set_groundtruth(matches):
+            self.fail(f"Filter 1 failed. Expected Matches : {filter_1_docs} , Actual Matches : {matches}")
+        
+        self.log.info("Filter 1 test successful")
+
+        #filter2
+        self.update_index_def(index,"filter_2",filter_2,collection_name=collection_list[0])
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(filter_2_docs) != hits:
+            self.fail(f"Filter 2 failed. Expected Hits : {len(filter_2_docs)} , Actual Hits : {hits}")
+
+        if filter_2_docs != self.set_groundtruth(matches):
+            self.fail(f"Filter 2 failed. Expected Matches : {filter_2_docs} , Actual Matches : {matches}")
+        
+        self.log.info("Filter 2 test successful")
+
+        #filter3
+        self.update_index_def(index,"filter_3",filter_3,collection_name=collection_list[0])
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        time.sleep(self.index_wait_time)
+
+        hits, matches, _, _ = index.execute_query(self.doc_filter_query)
+
+        if len(filter_3_docs) != hits:
+            self.fail(f"Filter 3 failed. Expected Hits : {len(filter_3_docs)} , Actual Hits : {hits}")
+        
+        if filter_3_docs != self.set_groundtruth(matches):
+            self.fail(f"Filter 3 failed. Expected Matches : {filter_3_docs} , Actual Matches : {matches}")
+        
+        self.log.info("Filter 3 test successful")
+
 
     def index_query_custom_mapping(self):
         """
@@ -4130,4 +4325,5 @@ class StableTopFTS(FTSBaseTest):
             for err in errors:
                 self.log.error(err)
             self.fail()
+
 

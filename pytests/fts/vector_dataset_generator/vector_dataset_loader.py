@@ -38,7 +38,7 @@ class VectorLoader:
 
     def load_data(self, container_name=None):
         try:
-            docker_image = "sequoiatools/vectorloader"
+            docker_image = "sequoiatools/vectorloader:v1.1"
             dataset_name = self.dataset[0]
             docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
                                 f"-b {self.bucket} -sc {self.scope} -coll {self.collection} " \
@@ -83,7 +83,7 @@ class VectorLoader:
             # Run the Docker pull command
             try:
                 print(f"Pulling docker image {docker_image}")
-                self.docker_client.images.pull('sequoiatools/vectorloader')
+                self.docker_client.images.pull(docker_image)
             except docker.errors.APIError as e:
                 print("Exception will pulling docker image {}: {}".
                       format(docker_image, e))
@@ -144,7 +144,7 @@ class GoVectorLoader:
             # Run the Docker pull command
             try:
                 print(f"Pulling docker image {docker_image}")
-                self.docker_client.images.pull('sequoiatools/govectorloader')
+                self.docker_client.images.pull(docker_image)
             except docker.errors.APIError as e:
                 print("Exception will pulling docker image {}: {}".
                       format(docker_image, e))
@@ -160,3 +160,4 @@ class GoVectorLoader:
 
         except Exception as e:
             print(f"Error: {e}")
+

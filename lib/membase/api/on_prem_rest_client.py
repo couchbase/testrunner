@@ -4040,11 +4040,13 @@ class RestConnection(object):
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/query".format(bucket, scope, index_name)
         headers = self._create_capi_headers()
+
         status, content, header = self.urllib_request(
             api,
             verb="POST",
             params=json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             timeout=timeout)
+
         content = json.loads(content)
         if status:
             return content['total_hits'], content['hits'], content['took'], content['status']
@@ -4055,10 +4057,12 @@ class RestConnection(object):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
         headers = self._create_capi_headers()
+
         status, content, header = self.urllib_request(
             api,
             verb="POST",
             params=json.dumps(query_json, ensure_ascii=False).encode('utf8'))
+        
         content = json.loads(content)
         return content
 

@@ -75,6 +75,7 @@ import lib.capella.utils as capella_utils
 
 from .vector_dataset_generator.vector_dataset_generator import VectorDataset
 from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVectorLoader
+from .docfilter_datagen.docfilter_datagen import DocFilterLoader
 
 
 class RenameNodeException(FTSException):
@@ -833,6 +834,7 @@ class FTSIndex:
         else:
             self.index_storage_type = index_storage_type
         self.store_in_xattr = TestInputSingleton.input.param("store_in_xattr", False)
+        self.dynamic_store = TestInputSingleton.input.param("dynamic_store", True)
         self.num_pindexes = 0
 
 
@@ -1093,7 +1095,7 @@ class FTSIndex:
 
     def add_child_field_to_default_collection_mapping(self, field_name, field_type,
                                                       field_alias=None, analyzer=None, scope=None, collection=None,
-                                                      vector_fields=None, xattr=True,xattr_flag=False,base64_flag=False,store_all_flag=False):
+                                                      vector_fields=None, xattr=True,xattr_flag=False,base64_flag=False,store_all_flag=False,filters=None):
         """
         This method will add a field mapping to a default mapping
         """
@@ -1211,7 +1213,7 @@ class FTSIndex:
         type_map = {}
         type_map[type] = {}
         type_map[type]['default_analyzer'] = analyzer
-        type_map[type]['dynamic'] = True
+        type_map[type]['dynamic'] = self.dynamic_store
         type_map[type]['enabled'] = True
 
         if 'mapping' not in self.index_definition['params']:
@@ -2797,7 +2799,8 @@ class CouchbaseCluster:
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
-                         scope=None, collections=None, no_check=False,xattr_flag=False,base64_flag=False,store_all_flag=False):
+                         scope=None, collections=None, no_check=False,xattr_flag=False,base64_flag=False,store_all_flag=False,
+                         filters = None,payload=None):
 
 
 
@@ -2822,6 +2825,7 @@ class CouchbaseCluster:
         @param type: type mapping for collection index
         @analyzer: index analyzer
         """
+
         index = FTSIndex(
             self,
             name,
@@ -2837,6 +2841,12 @@ class CouchbaseCluster:
             scope=scope,
             collections=collections
         )
+
+        if payload:
+            index.index_definition = payload
+            index.create()
+            return index
+
         if store_all_flag:
             index.store_in_xattr = xattr_flag
 
@@ -2849,9 +2859,24 @@ class CouchbaseCluster:
                 else:
                     index.add_type_mapping_to_index_definition(type=_type, analyzer=analyzer)
 
+            doc_filter = TestInputSingleton.input.param("doc_filter", False)
             doc_config = {}
-            doc_config['mode'] = 'scope.collection.type_field'
-            doc_config['type_field'] = "type"
+
+            if doc_filter and filters is not None:
+                doc_config['doc_filter'] = {}
+
+                for filter_ in filters:
+                    filter_type = filter_['type']
+                    filter_obj = filter_['filter']
+                    doc_config['doc_filter'][filter_type] = filter_obj
+                
+                doc_config['mode'] = 'scope.collection.custom'
+                doc_config['type_field'] = "type"
+                
+            else:
+                doc_config['mode'] = 'scope.collection.type_field'
+                doc_config['type_field'] = "type"
+            
             index.index_definition['params']['doc_config'] = {}
             index.index_definition['params']['doc_config'] = doc_config
 
@@ -5664,13 +5689,10 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None,
-                     collections=None, no_check=False,store_all_flag=False):
+                     collections=None, no_check=False,store_all_flag=False,filters = None):
         """
         Creates a default index given bucket, index_name and plan_params
         """
-
-
-
 
         if not plan_params:
             plan_params = self.construct_plan_params()
@@ -5687,7 +5709,8 @@ class FTSBaseTest(unittest.TestCase):
             no_check=no_check,
             xattr_flag = self.store_in_xattr,
             base64_flag = self.encode_base64_vector,
-            store_all_flag = store_all_flag)
+            store_all_flag = store_all_flag,
+            filters = filters)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -5776,12 +5799,11 @@ class FTSBaseTest(unittest.TestCase):
 
     def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False,
                                         vector_fields=None, field_type=None, field_name=None, extra_fields=None,
-                                        wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False):
+                                        wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False,filters=None):
 
         if store_all_flag:
             self.store_in_xattr = xattr_flag
             self.encode_base64_vector = base64_flag
-
 
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
@@ -5793,7 +5815,8 @@ class FTSBaseTest(unittest.TestCase):
             if collection_index:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
                                               decoded_index["name"], collection_index=True, _type=_type,
-                                              scope=index_scope, collections=index_collections,store_all_flag=store_all_flag)
+                                              scope=index_scope, collections=index_collections,store_all_flag=store_all_flag,filters=filters)
+                
                 if field_name and field_type:
                     for collection in index_collections:
                         if create_vector_index:
@@ -5819,7 +5842,8 @@ class FTSBaseTest(unittest.TestCase):
                                                                                     collection=collection,
                                                                                     xattr_flag=xattr_flag,
                                                                                     base64_flag=base64_flag,
-                                                                                    store_all_flag=store_all_flag)
+                                                                                    store_all_flag=store_all_flag,
+                                                                                    filters=filters)
 
 
                 if extra_fields:
@@ -6595,7 +6619,7 @@ class FTSBaseTest(unittest.TestCase):
                          percentages_to_resize=[], dims_to_resize=[],
                          iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
                          python_loader_toggle=True, provideDefaultDocs=True,
-                         start_key=0):
+                         start_key=0,doc_filter_test=False):
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -6606,6 +6630,17 @@ class FTSBaseTest(unittest.TestCase):
                 scope_name = scope['name']
                 for collection in scope['collections']:
                     collection_name = collection['name']
+
+                    if doc_filter_test:
+                        container_name = "upgrade"
+                        ei = 1000    
+                        govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
+                                              self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, False,
+                                              percentages_to_resize, dims_to_resize,
+                                              provideDefaultDocs=provideDefaultDocs)
+                        govl.load_data(container_name)
+                        return bucketvsdataset
 
                     if load_invalid_vecs:
                         container_name = self.generate_random_container_name()
@@ -6690,6 +6725,148 @@ class FTSBaseTest(unittest.TestCase):
                         govl.load_data(container_name)
 
         return bucketvsdataset
+    
+    def gen_type_body(self,is_vector=False):
+        type_body = {}
+        type_body["dynamic"] = False
+        type_body["enabled"] = True
+        type_body["properties"] = {}
+        prop = {}
+        prop['search_string'] = { "dynamic": False,"enabled": True}
+        prop['search_string']['fields'] = []
+        prop['search_string']['fields'].append({
+            "docvalues": True,
+            "include_in_all": True,
+            "include_term_vectors": True,
+            "index": True,
+            "name": "search_string",
+            "store": True,
+            "type": "text"
+        })
+
+        type_body["properties"] = prop
+        if not is_vector:
+            return type_body
+
+        prop_v = {}
+        prop_v['vector_data'] = { "dynamic": False,"enabled": True}
+        prop_v['vector_data']['fields'] = []
+        prop_v['vector_data']['fields'].append({
+            "docvalues": True,
+            "include_in_all": True,
+            "include_term_vectors": True,
+            "index": True,
+            "name": "vector_data",
+            "store": True,
+            "type": "vector",
+            "dims": 128,
+            "similarity": "l2_norm"
+        })
+        type_body["properties"].update(prop_v)
+        return type_body
+    
+    def construct_docfilter_index(self,filters,bucket,scope,collection,index_name,is_vector=False):
+        index = {}
+        index['type'] = "fulltext-index"
+        index['name'] = index_name
+        index["sourceType"] = "gocbcore" 
+        index["sourceName"] = bucket
+        index["planParams"] = {"maxPartitionsPerPIndex": 64,"indexPartitions": 1}
+        index["params"] = {}
+
+        #doc config creation
+        doc_config = {}
+        doc_config['doc_filter'] = {}
+        for filter in filters:
+            doc_config['doc_filter'][filter[0]] = filter[1]
+        doc_config["docid_prefix_delim"] = ""
+        doc_config["docid_regexp"] = ""
+        doc_config["mode"] = "scope.collection.custom"
+        doc_config["type_field"] = "type"
+
+        index['params']['doc_config'] = doc_config
+
+        #mapping creation
+        mapping = {}
+
+        mapping["analysis"] = {}
+        mapping["default_analyzer"] = "standard"
+        mapping["default_datetime_parser"] = "dateTimeOptional"
+        mapping["default_field"] = "_all"
+
+        mapping["default_mapping"] = {
+            "dynamic": True,
+            "enabled": False
+        }
+
+        mapping["default_type"] = "_default"
+        mapping["docvalues_dynamic"] = False
+        mapping["index_dynamic"] = True
+        mapping["scoring_model"] = "tfidf"
+        mapping["store_dynamic"] = False
+        mapping["type_field"] = "_type"
+        
+        types = {}
+        type_body = self.gen_type_body(is_vector=is_vector)
+
+        for filter in filters:
+            types[scope + "." + collection + "." + filter[0]] = type_body
+        
+        mapping["types"] = types
+        index["params"]["mapping"] = mapping
+
+        index['params']['store'] = {"indexType": "scorch", "segmentVersion": 16}
+        index["sourceParams"] = {}
+
+        return index
+
+    def set_groundtruth(self,data):
+        res = []
+        for i in data:
+            res.append(int(i[4:]))
+        return sorted(res)
+    
+    def update_index_def(self,index,filter_type,filter,collection_name="c1",min_pass=1):
+        store_ = None
+        if filter_type == "conjunction_filter":
+            store_ = "conjuncts"
+        elif filter_type == "disjunction_filter":
+            store_ = "disjuncts"
+
+        index.index_definition['params']['doc_config']['doc_filter'] = {}
+        if type(filter) == list:
+            if filter_type == "conjunction_filter" or filter_type == "disjunction_filter":
+                index.index_definition['params']['doc_config']['doc_filter'][filter_type] = {}
+                index.index_definition['params']['doc_config']['doc_filter'][filter_type][store_] = filter
+                index.index_definition['params']['doc_config']['doc_filter'][filter_type]['order'] = 1
+                if store_ == "disjuncts":
+                    index.index_definition['params']['doc_config']['doc_filter'][filter_type]['min'] = min_pass
+
+            else:
+                for i in range(len(filter)):
+                    index.index_definition['params']['doc_config']['doc_filter']['a' + str(i)] = filter[i]
+        else:
+            index.index_definition['params']['doc_config']['doc_filter'][filter_type] = filter
+
+        index.index_definition['params']['mapping']['types'] = {}
+        if type(filter) == list:
+            if filter_type == "conjunction_filter" or filter_type == "disjunction_filter":
+                index.index_definition['params']['mapping']['types'][f"s1.{collection_name}.{filter_type}"] = self.gen_type_body()
+            else:
+                for i in range(len(filter)):
+                    index.index_definition['params']['mapping']['types'][f"s1.{collection_name}.{'a'+str(i)}"] = self.gen_type_body()
+        else:
+            index.index_definition['params']['mapping']['types'][f"s1.{collection_name}.{filter_type}"] = self.gen_type_body()
+        
+
+    def docfilter_data(self, bucket_name="default",scope_name="_default", collection_name="_default",prefix="doc-"):
+
+        container_name = "doc_filter_container"
+        self.docker_containers.append(container_name)
+        loader = DocFilterLoader(self.master,self._input.membase_settings.rest_username,
+                                self._input.membase_settings.rest_password, bucket_name, scope_name,
+                                collection_name,prefix)
+        return loader.load_data(container_name)
 
     def get_query_vectors(self, dataset_name, dimension=None):
         ds = VectorDataset(dataset_name)
