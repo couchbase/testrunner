@@ -431,7 +431,8 @@ def main():
                 else:
                     componentString = f'{componentString},{comp}'
 
-            queryString = "select * from `QE-Test-Suites`.`_default`.`_default` where {0} and component in [{1}] and subcomponent like \"{2}\";". \
+            queryString = ("select * from `QE-Test-Suites`.`_default`.`_default` as `QE-Test-Suites` "
+                           "where {0} and component in [{1}] and subcomponent like \"{2}\";"). \
                 format(suiteString, componentString, options.subcomponent_regex)
 
     print("Query: '{}'".format(queryString))
