@@ -18,7 +18,17 @@ class QuerySelectTests(QueryTests):
     def test_order(self):
         expected_result = [{"c": 3, "b": 2, "a": "1", "$1": 20}]
         result = self.run_cbq_query('SELECT t.c, t.b, t.a, 10*2 FROM [{"a":"1", "b":2, "c": 3}] t')
+        self.log.info(result['results'])
         self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+        result = self.run_cbq_query('SELECT t.c, t.b, t.a, 10*2 FROM [{"a":"1", "b":2, "c": 3}] t', query_params = {'sort_projection': False})
+        self.log.info(result['results'])
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+        expected_result_sorted = [{"$1": 20, "a": "1", "b": 2, "c": 3}]
+        result = self.run_cbq_query('SELECT t.c, t.b, t.a, 10*2 FROM [{"a":"1", "b":2, "c": 3}] t', query_params = {'sort_projection': True})
+        self.log.info(result['results'])
+        self.assertEqual(expected_result_sorted, result['results'], f"We expected {expected_result_sorted} but got {result['results']}")
 
     def test_exclude_single(self):
         expected_result = {"a": 1, "c": 3, "d": 4}
