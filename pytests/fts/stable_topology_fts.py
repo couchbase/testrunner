@@ -2237,21 +2237,21 @@ class StableTopFTS(FTSBaseTest):
             ]
             es_query["sort"] = sort_fields_es
 
-            hits2, doc_ids2, _ = self.es.search(index_name="es_index",
-                           query=es_query)
+            if self.es:
+                hits2, doc_ids2, _ = self.es.search(index_name="es_index",
+                            query=es_query)
+                self.log.info("Hits from ES: {0}".format(hits2))
+                self.log.info("First 50 doc_ids: {0}".format(doc_ids2[:50]))
 
-            self.log.info("Hits from ES: {0}".format(hits2))
-            self.log.info("First 50 doc_ids: {0}".format(doc_ids2[:50]))
+                if doc_ids==doc_ids2:
+                    self.log.info("PASS: Sort order matches!")
+                else:
+                    msg = "FAIL: Sort order mismatch!"
+                    self.log.error(msg)
+                    testcase_failed = True
 
-            if doc_ids==doc_ids2:
-                self.log.info("PASS: Sort order matches!")
-            else:
-                msg = "FAIL: Sort order mismatch!"
-                self.log.error(msg)
-                testcase_failed = True
-
-            self.log.info("--------------------------------------------------"
-                          "--------------------------------------------------")
+                self.log.info("--------------------------------------------------"
+                            "--------------------------------------------------")
         if testcase_failed:
             self.fail(msg)
 
