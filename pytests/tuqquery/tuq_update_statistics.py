@@ -173,11 +173,11 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_timeout(self):
         error_code = 5360
-        error_message = "Update Statistics timeout (2 seconds) exceeded"
-        update_stats = f"UPDATE STATISTICS `{self.bucket_name}`(city, country) WITH {{'update_statistics_timeout':2}}"
+        error_message = "Update Statistics timeout (1 seconds) exceeded."
+        update_stats = f"UPDATE STATISTICS `{self.bucket_name}`(city, country, meta().id) WITH {{'update_statistics_timeout':1,'batch_size':1}}"
         try:
             stats = self.run_cbq_query(query=update_stats)
-            self.fail(f"Update statistics dit not time-out. Expected error is {error}")
+            self.fail(f"Update statistics did not time-out. Expected error is {error_message}")
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], error_code)
@@ -328,7 +328,8 @@ class QueryUpdateStatsTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 12028)
-            self.assertEqual(error['msg'], 'Error while dropping collection default:travel-sample._system._query - cause: [_:Cannot drop system collection "_query" for scope "_system"]')
+            self.assertTrue('Error while dropping collection default:travel-sample._system._query' in str(error), f'Error message is not what we expect please check {str(error)}')
+            self.assertTrue('Cannot drop system collection "_query" for scope "_system"' in str(error), f'Error message is not what we expect please check {str(error)}')
 
     def test_drop_sys_scope(self):
         update_stats = "UPDATE STATISTICS `travel-sample`(city) WITH {'update_statistics_timeout':600}"
@@ -340,7 +341,8 @@ class QueryUpdateStatsTests(QueryTests):
         except CBQError as ex:
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 12026)
-            self.assertEqual(error['msg'], 'Error while dropping scope default:travel-sample._system - cause: [_:Deleting _system scope is not allowed]')
+            self.assertTrue('Error while dropping scope default:travel-sample._system' in str(error), f'Error message is not what we expect please check {str(error)}')
+            self.assertTrue('Deleting _system scope is not allowed' in str(error), f'Error message is not what we expect please check {str(error)}')
 
     def test_drop_sys_bucket(self):
         histogram_query = "SELECT `scope`, `collection`, `histogramKey` from `travel-sample`.`_system`.`_query` data WHERE type = 'histogram'"
