@@ -5340,13 +5340,14 @@ class FTSBaseTest(unittest.TestCase):
         3. if index is distributed - present on all fts nodes, almost equally?
         4. if index balanced - every fts node services almost equal num of vbs?
         """
-        rest = RestConnection(self.master)
-        self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))  
 
         validate_index_partition = TestInputSingleton.input.param("validate_index_partition", True)
         if not validate_index_partition:
             self.sleep(10, "giving sometime for index partition to be created")
             return True
+
+        rest = RestConnection(self.master)
+        self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))
 
         self.log.info("Validating index distribution for %s ..." % index.name)
 

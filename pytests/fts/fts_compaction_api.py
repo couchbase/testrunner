@@ -33,6 +33,7 @@ class FTSIndexCompactionAPI(FTSBaseTest):
                                                            f"response is: \n{start_compaction_content}")
 
     def test_concurrent_compaction(self):
+        RestConnection(self.master).modify_memory_quota(index_quota=256,kv_quota=1000,fts_quota=2500)
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
