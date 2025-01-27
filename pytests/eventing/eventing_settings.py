@@ -235,7 +235,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be less than 20 bytes" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "timer_context_size value should be greater than or equal to 20" in str(e), True
 
     def test_timer_context_max_size_greater_than_20mb(self):
         try:
@@ -244,7 +244,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size value can not be more than 20MB" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "timer_context_size value should be less than or equal to 2.097152e+07" in str(e), True
 
     def test_timer_context_max_size_less_than_handler_size(self):
         body = self.create_save_function_body(self.function_name, "handler_code/timer_context_size.js")
@@ -266,7 +266,7 @@ class EventingSettings(EventingBaseTest):
             self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_INVALID_CONFIG" in str(e) and "timer_context_size must be a number" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "timer_context_size expected interger value" in str(e), True
 
     def test_bindings_to_non_existent_buckets(self):
         try:
