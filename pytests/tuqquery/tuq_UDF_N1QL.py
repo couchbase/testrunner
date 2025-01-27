@@ -110,14 +110,14 @@ class QueryUDFN1QLTests(QueryTests):
             'pre': 'REVOKE query_select on default from jackdoe',
             'query': 'GRANT query_select on default to jackdoe',
             'function_expected': [[]],
-            'post': 'select roles from system:user_info where id = "jackdoe"',
+            'post': 'select `roles` from system:user_info where id = "jackdoe"',
             'post_expected': [{'roles': [{'bucket_name': 'default', 'collection_name': '*', 'origins': [{'type': 'user'}], 'role': 'select', 'scope_name': '*'}]}]
         },
         'revoke': {
             'pre': 'GRANT query_select on default to jackdoe',
             'query': 'REVOKE query_select on default from jackdoe',
             'function_expected': [[]],
-            'post': 'select roles from system:user_info where id = "jackdoe"',
+            'post': 'select `roles` from system:user_info where id = "jackdoe"',
             'post_expected': [{'roles': []}]
         }
     }
@@ -2442,7 +2442,6 @@ class QueryUDFN1QLTests(QueryTests):
             }} catch(error) {{\
                 n1ql_error = JSON.parse(error.message);\
                 return {{\
-                    "caller": n1ql_error.caller,\
                     "code": n1ql_error.code,\
                     "reason": n1ql_error.cause,\
                     "icode": n1ql_error.icause,\
@@ -2458,7 +2457,7 @@ class QueryUDFN1QLTests(QueryTests):
         result = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
         expected_result = [
             {
-                'caller': 'couchbase:2673', 'code': 12009, 'icode': 'Duplicate Key: k004',
+                'code': 12009, 'icode': 'Duplicate Key: k004',
                 'key': 'datastore.couchbase.DML_error',
                 'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004',
                 'reason': {'_level':'exception', 'caller': 'couchbase:2571', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
