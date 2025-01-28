@@ -144,7 +144,6 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self.stat_col = CollectionsStats(self.master)
         self.log.info("Create scope collection at src cluster")
         #self.rest_col.create_scope_collection_count()
-        self._create_scope_collection(self.rest_col, self.cli_col, self.buckets[0].name)
         self.sleep(10)
 
         self.des_rest = RestConnection(self.servers[self.nodes_init])
@@ -153,6 +152,7 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
         self.des_stat_col = CollectionsStats(self.servers[self.nodes_init])
         self.log.info("Create scope collection at des cluster")
         self.buckets = RestConnection(self.servers[self.nodes_init]).get_buckets()
+        self._create_scope_collection(self.rest_col, self.cli_col, self.buckets[0].name)
         self._create_scope_collection(self.des_rest_col, self.des_cli_col, self.buckets[0].name)
         self.load_to_collections_bucket()
 
