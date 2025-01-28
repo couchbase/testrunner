@@ -88,10 +88,10 @@ class EventingBucketCache(EventingBaseTest):
             self.rest.update_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_INVALID_CONFIG" in str(e) and "bucket_cache_age can not be zero or negative" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "bucket_cache_age value should be greater than or equal to 1" in str(e), True
         try:
             body['settings']['bucket_cache_size'] = -10
             self.rest.update_function(body['appname'], body, self.function_scope)
         except Exception as e:
             self.log.info(e)
-            assert "ERR_INVALID_CONFIG" in str(e) and "bucket_cache_size can not be zero or negative" in str(e), True
+            assert "ERR_INVALID_REQUEST" in str(e) and "bucket_cache_age value should be greater than or equal to 1" in str(e), True
