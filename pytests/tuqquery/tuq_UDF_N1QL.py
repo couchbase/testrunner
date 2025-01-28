@@ -2460,7 +2460,7 @@ class QueryUDFN1QLTests(QueryTests):
                 'code': 12009, 'icode': 'Duplicate Key: k004',
                 'key': 'datastore.couchbase.DML_error',
                 'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004',
-                'reason': {'_level':'exception', 'caller': 'couchbase:2571', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
+                'reason': {'_level':'exception', 'caller': 'couchbase:2848', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
                 'retry': False,
                 'stack': 'Error\n    at error_handling (functions/n1ql.js:1:190)'
             }
