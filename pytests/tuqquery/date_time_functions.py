@@ -405,3 +405,27 @@ class DateTimeFunctionClass(QueryTests):
         ]
         result = self.run_cbq_query(query)
         self.assertEqual(expected, result['results'], f"Got wrong results: {result['results']}")
+
+    def test_date_format_str_new(self):
+        date = "2025-01-28T14:37:23-08:00"
+        expected = {
+            "%x": "2025-01-28",    # same as %D
+            "%r": "02:37:23 PM",    # (12-hour) hh:mm:ss am
+            "%X": "14:37:23",    # same as %T
+            "%:z": "-08:00",   # Time zone as +HH:MM
+            "%::z": "-08:00:00",  # Time zone as +HH:MM:SS
+            "%:::z": "-08", # Time zone with only as much precision as is required.
+            "%V": "5",    # ISO week number
+            "%G": "2025",    # Year for ISO week number
+            "%j": "28",    # Day of the year
+            "%q": "1",    # Quarter (1...4)
+            "%w": "2",    # Weekday (Sunday == 0)
+            "%u": "2",    # Weekday (Monday == 1, Sunday == 7)
+            "%U": "4",    # Week number of year (Sunday is first day of the week)
+            "%W": "4",    # Week number of year (Monday is first day of the week)
+            "%#": "482806:37:23",    # Since Epoch as [...]h:mm:ss
+            "%@": "482806:37:23.000"     # Since Epoch as [...]h:mm:ss.fff
+        }
+        for fmt in expected:
+            result = self.run_cbq_query(f"SELECT DATE_FORMAT_STR('{date}', '{fmt}')")
+            self.assertEqual(result['results'][0]['$1'], expected[fmt], f"Failed to format date with {fmt}. We got {result['results'][0]['$1']} instead of {expected[fmt]}")
