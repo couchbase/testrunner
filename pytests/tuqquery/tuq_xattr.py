@@ -766,31 +766,21 @@ class QueryXattrTests(QueryTests):
         2. If queries cannot be made on two system xattr fields
     """
 
-    def test_system_xattr_negative(self):
+    def test_system_xattr_multi_field(self):
         self.recreate_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
 
-        # cannot create index on two system xattr fields
         index_statement = "CREATE INDEX idx1 ON " + self.query_bucket + \
                           "(meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3) USING " + \
                           self.index_type
         try:
             self.run_cbq_query(index_statement)
-        except Exception as ex:
-            pass
-        else:
-            self.fail()
-
-        # cannot query two system xattr fields
-        query = "SELECT meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3 FROM " + \
+            query = "SELECT meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3 FROM " + \
                 self.query_bucket
-        try:
             self.run_cbq_query(query)
         except Exception as ex:
-            pass
-        else:
-            self.fail()
+            self.fail(f"We should be allowed to index multiple xattr fields, please check the error{str(ex)}")
 
     '''MB-28533'''
 
@@ -1782,29 +1772,19 @@ class QueryXattrTests(QueryTests):
         2. If queries cannot be made on two system xattr fields
     """
 
-    def test_user_xattr_negative(self):
+    def test_user_xattr_multi_field(self):
         self.recreate_data()
         self.fail_if_no_buckets()
         self.user_xattr_data = self.create_xattr_data(type='user')
 
-        # cannot create index on two user xattr fields
         index_statement = "CREATE INDEX idx1 ON " + self.query_bucket + \
                           "(meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3) USING " + self.index_type
         try:
             query_response = self.run_cbq_query(index_statement)
-        except Exception as ex:
-            pass
-        else:
-            self.fail()
-
-        # cannot query two system xattr fields
-        query = "SELECT meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3 FROM " + self.query_bucket
-        try:
+            query = "SELECT meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3 FROM " + self.query_bucket
             self.run_cbq_query(query)
         except Exception as ex:
-            pass
-        else:
-            self.fail()
+            self.fail(f"We expect to be able to execute a query on multiple fields, please check error {str(ex)}")
 
     def test_user_xattr_array_index(self):
         self.recreate_data()
