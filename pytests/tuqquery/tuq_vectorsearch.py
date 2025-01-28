@@ -316,6 +316,7 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            self.sleep(10)
             self.run_cbq_query(update_stats_index)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -332,6 +333,7 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            self.sleep(10)
             if not self.prepare_before:
                 prepare_knn= self.run_cbq_query(prepare_knn_query)
                 self.log.info(prepare_knn['results'])
