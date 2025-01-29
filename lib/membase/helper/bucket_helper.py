@@ -103,8 +103,7 @@ class BucketOperationHelper:
                     assert_on_test.fail(msg=msg)
 
     @staticmethod
-    def create_bucket(serverInfo, name='default', replica=1, test_case=None, bucket_ram=-1, password=None,
-                      vbucket=None):
+    def create_bucket(serverInfo, name='default', replica=1, test_case=None, bucket_ram=-1, password=None):
         log = logger.Logger.get_logger()
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:

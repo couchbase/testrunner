@@ -3238,8 +3238,7 @@ class RestConnection(object):
                       lww=False,
                       maxTTL=None,
                       compressionMode='passive',
-                      storageBackend='magma',
-                      vbuckets=None):
+                      storageBackend='magma'):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
         params = urllib.parse.urlencode({})
 
@@ -3285,8 +3284,6 @@ class RestConnection(object):
                     init_params['historyRetentionSeconds'] = self.history_retention_secs
                     init_params['magmaKeyTreeDataBlockSize'] = self.magma_seq_tree_data_block_size
                     init_params['magmaSeqTreeDataBlockSize'] = self.magma_key_tree_data_block_size
-                if vbuckets:
-                    init_params['numVBuckets'] = vbuckets
             init_params['storageBackend'] = storageBackend
 
             if CbServer.cluster_profile == "serverless":
@@ -3315,6 +3312,9 @@ class RestConnection(object):
                       format(maxwait))
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
 
+
+
+
         create_time = time.time() - create_start_time
         log.info("{0:.02f} seconds to create bucket {1}".
                  format(round(create_time, 2), bucket))
@@ -3331,8 +3331,7 @@ class RestConnection(object):
                       maxTTL=None,
                       compressionMode=None,
                       enableCrossClusterVersioning=None,
-                      versionPruningWindowHrs=None,
-                      vbuckets=None):
+                      versionPruningWindowHrs=None):
         api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -3359,8 +3358,6 @@ class RestConnection(object):
             params_dict["enableCrossClusterVersioning"] = enableCrossClusterVersioning
         if versionPruningWindowHrs:
             params_dict["versionPruningWindowHrs"] = versionPruningWindowHrs
-        if vbuckets:
-            params_dict["numVBuckets"] = vbuckets
 
         params = urllib.parse.urlencode(params_dict)
 
@@ -7201,7 +7198,7 @@ class RestParser(object):
             bucket.port = parsed['proxyPort']
         bucket.nodes = list()
         if 'numVBuckets' in parsed:
-            bucket.numVBuckets = parsed['numVBuckets']
+            bucket.num_vbuckets = parsed['numVBuckets']
         if 'vBucketServerMap' in parsed:
             vBucketServerMap = parsed['vBucketServerMap']
             serverList = vBucketServerMap['serverList']

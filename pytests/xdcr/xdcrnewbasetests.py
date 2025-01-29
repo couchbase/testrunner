@@ -1363,7 +1363,7 @@ class CouchbaseCluster:
                               password=None,
                              bucket_type=None, enable_replica_index=1, eviction_policy='fullEviction',
                              bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
-                             bucket_storage='magma', vbuckets=None):
+                             bucket_storage='magma'):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -1418,7 +1418,6 @@ class CouchbaseCluster:
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
-        bucket_params['vbuckets'] = vbuckets
         return bucket_params
 
     def set_global_checkpt_interval(self, value):
@@ -1534,7 +1533,7 @@ class CouchbaseCluster:
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
-            maxttl=None, bucket_storage='couchstore', vbuckets=None):
+            maxttl=None, bucket_storage='couchstore'):
         """Create sasl buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1551,8 +1550,7 @@ class CouchbaseCluster:
                                                      eviction_policy=eviction_policy,
                                                      bucket_priority=bucket_priority,
                                                      lww=lww, maxttl=maxttl,
-                                                     bucket_storage=bucket_storage,
-                                                     vbuckets=vbuckets)
+                                                     bucket_storage=bucket_storage)
             tasks.append(self.__clusterop.async_create_sasl_bucket(name=name, password='password',
                                                       bucket_params=sasl_params))
             self.__buckets.append(
@@ -1563,8 +1561,7 @@ class CouchbaseCluster:
                     bucket_priority=bucket_priority,
                     lww=lww,
                     maxttl=maxttl,
-                    bucket_storage=bucket_storage,
-                    numVBuckets=vbuckets
+                    bucket_storage=bucket_storage
                 ))
             if self.scope_num or self.collection_num:
                 tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
@@ -1575,7 +1572,7 @@ class CouchbaseCluster:
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False, maxttl=None,
-            bucket_storage='couchstore', vbuckets=None):
+            bucket_storage='couchstore'):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1595,8 +1592,7 @@ class CouchbaseCluster:
                 bucket_priority=bucket_priority,
                 lww=lww,
                 maxttl=maxttl,
-                bucket_storage=bucket_storage,
-                vbuckets=vbuckets)
+                bucket_storage=bucket_storage)
             tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + i,
                                                           bucket_params=standard_params))
             self.__buckets.append(
@@ -1609,8 +1605,7 @@ class CouchbaseCluster:
                     bucket_priority=bucket_priority,
                     lww=lww,
                     maxttl=maxttl,
-                    bucket_storage=bucket_storage,
-                    numVBuckets=vbuckets
+                    bucket_storage=bucket_storage
                 ))
             if self.scope_num or self.collection_num:
                 tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
@@ -1621,7 +1616,7 @@ class CouchbaseCluster:
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
-            maxttl=None, bucket_storage='couchstore', vbuckets=None):
+            maxttl=None, bucket_storage='couchstore'):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -1637,8 +1632,7 @@ class CouchbaseCluster:
             bucket_priority=bucket_priority,
             lww=lww,
             maxttl=maxttl,
-            bucket_storage=bucket_storage,
-            vbuckets=vbuckets)
+            bucket_storage=bucket_storage)
 
         tasks = [self.__clusterop.create_default_bucket(bucket_params)]
         self.__buckets.append(
@@ -1650,8 +1644,7 @@ class CouchbaseCluster:
                 bucket_priority=bucket_priority,
                 lww=lww,
                 maxttl=maxttl,
-                bucket_storage=bucket_storage,
-                numVBuckets=vbuckets
+                bucket_storage=bucket_storage
             ))
         if self.scope_num or self.collection_num:
             tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
@@ -3119,7 +3112,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._use_https = self._input.param("use_https", False)
         self._version_pruning_window_hrs = self._input.param("version_pruning_window_hrs", None)
         self._enable_cross_cluster_versioning = self._input.param("enable_cross_cluster_versioning", None)
-        self._variable_vbucket_test = self._input.param("variable_vbucket_test", False)
 
     def __initialize_error_count_dict(self):
         """
@@ -3213,11 +3205,6 @@ class XDCRNewBaseTest(unittest.TestCase):
     def get_report_error_list(self):
         return self.__report_error_list
 
-    def get_random_bucket_storage(self):
-        options = ["magma_128vbs", "couchstore", "magma_1024vbs"]
-        random.shuffle(options)
-        return options
-
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
         if 'quota_percent' in self._input.test_params:
             quota_percent = int(self._input.test_params['quota_percent'])
@@ -3244,22 +3231,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__num_stand_buckets + int(self._create_default_bucket)
 
         maxttl = self._input.param("maxttl", None)
-        if self._variable_vbucket_test:
-            bucket_storage_list = self.get_random_bucket_storage()
 
-        for storage, cb_cluster in enumerate(self.__cb_clusters):
-            if self._variable_vbucket_test:
-                storage = storage % 3
-                if bucket_storage_list[storage] == "magma_128vbs":
-                    self.__bucket_storage = "magma"
-                    vbuckets = None
-                elif bucket_storage_list[storage] == "magma_1024vbs":
-                    self.__bucket_storage = "magma"
-                    vbuckets = 1024
-                else:
-                    self.__bucket_storage = "couchstore"
-                    vbuckets = None
-
+        for cb_cluster in self.__cb_clusters:
             total_quota = cb_cluster.get_mem_quota()
             bucket_size = self.__calculate_bucket_size(
                 total_quota,
@@ -3273,8 +3246,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     bucket_priority=bucket_priority,
                     lww=self.__lww,
                     maxttl=maxttl,
-                    bucket_storage=self.__bucket_storage,
-                    vbuckets=vbuckets)
+                    bucket_storage=self.__bucket_storage)
 
             cb_cluster.create_sasl_buckets(
                 bucket_size, num_buckets=self.__num_sasl_buckets,
@@ -3282,8 +3254,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority, lww=self.__lww,
                 maxttl=maxttl,
-                bucket_storage=self.__bucket_storage,
-                vbuckets=vbuckets)
+                bucket_storage=self.__bucket_storage)
 
             cb_cluster.create_standard_buckets(
                 bucket_size, num_buckets=self.__num_stand_buckets,
@@ -3291,8 +3262,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority, lww=self.__lww,
                 maxttl=maxttl,
-                bucket_storage=self.__bucket_storage,
-                vbuckets=vbuckets)
+                bucket_storage=self.__bucket_storage)
 
 
     def create_buckets_on_cluster(self, cluster_name):

@@ -48,7 +48,6 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
 
 from TestInput import TestInputServer, TestInputSingleton
 from lib.Cb_constants.CBServer import CbServer
-from lib.membase.api.on_prem_rest_client import vBucket
 
 try:
     CHECK_FLAG = False
@@ -294,7 +293,6 @@ class BucketCreateTask(Task):
         self.eviction_policy = bucket_params['eviction_policy']
         self.lww = bucket_params['lww']
         self.storageBackend = bucket_params['bucket_storage']
-        self.vbuckets = bucket_params['vbuckets']
 
         if 'maxTTL' in bucket_params:
             self.maxttl = bucket_params['maxTTL']
@@ -350,8 +348,7 @@ class BucketCreateTask(Task):
                                    lww=self.lww,
                                    maxTTL=self.maxttl,
                                    compressionMode=self.compressionMode,
-                                   storageBackend=self.storageBackend,
-                                   vbuckets=self.vbuckets)
+                                   storageBackend=self.storageBackend)
             else:
                 rest.create_bucket(bucket=self.bucket,
                                    ramQuotaMB=self.size,
