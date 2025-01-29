@@ -307,6 +307,7 @@ class MovingTopFTS(FTSBaseTest):
                                self.default_concurrent_partition_moves_per_node))
 
     def rebalance_in_during_index_building(self):
+        RestConnection(self.master).modify_memory_quota(kv_quota=800,fts_quota=2000)
         if self._input.param("must_fail", False):
             self.fail("Temporal fail to let all the other tests to be passed")
         self.load_data()
@@ -381,6 +382,7 @@ class MovingTopFTS(FTSBaseTest):
         self._cb_cluster.disable_retry_rebalance()
 
     def rebalance_out_during_index_building(self):
+        RestConnection(self.master).modify_memory_quota(fts_quota=2400)
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.sleep(30)
@@ -477,6 +479,7 @@ class MovingTopFTS(FTSBaseTest):
                 self.fail(f'Found file transfer failed for these partitions: {failed_file_transfer}')
 
     def rebalance_during_kv_mutations(self):
+        RestConnection(self.master).modify_memory_quota(kv_quota=3000,fts_quota=3000)
         index = self.create_index_generate_queries(wait_idx=False)
         self.sleep(10)
         self.log.info("Index building has begun...")
@@ -659,6 +662,7 @@ class MovingTopFTS(FTSBaseTest):
             self.fail(err)
 
     def swap_rebalance_kv_during_index_building(self):
+        RestConnection(self.master).modify_memory_quota(fts_quota=2400)
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
@@ -726,6 +730,7 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Expected exception: %s" % e)
 
     def failover_master_during_index_building(self):
+        RestConnection(self.master).modify_memory_quota(fts_quota=2400)
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
@@ -1119,6 +1124,7 @@ class MovingTopFTS(FTSBaseTest):
 
     def hard_failover_master_between_indexing_and_querying(self):
         #TESTED
+        RestConnection(self.master).modify_memory_quota(fts_quota=2400)
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
