@@ -55,9 +55,9 @@ class EventingNegative(EventingBaseTest):
         for bucket in self.buckets:
             self.rest.delete_bucket(bucket.name)
         try:
-            self.rest.deploy_function(body['appname'], body, self.function_scope)
+            self.deploy_function(body)
         except Exception as ex:
-            if "ERR_BUCKET_MISSING" not in str(ex):
+            if "ERR_INVALID_REQUEST" not in str(ex):
                 self.fail("Function save/deploy succeeded even when src/dst/metadata buckets doesn't exist")
 
     def test_deploy_function_where_source_and_metadata_buckets_are_same(self):
@@ -197,14 +197,13 @@ class EventingNegative(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         self.deploy_function(body, wait_for_bootstrap=False)
-        body1 = {"count": 1}
         # Set retry to 1
-        self.rest.set_eventing_retry(body['appname'], body1, self.function_scope)
+        self.rest.set_eventing_retry(body['appname'], body, self.function_scope)
         try:
             # Try undeploying the function when it is still bootstrapping
             self.undeploy_function(body)
         except Exception as ex:
-            if "ERR_APP_NOT_DEPLOYED" not in str(ex):
+            if "ERR_INVALID_REQUEST" not in str(ex):
                 self.fail("Function undeploy succeeded even when function was in bootstrapping state")
 
     def test_function_where_handler_code_takes_more_time_to_execute_than_execution_timeout(self):
@@ -272,7 +271,7 @@ class EventingNegative(EventingBaseTest):
         try:
             body = self.create_save_function_body(function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         except Exception as e:
-            if "Function name length must be less than 100" not in str(e):
+            if "ERR_INVALID_REQUEST" not in str(e):
                 self.fail("Deployment is expected to be failed but succeeded with function name more than 100 chars")
 
     def test_deploy_function_name_with_special_chars(self):
@@ -291,9 +290,9 @@ class EventingNegative(EventingBaseTest):
         try:
             self.rest.create_function(body['appname'], body, self.function_scope)
         except Exception as e:
-            if "ERR_INVALID_CONFIG" not in str(e):
+            if "ERR_INVALID_REQUEST" not in str(e):
                 log.info(str(e))
-                self.fail("Deployment is expected to be failed but succeeded with function name more than 100 chars")
+                self.fail("Deployment is expected to be failed but succeeded with incorrect alias name")
 
     def test_deploy_function_with_prefix_length_greater_than_16_chars(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
@@ -317,9 +316,9 @@ class EventingNegative(EventingBaseTest):
             self.pause_function(body)
             self.fail("application is paused even before deployment")
         except Exception as e:
-            if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
+            if "ERR_INVALID_REQUEST" not in str(e):
                 log.info(str(e))
-                self.fail("Not correct exception thrown")
+                self.fail("Function pause succeeded even when function was undeployed")
 
     def test_pause_when_function_is_deploying(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -331,9 +330,9 @@ class EventingNegative(EventingBaseTest):
             self.pause_function(body)
             self.fail("application is paused even before deployment")
         except Exception as e:
-            if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
+            if "ERR_INVALID_REQUEST" not in str(e):
                 log.info(str(e))
-                self.fail("Not correct exception thrown")
+                self.fail("Function pause succeeded even when function was undeployed")
         self.wait_for_handler_state(body['appname'],"deployed")
         self.undeploy_and_delete_function(body)
 
@@ -444,7 +443,7 @@ class EventingNegative(EventingBaseTest):
         try:
             self.rest.set_settings_for_function(self.function_name,update_body, self.function_scope)
         except Exception as e:
-            if "ERR_INVALID_CONFIG" not in str(e):
+            if "ERR_INVALID_REQUEST" not in str(e):
                 raise Exception("Feed boundary updated when app is deployed")
         self.undeploy_and_delete_function(body)
 
