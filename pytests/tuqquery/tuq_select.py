@@ -75,3 +75,78 @@ class QuerySelectTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], expected_code)
             self.assertEqual(error['reason']['cause']['details'], expected_msg)
+
+    def test_urlencode(self):
+        result = self.run_cbq_query('SELECT urlencode("a%20b") AS a')
+        expected_result = [{"a": "a%2520b"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode(self):
+        result = self.run_cbq_query('SELECT urldecode("a%20b") AS a')
+        expected_result = [{"a": "a b"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urlencode_urldecode(self):
+        result = self.run_cbq_query('SELECT urldecode(urlencode("a b")) AS a')
+        expected_result = [{"a": "a b"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode_urlencode(self):
+        result = self.run_cbq_query('SELECT urlencode(urldecode("a%20b")) AS a')
+        expected_result = [{"a": "a+b"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urlencode_urldecode_urlencode(self):
+        result = self.run_cbq_query('SELECT urlencode(urldecode(urlencode("a%20b"))) AS a')
+        expected_result = [{"a": "a%2520b"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urlencode_null(self):
+        result = self.run_cbq_query('SELECT urlencode(NULL) AS a')
+        expected_result = [{"a": None}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode_null(self):
+        result = self.run_cbq_query('SELECT urldecode(NULL) AS a')
+        expected_result = [{"a": None}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+    
+    def test_urlencode_empty(self):
+        result = self.run_cbq_query('SELECT urlencode("") AS a')
+        expected_result = [{"a": ""}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode_empty(self):
+        result = self.run_cbq_query('SELECT urldecode("") AS a')
+        expected_result = [{"a": ""}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urlencode_complex(self):
+        result = self.run_cbq_query('SELECT urlencode("p1=v/a/l/1&p2=v?a l;2") AS a')
+        expected_result = [{"a": "p1%3Dv%2Fa%2Fl%2F1%26p2%3Dv%3Fa+l%3B2"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode_complex(self):
+        result = self.run_cbq_query('SELECT urldecode("p1%3Dv%2Fa%2Fl%2F1%26p2%3Dv%3Fa+l%3B2") AS a')
+        expected_result = [{"a": "p1=v/a/l/1&p2=v?a l;2"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urlencode_number(self):
+        result = self.run_cbq_query('SELECT urlencode(123) AS a')
+        expected_result = [{"a": None}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode_number(self):
+        result = self.run_cbq_query('SELECT urldecode(123) AS a')
+        expected_result = [{"a": None}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urlencode_boolean(self):
+        result = self.run_cbq_query('SELECT urlencode(TRUE) AS a')
+        expected_result = [{"a": None}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_urldecode_boolean(self):
+        result = self.run_cbq_query('SELECT urldecode(TRUE) AS a')
+        expected_result = [{"a": None}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
