@@ -927,4 +927,26 @@ class QueryEarlyFilterTests(QueryTests):
         operator1 = children[0]['#operator']
         operator2 = children[1]['#operator']
         self.assertEqual(result['results'], expected)
+        self.assertTrue('index_keys' not in str(plan), "We expect early filter order not to occur please check plan: {plan}")
+        self.assertTrue(operator1 == 'IndexScan3' and operator2 != 'Order')
+    
+    def test_MB64917(self):
+        upsert = 'UPSERT INTO default VALUES("test::1", { "type": "test", "items": [ { "nestedId": 1 } ] }),VALUES("test::2", { "type": "test", "items": [ { "nestedId": 2 } ] });'
+        index = 'CREATE INDEX ix30 ON default(type);'
+        query = 'SELECT _a.nestedId as id FROM default AS a LEFT OUTER UNNEST a.items AS _a WHERE a.type = "test" ORDER BY id DESC LIMIT 2;'
+        expected = [{"id": 2}, {"id": 1}]
+        explain_query = f'EXPLAIN {query}'
+
+        self.run_cbq_query(upsert)
+        self.run_cbq_query(index)
+        result = self.run_cbq_query(query)
+        explain = self.run_cbq_query(explain_query)
+        plan = explain['results'][0]['plan']
+        self.log.info(f"Query result: {result['results']}")
+        self.log.info(f'Query plan: {plan}')
+        children = plan['~children'][0]['~children']
+        operator1 = children[0]['#operator']
+        operator2 = children[1]['#operator']
+        self.assertEqual(result['results'], expected)
+        self.assertTrue('index_keys' not in str(plan), "We expect early filter order not to occur please check plan: {plan}")
         self.assertTrue(operator1 == 'IndexScan3' and operator2 != 'Order')
