@@ -556,7 +556,7 @@ class EventingBaseTest(QueryHelperTests):
     """
     def push_to_dgm(self, bucket, dgm_percent):
         doc_size = 1024
-        curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)
+        curr_active = int(float(self.bucket_stat('vb_active_perc_mem_resident', bucket)))
         total_items = self.bucket_stat('curr_items', bucket)
         batch_items = 20000
         # go into dgm
@@ -569,7 +569,7 @@ class EventingBaseTest(QueryHelperTests):
                                            'create', exp=0, flag=0, batch_size=1000, compression=self.sdk_compression)
             except:
                 pass
-            curr_active = self.bucket_stat('vb_active_perc_mem_resident', bucket)
+            curr_active = int(float(self.bucket_stat('vb_active_perc_mem_resident', bucket)))
         log.info("bucket {0} in DGM, resident_ratio : {1}%".format(bucket, curr_active))
         total_items = self.bucket_stat('curr_items', bucket)
         return total_items
