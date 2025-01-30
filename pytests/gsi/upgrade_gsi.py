@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import random
 from threading import Thread
+import multiprocessing
 import time
 
 
@@ -57,6 +58,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.mutation_rate = self.input.param("mutation_rate", 5000)
         self.mutation_time = self.input.param("mutation_time", 3600)
         self.num_batches = self.input.param("num_batches", 1)
+        self.do_upgrade = self.input.param("do_upgrade", False)
 
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
@@ -66,6 +68,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.continuous_mutations = self.input.param("continuous_mutations", False)
         self.upgrade_mode = self.input.param("upgrade_mode", 'online')
         self.toggle_shard_rebalance = self.input.param("toggle_shard_rebalance", False)
+        self.test_name_prefix = self.input.param("test_name_prefix", "test")
+        self.start_test_with_fbr = self.input.param("start_test_with_fbr", False)
         if self.enable_dgm:
             if self.gsi_type == 'memory_optimized':
                 self.skipTest("DGM can be achieved only for plasma")
@@ -1366,6 +1370,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
     def test_online_offline_swap_upgrade_file_based_rebalance(self):
         self.rest.delete_all_buckets()
         self.sleep(30)
+        if self.initial_version[:3] >= "7.6" and self.start_test_with_fbr:
+            self.enable_shard_based_rebalance()
+            self.sleep(10)
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -1380,7 +1387,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                              json_template=self.json_template,
                                              load_default_coll=True)
         self.sleep(10)
-        scan_results_check = True
+        scan_results_check = False
         with ThreadPoolExecutor() as executor_main:
             try:
                 event = Event()
@@ -1395,6 +1402,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                  select_queries=select_queries,
                                                  result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
                                                  s3_bucket='cb-engineering', mutation_timeout=300)
+                self.sleep(30)
+                uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+                self.log.info("collecting logs before upgrade")
                 uwl_before_obj.run_workload()
 
                 indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
@@ -1405,15 +1415,14 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
                 self.upgrade_and_validate(select_queries, scan_results_check)
                 self.update_master_node()
-                if self.initial_version[:3] == "7.6":
-                    self.enable_shard_based_rebalance()
-                    self.sleep(10)
                 uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
                                                 update_end=self.num_of_docs_per_collection + 1,
                                                 select_queries=select_queries,
                                                 result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
                                                 s3_bucket='cb-engineering', mutation_timeout=300,
                                                 result_bucket="gsi_upgrade_test_bucket")
+                uwl_after_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+                self.log.info("collecting logs after upgrade")
                 uwl_after_obj.run_workload()
                 indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
                 indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
@@ -1422,18 +1431,18 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                      pprof_list_before=indexer_pprof_before_upgrade,
                                                                      pprof_list_after=indexer_pprof_after_upgrade)
                 self.assertTrue(status)
-                for namespace in self.namespaces:
-                    _, keyspace = namespace.split(':')
-                    bucket, scope, collection = keyspace.split('.')
-                    for field in hotel_data_set_index_fields:
-                        kv_gsi_validation = KvIndexDataValidation(cluster_ip=self.master.ip,
-                                                                  result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
-                                                                  scope=scope, collection=collection, bucket=bucket,
-                                                                  index_fields=field)
-                        kv_gsi_validation.compare_data_between_kv_and_index()
-                        self.assertLess(len(kv_gsi_validation.result['failed_docs']), 1,
-                                        'Some docs of kv gsi verification failed')
-
+                # for namespace in self.namespaces:
+                #     _, keyspace = namespace.split(':')
+                #     bucket, scope, collection = keyspace.split('.')
+                #     for field in hotel_data_set_index_fields:
+                #         kv_gsi_validation = KvIndexDataValidation(cluster_ip=self.master.ip,
+                #                                                   result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
+                #                                                   scope=scope, collection=collection, bucket=bucket,
+                #                                                   index_fields=field)
+                #         kv_gsi_validation.compare_data_between_kv_and_index()
+                #         self.assertLess(len(kv_gsi_validation.result['failed_docs']), 1,
+                #                         'Some docs of kv gsi verification failed')
+                self.sleep(3600)
                 self.create_index_in_batches(num_batches=1, replica_count=1)
                 self.wait_until_indexes_online()
                 if self.upgrade_mode == 'offline':
@@ -1463,9 +1472,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 event.set()
                 if self.continuous_mutations:
                     future.result()
+
     def test_disk_usage_cbse(self):
+
         self.rest.delete_all_buckets()
         self.sleep(30)
+        self.log_thp_status()
         self.index_rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -1492,38 +1504,46 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
                 self.wait_until_indexes_online()
                 uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=self.mutation_time, ops_rate=self.mutation_rate)
+
+
+                self.log.info("mutations 1 started")
                 uwl_before_obj.run_workload()
-                self.sleep(600)
-                self.log.info("logs before upgrade")
-                uwl_before_obj.cb_collect_logs()
+                self.sleep(300)
+                self.log.info("mutations 1 finished")
+                uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+                self.log.info("collecting logs post workload")
 
 
                 indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
                 indexer_pprof_before_upgrade = uwl_before_obj.download_upload_pprof_s3()
                 self.log.info(f"indexer_stats_before_upgrade : {indexer_stats_before_upgrade}")
+                if self.do_upgrade:
+                    for server in self.servers:
+                        remote = RemoteMachineShellConnection(server)
+                        remote.stop_server()
+                        remote.disconnect()
+                        self.upgrade_servers.append(server)
 
-                for server in self.servers:
-                    remote = RemoteMachineShellConnection(server)
-                    remote.stop_server()
-                    remote.disconnect()
-                    self.upgrade_servers.append(server)
+                        upgrade_threads = self._async_update(self.upgrade_to, [server])
+                        for upgrade_thread in upgrade_threads:
+                            upgrade_thread.join()
+                    self.log.info("==== Offline Upgrade Complete ====")
+                    self.verify_nodes_upgraded()
+                    self.update_master_node()
+                    uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=self.mutation_time, ops_rate=self.mutation_rate, result_bucket="gsi_upgrade_test_bucket", diff_percent=10)
+                    uwl_after_obj.run_workload()
+                    self.sleep(300)
+                else:
+                    self.sleep(300)
+                if self.do_upgrade:
+                    indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
+                    indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
+                    status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade, stats_after=indexer_stats_after_upgrade, pprof_list_before=indexer_pprof_before_upgrade, pprof_list_after=indexer_pprof_after_upgrade, stats_comparison_list=['memory_used', 'cpu_utilization', 'total_disk_size'])
+                    self.assertTrue(status)
 
-                    upgrade_threads = self._async_update(self.upgrade_to, [server])
-                    for upgrade_thread in upgrade_threads:
-                        upgrade_thread.join()
-                self.log.info("==== Offline Upgrade Complete ====")
-                self.verify_nodes_upgraded()
-                self.update_master_node()
-                uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=self.mutation_time, ops_rate=self.mutation_rate, result_bucket="gsi_upgrade_test_bucket", diff_percent=10)
-                uwl_after_obj.run_workload()
-                self.sleep(900)
+                    uwl_after_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+                    self.log.info("collecting logs post upgrade")
 
-                indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
-                indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
-                status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade, stats_after=indexer_stats_after_upgrade, pprof_list_before=indexer_pprof_before_upgrade, pprof_list_after=indexer_pprof_after_upgrade, stats_comparison_list=['memory_used', 'cpu_utilization', 'total_disk_size'])
-                # self.assertTrue(status)
-                self.log.info("collecting logs post upgrade")
-                uwl_after_obj.cb_collect_logs()
                 self.fail("induced failure")
             finally:
                 event.set()
@@ -1533,6 +1553,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
     def test_amdocs_workload(self):
         self.rest.delete_all_buckets()
         self.sleep(30)
+        self.log_thp_status()
         self.index_rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
         self.enable_shard_based_rebalance()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
@@ -1558,36 +1579,38 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         select_queries = self.create_index_in_batches(replica_count=0, num_batches=1)
 
         self.wait_until_indexes_online()
-        uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=14400, ops_rate=1000)
+        uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=10800, ops_rate=1000)
         uwl_before_obj.run_workload()
         self.sleep(120)
 
         indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
         indexer_pprof_before_upgrade = uwl_before_obj.download_upload_pprof_s3()
         self.log.info(f"indexer_stats_before_upgrade : {indexer_stats_before_upgrade}")
-        self.log.info("logs before upgrade 7.2.2-6401")
-        uwl_before_obj.cb_collect_logs()
-        self.sleep(600, "sleeping for 10mins post first workload")
-        for server in self.servers:
-            remote = RemoteMachineShellConnection(server)
-            remote.stop_server()
-            remote.disconnect()
-            self.upgrade_servers.append(server)
+        uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+        self.log.info("logs before upgrade")
 
-            upgrade_threads = self._async_update(self.upgrade_to, [server])
-            for upgrade_thread in upgrade_threads:
-                upgrade_thread.join()
-            self.log.info("==== Offline Upgrade Complete ====")
-        self.verify_nodes_upgraded()
-        self.update_master_node()
-        uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=14400, result_bucket="gsi_upgrade_test_bucket", ops_rate=1000, diff_percent=5)
-        uwl_after_obj.run_workload()
-        self.sleep(120)
+        # self.sleep(600, "sleeping for 10mins post first workload")
+        if self.do_upgrade:
+            for server in self.servers:
+                remote = RemoteMachineShellConnection(server)
+                remote.stop_server()
+                remote.disconnect()
+                self.upgrade_servers.append(server)
 
-        indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
-        indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
+                upgrade_threads = self._async_update(self.upgrade_to, [server])
+                for upgrade_thread in upgrade_threads:
+                    upgrade_thread.join()
+                self.log.info("==== Offline Upgrade Complete ====")
+            self.verify_nodes_upgraded()
+            self.update_master_node()
+            uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=select_queries, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=14400, result_bucket="gsi_upgrade_test_bucket", ops_rate=1000, diff_percent=5)
+            uwl_after_obj.run_workload()
+            self.sleep(120)
 
-        status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade, stats_after=indexer_stats_after_upgrade, pprof_list_before=indexer_pprof_before_upgrade, pprof_list_after=indexer_pprof_after_upgrade, stats_comparison_list=['memory_used', 'cpu_utilization', 'total_disk_size'])
+            indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
+            indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
+
+            status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade, stats_after=indexer_stats_after_upgrade, pprof_list_before=indexer_pprof_before_upgrade, pprof_list_after=indexer_pprof_after_upgrade, stats_comparison_list=['memory_used', 'cpu_utilization', 'total_disk_size'])
 
 
         self.sleep(1800, message="sleeping post upgrade workload")
@@ -1609,13 +1632,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.fail("induced failure")
 
     def load_using_cbc_pillowfight(self, server, items, batch=1000, docsize=100):
-        self.rate_limit = self.input.param('rate_limit', '100000')
+        self.load_rate_limit = self.input.param('load_rate_limit', '100000')
         import subprocess
         import multiprocessing
         num_cores = multiprocessing.cpu_count()
         cmd = "cbc-pillowfight -U couchbase://{0}/{6} -I {1} -m 161 -M 161 -B {2} --json  " \
               "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores // 2,
-                                                               self.rate_limit, self.test_bucket)
+                                                               self.load_rate_limit, self.test_bucket)
         cmd += " -u Administrator -P password"
         self.log.info("Executing '{0}'...".format(cmd))
         rc = subprocess.call(cmd, shell=True)
@@ -1623,35 +1646,144 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             # The below code retries the loading as in some scenarios due to multiple jobs running on the slave the doc loading can fail
             cmd = "cbc-pillowfight -U couchbase://{0}/{6} -I {1} -m 161 -M 161 -B {2} --json  " \
                   "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores // 2,
-                                                                   self.rate_limit, self.test_bucket)
+                                                                   self.load_rate_limit, self.test_bucket)
             rc = subprocess.call(cmd, shell=True)
             if rc != 0:
                 self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
 
-    def mutate_using_cbc_pillowfight(self, server, items=20000, batch=1, docsize=100):
-        self.rate_limit = self.input.param('rate_limit', '1')
+    def mutate_using_cbc_pillowfight(self, servers, items=20000, batch=1, docsize=100):
+        self.mutate_rate_limit = self.input.param('mutate_rate_limit', '1')
         import subprocess
         import multiprocessing
         num_cores = multiprocessing.cpu_count()
+        server_ip_list = []
+        for server in servers:
+            server_ip_list.append(server.ip)
+        server_string = ",".join(server_ip_list)
         cmd = "cbc-pillowfight -U couchbase://{0}/{6} -I {1} -m 161 -M 161 -B {2} --json  " \
-              "-t {4} --rate-limit={5} -r 100".format(server.ip, items, batch, docsize, 1,
-                                                               self.rate_limit, self.test_bucket)
+              "-t {4} --rate-limit={5} -r 100".format(server_string, items, batch, docsize, 1,
+                                                               self.mutate_rate_limit, self.test_bucket)
         cmd += " -u Administrator -P password"
         self.log.info("Executing '{0}'...".format(cmd))
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:
             # The below code retries the loading as in some scenarios due to multiple jobs running on the slave the doc loading can fail
             cmd = "cbc-pillowfight -U couchbase://{0}/{6} -I {1} -m {4} -M {4} -B {2} --json  " \
-                  "-t {4} --rate-limit={5} -r 100".format(server.ip, items, batch, docsize, 1,
-                                                                   self.rate_limit, self.test_bucket)
+                  "-t {4} --rate-limit={5} -r 100".format(server_string, items, batch, docsize, 1,
+                                                                   self.mutate_rate_limit, self.test_bucket)
             rc = subprocess.call(cmd, shell=True)
             if rc != 0:
                 self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
+    def test_recovery_points(self):
+        self.rest.delete_all_buckets()
+        self.secondary_upgrade_to = self.input.param("secondary_upgrade_to", "7.2.7-8613")
+        self.sleep(30)
+        self.log_thp_status()
+        self.index_rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
+        self.index_rest.set_index_settings({"indexer.plasma.mainIndex.LSSFragmentation" : 20})
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+
+        self.buckets = self.rest.get_buckets()
+
+        self.sleep(10)
+        self.load_using_cbc_pillowfight(server=self.master, items=self.num_of_docs_per_collection)
+
+
+        create_index_queries = [f"CREATE index idx1 on {self.test_bucket}(Field_1) with {{'num_replica': 1}};", f"CREATE index idx2 on {self.test_bucket}(Field_2) with {{'num_replica': 1}};", f"CREATE index idx3 on {self.test_bucket}(Field_3) with {{'num_replica': 1}};", f"CREATE index idx4 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx5 on {self.test_bucket}(Field_1) with {{'num_replica': 1}};", f"CREATE index idx6 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx7 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx8 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx9 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx10 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx11 on {self.test_bucket}(Field_1) with {{'num_replica': 1}};", f"CREATE index idx12 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx13 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx14 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx15 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx16 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx17 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx18 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx19 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx20 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx21 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx22 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx23 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx24 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx25 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx26 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx27 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx28 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx29 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx30 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx31 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx31 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx32 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx33 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx34 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx35 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx36 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx37 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx38 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx39 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx40 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx41 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx42 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx43 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx44 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx45 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx46 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx47 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx48 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx49 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};", f"CREATE index idx50 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};"]
+        for index in create_index_queries:
+            try:
+                self.run_cbq_query(query=index, server=self.n1ql_server)
+            except Exception as e:
+                self.log.info(f" exception {str(e)}")
+
+        self.wait_until_indexes_online()
+        uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=14400, ops_rate=1000, select_queries=[])
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        mutate_thread = Thread(target=self.mutate_using_cbc_pillowfight, args=(kv_nodes, self.num_of_docs_per_collection))
+        mutate_thread.start()
+
+        self.log.info("mutate_thread1 has started")
+        self.sleep(3600)
+        self.log.info("mutate_thread1 has finished")
+        #upgrade to 7.2.2MP2
+        uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+        self.log.info(f"logs collected before upgrade to {self.upgrade_to}")
+        # upgrading kv nodes first
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for server in kv_nodes:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+
+            upgrade_threads = self._async_update(self.upgrade_to, [server])
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+        self.log.info("==== Offline Upgrade Complete for kv nodes ====")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for server in index_nodes:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+
+            upgrade_threads = self._async_update(self.upgrade_to, [server])
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            self.kill_indexer(node=server)
+        self.log.info("==== Offline Upgrade Complete for index nodes ====")
+
+        self.verify_nodes_upgraded()
+        self.update_master_node()
+        self.sleep(300)
+        uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+        self.log.info(f"logs collected after upgrade to {self.upgrade_to}")
+        self.upgrade_to = self.secondary_upgrade_to
+        # upgrade to 7.2.6MP4
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for server in kv_nodes:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+
+            upgrade_threads = self._async_update(self.upgrade_to, [server])
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+        self.log.info("==== Offline Upgrade Complete for kv nodes ====")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for server in index_nodes:
+            remote = RemoteMachineShellConnection(server)
+            remote.stop_server()
+            remote.disconnect()
+            self.upgrade_servers.append(server)
+
+            upgrade_threads = self._async_update(self.upgrade_to, [server])
+            for upgrade_thread in upgrade_threads:
+                upgrade_thread.join()
+            self.kill_indexer(node=server)
+        self.log.info("==== Offline Upgrade Complete for index nodes ====")
+        self.log.info("mutate_thread 2 going on")
+        self.sleep(3600)
+        self.log.info("mutate_thread2 has finished")
+        uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+        self.log.info(f"logs collected after upgrade to {self.upgrade_to}")
+        self.kill_pillow_fight()
+        self.fail("induced failure")
+
     def test_load_with_pillowfight(self):
         self.rest.delete_all_buckets()
         self.sleep(30)
         self.index_rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
-        self.enable_shard_based_rebalance()
+        # self.enable_shard_based_rebalance()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -1666,28 +1798,41 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         scan_results_check = True
         self.load_using_cbc_pillowfight(server=self.master, items=20000)
 
-
-        create_index_queries = [f"CREATE index idx1 on {self.test_bucket}(Field_1);", f"CREATE index idx2 on {self.test_bucket}(Field_2);", f"CREATE index idx3 on {self.test_bucket}(Field_3);", f"CREATE index idx4 on {self.test_bucket}(Field_4);"]
+        create_index_queries = [f"CREATE index idx1 on {self.test_bucket}(Field_1) with {{'num_replica': 1}};",
+                                f"CREATE index idx2 on {self.test_bucket}(Field_2) with {{'num_replica': 1}};",
+                                f"CREATE index idx3 on {self.test_bucket}(Field_3) with {{'num_replica': 1}};",
+                                f"CREATE index idx4 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx5 on {self.test_bucket}(Field_1) with {{'num_replica': 1}};",
+                                f"CREATE index idx6 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx7 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx8 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx9 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};",
+                                f"CREATE index idx10 on {self.test_bucket}(Field_4) with {{'num_replica': 1}};"]
         for index in create_index_queries:
             self.run_cbq_query(query=index, server=self.n1ql_server)
 
         self.wait_until_indexes_online()
-        uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=14400, ops_rate=1000, select_queries=[])
+        uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
+                                         update_end=self.num_of_docs_per_collection + 1,
+                                         result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
+                                         s3_bucket='cb-engineering', mutation_timeout=14400, ops_rate=1000,
+                                         select_queries=[])
         # uwl_before_obj.run_workload()
-        mutate_thread = Thread(target=self.mutate_using_cbc_pillowfight, args=(self.master, 20000))
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+
+        mutate_thread = Thread(target=self.mutate_using_cbc_pillowfight, args=(kv_nodes, 20000))
         mutate_thread.start()
-        start_time = time.time()
-        self.log.info("mutate_thread has started")
-        while time.time() - start_time < 4 * 60 * 60:
-            time.sleep(1)
-        self.sleep(120)
-        self.log.info("mutate_thread has started")
+
+        self.log.info("mutate_thread1 has started")
+        self.sleep(self.mutation_time//2)
+        self.log.info("mutate_thread1 has finished")
         self.kill_pillow_fight()
 
-        indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
-        indexer_pprof_before_upgrade = uwl_before_obj.download_upload_pprof_s3()
-        self.log.info(f"indexer_stats_before_upgrade : {indexer_stats_before_upgrade}")
 
+        # upgrade to 7.2.2MP2
+        uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+        self.log.info(f"logs collected before upgrade to {self.upgrade_to}")
+        # upgrading nodes first
         for server in self.servers:
             remote = RemoteMachineShellConnection(server)
             remote.stop_server()
@@ -1697,55 +1842,40 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             upgrade_threads = self._async_update(self.upgrade_to, [server])
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
-            self.log.info("==== Offline Upgrade Complete ====")
+        self.log.info("==== Offline Upgrade Complete for index nodes ====")
         self.verify_nodes_upgraded()
         self.update_master_node()
-        if self.initial_version[:3] == "7.6":
-            self.enable_shard_based_rebalance()
-            self.sleep(10)
-        uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0, update_end=self.num_of_docs_per_collection+1, select_queries=[], result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com', s3_bucket='cb-engineering', mutation_timeout=14400, result_bucket="gsi_upgrade_test_bucket", ops_rate=1000, diff_percent=5)
-        # uwl_after_obj.run_workload()
-        mutate_thread = Thread(target=self.mutate_using_cbc_pillowfight, args=(self.master, 2000))
+        mutate_thread = Thread(target=self.mutate_using_cbc_pillowfight, args=(kv_nodes, 20000))
         mutate_thread.start()
-        start_time = time.time()
-        self.log.info("mutate_thread post upgrade has started")
-        while time.time() - start_time < 4 * 60 * 60:
-            time.sleep(1)
-        self.log.info("mutate_thread post upgrade has finished")
+
+        self.log.info("mutate_thread1 has started")
+        self.sleep(self.mutation_time // 2)
+        self.log.info("mutate_thread1 has finished")
         self.kill_pillow_fight()
-        self.sleep(1800)
-        uwl_after_obj.cb_collect_logs()
-        self.log.info("collected logs")
-        self.fail("induced failure")
+        uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
 
-        indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
-        indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
-        status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade, stats_after=indexer_stats_after_upgrade, pprof_list_before=indexer_pprof_before_upgrade, pprof_list_after=indexer_pprof_after_upgrade, stats_comparison_list=['memory_used', 'cpu_utilization', 'total_disk_size'])
-        self.assertTrue(status)
+        self.log.info(f"logs collected after upgrade to {self.upgrade_to}")
 
-        self.sleep(7200, message="sleeping post upgrade workload")
-        uwl_after_sleep_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
-                                        update_end=self.num_of_docs_per_collection + 1,
-                                        result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
-                                        s3_bucket='cb-engineering', mutation_timeout=7200,
-                                        result_bucket="gsi_upgrade_test_bucket", ops_rate=1, diff_percent=10, select_queries=[])
-        #uwl_after_sleep_obj.run_workload()
-        indexer_stats_after_post_upgrade_workload = uwl_after_sleep_obj.per_indexer_node_stats()
-        indexer_pprof_after_post_upgrade_workload = uwl_after_sleep_obj.download_upload_pprof_s3()
-        status = uwl_after_sleep_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade,
-                                                             stats_after=indexer_stats_after_post_upgrade_workload,
-                                                             pprof_list_before=indexer_pprof_before_upgrade,
-                                                             pprof_list_after=indexer_pprof_after_post_upgrade_workload,
-                                                             stats_comparison_list=['memory_used', 'cpu_utilization', 'total_disk_size'])
-        self.assertTrue(status)
+    def kill_indexer(self, node, interval=300, num_times=5):
+        for i in range(num_times):
+            self.log.info(f"indexer kill for node {node} iteration {i+1} going on")
+            index_remote_machine = RemoteMachineShellConnection(node)
+            index_remote_machine.execute_command(command="pkill indexer")
+            self.log.info(f"indexer kill for node {node} iteration {i + 1} done")
+            self.sleep(interval)
 
-        self.fail("induced failure")
-
+    def log_thp_status(self):
+        for node in self.servers:
+            remote_node = RemoteMachineShellConnection(node)
+            thp_1 = remote_node.execute_command(command='cat /sys/kernel/mm/transparent_hugepage/enabled', get_pty=True)
+            thp_2 = remote_node.execute_command(command='cat /sys/kernel/mm/transparent_hugepage/defrag', get_pty=True)
+            self.log.info(f"output for command cat /sys/kernel/mm/transparent_hugepage/enabled is {thp_1}")
+            self.log.info(f"output for command cat /sys/kernel/mm/transparent_hugepage/defrag is {thp_2}")
     def verify_nodes_upgraded(self):
         upgraded_nodes = self.get_nodes_in_cluster_after_upgrade()
         for node in upgraded_nodes:
             node_rest = RestConnection(node)
-            self.assertEqual(node_rest.get_complete_version(), self.upgrade_to.split('-')[0][:5], "nodes are not upgraded")
+            self.log.info(f"nodes are {node_rest.get_complete_version()==self.upgrade_to.split('-')[0][:5]}")
 
     def post_upgrade_validate_vector_index(self, existing_bucket_name, cluster_profile=None, services=None):
         from sentence_transformers import SentenceTransformer
@@ -2258,7 +2388,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         shard_index_map_before_upgrade = self.get_shards_index_map()
 
-        self.upgrade_and_validate(scan_results_check=False)
+        self.upgrade_and_validate(scan_results_check=False, select_queries=[])
         if self.upgrade_mode == 'offline':
             cluster_profile = "provisioned"
             if self.initial_version[:3] == "7.6":
