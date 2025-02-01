@@ -1833,3 +1833,111 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results getting rr less than {self.desired_rr}%", similarity=self.similarity)
+
+    def test_rebalance_operation_with_errored_out_indexes(self):
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv")
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes, collection_num=self.num_collections,
+                                                           scope_prefix=self.scope_prefix,
+                                                           collection_prefix=self.collection_prefix,
+                                                           bucket=self.test_bucket)
+        #creating namespaces and loading docs
+
+        scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
+        self.sleep(10, "Allowing time after collection creation")
+        for s_item in scopes:
+            collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
+            for c_item in collections:
+                self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                num_docs = self.num_of_docs_per_collection
+                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=s_item,
+                                                collection=c_item, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password)
+
+                task = self.cluster.async_load_gen_docs(self.master, bucket=self.test_bucket,
+                                                        generator=self.gen_create, pause_secs=1,
+                                                        timeout_secs=300, use_magma_loader=True)
+                task.result()
+
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        with ThreadPoolExecutor() as executor:
+            add_nodes = [self.servers[3]]
+            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                to_remove=[index_nodes[0]], services=['index'])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+
+            # Load more data into each collection so that index building does not fail this time around
+            # due to insufficient training vectors
+            for namespace in self.namespaces:
+                bucket, scope, collection = namespace.split('.')
+                num_docs = self.num_of_docs_per_collection * 3
+                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection*4)
+                task = self.cluster.async_load_gen_docs(self.master, bucket=self.test_bucket,
+                                                        generator=self.gen_create, pause_secs=1,
+                                                        timeout_secs=300, use_magma_loader=True)
+                task.result()
+
+            # index building should succeed this time around as there are enough qualifying documents
+            # for codebook training
+            self.run_cbq_query(query=build_query, server=self.n1ql_node)
+            self.wait_until_indexes_online()
+
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+
+            # perform index item count check to validate that indexer has processed all mutations
+            _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+            index_item_count_map = {}
+            for node in stats:
+                for namespace in stats[node]:
+                    for index in stats[node][namespace]:
+                        if index not in index_item_count_map:
+                            index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                        else:
+                            index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            for index in index_item_count_map:
+                if "Partial" in index:
+                    continue
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection*4, f"stats {stats}")
+
+            self.gsi_util_obj.query_event.clear()
+
+            # Recall and accuracy check
+            for select_query in select_queries:
+                # Skipping validation for recall and accuracy against primary index
+                if "DISTINCT" in select_query:
+                    continue
+                self.validate_scans_for_recall_and_accuracy(select_query=select_query)

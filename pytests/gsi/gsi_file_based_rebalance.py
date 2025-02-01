@@ -48,18 +48,20 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def test_gsi_rebalance_out_indexer_node(self):
         self.install_tools()
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
-                                            bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template,
-                                             load_default_coll=True)
-        time.sleep(10)
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+            time.sleep(10)
         skip_array_index_item_count, scan_results_check = False, True
         with ThreadPoolExecutor() as executor_main:
             try:
@@ -79,14 +81,23 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                  prefix='test_',
+                                                                                  similarity=self.similarity, train_list=None,
+                                                                                  scan_nprobes=self.scan_nprobes,
+                                                                                  array_indexes=False,
+                                                                                  limit=self.scan_limit, is_base64=self.base64,
+                                                                                  quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                  quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                  bhive_index=self.bhive_index)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                                   namespace=namespace))
+                                                                                   namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
-                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes,
+                                                                          bhive_index=self.bhive_index)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
@@ -126,17 +137,20 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         for indexer_node in indexer_nodes:
             rest = RestConnection(indexer_node)
             rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
-                                            bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template, load_default_coll=True)
-        time.sleep(10)
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+            time.sleep(10)
         skip_array_index_item_count, scan_results_check = False, True
         with ThreadPoolExecutor() as executor_main:
             try:
@@ -156,14 +170,23 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                  prefix='test_',
+                                                                                  similarity=self.similarity, train_list=None,
+                                                                                  scan_nprobes=self.scan_nprobes,
+                                                                                  array_indexes=False,
+                                                                                  limit=self.scan_limit, is_base64=self.base64,
+                                                                                  quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                  quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                  bhive_index=self.bhive_index)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                                   namespace=namespace))
+                                                                                   namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
-                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes,
+                                                                          bhive_index=self.bhive_index)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
@@ -214,17 +237,20 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def test_gsi_swap_rebalance(self):
         self.install_tools()
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
-                                            bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template, load_default_coll=True)
-        time.sleep(10)
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+            time.sleep(10)
         skip_array_index_item_count, scan_results_check = False, True
         with ThreadPoolExecutor() as executor_main:
             try:
@@ -244,14 +270,23 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                  prefix='test_',
+                                                                                  similarity=self.similarity, train_list=None,
+                                                                                  scan_nprobes=self.scan_nprobes,
+                                                                                  array_indexes=False,
+                                                                                  limit=self.scan_limit, is_base64=self.base64,
+                                                                                  quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                  quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                  bhive_index=self.bhive_index)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                                   namespace=namespace))
+                                                                                   namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True,
-                                                                          deploy_node_info=deploy_nodes)
+                                                                          deploy_node_info=deploy_nodes,
+                                                                          bhive_index=self.bhive_index)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
@@ -292,17 +327,20 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def test_gsi_failover_indexer_node(self):
         self.install_tools()
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
-                                            bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template, load_default_coll=True)
-        time.sleep(10)
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+            time.sleep(10)
         skip_array_index_item_count, scan_results_check = False, True
         with ThreadPoolExecutor() as executor_main:
             try:
@@ -322,14 +360,23 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                  prefix='test_',
+                                                                                  similarity=self.similarity, train_list=None,
+                                                                                  scan_nprobes=self.scan_nprobes,
+                                                                                  array_indexes=False,
+                                                                                  limit=self.scan_limit, is_base64=self.base64,
+                                                                                  quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                  quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                  bhive_index=self.bhive_index)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                                   namespace=namespace))
+                                                                                   namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True,
-                                                                          deploy_node_info=deploy_nodes)
+                                                                          deploy_node_info=deploy_nodes,
+                                                                          bhive_index=self.bhive_index)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
@@ -367,18 +414,20 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
     def test_gsi_rebalance_toggle_flag(self):
         self.install_tools()
         self.disable_shard_based_rebalance()
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
-                                            bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template,
-                                             load_default_coll=True)
-        time.sleep(10)
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+            time.sleep(10)
         skip_array_index_item_count, scan_results_check = False, True
         with ThreadPoolExecutor() as executor_main:
             try:
@@ -398,14 +447,23 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                  prefix='test_',
+                                                                                  similarity=self.similarity, train_list=None,
+                                                                                  scan_nprobes=self.scan_nprobes,
+                                                                                  array_indexes=False,
+                                                                                  limit=self.scan_limit, is_base64=self.base64,
+                                                                                  quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                  quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                  bhive_index=self.bhive_index)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                                   namespace=namespace))
+                                                                                   namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
                                                                           num_replica=replica_count,
                                                                           randomise_replica_count=True,
-                                                                          deploy_node_info=deploy_nodes)
+                                                                          deploy_node_info=deploy_nodes,
+                                                                          bhive_index=self.bhive_index)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
