@@ -2438,7 +2438,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                            namespace=namespace, limit=self.scan_limit))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace, bhive_index=self.bhive_index,
-                                                                  num_replica=self.num_index_replicas)
+                                                                  num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
             self.wait_until_indexes_online()
@@ -2611,7 +2611,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                            namespace=namespace, limit=self.scan_limit))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace, bhive_index=self.bhive_index,
-                                                                  num_replica=self.num_index_replicas)
+                                                                  num_replica=self.num_index_replica)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
             self.wait_until_indexes_online()
