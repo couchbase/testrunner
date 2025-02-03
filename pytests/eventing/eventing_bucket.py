@@ -395,41 +395,6 @@ class EventingBucket(EventingBaseTest):
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
     def test_eventing_with_different_compression_modes(self):
-        compression_mode = self.input.param('compression_mode', 'passive')
-        bucket_type = self.input.param('bucket_type', 'membase')
-        # delete existing couchbase buckets which will be created as part of setup
-        for bucket in self.buckets:
-            self.rest.delete_bucket(bucket.name)
-        if self.non_default_collection:
-            self.collection_rest.delete_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
-                                             collection=self.src_bucket_name)
-            self.collection_rest.delete_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
-                                             collection=self.metadata_bucket_name)
-            self.collection_rest.delete_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
-                                             collection=self.dst_bucket_name)
-        # create buckets with the same name with different compression modes
-        if bucket_type != "ephemeral":
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                   replicas=self.num_replicas,
-                                                   bucket_type=bucket_type, compression_mode=compression_mode)
-        else:
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                   replicas=self.num_replicas,
-                                                   bucket_type=bucket_type, compression_mode=compression_mode,
-                                                   eviction_policy='noEviction')
-        tasks = []
-        for bucket in self.buckets:
-            tasks.append(self.cluster.async_create_standard_bucket(name=bucket.name, port=STANDARD_BUCKET_PORT + 1,
-                                                                   bucket_params=bucket_params))
-        for task in tasks:
-            task.result()
-        if self.non_default_collection:
-            self.create_scope_collection(bucket=self.src_bucket_name, scope=self.src_bucket_name,
-                                         collection=self.src_bucket_name)
-            self.create_scope_collection(bucket=self.metadata_bucket_name, scope=self.metadata_bucket_name,
-                                         collection=self.metadata_bucket_name)
-            self.create_scope_collection(bucket=self.dst_bucket_name, scope=self.dst_bucket_name,
-                                         collection=self.dst_bucket_name)
         if self.non_default_collection:
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
         else:

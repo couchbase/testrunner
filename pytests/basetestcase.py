@@ -1131,7 +1131,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         standard_params = self._create_bucket_params(server=server, size=bucket_size,
                                                      replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                      enable_replica_index=self.enable_replica_index,
-                                                     eviction_policy=self.eviction_policy, lww=self.lww)
+                                                     eviction_policy=self.eviction_policy, lww=self.lww, compression_mode=self.compression_mode)
 
         for bucket_name in bucket_list:
             self.log.info(" Creating bucket {0}".format(bucket_name))
