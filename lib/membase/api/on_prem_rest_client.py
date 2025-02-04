@@ -5954,54 +5954,6 @@ class RestConnection(object):
         return json.loads(content)
 
     '''
-             Get Eventing processing stats
-    '''
-    def get_event_processing_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
-        if eventing_map is None:
-            eventing_map = {}
-        authorization = self.get_authorization(username, password)
-        url = "getEventProcessingStats?name=" + name
-        if function_scope is not None:
-            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
-                                                  function_scope["scope"])
-        api = self.eventing_baseUrl + url
-        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        status, content, header = self._http_request(api, 'GET', headers=headers)
-        if status:
-            json_parsed = json.loads(content)
-            for key in list(json_parsed.keys()):
-                tokens = key.split(":")
-                val = json_parsed[key]
-                if len(tokens) == 1:
-                    field = tokens[0]
-                    eventing_map[field] = val
-        return eventing_map
-
-    '''
-            Get Aggregate Eventing processing stats
-    '''
-    def get_aggregate_event_processing_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
-        if eventing_map is None:
-            eventing_map = {}
-        authorization = self.get_authorization(username, password)
-        url = "getAggEventProcessingStats?name=" + name
-        if function_scope is not None:
-            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
-                                                  function_scope["scope"])
-        api = self.eventing_baseUrl + url
-        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        status, content, header = self._http_request(api, 'GET', headers=headers)
-        if status:
-            json_parsed = json.loads(content)
-            for key in list(json_parsed.keys()):
-                tokens = key.split(":")
-                val = json_parsed[key]
-                if len(tokens) == 1:
-                    field = tokens[0]
-                    eventing_map[field] = val
-        return eventing_map
-
-    '''
             Get Eventing execution stats
     '''
     def get_event_execution_stats(self, name, function_scope=None, eventing_map=None, username="Administrator", password="password"):
