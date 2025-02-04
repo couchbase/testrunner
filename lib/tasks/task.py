@@ -293,6 +293,8 @@ class BucketCreateTask(Task):
         self.eviction_policy = bucket_params['eviction_policy']
         self.lww = bucket_params['lww']
         self.storageBackend = bucket_params['bucket_storage']
+        self.num_vbuckets = bucket_params["numVBuckets"] \
+            if "numVBuckets" in bucket_params else None
 
         if 'maxTTL' in bucket_params:
             self.maxttl = bucket_params['maxTTL']
@@ -348,7 +350,8 @@ class BucketCreateTask(Task):
                                    lww=self.lww,
                                    maxTTL=self.maxttl,
                                    compressionMode=self.compressionMode,
-                                   storageBackend=self.storageBackend)
+                                   storageBackend=self.storageBackend,
+                                   numVBuckets=self.num_vbuckets)
             else:
                 rest.create_bucket(bucket=self.bucket,
                                    ramQuotaMB=self.size,
@@ -360,10 +363,10 @@ class BucketCreateTask(Task):
                                    evictionPolicy=self.eviction_policy,
                                    lww=self.lww,
                                    maxTTL=self.maxttl,
-                                   compressionMode=self.compressionMode)
+                                   compressionMode=self.compressionMode,
+                                   numVBuckets=self.num_vbuckets)
             self.state = CHECKING
             task_manager.schedule(self)
-
         except BucketCreationException as e:
             self.state = FINISHED
             self.set_exception(e)

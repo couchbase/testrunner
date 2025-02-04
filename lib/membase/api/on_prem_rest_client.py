@@ -3238,12 +3238,9 @@ class RestConnection(object):
                       lww=False,
                       maxTTL=None,
                       compressionMode='passive',
-                      storageBackend='magma'):
+                      storageBackend='magma',
+                      numVBuckets=None):
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
-        params = urllib.parse.urlencode({})
-
-
-
         init_params = {'name': bucket,
                        'ramQuotaMB': ramQuotaMB,
                        'replicaNumber': replicaNumber,
@@ -3254,6 +3251,7 @@ class RestConnection(object):
                        'flushEnabled': flushEnabled,
                        'evictionPolicy': evictionPolicy}
 
+        # Still having 'memcached' for upgrade scenarios
         if bucketType == "memcached":
             log.info("Create memcached bucket")
             # 'replicaNumber' is not valid for memcached buckets
@@ -3274,6 +3272,10 @@ class RestConnection(object):
         # bucket storage is applicable only for membase bucket
         if bucketType == "membase":
             if storageBackend == "magma":
+                # Setting this param only in case of 'magma' bucket
+                if numVBuckets:
+                    init_params["numVBuckets"] = numVBuckets
+
                 if ramQuotaMB in range(256, 1024) and ramQuotaMB < self.get_internalSettings("magmaMinMemoryQuota"):
                     log.info("Setting magmaMinMemoryQuota to {0} MB".format(ramQuotaMB))
                     self.set_internalSetting("magmaMinMemoryQuota", ramQuotaMB)
@@ -3311,9 +3313,6 @@ class RestConnection(object):
             log.error("Tried to create the bucket for {0} secs.. giving up".
                       format(maxwait))
             raise BucketCreationException(ip=self.ip, bucket_name=bucket)
-
-
-
 
         create_time = time.time() - create_start_time
         log.info("{0:.02f} seconds to create bucket {1}".

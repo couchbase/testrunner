@@ -684,7 +684,7 @@ class XDCRRemoteClusterRef:
         for ca_dict in raw_content:
             certs += ca_dict["pem"]
         return certs
-    
+
     def connection_pre_check(self, rest_conn_src, dest_master, certificate):
         log = logger.Logger.get_logger()
         log.info("Pre check flow started")
@@ -708,8 +708,8 @@ class XDCRRemoteClusterRef:
                 log.info("connection pre check completed")
                 status = str(res["result"])
                 log.info(status)
-                break                    
-            time.sleep(30)       
+                break
+            time.sleep(30)
         if res["done"] == False:
             log.error("connection pre check status failed after 10 attempts")
 
@@ -732,10 +732,10 @@ class XDCRRemoteClusterRef:
         else:
             self.dest_user = dest_master.rest_username
             self.dest_pass = dest_master.rest_password
-        
+
         logger.Logger.get_logger().info(self.__pre_check)
-        if self.__pre_check:                
-            self.connection_pre_check(rest_conn_src, dest_master, certificate)                    
+        if self.__pre_check:
+            self.connection_pre_check(rest_conn_src, dest_master, certificate)
 
         if not self.__use_scramsha:
             self.__rest_info = rest_conn_src.add_remote_cluster(
@@ -1361,9 +1361,9 @@ class CouchbaseCluster:
 
     def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
                               password=None,
-                             bucket_type=None, enable_replica_index=1, eviction_policy='fullEviction',
-                             bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
-                             bucket_storage='magma'):
+                              bucket_type=None, enable_replica_index=1, eviction_policy='fullEviction',
+                              bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
+                              bucket_storage='magma', num_vbuckets=None):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -1413,6 +1413,10 @@ class CouchbaseCluster:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
                 bucket_params['eviction_policy'] = EVICTION_POLICY.VALUE_ONLY
+
+            if num_vbuckets is not None and bucket_storage == "magma":
+                bucket_params["numVBuckets"] = num_vbuckets
+
         bucket_params['bucket_storage'] = bucket_storage
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
@@ -1566,13 +1570,12 @@ class CouchbaseCluster:
             if self.scope_num or self.collection_num:
                 tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
                     self.scope_num, self.collection_num, name))
-        [task for task in tasks]
 
     def create_standard_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False, maxttl=None,
-            bucket_storage='couchstore'):
+            bucket_storage='couchstore', num_vbuckets=None):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1592,7 +1595,8 @@ class CouchbaseCluster:
                 bucket_priority=bucket_priority,
                 lww=lww,
                 maxttl=maxttl,
-                bucket_storage=bucket_storage)
+                bucket_storage=bucket_storage,
+                num_vbuckets=num_vbuckets)
             tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + i,
                                                           bucket_params=standard_params))
             self.__buckets.append(
@@ -1605,7 +1609,8 @@ class CouchbaseCluster:
                     bucket_priority=bucket_priority,
                     lww=lww,
                     maxttl=maxttl,
-                    bucket_storage=bucket_storage
+                    bucket_storage=bucket_storage,
+                    numVBuckets=num_vbuckets,
                 ))
             if self.scope_num or self.collection_num:
                 tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
@@ -1616,7 +1621,8 @@ class CouchbaseCluster:
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
-            maxttl=None, bucket_storage='couchstore'):
+            maxttl=None, bucket_storage='couchstore',
+            num_vbuckets=None):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -1624,7 +1630,7 @@ class CouchbaseCluster:
         @param bucket_priority: high/low etc.
         @param lww: conflict_resolution_type.
         """
-        bucket_params=self._create_bucket_params(
+        bucket_params = self._create_bucket_params(
             server=self.__master_node,
             size=bucket_size,
             replicas=num_replicas,
@@ -1632,7 +1638,8 @@ class CouchbaseCluster:
             bucket_priority=bucket_priority,
             lww=lww,
             maxttl=maxttl,
-            bucket_storage=bucket_storage)
+            bucket_storage=bucket_storage,
+            num_vbuckets=num_vbuckets)
 
         tasks = [self.__clusterop.create_default_bucket(bucket_params)]
         self.__buckets.append(
@@ -1644,12 +1651,12 @@ class CouchbaseCluster:
                 bucket_priority=bucket_priority,
                 lww=lww,
                 maxttl=maxttl,
-                bucket_storage=bucket_storage
+                bucket_storage=bucket_storage,
+                numVBuckets=num_vbuckets
             ))
         if self.scope_num or self.collection_num:
             tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
                 self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT))
-        [task for task in tasks]
 
     def get_buckets(self):
         return self.__buckets
@@ -3112,6 +3119,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._use_https = self._input.param("use_https", False)
         self._version_pruning_window_hrs = self._input.param("version_pruning_window_hrs", None)
         self._enable_cross_cluster_versioning = self._input.param("enable_cross_cluster_versioning", None)
+        self.variable_vbuckets_test = self._input.param("variable_vbucket_test", False)
 
     def __initialize_error_count_dict(self):
         """
@@ -3179,6 +3187,11 @@ class XDCRNewBaseTest(unittest.TestCase):
             else:
                 FloatingServers._serverlist.append(server)
 
+    def get_random_bucket_vbs(self):
+        vbucket_options = ["magma_128vbs", "magma_1024vbs", "couchstore"]
+        random.shuffle(vbucket_options)
+        return vbucket_options
+
     def get_cluster_op(self):
         return self.__cluster_op
 
@@ -3212,7 +3225,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             quota_percent = None
         bucket_size = 0
         if quota_percent is not None and num_buckets > 0:
-            bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets))
+            bucket_size = int(float(cluster_quota - 500) * float(quota_percent/100.0) /float(num_buckets))
         elif num_buckets > 0:
             bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
         # Setting upper limit of 3GB for bucket size
@@ -3231,8 +3244,21 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__num_stand_buckets + int(self._create_default_bucket)
 
         maxttl = self._input.param("maxttl", None)
+        bucket_vb_options = self.get_random_bucket_vbs()
 
-        for cb_cluster in self.__cb_clusters:
+        for cluster_index, cb_cluster in enumerate(self.__cb_clusters):
+            num_vbuckets = None
+            if self.variable_vbuckets_test:
+                vb_conf = bucket_vb_options[cluster_index % 3]
+                if vb_conf == "magma_128vbs":
+                    self.__bucket_storage = "magma"
+                    num_vbuckets = 128
+                elif vb_conf == "magma_1024vbs":
+                    self.__bucket_storage = "magma"
+                    num_vbuckets = 1024
+                else:
+                    self.__bucket_storage = "couchstore"
+
             total_quota = cb_cluster.get_mem_quota()
             bucket_size = self.__calculate_bucket_size(
                 total_quota,
@@ -3246,7 +3272,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                     bucket_priority=bucket_priority,
                     lww=self.__lww,
                     maxttl=maxttl,
-                    bucket_storage=self.__bucket_storage)
+                    bucket_storage=self.__bucket_storage,
+                    num_vbuckets=num_vbuckets)
 
             cb_cluster.create_sasl_buckets(
                 bucket_size, num_buckets=self.__num_sasl_buckets,
@@ -3264,7 +3291,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                 maxttl=maxttl,
                 bucket_storage=self.__bucket_storage)
 
-
     def create_buckets_on_cluster(self, cluster_name):
         # if mixed priority is set by user, set high priority for sasl and
         # standard buckets
@@ -3275,6 +3301,17 @@ class XDCRNewBaseTest(unittest.TestCase):
         num_buckets = self.__num_sasl_buckets + \
             self.__num_stand_buckets + int(self._create_default_bucket)
 
+        vb_conf = self.get_random_bucket_vbs()[0]
+        num_vbuckets = None
+        if self.variable_vbuckets_test:
+            if vb_conf == "magma_128vbs":
+                self.__bucket_storage = "magma"
+                num_vbuckets = 128
+            elif vb_conf == "magma_1024vbs":
+                self.__bucket_storage = "magma"
+                num_vbuckets = 1024
+            else:
+                self.__bucket_storage = "couchstore"
         cb_cluster = self.get_cb_cluster_by_name(cluster_name)
         total_quota = cb_cluster.get_mem_quota()
         bucket_size = self.__calculate_bucket_size(
@@ -3286,7 +3323,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 bucket_size,
                 self._num_replicas,
                 eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority)
+                bucket_priority=bucket_priority,
+                num_vbuckets=num_vbuckets)
 
         cb_cluster.create_sasl_buckets(
             bucket_size, num_buckets=self.__num_sasl_buckets,
@@ -3298,7 +3336,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             bucket_size, num_buckets=self.__num_stand_buckets,
             num_replicas=self._num_replicas,
             eviction_policy=self.__eviction_policy,
-            bucket_priority=bucket_priority)
+            bucket_priority=bucket_priority,
+            num_vbuckets=num_vbuckets)
 
     def __set_topology_chain(self):
         """Will Setup Remote Cluster Chain Topology i.e. A -> B -> C
@@ -3624,7 +3663,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             for cb_cluster in self.__cb_clusters:
                 rest1 = RestConnection(cb_cluster.get_master_node())
                 for bucket in cb_cluster.get_buckets():
-                    self.log.info("Mobile settings: Enable cross cluster versioning: {0}, Version pruning window hours: {1}".format(self._enable_cross_cluster_versioning, self._version_pruning_window_hrs))               
+                    self.log.info("Mobile settings: Enable cross cluster versioning: {0}, Version pruning window hours: {1}".format(self._enable_cross_cluster_versioning, self._version_pruning_window_hrs))
                     if self._enable_cross_cluster_versioning != None:
                         test = rest1.change_bucket_props(bucket, enableCrossClusterVersioning=str(self._enable_cross_cluster_versioning).lower())
                         self.log.info("{0}".format(test))
@@ -3848,7 +3887,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         if repl_restart_fail and restarted:
             self.fail("Replication restarted on one of the nodes, scroll above"
                       "for reason")
-            
+
     def get_collection_info(self, bucket, master):
         shell = RemoteMachineShellConnection(master)
         nameOutput, error = shell.execute_cbstats(bucket, "collections",
@@ -3883,7 +3922,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     while time.time() < end_time :
                         try:
                             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
-                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]                                                    
+                            _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                         except Exception as e:
                             self.log.warning(e)
                             self.log.info("Trying other method to fetch bucket current items")
@@ -3897,15 +3936,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                             nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
-                                _count2 += node["interestingStats"]["curr_items"]  
+                                _count2 += node["interestingStats"]["curr_items"]
                         self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
-                                   format(bucket.name, _count1, _count2))                        
+                                   format(bucket.name, _count1, _count2))
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-                            break                                                  
+                            break
                     else:
-                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated                            
+                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated
                         collections_info = self.get_collection_info(bucket, cb_cluster.get_master_node())[0]
                         dest_collections_info = self.get_collection_info(bucket, remote_cluster.get_dest_cluster().get_master_node())[0]
 
@@ -3914,15 +3953,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 collections_info = self.get_collection_info(bucket, node)[0]
                                 self.log.info(collections_info)
                                 _count1 -= collections_info["_query"]
-                                _count1 -= collections_info["_mobile"] 
+                                _count1 -= collections_info["_mobile"]
                             for node in remote_cluster.get_dest_cluster().get_nodes():
                                 dest_collections_info = self.get_collection_info(bucket, node)[0]
                                 self.log.info(dest_collections_info)
                                 _count2 -= dest_collections_info["_query"]
-                                _count2 -= dest_collections_info["_mobile"]                                              
+                                _count2 -= dest_collections_info["_mobile"]
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
-                            break                        
+                            break
                         self.fail("Not all items replicated in {0} sec for {1} "
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
