@@ -251,21 +251,26 @@ def flatten_param_to_str(value):
 
 def extract_individual_tests_from_query_result(col_rel_version,
                                                query_result_row):
-    def populate_required_dispatcher_data(data_from_db_doc,
-                                          sub_comp_dict_to_update):
+    def sub_component_is_supported_in_this_release(data_from_db_doc):
         if 'implementedIn' in data_from_db_doc \
                 and RELEASE_VERSION < float(data_from_db_doc['implementedIn']):
             # Return empty list since feature not supported in this version
-            print(f"{unsupported_feature_msg}:{data_from_db_doc['subcomponent']}")
-            return test_jobs_list
+            print(
+                f"{unsupported_feature_msg}:{data_from_db_doc['subcomponent']}")
+            return False
+
         if 'maxVersion' in data_from_db_doc:
             if RELEASE_VERSION > float(data_from_db_doc['maxVersion']) \
                     or (col_rel_version
-                        and col_rel_version > float(data_from_db_doc['maxVersion'])):
+                        and col_rel_version > float(
+                        data_from_db_doc['maxVersion'])):
                 # Return empty list since feature not supported in this version
-                print(f"{unsupported_feature_msg}:{data['subcomponent']}")
-                return test_jobs_list
+                print(f"{unsupported_feature_msg}:{data_from_db_doc['subcomponent']}")
+                return False
+        return True
 
+    def populate_required_dispatcher_data(data_from_db_doc,
+                                          sub_comp_dict_to_update):
         mixed_build_config = dict()
         if data["component"] == "columnar":
             if 'mixed_build_config' in data_from_db_doc:
@@ -386,21 +391,24 @@ def extract_individual_tests_from_query_result(col_rel_version,
             print("Git pull failed !!!")
         REPO_PULLED = True
 
-    unsupported_feature_msg = f"Feature unsupported - {component}:"
+    unsupported_feature_msg = f"Not supported in {options.version} - {component}:"
     if "subcomponents" in data:
         # Config entry has multiple subcomponents to evaluate
         for inner_json_dict in data['subcomponents']:
             # Create a new copy to append multiple subcomponents
             sub_comp_dict = deepcopy(common_sub_comp_dict)
-            populate_required_dispatcher_data(inner_json_dict, sub_comp_dict)
-            test_jobs_list.append(sub_comp_dict)
+            if sub_component_is_supported_in_this_release(inner_json_dict):
+                populate_required_dispatcher_data(inner_json_dict, sub_comp_dict)
+                # Append to list for returning back
+                test_jobs_list.append(sub_comp_dict)
     else:
         # Traditional way (one sub-component case)
         # Use the above template as actual dict since no need to duplicate
         sub_comp_dict = common_sub_comp_dict
-        populate_required_dispatcher_data(data, sub_comp_dict)
-        # Append to list for returning back
-        test_jobs_list.append(sub_comp_dict)
+        if sub_component_is_supported_in_this_release(data):
+            populate_required_dispatcher_data(data, sub_comp_dict)
+            # Append to list for returning back
+            test_jobs_list.append(sub_comp_dict)
     return test_jobs_list
 
 
