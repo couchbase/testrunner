@@ -14,6 +14,9 @@ import time
 
 class MovingTopFTS(FTSBaseTest):
 
+    def suite_setUp(self):
+        pass
+
     def setUp(self):
         self.num_rebalance = TestInputSingleton.input.param("num_rebalance", 1)
         self.retry_time = TestInputSingleton.input.param("retry_time", 300)
