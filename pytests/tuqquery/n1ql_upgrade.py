@@ -318,9 +318,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if upgrade_type != "OFFLINE":
                 with self.subTest("PRE PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
+                    self.run_test_prepare_cte(phase=phase)
             if int(self.initial_version[0]) == 7:
                 with self.subTest("PRE UDF INLINE TEST"):
                     self.run_test_udf_inline(phase=phase)
+                    self.run_test_udf_js_inline(phase=phase)
+                    self.run_test_udj_js_inline_scope(phase=phase)
                 with self.subTest("PRE CBO MIGRATION TEST"):
                     self.run_test_cbo_migration(phase=phase)
                 with self.subTest("PRE UDF JAVASCRIPT TEST"):
@@ -333,6 +336,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_window()
             with self.subTest("MIXED UDF INLINE TEST"):
                 self.run_test_udf_inline(phase=phase)
+                self.run_test_udf_js_inline(phase=phase)
+                self.run_test_udj_js_inline_scope(phase=phase)
             with self.subTest("MIXED UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
@@ -342,6 +347,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             #         self.test_query_limit()
             #with self.subTest("MIXED SYSTEM EVENT TEST"):
             #    self.test_system_event()
+            with self.subTest("QUERY TEST"):
+                self.run_test_cte()
+                self.run_test_subquery()
             with self.subTest("MIXED ADVISOR STATEMENT TEST"):
                 self.run_test_advisor_statement()
             with self.subTest("MIXED ADVISOR SESSION TEST"):
@@ -355,6 +363,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if upgrade_type != "offline":
                 with self.subTest("MIXED PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
+                    self.run_test_prepare_cte(phase=phase)
             with self.subTest("MIXED SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
         elif phase == "post-upgrade":
@@ -364,6 +373,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_window()
             with self.subTest("POST UDF INLINE TEST"):
                 self.run_test_udf_inline(phase=phase)
+                self.run_test_udf_js_inline(phase=phase)
+                self.run_test_udj_js_inline_scope(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT TEST"):
@@ -395,6 +406,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
+                    self.run_test_prepare_cte(phase=phase)
             with self.subTest("POST SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
         else:
@@ -497,6 +509,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         queries_to_run.append((query, 288)) # 288 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
+    def run_test_cte(self):
+        cte_query = "WITH t1 AS (SELECT * FROM `travel-sample` WHERE type = 'airport' and country = 'France') SELECT * FROM t1"
+        cte_results = self.run_cbq_query(cte_query)
+        self.assertEqual(cte_results['metrics']['resultCount'], 221)
+
+    def run_test_subquery(self):
+        subquery = "SELECT name, city from `travel-sample` WHERE type = 'hotel' and city in ( SELECT RAW a.city FROM `travel-sample` a WHERE type = 'airport' and country = 'France')"
+        subquery_results = self.run_cbq_query(subquery)
+        self.assertEqual(subquery_results['metrics']['resultCount'], 86)
+    
     def run_test_filter(self):
         filter_query = "SELECT COUNT(*) FILTER (WHERE city = 'Paris') as count_paris FROM `travel-sample` WHERE type = 'airport'"
         case_query = "SELECT COUNT(CASE WHEN city = 'Paris' THEN 1 ELSE NULL END) as count_paris FROM `travel-sample` WHERE type = 'airport'"
@@ -633,6 +655,36 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
+
+    def run_test_udf_js_inline(self, phase):
+        try:
+            if phase == "pre-upgrade":
+                self.run_cbq_query("CREATE or REPLACE FUNCTION jsudf1(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf1(a,b,c) { return a+b+c-40; }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                results = self.run_cbq_query("EXECUTE FUNCTION jsudf1(10,20,30)")
+                self.assertEqual(results['results'], [[20]])
+                results = self.run_cbq_query("SELECT jsudf1(10,20,30)")
+                self.assertEqual(results['results'], [{'$1': 20}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            self.run_cbq_query("DROP FUNCTION jsudf1 IF EXISTS")
+
+    def run_test_udj_js_inline_scope(self, phase):
+        try:
+            if phase == "pre-upgrade":
+                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudf2(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf1(a,b,c) { return a+b+c-40; }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.jsudf2(10,20,30)")
+                self.assertEqual(results['results'], [[20]])
+                results = self.run_cbq_query("SELECT `travel-sample`.inventory.jsudf2(10,20,30)")
+                self.assertEqual(results['results'], [{'$1': 20}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.jsudf2 IF EXISTS")
 
     def test_flatten_array_index(self):
         self.run_cbq_query("DROP INDEX idx1 IF EXISTS ON `travel-sample`")
@@ -836,6 +888,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if phase == "mixed-mode" or phase == "post-upgrade":
             results = self.run_cbq_query(query=execute_query)
             self.assertEqual(results['results'][0]['$1'], lyon_airport)
+    
+    def run_test_prepare_cte(self, phase):
+        prepare_query = "prepare p1 FROM WITH a AS (1), b AS (2) SELECT a, b"
+        execute_query = "execute p1"
+        expected_result = [{'a': 1, 'b': 2}]
+        if phase == "pre-upgrade":
+            self.run_cbq_query(query=prepare_query)
+        if phase == "mixed-mode" or phase == "post-upgrade":
+            results = self.run_cbq_query(query=execute_query)
+            self.assertEqual(results['results'], expected_result)
 
     def run_test_cbo(self):
         update_stats = "UPDATE STATISTICS FOR `travel-sample`(city) WITH {'update_statistics_timeout':600}"
