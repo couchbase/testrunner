@@ -1266,7 +1266,7 @@ class CouchbaseCluster:
             tasks.append(
                 self.__clusterop.async_init_node(
                     node,
-                    disabled_consistent_view))
+                    disabled_consistent_view=disabled_consistent_view))
         for task in tasks:
             mem_quota = task.result()
             if mem_quota < self.__mem_quota or self.__mem_quota == 0:
@@ -1322,7 +1322,7 @@ class CouchbaseCluster:
         """
         master = RestConnection(self.__master_node)
         self.enable_diag_eval_on_non_local_hosts(self.__master_node)
-        self.__init_nodes(disabled_consistent_view)
+        self.__init_nodes(disabled_consistent_view=disabled_consistent_view)
         self.__clusterop.async_rebalance(
             self.__nodes,
             self.__nodes[1:],
@@ -3904,7 +3904,63 @@ class XDCRNewBaseTest(unittest.TestCase):
                 collection_info[x.split(":name:")[1].strip()] = int(y.split(":items:")[1].strip())
                 # collection_names.append(x.split(":name:")[1].strip())
         return collection_info, error
-
+    def _if_docs_count_match_on_servers(self) -> bool:
+        src_cluster = self.__cb_clusters[0]
+        src_master = src_cluster.get_master_node()
+        src_rest = RestConnection(src_master)
+        filterexp_map = {}
+        docs_match_map = {}
+        replications = src_rest.get_replications()
+        for repl in replications:
+            bucket = repl['source']
+            if repl['filterExpression']:
+                exp_in_brackets = '( ' + str(repl['filterExpression']) + ' )'
+                if bucket in filterexp_map.keys():
+                    filterexp_map[bucket].add(exp_in_brackets)
+                else:
+                    filterexp_map[bucket] = {exp_in_brackets}
+        for remote_cluster in src_cluster.get_remote_clusters():
+            dest_cluster = remote_cluster.get_dest_cluster()
+            dest_master = dest_cluster.get_master_node()
+            for bucket in src_cluster.get_buckets():
+                exp = set()
+                src_count = 0
+                dest_count = -1  # Different values so they don't accidently satisfy equality
+                if bucket.name in filterexp_map.keys():  # check if filter exists for the bucket
+                    exp = filterexp_map[bucket.name]
+                    if len(exp) > 1:
+                        exp = " AND ".join(exp)
+                    else:
+                        exp = next(iter(exp))
+                try:
+                    if len(exp) != 0:
+                        res = RestConnection(src_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name +
+                                                     " WHERE " + exp, timeout=30)
+                    else:
+                        res = RestConnection(src_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name, timeout=30)
+                    src_count = res["results"][0]['$1']
+                except Exception as e:
+                    print("Exception while querying number of docs in source: ", str(e))
+                try:
+                    if len(exp) != 0:
+                        res = RestConnection(dest_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name +
+                                                     " WHERE " + exp, timeout=30)
+                    else:
+                        res = RestConnection(dest_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name, timeout=30)
+                    dest_count = res["results"][0]['$1']
+                except Exception as e:
+                    print("Exception while querying number of docs in target: ", str(e))
+                if src_count == dest_count:
+                    print(f"DOCS COUNT MATCHED SRC:{src_count}, TARGET:{dest_count}")
+                    docs_match_map[bucket.name] = True
+                else:
+                    print(f"DOCS COUNT DID NOT MATCH SRC:{src_count}, TARGET:{dest_count}")
+                    docs_match_map[bucket.name] = False
+        return all(docs_match_map.values())
     def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute"):
 
         _count1 = _count2 = 0
@@ -4030,8 +4086,15 @@ class XDCRNewBaseTest(unittest.TestCase):
                                  + "ON " + bucket)
 
     def _get_doc_count(self, server, bucket, scope=None, collection=None):
-        exp = self.filter_exp[bucket]
-        if len(exp) > 1:
+        exp = self.filter_exp.get(bucket, set())
+        if len(exp) == 0 and scope != None and collection != None:
+            return self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                        + "default:" + bucket + "."
+                                        + scope + "." + collection)
+        elif len(exp) == 0 and scope == None and collection == None:
+            return self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                        + bucket)
+        elif len(exp) > 1:
             exp = " AND ".join(exp)
         else:
             exp = next(iter(exp))
@@ -4251,3 +4314,4 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.wait_interval(10, "Waiting for couchbase service to be running. {0}".format(output))
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
+

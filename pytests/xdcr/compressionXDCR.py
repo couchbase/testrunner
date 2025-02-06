@@ -109,9 +109,17 @@ class compression(XDCRNewBaseTest):
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.perform_update_delete()
-
-        self._wait_for_replication_to_catchup()
-
+        # self._wait_for_replication_to_catchup()  # This function does not account for filtered replications and just assumes the number of docs to be same on source and target
+        end_time = time.time() + 300 # timeout for 300 seconds
+        while time.time() < end_time:
+            docs_matched = self._if_docs_count_match_on_servers()
+            if docs_matched:
+                print("REPLICATION CAUGHT UP !!!")
+                break
+            else:
+                print("REPLICATION NOT CAUGHT UP YET !!! Sleeping for 30 seconds before retrying")
+                time.sleep(30)
+        time.sleep(30)
         self._verify_compression(cluster=self.src_cluster,
                                  compr_bucket_name=bucket_prefix + "1",
                                  uncompr_bucket_name=bucket_prefix + "2",
@@ -135,6 +143,8 @@ class compression(XDCRNewBaseTest):
                                      compression_type=self.compression_type,
                                      repl_time=repl_time)
         self.verify_results()
+
+
 
     def test_compression_with_unixdcr_backfill_load(self):
         self.setup_xdcr()
@@ -573,3 +583,5 @@ class compression(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup()
 
         self.verify_results()
+
+
