@@ -319,11 +319,14 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("PRE PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
+                    self.run_test_prepare_udf(phase=phase)
             if int(self.initial_version[0]) == 7:
                 with self.subTest("PRE UDF INLINE TEST"):
                     self.run_test_udf_inline(phase=phase)
                     self.run_test_udf_js_inline(phase=phase)
                     self.run_test_udj_js_inline_scope(phase=phase)
+                    self.run_test_udj_js_inline_recursive(phase=phase)
+                    self.run_test_udf_inline_recursive(phase=phase)
                 with self.subTest("PRE CBO MIGRATION TEST"):
                     self.run_test_cbo_migration(phase=phase)
                 with self.subTest("PRE UDF JAVASCRIPT TEST"):
@@ -338,6 +341,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline(phase=phase)
                 self.run_test_udf_js_inline(phase=phase)
                 self.run_test_udj_js_inline_scope(phase=phase)
+                self.run_test_udj_js_inline_recursive(phase=phase)
+                self.run_test_udf_inline_recursive(phase=phase)
             with self.subTest("MIXED UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
@@ -364,6 +369,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("MIXED PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
+                    self.run_test_prepare_udf(phase=phase)
             with self.subTest("MIXED SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
         elif phase == "post-upgrade":
@@ -375,6 +381,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline(phase=phase)
                 self.run_test_udf_js_inline(phase=phase)
                 self.run_test_udj_js_inline_scope(phase=phase)
+                self.run_test_udj_js_inline_recursive(phase=phase)
+                self.run_test_udf_inline_recursive(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT TEST"):
@@ -407,6 +415,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
+                    self.run_test_prepare_udf(phase=phase)
             with self.subTest("POST SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
         else:
@@ -674,10 +683,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def run_test_udj_js_inline_scope(self, phase):
         try:
             if phase == "pre-upgrade":
-                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudf2(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf1(a,b,c) { return a+b+c-40; }")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudf2(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf2(a,b,c) { return a+b+c-40; }'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.jsudf2(10,20,30)")
-                self.assertEqual(results['results'], [[20]])
+                self.assertEqual(results['results'], [20])
                 results = self.run_cbq_query("SELECT `travel-sample`.inventory.jsudf2(10,20,30)")
                 self.assertEqual(results['results'], [{'$1': 20}])
         except Exception as e:
@@ -685,6 +694,38 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.jsudf2 IF EXISTS")
+
+    def run_test_udj_js_inline_recursive(self, phase):
+        try:
+            if phase == "pre-upgrade":
+                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { return a; }'")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { if (a >= 10) { return a;} else { return jsudfrecursive(a+2); } }'")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.jsudfrecursive(2)")
+                self.assertEqual(results['results'], [10])
+                results = self.run_cbq_query("SELECT `travel-sample`.inventory.jsudfrecursive(2)")
+                self.assertEqual(results['results'], [{'$1': 10}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.jsudfrecursive IF EXISTS")
+
+    def run_test_udf_inline_recursive(self, phase):
+        try:
+            if phase == "pre-upgrade":
+                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.udfrecursive(a) { a }")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.udfrecursive(2)")
+                self.assertEqual(results['results'], [10])
+                results = self.run_cbq_query("SELECT `travel-sample`.inventory.udfrecursive(2)")
+                self.assertEqual(results['results'], [{'$1': 10}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.udfrecursive IF EXISTS")
 
     def test_flatten_array_index(self):
         self.run_cbq_query("DROP INDEX idx1 IF EXISTS ON `travel-sample`")
@@ -894,6 +935,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         execute_query = "execute p1"
         expected_result = [{'a': 1, 'b': 2}]
         if phase == "pre-upgrade":
+            self.run_cbq_query(query=prepare_query)
+        if phase == "mixed-mode" or phase == "post-upgrade":
+            results = self.run_cbq_query(query=execute_query)
+            self.assertEqual(results['results'], expected_result)
+
+    def run_test_prepare_udf(self, phase):
+        udf = 'CREATE OR REPLACE FUNCTION `travel-sample`.inventory.jsudf3(a,b,c) LANGUAGE JAVASCRIPT as "function jsudf3(a,b,c) { return a+b+c-40; }"'
+        prepare_query = "prepare p1udf FROM SELECT `travel-sample`.inventory.jsudf3(10,20,30)"
+        execute_query = "execute p1udf"
+        expected_result = [{'$1': [20]}]
+        if phase == "pre-upgrade":
+            self.run_cbq_query(query=udf)
             self.run_cbq_query(query=prepare_query)
         if phase == "mixed-mode" or phase == "post-upgrade":
             results = self.run_cbq_query(query=execute_query)
