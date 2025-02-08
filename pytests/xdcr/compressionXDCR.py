@@ -39,7 +39,7 @@ class compression(XDCRNewBaseTest):
     def _verify_compression(self, cluster, compr_bucket_name="", uncompr_bucket_name="",
                             compression_type="None", repl_time=0):
         repls = cluster.get_remote_clusters()[0].get_replications()
-        compr_repl_id = uncompr_repl_id = None
+        compr_repl_id = uncompr_repl_id = ""
         for repl in repls:
             if compr_bucket_name in str(repl):
                 compr_repl_id = repl.get_repl_id()
@@ -70,7 +70,7 @@ class compression(XDCRNewBaseTest):
             for item in items:
                 compressed_data_replicated += item
         self.log.info("Compressed data for replication {0} is {1}".format(compr_repl_id, compressed_data_replicated))
-        if uncompr_repl_id == None:
+        if uncompr_repl_id != "":
 
             base_url = "http://" + cluster.get_master_node().ip + ":8091/pools/default/buckets/" + uncompr_bucket_name + \
                        "/stats/replications%2F" + uncompr_repl_id + "%2Fdata_replicated?haveTStamp=" + str(repl_time)
