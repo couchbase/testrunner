@@ -42,7 +42,7 @@ class QueryDefinition(object):
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
                  dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
-                 is_base64=False, include_fields=None, bhive_index=False, persist_full_vector=True):
+                 is_base64=False, include_fields=None, bhive_index=False, defer_build=False, num_replica=None, persist_full_vector=True):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -77,6 +77,8 @@ class QueryDefinition(object):
         self.is_base64 = is_base64
         self.include_fields = include_fields
         self.bhive_index = bhive_index
+        self.defer_build = defer_build
+        self.num_replica = num_replica
         self.persist_full_vector = persist_full_vector
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
@@ -97,6 +99,8 @@ class QueryDefinition(object):
             self.scan_nprobes = scan_nprobes
         if limit:
             self.limit = limit
+        if num_replica is None:
+            num_replica = self.num_replica
         self.persist_full_vector = persist_full_vector
         if self.is_primary:
             return self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
@@ -188,7 +192,10 @@ class QueryDefinition(object):
         deployment_plan = {}
         if self.keyspace:
             namespace = self.keyspace
-        query = f"CREATE PRIMARY INDEX `{self.index_name}` ON {namespace} USING GSI"
+        if self.index_name is not None:
+            query = f"CREATE PRIMARY INDEX `{self.index_name}` ON {namespace} USING GSI"
+        else:
+            query = f"CREATE PRIMARY INDEX ON {namespace} USING GSI"
         if deploy_node_info:
             deployment_plan["nodes"] = deploy_node_info
         if defer_build:
@@ -221,19 +228,15 @@ class QueryDefinition(object):
     def generate_index_drop_query(self, namespace="default", use_gsi_for_secondary=True, use_gsi_for_primary=True,
                                   pre_cc=False):
 
-        if "#primary" in self.index_name:
+        if self.index_name is None:
+            query = f"DROP PRIMARY INDEX  ON {namespace}"
+        elif "#primary" in self.index_name:
             query = f"DROP INDEX `{self.index_name}` ON {namespace}"
         else:
             if pre_cc:
                 query = f"DROP INDEX {namespace}.{self.index_name}"
             else:
                 query = f"DROP INDEX {self.index_name} ON {namespace}"
-        if use_gsi_for_secondary and "primary" not in self.index_name:
-            query += " USING GSI"
-        elif use_gsi_for_primary and "primary" in self.index_name:
-            query += " USING GSI"
-        if not use_gsi_for_secondary:
-            query += " USING VIEW "
         return query
 
     def generate_query(self, bucket):

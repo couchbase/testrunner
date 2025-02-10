@@ -39,7 +39,7 @@ class AutoFailoverBaseTest(BaseTestCase):
                                              self.value_size,
                                              start=self.update_items,
                                              end=self.delete_items)
-        if self.skip_load:
+        if not self.skip_load:
             self._load_all_buckets(self.servers[0], self.initial_load_gen,
                                    "create", 0)
             self._async_load_all_buckets(self.orchestrator,

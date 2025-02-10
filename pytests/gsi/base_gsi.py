@@ -2233,7 +2233,8 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
-                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False, model="sentence-transformers/all-MiniLM-L6-v2"):
+                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False,
+                                        model="sentence-transformers/all-MiniLM-L6-v2"):
         if not bucket_name:
             bucket_name = self.test_bucket
         pre_load_idx_pri = None
@@ -2265,7 +2266,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
-                                                    output=True, username=self.username, password=self.password, base64=base64, model=model)
+                                                    output=True, username=self.username, password=self.password,
+                                                    key_prefix=key_prefix, base64=base64, model=model)
                     if self.use_magma_loader:
                         task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
                                                                 generator=self.gen_create, pause_secs=1,

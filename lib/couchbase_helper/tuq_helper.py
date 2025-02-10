@@ -238,7 +238,7 @@ class N1QLHelper():
             self.log.info("current indexes: \n" + str(current_indexes) + "\n")
             return False
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
+    def run_cbq_query(self, query=None, server=None, query_params={}, is_prepared=False,
                       scan_consistency=None, scan_vector=None, scan_vectors=None, verbose=True, timeout=None,
                       rest_timeout=None, query_context=None,txnid=None,txtimeout=None, use_sdk = False):
         if query is None:
