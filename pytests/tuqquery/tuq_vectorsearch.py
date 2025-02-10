@@ -63,6 +63,10 @@ class VectorSearchTests(QueryTests):
             self.log.info("Start updating vector data")
             # make it so some docs do not have a price field
             self.run_cbq_query('UPDATE default SET price = [100,150,200,250][FLOOR(RANDOM() * 4)] limit 20000')
+            # add nulls into the data 
+            self.run_cbq_query('UPDATE default SET null_field = null limit 20000')
+            # add nested data into the data
+            self.run_cbq_query('UPDATE default SET nested = {"a": 1, "b": [1,2,3]} limit 20000')
         self.log.info("Completed loading vector data")
 
     def tearDown(self):
@@ -172,6 +176,76 @@ class VectorSearchTests(QueryTests):
                     self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+    '''Vector query that accesses null data'''
+    def test_ann_nulls(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (null_field,price,brand,size,vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="null_field,price,brand,size,vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
+            self.assertTrue('index_vector' in children)
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+    '''Vector query that uses both ann and knn'''
+    def test_ann_knn(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}"),KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
+            self.assertTrue('index_vector' in children)
+            ann_results = self.run_cbq_query(ann_query)
+            recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), ann_results['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            if recall < self.recall_ann:
+                self.log.warn(f"Expected: {self.gt[query_num].tolist()}")
+                self.log.warn(f"Actual: {ann_results['results']}")
+                self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Vector query in select and orderby'''
+    def test_ann_predicate_order(self):
+        query_num = 72
+        ann_query = f'SELECT meta().id,CEIL(ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}")) FROM default ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT meta().id,CEIL(KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}")) FROM default ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
+            self.assertTrue('index_vector' in children)
+            ann_results = self.run_cbq_query(ann_query)
+            knn_results = self.run_cbq_query(knn_query)
+            recall, accuracy = UtilVector().compare_result(knn_results['results'], ann_results['results'])
+            self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+            if recall < self.recall_ann:
+                self.log.warn(f"Expected: {knn_results['results']}")
+                self.log.warn(f"Actual: {ann_results['results']}")
+                self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
 
     def test_normalize(self):
         vector = ast.literal_eval(self.vector)
@@ -575,6 +649,39 @@ class VectorSearchTests(QueryTests):
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
+    '''Given an index that does not pushdown and one that does, we expect the pushdown index to be selected'''
+    def test_select_pushdown_index(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",custom_name="non_pushdown")
+            explain_plan = self.run_cbq_query(explain_query)
+            # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
+            self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
+            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 2}], f"We expect the ordering to be on the vector, please check explain plan {explain_plan}")
+            self.assertTrue('Order' not in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
+            query_plan = explain_plan['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                else:
+                    #check that spans have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_name='non_pushdown')
+    
     '''Query contains equality predicates only and only orderbys on a vector field'''
     def test_limit_pushdown_leading_scalar_orderby_vector(self):
         query_num = 72
@@ -850,6 +957,226 @@ class VectorSearchTests(QueryTests):
             self.check_results_against_knn(knn_query, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+    '''Vector query with no limit vector only'''
+    def test_no_limit_vector_only(self):
+        query_num = 72
+        ann_query = f'SELECT meta().id FROM default ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT meta().id FROM default ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition)
+            explain_plan = self.run_cbq_query(explain_query)
+            # We don't expect pushdown to occur without limit
+            self.assertTrue("cover (approx_vector_distance(" in str(explain_plan), f'We expect the indexer to provide an approximate distance, please check plan {explain_plan}')
+            self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Vector query with no limit orderby vector'''
+    def test_no_limit_scalar(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            # We don't expect pushdown to occur without limit
+            self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                else:
+                    #check that spans have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Vector query with no limit orderby vector and scalar'''
+    def test_no_limit_scalar_orderby_scalar_vector(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            # We don't expect pushdown to occur without limit
+            self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                else:
+                    #check that spans have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Vector query with no limit orderby vector and scalar, in predicate'''
+    def test_no_limit_scalar_in_orderby_scalar_vector(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            # We don't expect pushdown to occur without limit
+            self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                else:
+                    #check that spans have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Query contains a range span and orderby on vector'''
+    def test_no_limit_leading_range_scalar(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                elif fields['index_key'] == '`size`':
+                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
+                else:
+                    #check that the brand field have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+    '''Query contains a range span and orderby on scalar and vector'''
+    def test_no_limit_leading_range_scalar_orderby_scalar_vector(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                elif fields['index_key'] == '`size`':
+                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
+                else:
+                    #check that the brand field have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+        '''Query contains a range span and orderby on vector'''
+    def test_no_limit_leading_multiple_range_scalar_orderby_scalar_vector(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                elif fields['index_key'] == '`size`':
+                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
+                else:
+                    #check that the brand field have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+    '''Query contains spans on a non leading field and orderby not in index order, mutliple predicates have different possible values so there is more to orderby'''
+    def test_no_limit_non_leading_scalar_non_ordered_multiple_range(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (size, brand, vec VECTOR,price)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price")
+            explain_plan = self.run_cbq_query(explain_query)
+            self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                else:
+                    #check that spans have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+    
+    '''Pushdown should not occur'''
+    def test_leading_vector_no_pushdown(self):
+        query_num = 72
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}"), size'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, KNN(vec, {self.xq[query_num].tolist()}, "{self.distance}"), size'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (vec VECTOR, size, brand)
+            IndexVector().create_index(self.database,index_order='lead',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain_plan = self.run_cbq_query(explain_query)
+            self.assertTrue('Order' in str(explain_plan), f'We expect an Order operator, please check plan {explain_plan}')
+            self.assertTrue('index_order' not in str(explain_plan), f'We expect order not to be pushed to the indexer, please check plan {explain_plan}')
+            # check the spans
+            for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
+                # Vector field will not have a high or a low value
+                if fields['index_key'] == '`vec`':
+                    continue
+                else:
+                    #check that spans have the same high and low values
+                    self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def check_results_against_knn(self, knn_query, ann_query):
         ann_results = self.run_cbq_query(ann_query)
@@ -991,3 +1318,28 @@ class VectorSearchTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], error_code)
             self.assertEqual(error['msg'], error_message)
+    
+    '''Aggregates should not be allowed'''
+    def test_aggregate_pushdown_negative(self):
+        query_num = 72
+        ann_query = f'SELECT COUNT(meta().id) FROM default ORDER BY ANN(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        # Create vector index based on conf file so we can test pushdown under multiple conditions
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            ann_results = self.run_cbq_query(ann_query)
+            self.fail("We expected an error message")
+        except Exception as e:
+            self.assertTrue('Cannot use aggregate/window functions with vector search function' in str(e), f'We expect an error message, please check {e}')
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Cannot create a vector index with an array field in it'''
+    def test_create_vector_index_array_negative(self):
+        try:
+            results = self.run_cbq_query("CREATE INDEX vector_index_negative IF NOT EXISTS ON default"
+                               "(vec VECTOR, DISTINCT ARRAY FLATTEN_KEYS(r.author,r.ratings.Cleanliness) FOR r IN reviews END) "
+                               "WITH {'dimension': 128, 'train_list': 10000, 'description': 'IVF,SQ8', 'similarity': 'L2', 'scan_nprobes': 3}")
+            self.fail(f"we expect this index creation to fail currently please check the results {results}")
+        except Exception as ex:
+            self.assertTrue("Failure to create vector index. Vector index with any field having array expression is currently not supported" in str(ex), f'We expect a specific error message, please check {str(ex)}')
