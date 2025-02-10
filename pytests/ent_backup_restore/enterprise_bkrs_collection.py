@@ -328,7 +328,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                 if backup_name in self.backups:
                     backup_count += 1
                     self.log.info("{0} matched in info command output".format(backup_name))
-        self.assertEqual(backup_count, len(strip_backupset), "Merged number of backups did not match")
+        self.assertEqual(backup_count, len(self.backups), "Merged number of backups did not match")
         self.log.info("Merged number of backups matched")
 
     def _take_n_backups(self, n=1, validate=False):
