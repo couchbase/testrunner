@@ -1470,7 +1470,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", mutate=1, dim=384,
                                             update_start=0, update_end=self.num_of_docs_per_collection)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             query_stats_map = {}
             for query in select_queries:
@@ -1524,7 +1524,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", dim=384,
                                             update_start=0, update_end=self.num_of_docs_per_collection)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             query_stats_map = {}
             for query in select_queries:
@@ -1634,7 +1634,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", mutate=1, dim=128,
                                             update_start=0, update_end=10000)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             for query in select_queries:
                 self.run_cbq_query(query=query)
@@ -1656,7 +1656,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", mutate=1, dim=384,
                                             update_start=0, update_end=10000)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             query_stats_map = {}
             for query in select_queries:
@@ -1712,7 +1712,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 2))
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             query_stats_map = {}
             for query in select_queries:
@@ -1763,7 +1763,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", dim=384,
                                             update_start=0, update_end=self.num_of_docs_per_collection)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             # run scans in a loop while docs are getting expired
             start_time = datetime.datetime.now()
