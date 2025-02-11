@@ -26,6 +26,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
 from threading import Thread
+import random
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -649,18 +650,18 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                message="results after reducing num replica count", similarity=self.similarity)
 
         # increasing replica count
-        self.num_index_replicas = self.num_index_replica - 1
+
         for namespace in namespace_index_map:
             definition_list = namespace_index_map[namespace]
             for definitions in definition_list:
                 self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
-                                          action='replica_count', num_replicas=self.num_index_replicas + 1)
+                                          action='replica_count', num_replicas=self.num_index_replica + 1)
                 self.wait_until_indexes_online()
                 self.sleep(10)
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replicas + 1,
+            self.assertEqual(index['numReplica'], self.num_index_replica + 1,
                              "No. of replicas are not matching post alter query")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
@@ -758,7 +759,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
         for namespace in namespace_index_map:
             definition_list = namespace_index_map[namespace]
@@ -782,7 +783,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
@@ -1065,7 +1066,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replicas, "No. of replicas are not matching")
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
     def test_vector_indexes_after_bucket_flush(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -1474,8 +1475,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             create_query = idx.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=create_query, server=self.n1ql_node)
             select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
-                                                                namespace=collection_namespace,
-                                                                index_name=idx.index_name)[0]
+                                                                namespace=collection_namespace)[0]
             select_queries.append(select_query)
 
         for query in [vector_index_L2, vector_index_cosine]:
@@ -1996,6 +1996,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         status = self.wait_until_indexes_online()
         self.assertTrue(status)
 
+
     def test_rebalance_operation_with_errored_out_indexes(self):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -2097,3 +2098,99 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if "DISTINCT" in select_query:
                     continue
                 self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+
+    def test_random_sampling_across_keyspaces(self):
+        self.use_named_namespace = self.input.param("use_named_keyspace", True)
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        collection_namespace = self.namespaces[0]
+        #required to get the ground truth data
+        primary_idx = f"CREATE PRIMARY INDEX `#primary_4848` on {self.namespaces[0]};"
+        self.run_cbq_query(query=primary_idx)
+        desc_2 = "A red color car with 4 or 5 star safety rating"
+        descVec2 = list(self.encoder.encode(desc_2))
+        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
+
+        vector_index = QueryDefinition('oneScalarOneVectorLeading',
+                        index_fields=['descriptionVector VECTOR', 'category'],
+                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                        similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                        train_list=self.trainlist, limit=self.scan_limit, is_base64=self.base64,
+                        query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"category, descriptionVector",
+                                                                           'category in ["Sedan", "Luxury Car"] ',
+                                                                           scan_desc_vec_2))
+
+        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+        self.run_cbq_query(query=query)
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index],
+                                                            namespace=collection_namespace)[0]
+        _, recall_before_random_sampling, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query, similarity=self.similarity,
+                                                                              scan_consitency=True)
+
+        #loading docs with  random vector values in another namespace
+        category_field = ["Sedan", "SUV", "Truck", "Coupe", "Convertible", "Hatchback", "Minivan",
+            "Van", "Wagon", "Crossover", "Hybrid", "Sports Car", "Luxury Car", "Compact", "Subcompact",
+            "Pickup", "Roadster", "Supercar", "Muscle Car"]
+
+        queries = []
+        if self.use_named_namespace:
+            namespace = "test_bucket.test_scope_2.test_collection_2"
+            self.namespaces.append(namespace)
+            n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.n1ql_helper.create_scope(server=n1ql_node, bucket_name=self.buckets[0].name, scope_name="test_scope_2")
+            self.n1ql_helper.create_collection(server=n1ql_node, bucket_name=self.buckets[0].name, scope_name="test_scope_2", collection_name="test_collection_2")
+        else:
+            namespace = "test_bucket._default._default"
+            self.namespaces.append(namespace)
+        for i in range(1, 100001):
+            vector = [random.randint(0, 50) for _ in range(384)]
+            category = random.choice(category_field)
+            query = f"INSERT INTO {self.namespaces[1]} (KEY, VALUE) VALUES (UUID(), {{ \"descriptionVector\": {vector}, \"category\": \"{category}\" }});"
+            queries.append(query)
+            # self.run_cbq_query(query=query)
+        self.gsi_util_obj.async_create_indexes(create_queries=queries, database=self.namespaces[1])
+        self.sleep(60)
+
+        _, recall_after_random_sampling, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query,
+                                                                                          similarity=self.similarity,
+                                                                                          scan_consitency=True)
+        self.log.info(f"recall before sampling : {recall_before_random_sampling*100}")
+        self.log.info(f"recall after sampling : {recall_after_random_sampling*100}")
+
+        self.threshold_percentage = self.input.param("threshold_percentage", 10)
+        diff = recall_after_random_sampling - recall_before_random_sampling
+        threshold = (self.threshold_percentage / 100) * recall_before_random_sampling
+        self.assertLess(diff, threshold, f"diff {diff}, threshold {threshold}")
+
+    def test_mixed_dimension_data(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        collection_namespace = self.namespaces[0]
+        #required to get the ground truth data
+        primary_idx = f"CREATE PRIMARY INDEX `#primary_4848` on {self.namespaces[0]};"
+        self.run_cbq_query(query=primary_idx)
+        desc_2 = "A red color car with 4 or 5 star safety rating"
+        descVec2 = list(self.encoder.encode(desc_2))
+        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
+        # query to ensure only 750K docs have vector fields of the dimension on which the vector index created
+        modification_query = f"UPDATE {collection_namespace} SET descriptionVector = [100,100,100,1000,1000] WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
+        self.run_cbq_query(query=modification_query)
+
+        vector_index = QueryDefinition('oneScalarOneVectorLeading',
+                                       index_fields=['descriptionVector VECTOR', 'category'],
+                                       dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                                       similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                                       train_list=self.trainlist, limit=self.scan_limit, is_base64=self.base64,
+                                       query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                           f"category, descriptionVector",
+                                           'category in ["Sedan", "Luxury Car"] ',
+                                           scan_desc_vec_2))
+
+        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+        self.run_cbq_query(query=query)
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index],
+                                                            namespace=collection_namespace)[0]
+        _, recall, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query,
+                                                                                          similarity=self.similarity,
+                                                                                          scan_consitency=True)
+        self.assertGreaterEqual(recall*100, 70, f"recall is {recall}")
+
+        #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
