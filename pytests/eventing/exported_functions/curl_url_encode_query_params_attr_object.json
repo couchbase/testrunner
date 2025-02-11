@@ -22,7 +22,7 @@
                 "validate_ssl_certificate": false
             },
             {
-                "hostname": "https://jira.issues.couchbase.com/rest/api/latest/",
+                "hostname": "https://jira.issues.couchbase.com/",
                 "value": "jira",
                 "auth_type": "no-auth",
                 "username": "",
