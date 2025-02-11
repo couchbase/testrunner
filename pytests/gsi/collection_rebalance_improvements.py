@@ -195,21 +195,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
             self.fail(f'Node {node} is not serving scans post rebalanced')
 
     def test_swap_rebalance_by_one(self):
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
                 for query in select_queries:
                     select_queries_list.append(query)
         select_queries_list = list(set(select_queries_list))
@@ -260,21 +274,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
     def test_rebalance_in_one(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.index_rest.set_index_settings(redistribute)
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
@@ -321,21 +349,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.verify_index_distribution(indexer_metadata=indexder_metadata_after_rebalance)
 
     def test_replica_repair_swap_rebalance_node(self):
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
+                select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
+                                                                      namespace=namespace, limit=self.scan_limit)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-                select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                         num_replica=self.num_index_replica,
+                                                                         bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
@@ -406,21 +448,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
     def test_replica_repair_rebalance_in(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.index_rest.set_index_settings(redistribute)
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
@@ -492,21 +548,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
     def test_rebalance_in_out_one(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": False}
         self.index_rest.set_index_settings(redistribute)
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
@@ -558,21 +628,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.verify_index_distribution(indexer_metadata=indexder_metadata_after_rebalance)
 
     def test_fail_swap_rebalance(self):
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
@@ -651,21 +735,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
     def test_fail_rebalance_in(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.index_rest.set_index_settings(redistribute)
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
@@ -739,21 +837,35 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.verify_index_distribution(indexer_metadata=indexder_metadata_after_rebalance)
 
     def test_fail_rebalance_in_out(self):
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template='Hotel')
+        if self.bhive_index:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template='Hotel')
         select_queries_list = []
 
         for namespace in self.namespaces:
             for index in range(self.num_index_batches):
                 prefix = f"idx_{index}"
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
-                                                                         namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
-                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                prefix=prefix,
+                                                                                similarity=self.similarity, train_list=None,
+                                                                                scan_nprobes=self.scan_nprobes,
+                                                                                array_indexes=False,
+                                                                                limit=self.scan_limit, is_base64=self.base64,
+                                                                                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                bhive_index=self.bhive_index)
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
-                                                                      namespace=namespace, limit=10)
+                                                                           namespace=namespace, limit=self.scan_limit)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
+                                                                  namespace=namespace,
+                                                                  num_replica=self.num_index_replica,
+                                                                  bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.query_node)
 
                 for query in select_queries:
                     select_queries_list.append(query)
