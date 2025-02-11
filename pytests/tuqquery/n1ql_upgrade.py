@@ -391,6 +391,17 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_n1ql_javascript()
             with self.subTest("POST FLATTEN ARRAY INDEX TEST"):
                 self.test_flatten_array_index()
+            with self.subTest("POST HAVING TEST"):
+                self.run_test_group_by_having()
+            with self.subTest("POST NEST TEST"):
+                self.run_test_nest()
+            with self.subTest("POST LIMIT OFFSET TEST"):
+                self.run_test_limit_offset()
+            with self.subTest("POST LET/LETTING TEST"):
+                self.run_test_let()
+                self.run_test_letting()
+            with self.subTest("POST JOIN TEST"):
+                self.run_test_right_join()
             with self.subTest("POST SYSTEM EVENT TEST"):
                 self.test_system_event()
             # with self.subTest("POST QUERY LIMIT TEST"):
@@ -738,6 +749,49 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.assertTrue("covers" in str(explain_results),
                         "The index is not covering, it should be. Check plan {0}".format(explain_results))
         self.assertTrue("index_group_aggs" in str(explain_results), "Index should be pushing down but it isn't. Please check the plan {0}".format(explain_results))
+
+    def run_test_group_by_having(self):
+        query = "SELECT type, COUNT(*) FROM `travel-sample` GROUP BY type HAVING COUNT(*) > 1"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue(len(results['results']) > 0, "The query should have results")
+
+    def run_test_limit_offset(self):
+        query = "SELECT * FROM `travel-sample` LIMIT 10 OFFSET 10"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(len(results['results']), 10, "The results should have 10 results")
+
+    def run_test_nest(self):
+        query = 'SELECT a.airportname, r[0] FROM `travel-sample`.inventory.airport a LEFT NEST `travel-sample`.inventory.route r ON a.faa = r.sourceairport WHERE a.city = "Toulouse" ORDER BY a.airportname'
+        results = self.run_cbq_query(query=query)
+        self.assertTrue(len(results['results']) > 0, "The query should have results")
+
+    def run_test_let(self):
+        expected_results = [
+            {"airportname": "Wiley Post Will Rogers Mem", "city": "Barrow", "lat": 71.285446, "lon": -156.766003, "type": "airport"},
+            {"airportname": "Dillant Hopkins Airport", "city": "Keene", "lat": 72.270833, "lon": 42.898333, "type": "airport"}
+        ]
+        query = 'SELECT t1.airportname, t1.geo.lat, t1.geo.lon, t1.city, t1.type FROM `travel-sample`.inventory.airport t1 LET min_lat = 71, max_lat = ABS(t1.geo.lon)*4+1, place = (SELECT RAW t2.country FROM `travel-sample`.inventory.landmark t2) WHERE t1.geo.lat > min_lat AND t1.geo.lat < max_lat AND t1.country IN place'
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'], expected_results)
+
+    def run_test_letting(self):
+        expected_results = [
+            {"City": "London", "LandmarkCount": 443},
+            {"City": "San Francisco", "LandmarkCount": 797}
+        ]
+        query = 'SELECT city AS City, COUNT(DISTINCT name) AS LandmarkCount FROM `travel-sample`.inventory.landmark GROUP BY city LETTING MinimumThingsToSee = 400 HAVING COUNT(DISTINCT name) > MinimumThingsToSee'
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'], expected_results)
+
+    def run_test_right_join(self):
+        expected_results = [
+            {"name": "United Airlines","sourceairport": "SFO","destinationairport": "MOD"},
+            {"name": "United Airlines","sourceairport": "SFO","destinationairport": "MRY"},
+            {"name": "United Airlines","sourceairport": "SFO","destinationairport": "SMF"}
+        ]
+        query = 'SELECT airline.name, route.sourceairport, route.destinationairport FROM `travel-sample`.inventory.route RIGHT JOIN `travel-sample`.inventory.airline ON route.airlineid = META(airline).id WHERE route.sourceairport = "SFO" and route.distance < 200'
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'], expected_results)
 
     def test_system_event(self):
         self.event_rest = SystemEventRestHelper([self.master])
