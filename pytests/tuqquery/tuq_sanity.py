@@ -4660,3 +4660,19 @@ class QuerySanityTests(QueryTests):
         diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
         if diffs:
             self.assertTrue(False, diffs)
+
+    # MB-65246
+    def test_array_agg_perf(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query('CREATE INDEX ix1 ON default(c1, a1)')
+        upsert_query = '''
+        UPSERT INTO default (KEY v.id, VALUE v)
+        SELECT {"c1": 1, "id": "k"||SUBSTR("0000000"||TOSTR(d),-7), "a1": ["aa","bb","cc"]} AS v
+        FROM ARRAY_RANGE(0,32000) AS d
+        '''
+        self.run_cbq_query(upsert_query)
+        array_agg_query = 'SELECT d1.c1 FROM default AS d1 WHERE d1.c1 = 1 GROUP BY d1.c1 LETTING aa = ARRAY_AGG(d1.a1)'
+        expected_result = [{'c1': 1}]
+        # Query should run within 2 seconds
+        result = self.run_cbq_query(array_agg_query, query_params={'timeout': '2s'})
+        self.assertEqual(result['results'], expected_result)
