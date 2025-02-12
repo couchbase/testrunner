@@ -194,6 +194,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     query_stats_map[query] = [recall, accuracy]
                     # todo validate indexer metadata for indexes
 
+                codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
+                self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
+                self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
+
                 for query in drop_queries:
                     self.run_cbq_query(query=query, server=self.n1ql_node)
 
@@ -413,7 +417,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-
+        code_book_memory_map_before_rebalance, aggregated_code_book_memory_before_rebalance = self.get_per_index_codebook_memory_usage()
         # Recall and accuracy check
         for select_query in select_queries:
             # Skipping validation for recall and accuracy against primary index
@@ -451,6 +455,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
             data_nodes = self.get_nodes_from_services_map(service_type="kv")
+            self.sleep(30)
+            code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
+            index_names = self.get_all_indexes_in_the_cluster()
+            for index in index_names:
+                self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
+                                 f"Codebook memory has changed for index {index}")
+
             # Todo: Add metadata validation
             if self.post_rebalance_action == "data_load":
                 for namespace in self.namespaces:
@@ -2194,3 +2205,38 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.assertGreaterEqual(recall*100, 70, f"recall is {recall}")
 
         #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
+
+    def test_codebook_memory_indexer_restart(self):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+        self.wait_until_indexes_online()
+
+        code_book_memory_map_before_rebalance, aggregated_code_book_memory_before_rebalance = self.get_per_index_codebook_memory_usage()
+        # restart indexer process on index_nodes
+        for node in index_nodes:
+            self._kill_all_processes_index(server=node)
+        self.sleep(30)
+        #compare the code book memory stats post indexer restart
+        code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
+        index_names = self.get_all_indexes_in_the_cluster()
+        for index in index_names:
+            self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
+                             f"Codebook memory has changed for index {index}")
+
+
+
+
+

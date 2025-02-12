@@ -551,6 +551,18 @@ class BaseSecondaryIndexingTests(QueryTests):
         else:
             raise Exception("no fields extracted")
 
+    def get_per_index_codebook_memory_usage(self):
+        stats_map = self.get_index_stats(perNode=True)
+        index_code_book_memory_map = {}
+        code_book_map = {}
+        for node in stats_map:
+            for ks in stats_map[node]:
+                for index in stats_map[node][ks]:
+                    if "primary" in index:
+                        continue
+                    index_code_book_memory_map[index] = stats_map[node][ks][index]['codebook_mem_usage']
+        return index_code_book_memory_map, sum(index_code_book_memory_map.values())
+    
     def validate_shard_seggregation(self, shard_index_map):
         index_categories = ['scalar', 'vector', 'bhive']
         for shard, indices in shard_index_map.items():
