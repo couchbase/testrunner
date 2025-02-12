@@ -67,6 +67,7 @@ class VectorSearchTests(QueryTests):
             self.run_cbq_query('UPDATE default SET null_field = null limit 20000')
             # add nested data into the data
             self.run_cbq_query('UPDATE default SET nested = {"a": 1, "b": [1,2,3]} limit 20000')
+            self.run_cbq_query('UPDATE default SET nested = {"a": 2, "b": [3,2,1]} WHERE nested IS MISSING limit 10000')
         self.log.info("Completed loading vector data")
 
     def tearDown(self):
@@ -246,6 +247,109 @@ class VectorSearchTests(QueryTests):
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    '''A vector query with an array predicate'''
+    def test_ann_array_any(self):
+        query_num = 72
+        ann_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+        '''A vector query with an array predicate'''
+    def test_ann_array_every(self):
+        query_num = 72
+        ann_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+
+    '''A vector query with an unnest clause'''
+    def test_ann_unnest(self):
+        query_num = 72
+        ann_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            query_plan = explain['results'][0]['plan']
+            children = query_plan['~children'][0]['~children'][0]
+            index_name = children['index']
+            self.assertEqual(index_name, f'vector_index_{self.distance}_custom')
+            self.assertTrue("Unnest" in str(explain), "We expect an unnest to be happening please check")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+    
+    '''Vector query with a from clause subquery'''
+    def test_ann_subquery_from(self):
+        query_num = 72
+        ann_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (vec VECTOR)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            explain = self.run_cbq_query(explain_query)
+            explain = self.run_cbq_query(explain_query)
+            self.assertTrue(f'vector_index_{self.distance}_custom' in str(explain), f"We expect a vector index to be used please check {explain}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+
+    '''Vector query with a subquery in the predicate'''
+    def test_ann_subquery(self):
+        query_num = 72
+        ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (size,brand,vec VECTOR)
+            IndexVector().create_index(self.database,index_order="tail",similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            explain = self.run_cbq_query(explain_query)
+            self.assertTrue(f'vector_index_{self.distance}' in str(explain), f"We expect a vector index to be used please check {explain}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+
+    '''Vector query with a correlated subquery in the predicate'''
+    def test_ann_subquery_correlated(self):
+        query_num = 72
+        ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY ANN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        explain_query = f'EXPLAIN {ann_query}'
+        knn_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY KNN(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        try:
+            # Index is on (size,brand,vec VECTOR)
+            IndexVector().create_index(self.database,index_order="tail",similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, use_bhive=self.use_bhive)
+            # need this index for correlated subquery to work
+            self.run_cbq_query('CREATE INDEX idx_size ON default(size)')
+            explain = self.run_cbq_query(explain_query)
+            self.assertTrue(f'vector_index_{self.distance}' in str(explain), f"We expect a vector index to be used please check {explain}")
+            self.check_results_against_knn(knn_query, ann_query)
+        finally:
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            self.run_cbq_query('DROP INDEX default.idx_size')
 
     def test_normalize(self):
         vector = ast.literal_eval(self.vector)
