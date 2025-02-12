@@ -6711,14 +6711,31 @@ class RestConnection(object):
     def client_cert_auth(self, state, prefixes):
         """
         Args:
-            state (str): Either 'enable', 'mandatory' or 'disable'.
+            state (str): Either 'enable', 'mandatory' or 'disable' or 'hybrid'.
             prefixes (list(dict)): A list of dicts of containing the keys 'path', 'prefix' and 'delimiter'
                 e.g. {"path": .., "prefix": .., "delimiter", ..}
         """
         headers = self._create_capi_headers()
         params = json.dumps({'state': state, 'prefixes': prefixes})
-        status, content, header = self._http_request(self.baseUrl + "settings/clientCertAuth", 'POST', headers=headers, params=params)
+        status, content, header = self._http_request(self.baseUrl + "settings/clientCertAuth", 'POST',
+                                                     headers=headers, params=params)
         return status, content
+
+    def get_client_cert_auth(self):
+        """
+        Returns current client security settings
+        """
+        api = self.baseUrl + 'settings/clientCertAuth'
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def get_security_settings(self):
+        """
+        Returns current security settings
+        """
+        api = self.baseUrl + 'settings/security'
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
 
     def get_saml_settings(self):
         """
