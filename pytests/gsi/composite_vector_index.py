@@ -1988,6 +1988,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=select_query)
 
     def test_retry_index_training(self):
+        self.is_partial = self.input.param("is_partial", False)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         collection_namespace = self.namespaces[0]
 
@@ -1995,13 +1996,33 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=primary_index_query)
 
         #query to ensure only 256 docs have vector fields
-        modification_query = f"UPDATE {collection_namespace} SET descriptionVector = \"hello\" WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
+        if self.is_partial:
+            modification_query = f"UPDATE {collection_namespace} SET descriptionVector = \"hello\" WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
+        else:
+            modification_query = f"update {collection_namespace} SET colorRGBVector = \"hello\" WHERE rating > 3 limit {20000 - self.num_centroids};"
         self.run_cbq_query(query=modification_query)
+        color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
+        scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{self.similarity}', {self.scan_nprobes})"
 
         #creating index
-        vector_idx = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
-                                     description=f"{self.description}", similarity="L2_SQUARED", is_base64=self.base64)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+        if self.is_partial:
+            vector_index = QueryDefinition(index_name='PartialIndex',
+                                           index_fields=['rating ', 'color', 'colorRGBVector Vector'],
+                                           index_where_clause='rating > 3',
+                                           dimension=3, description=f"IVF,{self.quantization_algo_color_vector}",
+                                           similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                                           train_list=self.trainlist, limit=self.scan_limit, is_base64=self.base64,
+                                           query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                               "description, colorRGBVector",
+                                               "rating = 4 and "
+                                               'color like "%%blue%%" ',
+                                               scan_color_vec_1))
+        else:
+            vector_index = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
+                                         description=f"{self.description}", similarity="L2_SQUARED",
+                                         is_base64=self.base64)
+
+        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
 
         status = self.wait_until_indexes_online()
@@ -2235,8 +2256,3 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for index in index_names:
             self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
                              f"Codebook memory has changed for index {index}")
-
-
-
-
-
