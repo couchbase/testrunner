@@ -5818,9 +5818,10 @@ class FTSBaseTest(unittest.TestCase):
         for k, v in node_active_count.items():
             self.log.info(f"\t{node_defs_known[k]} : {v}")
 
-        self.log.info("Replicas:")
-        for k, v in node_replica_count.items():
-            self.log.info(f"\t{node_defs_known[k]} : {v}")
+        if len(node_replica_count) != 0:
+            self.log.info("Replicas:")
+            for k, v in node_replica_count.items():
+                self.log.info(f"\t{node_defs_known[k]} : {v}")
 
         self.log.info(f"Actual number of index partitions in cluster: {actual_partition_count}")
 
@@ -5831,8 +5832,7 @@ class FTSBaseTest(unittest.TestCase):
             if "indexDefs" in payload:
                 for k, v in payload["indexDefs"]["indexDefs"].items():
                     try:
-                        num_rep = v['planParams']['numReplicas']
-                        num_rep = min(num_rep, len(fts_nodes) - 1)
+                        num_rep = min(v['planParams']['numReplicas'], len(fts_nodes) - 1)
                     except:
                         num_rep = 0
                     indexes_map[
