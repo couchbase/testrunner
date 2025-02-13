@@ -422,6 +422,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_transaction()
             with self.subTest("POST SEQUENCE TEST"):
                 self.run_test_sequences()
+            with self.subTest("POST BUCKET TEST"):
+                self.run_test_bucket()
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -915,6 +917,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         finally:
             results = self.run_cbq_query(query=drop_collection)
             results = self.run_cbq_query(query=drop_scope)
+
+    def run_test_bucket(self):
+        try:
+            self.run_cbq_query("CREATE BUCKET testbucket WITH {'ramQuota': 256}")
+            self.run_cbq_query("INSERT INTO testbucket (KEY, VALUE) VALUES ('test', 'test')")
+            results = self.run_cbq_query("SELECT * FROM testbucket")
+            self.assertEqual(results['results'][0]['testbucket'], 'test')
+        except Exception as e:
+            self.log.error("Bucket test failed: {0}".format(e))
+            self.fail()
+        finally:
+            self.run_cbq_query("DROP BUCKET testbucket IF EXISTS")
 
     def run_test_transaction(self):
         select_query = "select count(*) from `travel-sample`"
