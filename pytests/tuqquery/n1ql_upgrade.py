@@ -424,6 +424,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_sequences()
             with self.subTest("POST BUCKET TEST"):
                 self.run_test_bucket()
+            with self.subTest("POST TYPE FUNCTION TEST"):
+                self.run_test_type_function()
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -681,7 +683,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def run_test_udf_js_inline(self, phase):
         try:
             if phase == "pre-upgrade":
-                self.run_cbq_query("CREATE or REPLACE FUNCTION jsudf1(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf1(a,b,c) { return a+b+c-40; }")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION jsudf1(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf1(a,b,c) { return a+b+c-40; }'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 results = self.run_cbq_query("EXECUTE FUNCTION jsudf1(10,20,30)")
                 self.assertEqual(results['results'], [[20]])
@@ -690,8 +692,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         except Exception as e:
             self.log.error(str(e))
             self.fail()
-        finally:
-            self.run_cbq_query("DROP FUNCTION jsudf1 IF EXISTS")
 
     def run_test_udj_js_inline_scope(self, phase):
         try:
@@ -705,8 +705,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         except Exception as e:
             self.log.error(str(e))
             self.fail()
-        finally:
-            self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.jsudf2 IF EXISTS")
 
     def run_test_udj_js_inline_recursive(self, phase):
         try:
@@ -721,8 +719,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         except Exception as e:
             self.log.error(str(e))
             self.fail()
-        finally:
-            self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.jsudfrecursive IF EXISTS")
 
     def run_test_udf_inline_recursive(self, phase):
         try:
@@ -737,8 +733,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         except Exception as e:
             self.log.error(str(e))
             self.fail()
-        finally:
-            self.run_cbq_query("DROP FUNCTION `travel-sample`.inventory.udfrecursive IF EXISTS")
 
     def test_flatten_array_index(self):
         self.run_cbq_query("DROP INDEX idx1 IF EXISTS ON `travel-sample`")
@@ -930,6 +924,27 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         finally:
             self.run_cbq_query("DROP BUCKET testbucket IF EXISTS")
 
+    def run_test_type_function(self):
+        isarray = "SELECT ISARRAY('test')"
+        isarray_results = self.run_cbq_query(query=isarray)
+        self.assertEqual(isarray_results['results'][0]['$1'], False)
+
+        isarray = "SELECT ISARRAY([1,2,3])"
+        isarray_results = self.run_cbq_query(query=isarray)
+        self.assertEqual(isarray_results['results'][0]['$1'], True)
+
+        isarray = "SELECT ISARRAY(1)"
+        isarray_results = self.run_cbq_query(query=isarray)
+        self.assertEqual(isarray_results['results'][0]['$1'], False)
+
+        isobject = "SELECT ISOBJECT('test')"
+        isobject_results = self.run_cbq_query(query=isobject)
+        self.assertEqual(isobject_results['results'][0]['$1'], False)
+
+        isobject = "SELECT ISOBJECT({'a': 1})"
+        isobject_results = self.run_cbq_query(query=isobject)
+        self.assertEqual(isobject_results['results'][0]['$1'], True)
+
     def run_test_transaction(self):
         select_query = "select count(*) from `travel-sample`"
         insert_query = "INSERT INTO `travel-sample`(KEY,VALUE) VALUES ('airport_9999', {'id':9999,'type':'airport','airportname':'Bron','city':'Lyon','country':'France'})"
@@ -1009,7 +1024,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.assertEqual(results['results'], expected_result)
 
     def run_test_prepare_udf(self, phase):
-        udf = 'CREATE OR REPLACE FUNCTION `travel-sample`.inventory.jsudf3(a,b,c) LANGUAGE JAVASCRIPT as "function jsudf3(a,b,c) { return a+b+c-40; }"'
+        udf = "CREATE OR REPLACE FUNCTION `travel-sample`.inventory.jsudf3(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf3(a,b,c) { return a+b+c-40; }'"
         prepare_query = "prepare p1udf FROM SELECT `travel-sample`.inventory.jsudf3(10,20,30)"
         execute_query = "execute p1udf"
         expected_result = [{'$1': [20]}]
