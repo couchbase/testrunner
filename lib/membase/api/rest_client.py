@@ -3363,7 +3363,7 @@ class RestConnection(object):
             log.info("Updated {0} on bucket '{1}' on {2}".format(param_value_map, src_bucket_name, self.ip))
 
     def set_global_xdcr_param(self, param, value):
-        api = self.baseUrl[:-1] + "settings/replications"
+        api = self.baseUrl[:-1] + "/settings/replications"
         value = str(value).lower()
         params = urllib.parse.urlencode({param: value})
         status, _, _ = self._http_request(api, "POST", params)

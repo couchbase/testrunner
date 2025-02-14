@@ -1,4 +1,6 @@
 import io
+from subprocess import call
+call("pip install pytz", shell=True)
 import random
 import string
 import sys
