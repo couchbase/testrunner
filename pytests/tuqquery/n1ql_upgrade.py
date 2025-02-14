@@ -319,12 +319,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("PRE PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
-                    if (int(self.version[0]) == 7 and int(self.version[2]) >= 6) or int(self.version[0]) >= 8:
+                    if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
                         self.run_test_prepare_udf(phase=phase)
             if int(self.initial_version[0]) == 7:
                 with self.subTest("PRE UDF INLINE TEST"):
                     self.run_test_udf_inline(phase=phase)
-                    if (int(self.version[0]) == 7 and int(self.version[2]) >= 6) or int(self.version[0]) >= 8:
+                    if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
                         self.run_test_udf_js_inline(phase=phase)
                         self.run_test_udj_js_inline_scope(phase=phase)
                         self.run_test_udj_js_inline_recursive(phase=phase)
@@ -341,9 +341,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_window()
             with self.subTest("MIXED UDF INLINE TEST"):
                 self.run_test_udf_inline(phase=phase)
-                self.run_test_udf_js_inline(phase=phase)
-                self.run_test_udj_js_inline_scope(phase=phase)
-                self.run_test_udj_js_inline_recursive(phase=phase)
+                if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                    self.run_test_udf_js_inline(phase=phase)
+                    self.run_test_udj_js_inline_scope(phase=phase)
+                    self.run_test_udj_js_inline_recursive(phase=phase)
                 self.run_test_udf_inline_recursive(phase=phase)
             with self.subTest("MIXED UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
@@ -374,6 +375,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_test_prepare_udf(phase=phase)
             with self.subTest("MIXED SYSTEM TABLE TEST"):
                 self.run_test_system_tables()
+            with self.subTest("MIXED ENCODE DECODE TEST"):
+                self.run_test_encode_decode()
+            with self.subTest("MIXED STRING FUNCTIONS TEST"):
+                self.run_test_string_functions()
         elif phase == "post-upgrade":
             with self.subTest("POST FILTER TEST"):
                 self.run_test_filter()
@@ -381,9 +386,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_window()
             with self.subTest("POST UDF INLINE TEST"):
                 self.run_test_udf_inline(phase=phase)
-                self.run_test_udf_js_inline(phase=phase)
-                self.run_test_udj_js_inline_scope(phase=phase)
-                self.run_test_udj_js_inline_recursive(phase=phase)
+                if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                    self.run_test_udf_js_inline(phase=phase)
+                    self.run_test_udj_js_inline_scope(phase=phase)
+                    self.run_test_udj_js_inline_recursive(phase=phase)
                 self.run_test_udf_inline_recursive(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
@@ -428,6 +434,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_bucket()
             with self.subTest("POST TYPE FUNCTION TEST"):
                 self.run_test_type_function()
+            with self.subTest("POST ENCODE DECODE TEST"):
+                self.run_test_encode_decode()
+            with self.subTest("POST STRING FUNCTIONS TEST"):
+                self.run_test_string_functions()
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -946,6 +956,112 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         isobject = "SELECT ISOBJECT({'a': 1})"
         isobject_results = self.run_cbq_query(query=isobject)
         self.assertEqual(isobject_results['results'][0]['$1'], True)
+
+    def run_test_encode_decode(self):
+        json_string = '{"age": 30, "city": "New York", "name": "John"}'
+        json_data = json.loads(json_string)
+
+        encode_query = f"SELECT ENCODE_JSON({json_data})"
+        encode_results = self.run_cbq_query(query=encode_query)
+        self.assertEqual(encode_results['results'][0]['$1'], json_string)
+
+        decode_query = f"SELECT DECODE_JSON('{json_string}')"
+        decode_results = self.run_cbq_query(query=decode_query)
+        self.assertEqual(decode_results['results'][0]['$1'], json_data)
+
+    def run_test_string_functions(self):
+        # Test CONCAT
+        string_query = "SELECT CONCAT('Hello', ' ', 'World')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello World')
+
+        # Test LENGTH
+        string_query = "SELECT LENGTH('Hello World')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 11)
+
+        # Test UPPER and LOWER
+        string_query = "SELECT UPPER('Hello'), LOWER('World')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'HELLO')
+        self.assertEqual(string_results['results'][0]['$2'], 'world')
+
+        # Test TRIM functions
+        string_query = "SELECT TRIM('  Hello  '), LTRIM('  Hello'), RTRIM('Hello  ')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello')
+        self.assertEqual(string_results['results'][0]['$2'], 'Hello')
+        self.assertEqual(string_results['results'][0]['$3'], 'Hello')
+
+        # Test SUBSTR
+        string_query = "SELECT SUBSTR('Hello World', 6)"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'World')
+
+        # Test SUBSTR with length
+        string_query = "SELECT SUBSTR('Hello World', 0, 5)"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello')
+
+        # Test REPLACE
+        string_query = "SELECT REPLACE('Hello World', 'World', 'N1QL')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello N1QL')
+
+        # Test POSITION
+        string_query = "SELECT POSITION('Hello World', 'World')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 6)
+
+        # Test SPLIT
+        string_query = "SELECT SPLIT('Hello,World', ',')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], ['Hello', 'World'])
+
+        # Test REPEAT
+        string_query = "SELECT REPEAT('Hello ', 3)"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello Hello Hello ')
+
+        # Test CONTAINS
+        string_query = "SELECT CONTAINS('Hello World', 'World')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], True)
+
+        # Test INITCAP
+        string_query = "SELECT INITCAP('hello world')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello World')
+
+        # Test TITLE
+        string_query = "SELECT TITLE('hello world')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello World')
+
+        # Test REVERSE
+        string_query = "SELECT REVERSE('Hello')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'olleH')
+
+        # Test string pattern matching
+        string_query = "SELECT 'Hello' LIKE 'H%'"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], True)
+
+        # Test REGEX_CONTAINS
+        string_query = "SELECT REGEX_CONTAINS('Hello123', '[0-9]+')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], True)
+
+        # Test REGEX_REPLACE
+        string_query = "SELECT REGEX_REPLACE('Hello123', '[0-9]+', 'World')"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'HelloWorld')
+
+        # Test string concatenation with ||
+        string_query = "SELECT 'Hello' || ' ' || 'World'"
+        string_results = self.run_cbq_query(query=string_query)
+        self.assertEqual(string_results['results'][0]['$1'], 'Hello World')
 
     def run_test_transaction(self):
         select_query = "select count(*) from `travel-sample`"
