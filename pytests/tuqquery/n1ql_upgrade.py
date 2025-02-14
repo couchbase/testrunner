@@ -319,13 +319,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 with self.subTest("PRE PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
                     self.run_test_prepare_cte(phase=phase)
-                    self.run_test_prepare_udf(phase=phase)
+                    if (int(self.version[0]) == 7 and int(self.version[2]) >= 6) or int(self.version[0]) >= 8:
+                        self.run_test_prepare_udf(phase=phase)
             if int(self.initial_version[0]) == 7:
                 with self.subTest("PRE UDF INLINE TEST"):
                     self.run_test_udf_inline(phase=phase)
-                    self.run_test_udf_js_inline(phase=phase)
-                    self.run_test_udj_js_inline_scope(phase=phase)
-                    self.run_test_udj_js_inline_recursive(phase=phase)
+                    if (int(self.version[0]) == 7 and int(self.version[2]) >= 6) or int(self.version[0]) >= 8:
+                        self.run_test_udf_js_inline(phase=phase)
+                        self.run_test_udj_js_inline_scope(phase=phase)
+                        self.run_test_udj_js_inline_recursive(phase=phase)
                     self.run_test_udf_inline_recursive(phase=phase)
                 with self.subTest("PRE CBO MIGRATION TEST"):
                     self.run_test_cbo_migration(phase=phase)
@@ -1072,33 +1074,125 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.assertEqual(keyspaces_info['count'], 31591)
 
         query_all_keyspaces = "select array_agg(`path`) from system:all_keyspaces where datastore_id = 'system'"
-        system_keyspaces = [
-            "system:active_requests","system:all_indexes","system:all_keyspaces","system:all_keyspaces_info",
-            "system:all_scopes","system:all_sequences","system:applicable_roles","system:buckets",
-            "system:completed_requests","system:completed_requests_history","system:datastores","system:dictionary","system:dictionary_cache",
-            "system:dual","system:functions","system:functions_cache","system:indexes","system:keyspaces","system:keyspaces_info",
-            "system:my_user_info","system:namespaces","system:nodes","system:prepareds","system:scopes",
-            "system:sequences","system:tasks_cache","system:transactions","system:user_info","system:vitals"]
+        system_keyspaces =[
+            "system:active_requests",
+            "system:all_indexes",
+            "system:all_keyspaces",
+            "system:all_keyspaces_info",
+            "system:all_scopes",
+            "system:all_sequences",
+            "system:applicable_roles",
+            "system:aus",
+            "system:aus_settings",
+            "system:awr",
+            "system:bucket_info",
+            "system:bucket_info",
+            "system:buckets",
+            "system:completed_requests",
+            "system:completed_requests_history",
+            "system:datastores",
+            "system:dictionary",
+            "system:dictionary_cache",
+            "system:dual",
+            "system:functions",
+            "system:functions_cache",
+            "system:group_info",
+            "system:indexes",
+            "system:keyspaces",
+            "system:keyspaces_info",
+            "system:my_user_info",
+            "system:namespaces",
+            "system:nodes",
+            "system:prepareds",
+            "system:scopes",
+            "system:sequences",
+            "system:tasks_cache",
+            "system:transactions",
+            "system:user_info",
+            "system:vitals"
+        ]
         results = self.run_cbq_query(query=query_all_keyspaces)
         all_keyspaces = results['results'][0]['$1']
         self.assertEqual(all_keyspaces, system_keyspaces)
 
         query_all_indexes = "select array_agg(distinct keyspace_id) from system:all_indexes where all_indexes.`namespace_id` = '#system'"
         system_all_indexes = [
-            "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "all_sequences", "applicable_roles", "buckets",
-            "completed_requests", "completed_requests_history", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
-            "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "sequences", "tasks_cache", "transactions",
-            "user_info", "vitals"]
+            "active_requests",
+            "all_indexes",
+            "all_keyspaces",
+            "all_keyspaces_info",
+            "all_scopes",
+            "all_sequences",
+            "applicable_roles",
+            "aus",
+            "aus_settings",
+            "awr",
+            "bucket_info",
+            "buckets",
+            "completed_requests",
+            "completed_requests_history",
+            "datastores",
+            "dictionary",
+            "dictionary_cache",
+            "dual",
+            "functions",
+            "functions_cache",
+            "group_info",
+            "indexes",
+            "keyspaces",
+            "keyspaces_info",
+            "my_user_info",
+            "namespaces",
+            "nodes",
+            "prepareds",
+            "scopes",
+            "sequences",
+            "tasks_cache",
+            "transactions",
+            "user_info",
+            "vitals"
+        ]
         results = self.run_cbq_query(query=query_all_indexes)
         all_indexes = results['results'][0]['$1']
         self.assertEqual(all_indexes, system_all_indexes)
 
         query_all_keyspaces_info = "select array_agg(id) from system:all_keyspaces_info where all_keyspaces_info.datastore_id = 'system'"
         system_keyspaces_info = [
-            "active_requests", "all_indexes", "all_keyspaces", "all_keyspaces_info", "all_scopes", "all_sequences", "applicable_roles", "buckets",
-            "completed_requests", "completed_requests_history", "datastores", "dictionary", "dictionary_cache", "dual", "functions", "functions_cache", "indexes",
-            "keyspaces", "keyspaces_info", "my_user_info", "namespaces", "nodes", "prepareds", "scopes", "sequences", "tasks_cache", "transactions",
-            "user_info", "vitals"
+            "active_requests",
+            "all_indexes",
+            "all_keyspaces",
+            "all_keyspaces_info",
+            "all_scopes",
+            "all_sequences",
+            "applicable_roles",
+            "aus",
+            "aus_settings",
+            "awr",
+            "bucket_info",
+            "bucket_info",
+            "buckets",
+            "completed_requests",
+            "completed_requests_history",
+            "datastores",
+            "dictionary",
+            "dictionary_cache",
+            "dual",
+            "functions",
+            "functions_cache",
+            "group_info",
+            "indexes",
+            "keyspaces",
+            "keyspaces_info",
+            "my_user_info",
+            "namespaces",
+            "nodes",
+            "prepareds",
+            "scopes",
+            "sequences",
+            "tasks_cache",
+            "transactions",
+            "user_info",
+            "vitals"
         ]
         results = self.run_cbq_query(query=query_all_keyspaces_info)
         all_keyspaces_info = results['results'][0]['$1']
