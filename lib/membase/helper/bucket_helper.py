@@ -112,7 +112,8 @@ class BucketOperationHelper:
 
         rest.create_bucket(bucket=name,
                            ramQuotaMB=bucket_ram,
-                           replicaNumber=replica)
+                           replicaNumber=replica,
+                           numVBuckets=128)
         msg = 'create_bucket succeeded but bucket "{0}" does not exist'
         bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)
         if not bucket_created:

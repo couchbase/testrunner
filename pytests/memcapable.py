@@ -1,6 +1,5 @@
 import os
 import random
-from threading import Thread
 import unittest
 from TestInput import TestInputSingleton
 import mc_bin_client
@@ -56,26 +55,16 @@ class MemcapableTestBase(object):
         master = self.master
         rest = RestConnection(master)
         helper = RestHelper(RestConnection(master))
+        num_vbs = 128 if self.bucket_storage == "magma" else None
         if not helper.bucket_exists(name):
             # MB-65261: If Magma+numVb=None, create bucket should fail
-            for num_vbs in [None, 128]:
-                node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
-                info = rest.get_nodes_self()
-                available_ram = info.memoryQuota * node_ram_ratio
-                try:
-                    rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
-                                       storageBackend=self.bucket_storage,
-                                       numVBuckets=num_vbs)
-                except BucketCreationException as e:
-                    if (self.bucket_storage == "magma"
-                            and num_vbs is None
-                            and "unable to create bucket" in str(e)):
-                        # MB-65261 - continue to test with numVBs=128
-                        continue
-                    else:
-                        # Got bucket create exception with numVBs passed
-                        raise e
-                BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
+            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+            info = rest.get_nodes_self()
+            available_ram = info.memoryQuota * node_ram_ratio
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                               storageBackend=self.bucket_storage,
+                               numVBuckets=num_vbs)
+            BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
         unittest.assertTrue(helper.bucket_exists(name),
                             msg="unable to create {0} bucket".format(name))
 
@@ -434,7 +423,10 @@ class GetrTests(BaseTestCase):
         prefix = str(uuid.uuid4())[:7]
 
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
-        BucketOperationHelper.create_bucket(self.master, name=self.default_bucket_name, replica=replica_count, port=11210, test_case=self, bucket_ram=-1, password="")
+        BucketOperationHelper.create_bucket(
+            self.master, name=self.default_bucket_name,
+            replica=replica_count, port=11210, test_case=self,
+            bucket_ram=-1, password="")
 
         if rebalance == GetrTests.DURING_REBALANCE or rebalance == GetrTests.AFTER_REBALANCE:
             # leave 1 node unclustered for rebalance in
@@ -697,7 +689,8 @@ class AppendTests(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                               numVBuckets=128)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
@@ -853,7 +846,8 @@ class WarmUpMemcachedTest(unittest.TestCase):
         node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
         info = rest.get_nodes_self()
         available_ram = info.memoryQuota * node_ram_ratio
-        rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+        rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                           numVBuckets=128)
         ready = BucketOperationHelper.wait_for_memcached(master, name)
         self.assertTrue(ready, msg="wait_for_memcached failed")
         self.load_thread = None
@@ -1005,7 +999,8 @@ class MultiGetNegativeTest(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                               numVBuckets=128)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
@@ -1101,7 +1096,8 @@ class MemcachedValueSizeLimitTest(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                               numVBuckets=128)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
