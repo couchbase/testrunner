@@ -16,6 +16,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from basetestcase import BaseTestCase
+from lib.membase.api.exception import BucketCreationException
 from security.rbac_base import RbacBase
 
 
@@ -43,13 +44,12 @@ class MemcapableTestBase(object):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
-        
+
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-        
-        self._create_default_bucket(unittest)
 
+        self._create_default_bucket(unittest)
 
     def _create_default_bucket(self, unittest):
         name = "default"
@@ -57,12 +57,25 @@ class MemcapableTestBase(object):
         rest = RestConnection(master)
         helper = RestHelper(RestConnection(master))
         if not helper.bucket_exists(name):
-            node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
-            info = rest.get_nodes_self()
-            available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
-                               storageBackend=self.bucket_storage)
-            BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
+            # MB-65261: If Magma+numVb=None, create bucket should fail
+            for num_vbs in [None, 128]:
+                node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
+                info = rest.get_nodes_self()
+                available_ram = info.memoryQuota * node_ram_ratio
+                try:
+                    rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                                       storageBackend=self.bucket_storage,
+                                       numVBuckets=num_vbs)
+                except BucketCreationException as e:
+                    if (self.bucket_storage == "magma"
+                            and num_vbs is None
+                            and "unable to create bucket" in str(e)):
+                        # MB-65261 - continue to test with numVBs=128
+                        continue
+                    else:
+                        # Got bucket create exception with numVBs passed
+                        raise e
+                BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
         unittest.assertTrue(helper.bucket_exists(name),
                             msg="unable to create {0} bucket".format(name))
 
