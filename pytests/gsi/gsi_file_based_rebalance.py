@@ -36,6 +36,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.rand = random.randint(1, 1000000000)
         self.alter_index = self.input.param("alter_index", None)
         self.use_nodes_clause = self.input.param("use_nodes_clause", False)
+        self.skip_default = self.input.param("skip_default", True)
         if self.ansi_join:
             self.rest.load_sample("travel-sample")
             self.sleep(10)
