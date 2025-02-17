@@ -459,7 +459,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     continue
                 collections = self.rest.get_scope_collections(bucket=bucket, scope=scope)
                 for collection in collections:
-                    self.namespaces.append(f"{bucket}.{scope}.{collection}")
+                    self.namespaces.append(f"default:{bucket}.{scope}.{collection}")
         self.log.info("namespaces created successfully")
         self.log.info(self.namespaces)
 
