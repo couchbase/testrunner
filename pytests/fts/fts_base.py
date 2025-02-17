@@ -1,6 +1,6 @@
 """
 Base class for FTS/CBFT/Couchbase Full Text Search
-"""
+""" 
 import ast
 import copy
 import datetime
@@ -158,6 +158,7 @@ class INDEX_DEFAULTS:
                 "dynamic": True,
                 "default_analyzer": ""
             },
+            "scoring_model": "tfidf",
             "type_field": "type",
             "default_type": "_default",
             "default_analyzer": "standard",
@@ -919,6 +920,11 @@ class FTSIndex:
                 "CompactionPercentage": 0.6,
                 "CompactionLevelMultiplier": 3
             }
+        
+        if TestInputSingleton.input.param("scoring_model", None):
+            if 'mapping' not in list(self.index_definition['params'].keys()):
+                self.index_definition['params']['mapping'] = {}
+            self.index_definition['params']['mapping']['scoring_model'] = TestInputSingleton.input.param("scoring_model", None)
 
         if TestInputSingleton.input.param("moss_compact_threshold", None):
             self.index_definition['params']['store'] \
@@ -1025,6 +1031,8 @@ class FTSIndex:
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
+            if TestInputSingleton.input.param("scoring_model", None):
+                mapping['scoring_model'] = TestInputSingleton.input.param("scoring_model", None)
             if self.custom_map:
                 if not TestInputSingleton.input.param("default_map", False):
                     mapping['mapping']['default_mapping']['enabled'] = False
@@ -1218,11 +1226,11 @@ class FTSIndex:
 
         if 'mapping' not in self.index_definition['params']:
             self.index_definition['params']['mapping'] = {}
-            self.index_definition['params']['mapping']['default_mapping'] = {}
-            self.index_definition['params']['mapping']['default_mapping'] \
-                ['properties'] = {}
-            self.index_definition['params']['mapping']['default_mapping'] \
-                ['dynamic'] = False
+        self.index_definition['params']['mapping']['default_mapping'] = {}
+        self.index_definition['params']['mapping']['default_mapping'] \
+            ['properties'] = {}
+        self.index_definition['params']['mapping']['default_mapping'] \
+            ['dynamic'] = False
 
         self.index_definition['params']['mapping']['default_mapping'] \
             ['enabled'] = False
