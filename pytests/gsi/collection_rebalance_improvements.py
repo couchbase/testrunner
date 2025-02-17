@@ -49,6 +49,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.failover_method = self.input.param("failover_method", "cancel_rebalance")
         self.num_index_batches = self.input.param("num_index_batches", 1)
         self.num_of_docs_per_collection_mutation = self.input.param("num_of_docs_per_collection_mutation", 1000)
+        self.skip_default = self.input.param("skip_default", True)
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.log.info("==============  RebalanceImprovement setup has completed ==============")
 
