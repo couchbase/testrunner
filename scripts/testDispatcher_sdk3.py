@@ -402,7 +402,8 @@ def extract_individual_tests_from_query_result(col_rel_version,
                 # Check to consider only user input sub-components
                 # Eg: if user input is 'aws_upgrade_1', then only consider
                 # that alone leaving out other sub-components from the list
-                if inner_json_dict["subcomponent"] not in user_input_sub_components:
+                if user_input_sub_components[0] != 'None' \
+                        and inner_json_dict["subcomponent"] not in user_input_sub_components:
                     continue
                 populate_required_dispatcher_data(inner_json_dict, sub_comp_dict)
                 # Append to list for returning back
