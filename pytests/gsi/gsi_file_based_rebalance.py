@@ -2,6 +2,7 @@ import math
 import random
 import time
 import os
+from sentence_transformers import SentenceTransformer
 from membase.api.rest_client import RestConnection, RestHelper
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -37,6 +38,9 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.alter_index = self.input.param("alter_index", None)
         self.use_nodes_clause = self.input.param("use_nodes_clause", False)
         self.skip_default = self.input.param("skip_default", True)
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         if self.ansi_join:
             self.rest.load_sample("travel-sample")
             self.sleep(10)

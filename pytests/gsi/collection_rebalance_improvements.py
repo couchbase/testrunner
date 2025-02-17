@@ -10,6 +10,7 @@ __created_on__ = 17/07/23 4:24 pm
 
 """
 
+from sentence_transformers import SentenceTransformer
 from membase.api.capella_rest_client import RestConnection as RestConnectionCapella
 from membase.api.rest_client import RestConnection
 from .base_gsi import BaseSecondaryIndexingTests
@@ -50,6 +51,9 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.num_index_batches = self.input.param("num_index_batches", 1)
         self.num_of_docs_per_collection_mutation = self.input.param("num_of_docs_per_collection_mutation", 1000)
         self.skip_default = self.input.param("skip_default", True)
+        self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.encoder.cpu()
+        self.gsi_util_obj.set_encoder(encoder=self.encoder)
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.log.info("==============  RebalanceImprovement setup has completed ==============")
 
