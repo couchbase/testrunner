@@ -44,8 +44,10 @@ class XDCRPrioritization(XDCRNewBaseTest):
                 output, error = shell.execute_cbstats(bucket, "dcp", print_results=False)
                 for stat in output:
                     if re.search("eq_dcpq:xdcr:dcp_" + repl['id'] + ".*==:priority:", stat):
+                        print(f"STAT: {stat}")
                         actual_priority = stat.split("==:priority:")[1].lstrip()
-                        if actual_priority in expected_priority[bucket.name]:
+                        print(f"ACTUAL:{actual_priority}")
+                        if actual_priority.lower() in expected_priority[bucket.name]:
                             match = True
                         self.log.info("Sample {0}:".format(sample + 1))
                         self.print_status(bucket.name, server.ip, "dcp priority",
@@ -53,6 +55,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
                                           expected_priority[bucket.name],
                                           match=match)
                         time.sleep(2)
+                        break
 
 
     def _verify_dcp_priority(self, server):
