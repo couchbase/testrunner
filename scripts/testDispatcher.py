@@ -1,6 +1,7 @@
 import base64
 import urllib.request, urllib.error, urllib.parse
 import urllib.request, urllib.parse, urllib.error
+from copy import deepcopy
 from uuid import uuid4
 import httplib2
 import json
@@ -69,14 +70,19 @@ def get_num_add_pool_servers(ini_file, add_pool_id):
         return 0
 
 
-def get_ssh_username_password(ini_file, search_str):
-    with open(ini_file) as f:
-        contents = f.readlines()
-    for line in contents:
-        if search_str in line:
+def get_ssh_username_password(ini_file_name):
+    u_name, p_word = None, None
+    for line in open(ini_file_name).readlines():
+        if u_name is None and "username:" in line:
             arr = line.split(":")[1:]
-            return arr[0].rstrip()
-    return ""
+            u_name = arr[0].rstrip()
+        if p_word is None and "password:" in line:
+            arr = line.split(":")[1:]
+            p_word = arr[0].rstrip()
+
+        if u_name and p_word:
+            break
+    return u_name, p_word
 
 
 def rreplace(str, pattern, num_replacements):
@@ -213,7 +219,7 @@ def flatten_param_to_str(value):
         result = '{'
         for key, val in value.items():
             if isinstance(val, dict) or isinstance(val, list):
-                result += SiriusCouchbaseLoader.flatten_param_to_str(val)
+                result += flatten_param_to_str(val)
             else:
                 try:
                     val = int(val)
@@ -225,11 +231,181 @@ def flatten_param_to_str(value):
         result = '['
         for val in value:
             if isinstance(val, dict) or isinstance(val, list):
-                result += SiriusCouchbaseLoader.flatten_param_to_str(val)
+                result += flatten_param_to_str(val)
             else:
                 result += '"%s",' % val
         result = result.rstrip(",") + ']'
     return result
+
+
+def extract_individual_tests_from_query_result(col_rel_version,
+                                               query_result_row):
+    def sub_component_is_supported_in_this_release(data_from_db_doc):
+        if 'implementedIn' in data_from_db_doc \
+                and RELEASE_VERSION < float(data_from_db_doc['implementedIn']):
+            # Return empty list since feature not supported in this version
+            print(
+                f"{unsupported_feature_msg}:{data_from_db_doc['subcomponent']}")
+            return False
+
+        if 'maxVersion' in data_from_db_doc:
+            if RELEASE_VERSION > float(data_from_db_doc['maxVersion']) \
+                    or (col_rel_version
+                        and col_rel_version > float(
+                            data_from_db_doc['maxVersion'])):
+                # Return empty list since feature not supported in this version
+                print(f"{unsupported_feature_msg}:{data_from_db_doc['subcomponent']}")
+                return False
+        return True
+
+    def populate_required_dispatcher_data(data_from_db_doc,
+                                          sub_comp_dict_to_update):
+        mixed_build_config = dict()
+        if data["component"] == "columnar":
+            if 'mixed_build_config' in data_from_db_doc:
+                mixed_build_config = data_from_db_doc["mixed_build_config"]
+
+        # Update dict with required values
+        sub_comp_dict_to_update["subcomponent"] = data_from_db_doc['subcomponent']
+        sub_comp_dict_to_update["mixed_build_config"] = urllib.parse.quote(
+            flatten_param_to_str(mixed_build_config))
+
+    # CBQE-8380
+    global options, RELEASE_VERSION, REPO_PULLED
+
+    # Having 'test_jobs_list' as list for the following cases:
+    # Case 1: Simple dict where component/subcomponent resides in direct dict
+    #         (Traditional way)
+    # Case 2: subcomponents resides as list where single confFile maps to
+    #         multiple subcomponents to run
+    #         (GCP / AWS or even durability jobs with different levels)
+    test_jobs_list = list()
+    data = query_result_row['QE-Test-Suites']
+
+    # Check if OS is compatible to run
+    os_compatible = False
+    if "os" not in data \
+            or data['os'] == options.os \
+            or (data['os'] == 'linux'
+                and options.os in {'centos', 'ubuntu', 'debian'}):
+        os_compatible = True
+
+    if not os_compatible:
+        # return empty list since nothing to run from this query result row
+        print(f"OS not supported - {data['component']}")
+        return test_jobs_list
+
+    # Fetch common params for both cases
+    # trailing spaces causes problems opening the files
+
+    ini_file = str(data["config"]).strip()
+    conf_file = str(data['confFile']).strip()
+    component = str(data["component"]).strip()
+    framework = data["framework"] if "framework" in data else "testrunner"
+    jenkins_server_url = data['jenkins_server_url'] \
+        if 'jenkins_server_url' in data else options.jenkins_server_url
+    jenkins_server_url = str(jenkins_server_url)
+    mailing_list = data['mailing_list'] \
+        if 'mailing_list' in data else 'qa@couchbase.com'
+    mode = data["mode"] \
+        if 'mode' in data else "java"
+    slave = data['slave'] \
+        if 'slave' in data else "P0"
+    support_py3 = data["support_py3"] \
+        if 'support_py3' in data else "false"
+    time_out = data["timeOut"] \
+        if "timeOut" in data else "120"
+    init_nodes = data['initNodes'].lower() == 'true' \
+        if 'initNodes' in data else True
+    parameters = data["parameters"] \
+        if "parameters" in data else ""
+    install_parameters = data["installParameters"] \
+        if 'installParameters' in data else 'None'
+    owner = data['owner'] \
+        if 'owner' in data else 'QE'
+
+    add_pool_id = options.addPoolId
+    # if there's an additional pool, get the number
+    # of additional servers needed from the ini
+    add_pool_server_count = get_num_add_pool_servers(ini_file, add_pool_id)
+
+    if options.serverType in CLOUD_SERVER_TYPES:
+        config = configparser.ConfigParser()
+        config.read(data['config'])
+
+        for section in config.sections():
+            if section == "cbbackupmgr" and config.has_option(section,
+                                                              "endpoint"):
+                add_pool_server_count = 1
+                add_pool_id = "localstack"
+                break
+
+    ssh_u_name, ssh_p_word = get_ssh_username_password(ini_file)
+    common_sub_comp_dict = {
+        'component': component,
+        'subcomponent': "None",
+        'confFile': conf_file,
+        'iniFile': ini_file,
+        'serverCount': get_num_servers(ini_file),
+        'ssh_username': ssh_u_name,
+        'ssh_password': ssh_p_word,
+        'addPoolServerCount': add_pool_server_count,
+        'timeLimit': time_out,
+        'parameters': parameters,
+        'initNodes': init_nodes,
+        'installParameters': install_parameters,
+        'slave': slave,
+        'owner': owner,
+        'mailing_list': mailing_list,
+        'mode': mode,
+        'framework': framework,
+        'addPoolId': add_pool_id,
+        'target_jenkins': jenkins_server_url,
+        'support_py3': support_py3,
+        'mixed_build_config': {}}
+
+    if not REPO_PULLED:
+        if options.branch != "master":
+            try:
+                subprocess.run(
+                    ["git", "checkout", "origin/" + options.branch,
+                     "--", data['config']], check=True)
+            except Exception:
+                print(
+                    'Git error: Did not find {} in {} branch'.format(
+                        data['config'], options.branch))
+        try:
+            subprocess.run(["git", "pull"], check=True)
+        except Exception:
+            print("Git pull failed !!!")
+        REPO_PULLED = True
+
+    unsupported_feature_msg = f"Not supported in {options.version} - {component}:"
+    if "subcomponents" in data:
+        # Config entry has multiple subcomponents to evaluate
+        user_input_sub_components = options.subcomponent.split(',')
+        for inner_json_dict in data['subcomponents']:
+            # Create a new copy to append multiple subcomponents
+            sub_comp_dict = deepcopy(common_sub_comp_dict)
+            if sub_component_is_supported_in_this_release(inner_json_dict):
+                # Check to consider only user input sub-components
+                # Eg: if user input is 'aws_upgrade_1', then only consider
+                # that alone leaving out other sub-components from the list
+                if user_input_sub_components[0] != 'None' \
+                        and inner_json_dict["subcomponent"] not in user_input_sub_components:
+                    continue
+                populate_required_dispatcher_data(inner_json_dict, sub_comp_dict)
+                # Append to list for returning back
+                test_jobs_list.append(sub_comp_dict)
+    else:
+        # Traditional way (one sub-component case)
+        # Use the above template as actual dict since no need to duplicate
+        sub_comp_dict = common_sub_comp_dict
+        if sub_component_is_supported_in_this_release(data):
+            populate_required_dispatcher_data(data, sub_comp_dict)
+            # Append to list for returning back
+            test_jobs_list.append(sub_comp_dict)
+    return test_jobs_list
 
 
 def main():
@@ -238,6 +414,9 @@ def main():
     global TIMEOUT
     global SSH_NUM_RETRIES
     global SSH_POLL_INTERVAL
+    global REPO_PULLED
+    global RELEASE_VERSION
+    global options
 
     usage = '%prog -s suitefile -v version -o OS'
     parser = OptionParser(usage)
@@ -306,13 +485,10 @@ def main():
     addPoolServer_os = "centos"
     print(('the run is', options.run))
     print(('the  version is', options.version))
-    releaseVersion = float('.'.join(options.version.split('.')[:2]))
-    print(('release version is', releaseVersion))
-
-    if options.columnar_version:
-        columnar_releaseVersion = float('.'.join(options.columnar_version.split('.')[:2]))
-    else:
-        columnar_releaseVersion = float(0.0)
+    RELEASE_VERSION = float('.'.join(options.version.split('.')[:2]))
+    print(('release version is', RELEASE_VERSION))
+    columnar_rel_version = float('.'.join(options.columnar_version.split('.')[:2])) \
+        if options.columnar_version else float(0.0)
 
     print(('nolaunch', options.noLaunch))
     print(('os', options.os))
@@ -394,8 +570,13 @@ def main():
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
-            queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent in [{2}];". \
-                format(suiteString, options.component, subcomponentString)
+            queryString = (
+                "SELECT * FROM `QE-Test-Suites`"
+                " WHERE {0}"
+                " AND component in ['{1}']"
+                " AND (subcomponent in [{2}]"
+                "      OR ANY `inner_json` IN `subcomponents` SATISFIES `inner_json`.`subcomponent` in [{2}] END);")\
+                .format(suiteString, options.component, subcomponentString)
         else:
             splitComponents = options.component.split(',')
             componentString = ''
@@ -406,143 +587,27 @@ def main():
                 else:
                     componentString = f'{componentString},{comp}'
 
-            queryString = "select * from `QE-Test-Suites` where {0} and component in [{1}] and subcomponent like \"{2}\";". \
-                format(suiteString, componentString, options.subcomponent_regex)
+            queryString = (
+                "SELECT * FROM `QE-Test-Suites`.`_default`.`_default` AS `QE-Test-Suites`"
+                " WHERE {0}"
+                " AND (component in [{1}] and subcomponent like \"{2}\""
+                "      OR ANY `inner_json` IN `subcomponents` SATISFIES `inner_json`.`subcomponent` LIKE \"{2}\" END);")\
+                .format(suiteString, componentString, options.subcomponent_regex)
 
-    print(('the query is', queryString))  # .format(options.run, componentString)
+    print(('Query is', queryString))
     results = cb.n1ql_query(queryString)
 
+    REPO_PULLED = False
     for row in results:
         try:
-            data = row['QE-Test-Suites']
-            data['config'] = data['config'].rstrip()  # trailing spaces causes problems opening the files
-            print(('row', data))
-
-            # check any os specific
-            if 'os' not in data or (data['os'] == options.os) or \
-                    (data['os'] == 'linux' and options.os in {'centos', 'ubuntu','debian'}):
-
-                # and also check for which release it is implemented in
-                if ('implementedIn' not in data or releaseVersion >= float(
-                        data['implementedIn'])):
-                    # and check if there is a max version the tests can run in
-                    if 'maxVersion' in data:
-                        if columnar_releaseVersion:
-                            if columnar_releaseVersion > float(
-                                    data['maxVersion']):
-                                print((data['component'], data['subcomponent'],
-                                       ' is not supported in this release'))
-                                continue
-                        elif releaseVersion > float(data['maxVersion']):
-                            print((data['component'], data['subcomponent'],
-                                   ' is not supported in this release'))
-                            continue
-                    if 'jenkins' in data:
-                        # then this is sort of a special case, launch the old style Jenkins job
-                        # not implemented yet
-                        print(('Old style Jenkins', data['jenkins']))
-                    else:
-                        if 'initNodes' in data:
-                            initNodes = data['initNodes'].lower() == 'true'
-                        else:
-                            initNodes = True
-                        if 'installParameters' in data:
-                            installParameters = data['installParameters']
-                        else:
-                            installParameters = 'None'
-                        if 'slave' in data:
-                            slave = data['slave']
-                        else:
-                            slave = 'P0'
-                        if 'owner' in data:
-                            owner = data['owner']
-                        else:
-                            owner = 'QE'
-                        if 'mailing_list' in data:
-                            mailing_list = data['mailing_list']
-                        else:
-                            mailing_list = 'qa@couchbase.com'
-                        if 'mode' in data:
-                            mode = data["mode"]
-                        else:
-                            mode = 'java'
-                        if 'framework' in data:
-                            framework = data["framework"]
-                        else:
-                            framework = 'testrunner'
-
-                        if 'jenkins_server_url' in data:
-                            jenkins_server_url = data['jenkins_server_url']
-                        else:
-                            jenkins_server_url = options.jenkins_server_url
-
-                        # checkout the ini file at the specified branch
-                        # raises an exception if the ini file does not exist on that branch
-                        if options.branch != "master":
-                            try:
-                                subprocess.run(["git", "checkout", "origin/" + options.branch, "--", data['config']], check=True)
-                            except Exception:
-                                print('Git error: Did not find {} in {} branch'.format(data['config'], options.branch))
-
-                        addPoolId = options.addPoolId
-
-                        # if there's an additional pool, get the number
-                        # of additional servers needed from the ini
-                        addPoolServerCount = get_num_add_pool_servers(
-                            data['config'],
-                            addPoolId)
-
-                        if options.serverType in CLOUD_SERVER_TYPES:
-                            config = configparser.ConfigParser()
-                            config.read(data['config'])
-
-                            for section in config.sections():
-                                if section == "cbbackupmgr" and config.has_option(section, "endpoint"):
-                                    addPoolServerCount = 1
-                                    addPoolId = "localstack"
-                                    break
-
-                        support_py3 = "false"
-                        if 'support_py3' in data:
-                            support_py3 = data["support_py3"]
-
-                        mixed_build_config = dict()
-                        if str(options.columnar_version).lower() not in ["none", ""]:
-                            if 'mixed_build_config' in data:
-                                mixed_build_config = data["mixed_build_config"]
-
-                        testsToLaunch.append({
-                            'component': data['component'],
-                            'subcomponent': data['subcomponent'],
-                            'confFile': data['confFile'],
-                            'iniFile': data['config'],
-                            'serverCount': get_num_servers(data['config']),
-                            'ssh_username': get_ssh_username_password(data['config'], search_str="username:"),
-                            'ssh_password': get_ssh_username_password(data['config'], search_str="password:"),
-                            'addPoolServerCount': addPoolServerCount,
-                            'timeLimit': data['timeOut'],
-                            'parameters': data['parameters'],
-                            'initNodes': initNodes,
-                            'installParameters': installParameters,
-                            'slave': slave,
-                            'owner': owner,
-                            'mailing_list': mailing_list,
-                            'mode': mode,
-                            'framework': framework,
-                            'addPoolId': addPoolId,
-                            'target_jenkins': str(jenkins_server_url),
-                            'support_py3': support_py3,
-                            'mixed_build_config': urllib.parse.quote(flatten_param_to_str(mixed_build_config)),
-                        })
-                else:
-                    print((data['component'], data['subcomponent'], ' is not supported in this release'))
-            else:
-                print(('OS does not apply to', data['component'], data['subcomponent']))
-
+            tests_dict_list = extract_individual_tests_from_query_result(
+                columnar_rel_version, row)
+            testsToLaunch.extend(tests_dict_list)
         except Exception as e:
             print('exception in querying tests, possible bad record')
             print((traceback.format_exc()))
-            print(data)
+            print(e)
+            print(row)
 
     total_req_servercount = 0
     total_req_addservercount = 0
