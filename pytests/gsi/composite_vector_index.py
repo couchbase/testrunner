@@ -1987,7 +1987,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                             namespace=collection_namespace)[0]
         self.run_cbq_query(query=select_query)
 
-    def test_retry_index_training(self):
+    def test_retry_index_training_and_dynamic_centroid_number(self):
         self.is_partial = self.input.param("is_partial", False)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         collection_namespace = self.namespaces[0]
@@ -1997,9 +1997,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         #query to ensure only 256 docs have vector fields
         if self.is_partial:
-            modification_query = f"UPDATE {collection_namespace} SET descriptionVector = \"hello\" WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
+            modification_query = f"update {collection_namespace} SET colorRGBVector = \"hello\" WHERE rating > 3 limit {self.num_of_docs_per_collection - self.num_centroids};"
         else:
-            modification_query = f"update {collection_namespace} SET colorRGBVector = \"hello\" WHERE rating > 3 limit {20000 - self.num_centroids};"
+            modification_query = f"UPDATE {collection_namespace} SET descriptionVector = \"hello\" WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
         self.run_cbq_query(query=modification_query)
         color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
         scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{self.similarity}', {self.scan_nprobes})"
