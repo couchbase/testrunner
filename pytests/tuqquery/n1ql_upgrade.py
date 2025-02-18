@@ -379,6 +379,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_encode_decode()
             with self.subTest("MIXED STRING FUNCTIONS TEST"):
                 self.run_test_string_functions()
+            with self.subTest("MIXED DATE FUNCTIONS TEST"):
+                self.run_test_date_functions()
         elif phase == "post-upgrade":
             with self.subTest("POST FILTER TEST"):
                 self.run_test_filter()
@@ -438,6 +440,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_encode_decode()
             with self.subTest("POST STRING FUNCTIONS TEST"):
                 self.run_test_string_functions()
+            with self.subTest("POST DATE FUNCTIONS TEST"):
+                self.run_test_date_functions()
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -1062,6 +1066,84 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         string_query = "SELECT 'Hello' || ' ' || 'World'"
         string_results = self.run_cbq_query(query=string_query)
         self.assertEqual(string_results['results'][0]['$1'], 'Hello World')
+
+    def run_test_date_functions(self):
+        # Test STR_TO_UTC
+        query = "SELECT STR_TO_UTC('2024-03-14 15:30:00') as utc_time"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['utc_time'], '2024-03-14 22:30:00')
+
+        # Test NOW_STR and NOW_MILLIS
+        query = "SELECT NOW_STR() as current_time, NOW_MILLIS() as current_millis"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue('current_time' in results['results'][0])
+        self.assertTrue('current_millis' in results['results'][0])
+        self.assertTrue(isinstance(results['results'][0]['current_millis'], (int, float)))
+
+        # Test DATE_ADD_STR and DATE_ADD_MILLIS
+        query = "SELECT DATE_ADD_STR('2024-03-14', 1, 'day') as tomorrow"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['tomorrow'], '2024-03-15')
+
+        # Test DATE_DIFF_STR and DATE_DIFF_MILLIS
+        query = "SELECT DATE_DIFF_STR('2024-03-15', '2024-03-14', 'day') as day_diff"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['day_diff'], 1)
+
+        # Test DATE_TRUNC_STR and DATE_TRUNC_MILLIS
+        query = "SELECT DATE_TRUNC_STR('2024-03-14 15:30:45', 'hour') as truncated_hour"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['truncated_hour'], '2024-03-14 15:00:00')
+
+        # Test MILLIS_TO_STR
+        query = "SELECT MILLIS_TO_STR(1710424200000) as date_str"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue('2024-03-14' in str(results['results'][0]['date_str']))
+
+        # Test STR_TO_MILLIS
+        query = "SELECT STR_TO_MILLIS('2024-03-14 15:30:00') as millis"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue(isinstance(results['results'][0]['millis'], (int, float)))
+
+        # Test DATE_FORMAT_STR
+        query = "SELECT DATE_FORMAT_STR('2024-03-14 15:30:00', '%d/%m/%Y') as formatted_date"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['formatted_date'], '14/03/2024')
+
+        # Test CLOCK_STR and CLOCK_MILLIS
+        query = "SELECT CLOCK_STR() as server_time, CLOCK_MILLIS() as server_millis"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue('server_time' in results['results'][0])
+        self.assertTrue('server_millis' in results['results'][0])
+        self.assertTrue(isinstance(results['results'][0]['server_millis'], (int, float)))
+
+        # Test DATE_PART_STR
+        query = "SELECT DATE_PART_STR('2024-03-14 15:30:00', 'hour') as hour_part"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['hour_part'], 15)
+
+        # Test with timezone functions
+        query = "SELECT STR_TO_TZ('2024-03-14 15:30:00', 'UTC') as utc_time"
+        results = self.run_cbq_query(query=query)
+        self.assertEqual(results['results'][0]['utc_time'], '2024-03-14 22:30:00')
+
+        # Test MILLIS_TO_TZ
+        query = "SELECT MILLIS_TO_TZ(1710424200000, 'UTC') as tz_time"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue('2024-03-14' in str(results['results'][0]['tz_time']))
+
+        # Test with travel-sample data
+        query = "SELECT schedule[0].utc as flight_time, \
+                 STR_TO_MILLIS(schedule[0].utc) as flight_millis, \
+                 DATE_PART_STR(schedule[0].utc, 'hour') as flight_hour \
+                 FROM `travel-sample` \
+                 WHERE type = 'route' AND schedule IS NOT MISSING \
+                 LIMIT 1"
+        results = self.run_cbq_query(query=query)
+        self.assertTrue(len(results['results']) > 0)
+        self.assertTrue('flight_time' in results['results'][0])
+        self.assertTrue('flight_millis' in results['results'][0])
+        self.assertTrue('flight_hour' in results['results'][0])
 
     def run_test_transaction(self):
         select_query = "select count(*) from `travel-sample`"
