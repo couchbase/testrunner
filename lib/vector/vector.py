@@ -107,14 +107,15 @@ class FAISSVector(object):
 class SiftVector(object):
     def __init__(self):
         self.dataset = "siftsmall"
+        self.dataset_location = "/data"
     def download_sift(self):
         # need to fix this by uploading the tar somewhere and changing this download link eventually
-        if os.path.exists(f'./{self.dataset}') != True:
+        if os.path.exists(f'{self.dataset_location}/{self.dataset}') != True:
             with closing(request.urlopen(f'ftp://ftp.irisa.fr/local/texmex/corpus/{self.dataset}.tar.gz')) as r:
                 with open(f'{self.dataset}.tar.gz', 'wb') as f:
                     shutil.copyfileobj(r, f)
             tar = tarfile.open(f'{self.dataset}.tar.gz', "r:gz")
-            tar.extractall()
+            tar.extractall(self.dataset_location)
     def read_fvecs(self, fp):
         a = np.fromfile(fp, dtype='int32')
         d = a[0]
@@ -124,13 +125,13 @@ class SiftVector(object):
         d = a[0]
         return a.reshape(-1, d + 1)[:, 1:].copy()
     def read_base(self, vector_dataset='siftsmall'):
-        xb = self.read_fvecs(f'./{vector_dataset}/{vector_dataset}_base.fvecs')
+        xb = self.read_fvecs(f'{self.dataset_location}/{vector_dataset}/{vector_dataset}_base.fvecs')
         return xb
     def read_query(self, vector_dataset='siftsmall'):
-        xq = self.read_fvecs(f'./{vector_dataset}/{vector_dataset}_query.fvecs')
+        xq = self.read_fvecs(f'{self.dataset_location}/{vector_dataset}/{vector_dataset}_query.fvecs')
         return xq
     def read_groundtruth(self, vector_dataset='siftsmall'):
-        gt = self.read_ivecs(f'./{vector_dataset}/{vector_dataset}_groundtruth.ivecs')
+        gt = self.read_ivecs(f'{self.dataset_location}/{vector_dataset}/{vector_dataset}_groundtruth.ivecs')
         return gt
 
 class LoadVector(object):
