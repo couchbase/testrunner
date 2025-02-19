@@ -5,7 +5,7 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator, BlobGenerator
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ONDEPLOY
 from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
@@ -23,6 +23,8 @@ class EventingSecurity(EventingBaseTest):
             self.handler_code = "handler_code/ABO/insert_rebalance.js"
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == 'ondeploy_test':
+            self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_TLS_N2N
 
     def tearDown(self):
         super(EventingSecurity, self).tearDown()
