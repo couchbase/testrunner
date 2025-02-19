@@ -329,6 +329,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_test_udj_js_inline_scope(phase=phase)
                         self.run_test_udj_js_inline_recursive(phase=phase)
                     self.run_test_udf_inline_recursive(phase=phase)
+                with self.subTest("PRE UDF INLINE NESTED INLINE TEST"):
+                    self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+                if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                    with self.subTest("PRE UDF INLINE JS INLINE TEST"):
+                        self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
+                        self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
+                        self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
                 with self.subTest("PRE CBO MIGRATION TEST"):
                     self.run_test_cbo_migration(phase=phase)
                 with self.subTest("PRE UDF JAVASCRIPT TEST"):
@@ -346,6 +355,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_test_udj_js_inline_scope(phase=phase)
                     self.run_test_udj_js_inline_recursive(phase=phase)
                 self.run_test_udf_inline_recursive(phase=phase)
+            with self.subTest("MIXED UDF INLINE NESTED INLINE TEST"):
+                self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
+                self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_scoped")
+                self.run_test_udf_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+            if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                with self.subTest("MIXED UDF INLINE JS INLINE TEST"):
+                    self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
             with self.subTest("MIXED UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
@@ -393,6 +411,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_test_udj_js_inline_scope(phase=phase)
                     self.run_test_udj_js_inline_recursive(phase=phase)
                 self.run_test_udf_inline_recursive(phase=phase)
+            with self.subTest("POST UDF INLINE NESTED INLINE TEST"):
+                self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
+                self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_scoped")
+                self.run_test_udf_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+            if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
+                with self.subTest("POST UDF INLINE JS INLINE TEST"):
+                    self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
             with self.subTest("POST UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT TEST"):
@@ -695,6 +722,96 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
+    
+    def run_test_udf_inline_nested_inline(self, phase, scoping):
+        try:
+            if phase == "pre-upgrade" or int(self.initial_version[0]) < 7:
+                if scoping == "global_scoped":
+                    #global calling scoped
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nested_funcgs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nested_funcgs2(a,b,c) { (SELECT RAW default._default.nested_funcgs(a,b,c)) }")
+                elif scoping == "scoped_scoped":
+                    #scoped calling scoped
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nested_funcss(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nested_funcss2(a,b,c) { (SELECT RAW default._default.nested_funcss(a,b,c)) }")
+                else:
+                    #global calling global 
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION nested_funcgg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nested_funcgg2(a,b,c) { (SELECT RAW nested_funcgg(a,b,c)) }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                if scoping == "scoped_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nested_funcss2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default._default.nested_funcss2(10,20,30)")
+                elif scoping == "global_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nested_funcgs2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nested_funcgs2(10,20,30)")
+                else:
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nested_funcgg2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nested_funcgg2(10,20,30)")
+                self.assertEqual(results_execute['results'], [[[20]]])
+                self.assertEqual(results_select['results'], [{'$1': [[20]]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if int(self.initial_version[0]) < 7:
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nested_funcgs")
+                        self.run_cbq_query("DROP FUNCTION nested_funcgs2")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nested_funcss")
+                        self.run_cbq_query("DROP FUNCTION default._default.nested_funcss2")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nested_funcgg")
+                        self.run_cbq_query("DROP FUNCTION nested_funcgg2")
+            except Exception as e:
+                self.log.error(str(e))
+
+    '''There are two ways of creating JS functions currently, this one tests the inline js method'''
+    def run_test_udf_inline_nested_js_inline(self, phase, scoping):
+        try:
+            if phase == "pre-upgrade":
+                if scoping == "global_scoped":
+                    #global calling scoped
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinlinegs(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegs2(a,b,c) { (SELECT RAW default._default.nestedjsinlinegs(a,b,c)) }")
+                elif scoping == "scoped_scoped":
+                    #scoped calling scoped
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedinliness2(a,b,c) { (SELECT RAW default._default.nestedjsinliness(a,b,c)) }")
+                else:
+                    #global calling global 
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg2(a,b,c) { (SELECT RAW nestedjsinlinegg(a,b,c)) }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                if scoping == "scoped_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedinliness2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default._default.nestedinliness2(10,20,30)")
+                elif scoping == "global_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedinlinegs2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedinlinegs2(10,20,30)")
+                else:
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedinlinegg2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedinlinegg2(10,20,30)")
+                self.assertEqual(results_execute['results'], [[[20]]])
+                self.assertEqual(results_select['results'], [{'$1': [[20]]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if scoping == "global_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs")
+                    self.run_cbq_query("DROP FUNCTION nestedinlinegs2")
+                elif scoping == "scoped_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedinliness2")
+                else:
+                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                    self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
+            except Exception as e:
+                self.log.error(str(e))
 
     def run_test_udf_js_inline(self, phase):
         try:
@@ -782,7 +899,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             {"airportname": "Wiley Post Will Rogers Mem", "city": "Barrow", "lat": 71.285446, "lon": -156.766003, "type": "airport"},
             {"airportname": "Dillant Hopkins Airport", "city": "Keene", "lat": 72.270833, "lon": 42.898333, "type": "airport"}
         ]
-        query = 'SELECT t1.airportname, t1.geo.lat, t1.geo.lon, t1.city, t1.type FROM `travel-sample`.inventory.airport t1 LET min_lat = 71, max_lat = ABS(t1.geo.lon)*4+1, place = (SELECT RAW t2.country FROM `travel-sample`.inventory.landmark t2) WHERE t1.geo.lat > min_lat AND t1.geo.lat < max_lat AND t1.country IN place'
+        query = 'SELECT t1.airportname, t1.geo.lat, t1.geo.lon, t1.city, t1.type FROM `travel-sample`.inventory.airport t1 LET min_lat = 71, max_lat = ABS(t1.geo.lon)*4+1, place = (SELECT RAW t2.country FROM `travel-sample`.inventory.landmark t2) WHERE t1.geo.lat > min_lat AND t1.geo.lat < max_lat AND t1.country IN place ORDER BY t1.city'
         results = self.run_cbq_query(query=query)
         self.assertEqual(results['results'], expected_results)
 
@@ -791,7 +908,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             {"City": "London", "LandmarkCount": 443},
             {"City": "San Francisco", "LandmarkCount": 797}
         ]
-        query = 'SELECT city AS City, COUNT(DISTINCT name) AS LandmarkCount FROM `travel-sample`.inventory.landmark GROUP BY city LETTING MinimumThingsToSee = 400 HAVING COUNT(DISTINCT name) > MinimumThingsToSee'
+        query = 'SELECT city AS City, COUNT(DISTINCT name) AS LandmarkCount FROM `travel-sample`.inventory.landmark GROUP BY city LETTING MinimumThingsToSee = 400 HAVING COUNT(DISTINCT name) > MinimumThingsToSee ORDER BY City'
         results = self.run_cbq_query(query=query)
         self.assertEqual(results['results'], expected_results)
 
@@ -931,6 +1048,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def run_test_bucket(self):
         try:
             self.run_cbq_query("CREATE BUCKET testbucket WITH {'ramQuota': 256}")
+            self.sleep(30)
             self.run_cbq_query("INSERT INTO testbucket (KEY, VALUE) VALUES ('test', 'test')")
             results = self.run_cbq_query("SELECT * FROM testbucket")
             self.assertEqual(results['results'][0]['testbucket'], 'test')
@@ -962,7 +1080,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.assertEqual(isobject_results['results'][0]['$1'], True)
 
     def run_test_encode_decode(self):
-        json_string = '{"age": 30, "city": "New York", "name": "John"}'
+        json_string = '{"age":30,"city":"New York","name":"John"}'
         json_data = json.loads(json_string)
 
         encode_query = f"SELECT ENCODE_JSON({json_data})"
@@ -1068,8 +1186,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.assertEqual(string_results['results'][0]['$1'], 'Hello World')
 
     def run_test_date_functions(self):
-        # Test STR_TO_UTC
-        query = "SELECT STR_TO_UTC('2024-03-14 15:30:00') as utc_time"
+        # Test STR_TO_TZ
+        query = "SELECT STR_TO_TZ('2024-03-14 15:30:00', 'UTC') as utc_time"
         results = self.run_cbq_query(query=query)
         self.assertEqual(results['results'][0]['utc_time'], '2024-03-14 22:30:00')
 
