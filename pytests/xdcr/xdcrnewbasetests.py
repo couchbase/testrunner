@@ -3906,18 +3906,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                 # collection_names.append(x.split(":name:")[1].strip())
         return collection_info, error
 
-    def get_incoming_replications(self, master):
+    def get_incoming_replications(self, server_rest):
+
         incoming_repl_uri = "xdcr/sourceClusters"
-        status, content, _ = master._http_request(api = master.baseUrl + incoming_repl_uri, method="GET", timeout=60)
+        status, content, _ = server_rest._http_request(api = server_rest.baseUrl + incoming_repl_uri, method="GET", timeout=60)
         if status:
             return json.loads(content)
         return None
 
-    def get_outgoing_replications(self, master):
+    def get_outgoing_replications(self, server_rest):
         outgoing_repl_uri = "pools/default/remoteClusters"
-        auth_user, auth_pass = master.username, master.password
-        auth = "Basic " + base64.b64encode(f"{auth_user}:{auth_pass}".encode('utf-8')).decode('utf-8')
-        status, content, _ = master._http_request(api = master.baseUrl + outgoing_repl_uri, method="GET", timeout=60)
+        status, content, _ = server_rest._http_request(api = server_rest.baseUrl + outgoing_repl_uri, method="GET", timeout=60)
         if status:
             return json.loads(content)
         return None

@@ -5,6 +5,8 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import LoadWithMcsoda
+
+from lib.membase.api.exception import XDCRException
 from .xdcrnewbasetests import XDCRNewBaseTest
 from .xdcrnewbasetests import NodeHelper
 from .xdcrnewbasetests import Utility, BUCKET_NAME, OPS
@@ -450,6 +452,19 @@ class unidirectional(XDCRNewBaseTest):
         shell = RemoteMachineShellConnection(node)
         shell.start_couchbase()
         shell.disconnect()
+
+    def _change_auth(self, server, username, current_password, new_password):
+        """
+        Change credentials for given username.
+        """
+        rest_conn = RestConnection(server)
+        api = rest_conn.baseUrl + "controller/changePassword"
+        payload = f'password={new_password}'
+        status, _, _ = rest_conn._http_request(api=api, method="POST", params=payload, timeout=30)
+        if status:
+            return status, new_password
+        else:
+            return status, current_password
 
     def test_node_crash_master(self):
         self.setup_xdcr_and_load()
@@ -964,3 +979,51 @@ class unidirectional(XDCRNewBaseTest):
             if items != 0:
                 self.fail("Docs in source bucket is not 0 after maxttl has elapsed")
         self._wait_for_replication_to_catchup()
+
+
+    def test_replication_restart_after_auth_err(self):
+        """
+        Test case for MB-61048
+        XDCR - restart replications when RC_AUTH status goes to RC_OK
+        """
+        self.setup_xdcr()
+        src_rest= RestConnection(self.src_master)
+        original_pass = self.src_master.rest_password
+        new_pass = "PASSWORD"
+        replications = self.get_outgoing_replications(src_rest)
+        for repl in replications:
+            if repl['connectivityStatus'] != "RC_OK":
+                self.fail(f"Initial replication set up is not done properly on {self.src_master.ip}")
+        self.log.info("Initial outgoing replication verified")
+
+        # Change auth credentials
+        ok, set_pass = self._change_auth(server=self.dest_master, username=self.src_master.rest_username, current_password=original_pass, new_password=new_pass)
+        if not ok:
+            self.fail("Authentication details could not be changed")
+        self.log.info("Password changed")
+        self.dest_master.rest_password = set_pass
+        self.wait_interval(20, "Waiting for logs to be populated")
+
+        # Check logs or fetch status using API
+        replications = self.get_outgoing_replications(src_rest)
+        for repl in replications:
+            if repl['connectivityStatus'] != "RC_AUTH_ERR":
+                self.fail(f"EXPECTED Auth failure did not take place")
+        self.log.info("Replication is not taking place due to auth error. EXPECTED BEHAVIOUR")
+
+        # Change back auth credentials
+        ok, set_pass = self._change_auth(server=self.dest_master, username=self.src_master.rest_username, current_password=set_pass, new_password=original_pass)
+        if not ok:
+            self.fail("Authentication details could not be reverted")
+        self.log.info("Password reverted to original")
+        self.dest_master.rest_password = set_pass
+
+        # Verify replication restarted (either via log or by doing a mutation)
+        self.wait_interval(20, "Waiting for logs to be populated")
+        verify_str = "has been restarted due to remote-cluster configuration changes"
+        count = NodeHelper.check_goxdcr_log(server=self.src_master, search_str=verify_str, print_matches=True)
+        if count == 0:
+            self.dest_master.rest_password = original_pass
+            self.fail(f"No match found for {verify_str} in logs")
+
+
