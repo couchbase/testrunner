@@ -2689,7 +2689,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         server = self.get_nodes_from_services_map(service_type="kv")
         return RestConnection(server).get_buckets_itemCount()
 
-    def get_index_stats(self, perNode=False, return_system_query_scope=False):
+    def get_index_stats(self, perNode=False, return_system_query_scope=False, partition=False):
         servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         index_map = None
         for server in servers:
@@ -2700,7 +2700,7 @@ class OnPremBaseTestCase(unittest.TestCase):
                 if index_map == None:
                     index_map = {}
                 index_map[key] = RestConnection(server).get_index_stats(index_map=None,
-                                                                        return_system_query_scope=return_system_query_scope)
+                                                                        return_system_query_scope=return_system_query_scope, partition=partition)
             else:
                 index_map = RestConnection(server).get_index_stats(index_map=index_map,
                                                                    return_system_query_scope=return_system_query_scope)

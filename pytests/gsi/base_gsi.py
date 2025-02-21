@@ -554,7 +554,6 @@ class BaseSecondaryIndexingTests(QueryTests):
     def get_per_index_codebook_memory_usage(self):
         stats_map = self.get_index_stats(perNode=True)
         index_code_book_memory_map = {}
-        code_book_map = {}
         for node in stats_map:
             for ks in stats_map[node]:
                 for index in stats_map[node][ks]:

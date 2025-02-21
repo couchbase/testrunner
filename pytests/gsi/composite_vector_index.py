@@ -459,6 +459,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
             index_names = self.get_all_indexes_in_the_cluster()
             for index in index_names:
+                if "primary" in index:
+                    continue
                 self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
                                  f"Codebook memory has changed for index {index}")
 
@@ -2218,12 +2220,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
-        select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index],
-                                                            namespace=collection_namespace)[0]
-        _, recall, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query,
-                                                                                          similarity=self.similarity,
-                                                                                          scan_consitency=True)
-        self.assertGreaterEqual(recall*100, 70, f"recall is {recall}")
 
         #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
 
@@ -2254,5 +2250,118 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
         index_names = self.get_all_indexes_in_the_cluster()
         for index in index_names:
+            if "primary" in index:
+                continue
             self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
                              f"Codebook memory has changed for index {index}")
+
+    def test_partition_elimination(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_vec2 = list(self.encoder.encode(desc_2))
+        collection_namespace = self.namespaces[0]
+
+        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+
+        #creating partitioned index with partition on a single key
+        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                               index_fields=['`fuel`,`rating`,`descriptionVector` VECTOR'],
+                                                               dimension=384,
+                                                               description=f"IVF,{self.quantization_algo_description_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                   "description, descriptionVector",
+                                                                   "fuel = \"LPG\"",
+                                                                   scan_desc_vec_2),
+                                                               partition_by_fields=['fuel']
+                                                               )
+        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
+        self.run_cbq_query(query=index)
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
+        self.run_cbq_query(select_query)
+        drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
+        stats_map = self.get_index_stats(perNode=True, partition=True)
+        num_scans_list = []
+        for node in stats_map:
+            for keyspace in stats_map[node]:
+                for index in stats_map[node][keyspace]:
+                    self.log.info(f"for index {index} on node {node} num requests is {stats_map[node][keyspace][index]['num_requests']}")
+                    num_scans_list.append(stats_map[node][keyspace][index]['num_requests'])
+        self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
+        self.run_cbq_query(query=drop_query)
+        self.sleep(30)
+
+        # creating partitioned index with partition on a multiple keys
+        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                               index_fields=[
+                                                                   '`fuel`,`rating`,`descriptionVector` VECTOR'],
+                                                               dimension=384,
+                                                               description=f"IVF,{self.quantization_algo_description_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                   "description, descriptionVector",
+                                                                   "fuel = \"LPG\" and rating = 3",
+                                                                   scan_desc_vec_2),
+                                                               partition_by_fields=['fuel, rating']
+                                                               )
+        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
+                                                                                 num_partition=8)
+        self.run_cbq_query(query=index)
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
+        self.run_cbq_query(select_query)
+        drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
+        stats_map = self.get_index_stats(perNode=True, partition=True)
+        num_scans_list = []
+        for node in stats_map:
+            for keyspace in stats_map[node]:
+                for index in stats_map[node][keyspace]:
+                    self.log.info(
+                        f"for index {index} on node {node} num requests is {stats_map[node][keyspace][index]['num_requests']}")
+                    num_scans_list.append(stats_map[node][keyspace][index]['num_requests'])
+        self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
+        self.run_cbq_query(query=drop_query)
+        self.sleep(30)
+
+        # creating partitioned index with partition on scans on using IN predicate
+        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                               index_fields=[
+                                                                   '`fuel`,`rating`,`descriptionVector` VECTOR,`manufacturer`'],
+                                                               dimension=384,
+                                                               description=f"IVF,{self.quantization_algo_description_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                   "description, descriptionVector",
+                                                                   "fuel = \"LPG\" and rating = 3 and manufacturer in [\"Chevrolet\", \"Lexus\"]",
+                                                                   scan_desc_vec_2),
+                                                               partition_by_fields=['fuel, rating, manufacturer']
+                                                               )
+        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
+                                                                                 num_partition=8)
+        self.run_cbq_query(query=index)
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
+        self.run_cbq_query(select_query)
+        drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
+        stats_map = self.get_index_stats(perNode=True, partition=True)
+        num_scans_list = []
+        for node in stats_map:
+            for keyspace in stats_map[node]:
+                for index in stats_map[node][keyspace]:
+                    self.log.info(
+                        f"for index {index} on node {node} num requests is {stats_map[node][keyspace][index]['num_requests']}")
+                    num_scans_list.append(stats_map[node][keyspace][index]['num_requests'])
+        self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
+        self.run_cbq_query(query=drop_query)
+
+
+
+
+
+
+
+

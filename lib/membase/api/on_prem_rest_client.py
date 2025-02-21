@@ -2226,8 +2226,11 @@ class RestConnection(object):
         r.raise_for_status()
         return r
 
-    def get_index_stats(self, timeout=120, index_map=None, return_system_query_scope=False):
-        api = self.index_baseUrl + 'stats?async=false'
+    def get_index_stats(self, timeout=120, index_map=None, return_system_query_scope=False, partition=False):
+        if partition:
+            api = self.index_baseUrl + 'stats?partn=true'
+        else:
+            api = self.index_baseUrl + 'stats?async=false'
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
