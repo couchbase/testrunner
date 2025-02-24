@@ -68,6 +68,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def populate_vectors_in_xattr(self, bucket, scope):
         self.buckets = self.rest.get_buckets()
+        bucket = bucket.split(":")[-1]
         metadata_bucket = "metadata_bucket"
         for iter_bucket in self.buckets:
             if iter_bucket.name == metadata_bucket:
@@ -84,7 +85,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         eventing_endpoint = f"http://{eventing_node.ip}:8096"
 
         # Define the eventing function details
-        function_name = f"GenVectors_{bucket}_{scope}"
+        function_name = f"GenVectors_{bucket.split(':')[-1]}_{scope}"
         app_code = """function OnUpdate(doc, meta, xattrs) {
                                   log("Doc created/updated", meta.id);
                                   // all user _xattrs in metadata KEY <= 16 chars, no long names
