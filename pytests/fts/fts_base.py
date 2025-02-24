@@ -159,7 +159,7 @@ class INDEX_DEFAULTS:
                 "default_analyzer": ""
             },
             "scoring_model": "tfidf",
-            "type_field": "type",
+            "type_field": "_type",
             "default_type": "_default",
             "default_analyzer": "standard",
             "default_datetime_parser": "dateTimeOptional",
@@ -1032,7 +1032,7 @@ class FTSIndex:
         if self.index_type == "fulltext-index":
             mapping = INDEX_DEFAULTS.BLEVE_MAPPING
             if TestInputSingleton.input.param("scoring_model", None):
-                mapping['scoring_model'] = TestInputSingleton.input.param("scoring_model", None)
+                mapping['mapping']['scoring_model'] = TestInputSingleton.input.param("scoring_model", None)
             if self.custom_map:
                 if not TestInputSingleton.input.param("default_map", False):
                     mapping['mapping']['default_mapping']['enabled'] = False
