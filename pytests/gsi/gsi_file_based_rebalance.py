@@ -1146,7 +1146,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         Create idx3, idx4, idx5.... with queryport.client.usePlanner disabled. Indexes should not be placed in
         round-robin fashion.
         """
-        if self.cb_version[:4] < "7.6.2":
+        if self.cb_version[:4] > "7.6.2":
             self.skipTest("Not applicable in 7.6.2")
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -1217,6 +1217,41 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         query = f'create index idx3 on {namespace}(name)'
         self.run_cbq_query(query=query, server=query_node)
         self.wait_until_indexes_online()
+
+    def test_disable_move_node_replicas_to_maintain_shard_affinity(self):
+        if self.cb_version[:4] < "7.6.6":
+            self.skipTest("Not applicable less than 7.6.6")
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=False)
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        namespace = self.namespaces[0]
+        query = f'create index idx on {namespace}(name)'
+        self.run_cbq_query(query=query, server=query_node)
+        time.sleep(10)
+        self.wait_until_indexes_online()
+        deploy_nodes = ",".join([f"\'{node.ip}:{node.port}\'" for node in indexer_nodes])
+
+        query = f'ALTER INDEX idx on {namespace} WITH {{"action": "replica_count" ,"num_replica": {self.num_index_replica}, "nodes": [{deploy_nodes}]}}'
+        message_alter_idx = "clause is disabled with alter index as file based rebalance (shard affinity) is enabled"
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+        except Exception as err:
+            if message_alter_idx in str(err):
+                self.log.info(f"Error raised {str(err)} as expected while running a query with nodes clause")
+            else:
+                raise Exception(
+                    f"Message not seen as expected. Message seen {message_alter_idx}. Message expected {str(err)}")
+
 
     def test_with_nodes_full_capacity(self):
         if self.cb_version[:4] < "7.6.2":
