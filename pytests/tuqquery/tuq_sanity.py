@@ -4676,3 +4676,17 @@ class QuerySanityTests(QueryTests):
         # Query should run within 2 seconds
         result = self.run_cbq_query(array_agg_query, query_params={'timeout': '2s'})
         self.assertEqual(result['results'], expected_result)
+
+    def test_array_agg_distinct(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query('DROP INDEX ix1 IF EXISTS ON default')
+        self.run_cbq_query('DELETE FROM default WHERE c1 is not missing')
+        upsert_query = '''
+        UPSERT INTO default (KEY k, VALUE t)
+        SELECT "k"|| TOSTR(d) AS k, {"c1":IMOD(d,500), "o1" : OBJECT "o"||TOSTR(o):o FOR o IN ARRAY_RANGE(0,25) END} AS t
+        FROM ARRAY_RANGE(0,2000) AS d
+        '''
+        self.run_cbq_query(upsert_query)
+        array_agg_distinct_query = 'SELECT d.c1, ARRAY_AGG(DISTINCT d) AS a1 FROM (SELECT d1.* FROM default AS d1 ) AS d GROUP BY d.c1 ORDER BY d.c1 LIMIT 100'
+        result = self.run_cbq_query(array_agg_distinct_query)
+        self.assertEqual(result['metrics']['resultCount'], 100)
