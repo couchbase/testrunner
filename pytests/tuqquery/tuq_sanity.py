@@ -4678,3 +4678,14 @@ class QuerySanityTests(QueryTests):
         array_agg_distinct_query = 'SELECT d.c1, ARRAY_AGG(DISTINCT d) AS a1 FROM (SELECT d1.* FROM default AS d1 ) AS d GROUP BY d.c1 ORDER BY d.c1 LIMIT 100'
         result = self.run_cbq_query(array_agg_distinct_query)
         self.assertEqual(result['metrics']['resultCount'], 100)
+
+    def test_unnest_array_memory_quota(self):
+        self.fail_if_no_buckets()
+        upsert_query = '''
+        UPSERT INTO default VALUES ("kk01", { "a1": ARRAY { "sa1": [ { "id": IDIV(d1,3), "type": "doc" } ] } FOR d1 IN ARRAY_RANGE(1,1200) END });
+        '''
+        self.run_cbq_query(upsert_query)
+        unnest_query = 'SELECT DISTINCT u1.* FROM default AS d USE KEYS "kk01" UNNEST d.a1 AS u1 UNNEST u1.sa1 AS u2 WHERE u2.id = 300 AND u2.type = "doc"'
+        result = self.run_cbq_query(unnest_query, query_params={'memory_quota': 1000})
+        expected_result = [{"sa1": [{"id": 300, "type": "doc"}]}]
+        self.assertEqual(result['results'], expected_result)
