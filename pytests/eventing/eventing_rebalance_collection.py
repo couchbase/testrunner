@@ -4,7 +4,7 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_ONDEPLOY
 from pytests.eventing.eventing_base import EventingBaseTest
 from membase.helper.cluster_helper import ClusterOperationHelper
 import logging
@@ -558,3 +558,20 @@ class EventingRebalanceCollection(EventingBaseTest):
         self.verify_all_handler(0)
         self.verify_doc_count_collections("src_bucket.scope_1.coll_1", self.docs_per_day * self.num_docs)
         self.undeploy_delete_all_functions()
+
+    def test_eventing_ondeploy_swap_rebalance_when_existing_eventing_node_is_processing_mutations(self):
+        #handler code addining 10000 documents to the dst_bucket
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_REBALANCE)
+        self.deploy_function(body)
+        services_in = ["eventing"]
+        nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                 nodes_out_ev, services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.verify_doc_count_collections("dst_bucket._default._default", 10000)
+        self.undeploy_function(body)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 20000)
+        self.undeploy_and_delete_function(body)

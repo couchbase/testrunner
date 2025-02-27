@@ -67,16 +67,28 @@ class EventingOndeploy(EventingBaseTest):
         self.verify_doc_count_collections("default.scope0.collection0", 1)
         self.undeploy_and_delete_function(body)
 
-    def test_eventing_ondeploy_n1ql_analytics(self):
+    def test_eventing_ondeploy_n1ql(self):
         '''
         N1QL Query
-        Analytics Query
         '''
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_N1QL_ANALYTICS)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_N1QL)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        # One doc added for each query. Expected doc count is 2
-        self.verify_doc_count_collections("default.scope0.collection1", 2)
+        # One doc added for each query. Expected doc count is 1
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_ondeploy_analytics(self):
+        '''
+        Analytics Query
+        '''
+        #load travel-sample bucket
+        self.load_sample_buckets(self.server,"travel-sample")
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_ANALYTICS)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        # One doc added for each query. Expected doc count is 1
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
         self.undeploy_and_delete_function(body)
 
     def test_eventing_ondeploy_function_pause_resume(self):
@@ -118,4 +130,28 @@ class EventingOndeploy(EventingBaseTest):
             self.wait_for_handler_state(self.function_name, "deployed")
         except Exception as e:
             print(f"Error while waiting for handler state to be deployed: {str(e)}")
+        self.delete_function(body)
+
+    def test_eventing_ondeploy_dropping_function_scope_when_handler_is_deployed(self):
+        '''
+        Dropping the function scope and checking if the function is getting undeployed
+        '''
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP)
+        self.deploy_function(body)
+        # drop function scope
+        self.rest.delete_bucket(self.src_bucket_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+
+    def test_eventing_ondeploy_dropping_metadata_keyspace_when_handler_is_deployed(self):
+        '''
+        Dropping the metadata keyspace and checking if the function is getting undeployed
+        '''
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP)
+        self.deploy_function(body)
+        # drop metadata keyspace
+        self.rest.delete_bucket(self.metadata_bucket_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
         self.delete_function(body)

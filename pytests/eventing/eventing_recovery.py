@@ -10,7 +10,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_ONDEPLOY
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
 import time
@@ -57,6 +57,8 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE.CANCEL_TIMER_RECOVERY
         elif handler_code == 'bucket_op_expired':
             self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED_RECOVERY
+        elif handler_code == 'ondeploy_test':
+            self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP
         else:
             self.handler_code = "handler_code/ABO/insert_recovery.js"
         if self.is_expired:
@@ -1319,4 +1321,35 @@ class EventingRecovery(EventingBaseTest):
                 self.log.info("Endpoints for dcp_delete_checkpoint_failure and dcp_mutation_checkpoint_failure are not present in the statistics.")
         else:
             self.log.info("Document Count Matched: {0} Expected: {1}".format(actual_count,self.docs_per_day * self.num_docs))
+        self.undeploy_and_delete_function(body)
+
+    def test_killing_eventing_consumer_when_eventing_ondeploy_is_processing_mutations(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
+            self.rest.create_function(body['appname'], body, self.function_scope)
+        self.deploy_function(body)
+        # kill eventing consumer
+        self.kill_consumer(eventing_node)
+        self.sleep(10)
+        self.wait_for_handler_state(body['appname'], "deployed")
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
+        self.undeploy_and_delete_function(body)
+
+    def test_ondeploy_after_stopping_couchbase_server(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name,self.handler_code)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 1)
+        self.stop_server(eventing_node,True)
+        self.log.info("Couchbase stopped on the eventing node")
+        self.start_server(eventing_node)
+        rest_conn = RestConnection(eventing_node)
+        json_response = rest_conn.cluster_status()
+        self.log.info("Pools Default Statistics: {0}".format(json_response))
+        self.sleep(10)
+        self.wait_for_handler_state(body['appname'], "deployed")
         self.undeploy_and_delete_function(body)

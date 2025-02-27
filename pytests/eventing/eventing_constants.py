@@ -92,7 +92,8 @@ class HANDLER_CODE_ONDEPLOY:
     ONDEPLOY_BASIC_BUCKET_OP = 'handler_code/ondeploy_basic_bucket_op.js'
     ONDEPLOY_ADVANCED_BUCKET_OP = 'handler_code/ondeploy_advanced_bucket_op.js'
     ONDEPLOY_CURL = 'handler_code/ondeploy_curl.js'
-    ONDEPLOY_N1QL_ANALYTICS = 'handler_code/ondeploy_n1ql_analytics.js'
+    ONDEPLOY_N1QL = 'handler_code/ondeploy_n1ql.js'
+    ONDEPLOY_ANALYTICS = 'handler_code/ondeploy_analytics.js'
     ONDEPLOY_XATTRS = 'handler_code/ondeploy_user_xattrs.js'
     ONDEPLOY_CRC64 = 'handler_code/ondeploy_crc64.js'
     ONDEPLOY_BASE64 = 'handler_code/ondeploy_base64.js'
@@ -100,6 +101,7 @@ class HANDLER_CODE_ONDEPLOY:
     ONDEPLOY_FAILURE_TIMEOUT = 'handler_code/ondeploy_failure_timeout.js'
     ONDEPLOY_SOURCE_BUCKET_MUTATION = 'handler_code/ondeploy_source_bucket_mutation.js'
     ONDEPLOY_TLS_N2N = 'handler_code/ondeploy_tls_n2n.js'
+    ONDEPLOY_REBALANCE = 'handler_code/ondeploy_rebalance.js'
 
 
 class HANDLER_CODE_ERROR:
