@@ -271,6 +271,14 @@ class QuerySanityTests(QueryTests):
                                            'WHERE type = "doc" AND META().id LIKE "aa_%" ) AS d UNNEST d.a1 AS u '
                                            'GROUP BY {u.ac1, u.ac2} AS g;',query_params={"max_parallelism":2,"memory_quota":13000})
         self.assertTrue(results['status'] == "success")
+    
+    '''This test tests that the simplified version of an index returns correct results (which is no results) MB-56787'''
+    def test_simplified_array(self):
+        self.run_cbq_query(query='UPSERT INTO default VALUES ("f01",{"a1":[ {"f1":1}, {"f1":1}], "a2": 1})')
+        self.run_cbq_query(query='CREATE INDEX ix40 ON default (ALL a2)')
+        results = self.run_cbq_query(query='SELECT v FROM default AS d UNNEST d.a2 AS v where v > 0;')
+        self.assertTrue(results['status'] == "success")
+        self.assertTrue(results['results'] == [], f"We expect no results from this query, please check the results {results}")
 
     #MB-55851
     def test_mem_quota_join_subquery(self):
