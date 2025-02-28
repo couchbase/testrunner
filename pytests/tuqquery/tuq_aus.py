@@ -390,3 +390,19 @@ class QueryAUSTests(QueryTests):
             task_delay_seconds = int(task_delay.split('m')[1].split('.')[0])
             task_delay_in_seconds = task_delay_hours * 3600 + task_delay_minutes * 60 + task_delay_seconds
             self.assertAlmostEqual(task_delay_in_seconds, expected_delay, delta=120)
+
+    def test_no_query_manage_system_catalog(self):
+        self.users = [{"id": "jacknosyscat", "name": "Jack Nosyscat", "password": "password1"}]
+        self.create_users()
+        user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
+        self.run_cbq_query(query=f"GRANT query_select on `travel-sample` to {user_id}")
+        self.run_cbq_query(query=f"GRANT query_update on `travel-sample` to {user_id}")
+        self.run_cbq_query(query=f"GRANT query_delete on `travel-sample` to {user_id}")
+
+        try:
+            self.run_cbq_query(query=f"SELECT * FROM system:aus", username=user_id, password=user_pwd)
+            self.fail("Expected error not raised")
+        except CBQError as ex:
+            error = self.process_CBQE(ex)
+            self.assertEqual(error['code'], 13014)
+            self.assertEqual(error['msg'], 'User does not have credentials to run queries accessing the system tables. Add role query_system_catalog to allow the statement to run.')
