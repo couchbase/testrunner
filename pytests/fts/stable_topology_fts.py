@@ -33,6 +33,21 @@ class StableTopFTS(FTSBaseTest):
             print(e)
         self.doc_filter_query = {"match": "search", "field": "search_string"}
         self.index_wait_time = 20
+        
+        if TestInputSingleton.input.param("synonym_source", None):
+            self.synonym_source = eval(TestInputSingleton.input.param("synonym_source", None))
+        else:
+            self.synonym_source = None
+
+        self.bucket_name = TestInputSingleton.input.param("bucket", None)
+        self.num_docs = TestInputSingleton.input.param("num_docs", 50000)
+        self.analyzer = TestInputSingleton.input.param("analyzer", "simple")
+        self.format = TestInputSingleton.input.param("format", 1)
+        
+        self.idx = None
+        if TestInputSingleton.input.param("idx", None):
+            self.idx = eval(TestInputSingleton.input.param("idx", None))
+
 
 
     def tearDown(self):
@@ -168,6 +183,177 @@ class StableTopFTS(FTSBaseTest):
         else:
             n1ql_executor = None
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
+
+    def test_basic_synonym_search(self):
+
+        #start the synonym datagen server on port 5100
+        self.synonym_datagen()
+
+        #create collections for the source collection and synonym collections
+        self._cb_cluster.create_scope_using_rest(bucket=self.bucket_name,scope=self.scope)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.collection)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
+
+
+        #load synonym data  
+        status, _ = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
+        if not status:
+            self.fail("Failed to load synonym data")
+
+        #load source data
+        status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
+        if not status:
+            self.fail("Failed to load synonym source data")
+        
+        #groundtruth store
+        raw_map = response['word_doc_map']
+        word_map = response['final_word_doc_map']
+        
+        #create index
+        _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
+        time.sleep(30)
+        self.run_synonym_query_and_compare(index_name="i1",rawmap=raw_map,wordmap=word_map)
+
+
+    def test_wildcard_synonym_search(self):
+
+        #start the synonym datagen server on port 5100
+        self.synonym_datagen()
+
+        #create collections for the source collection and synonym collection
+        self._cb_cluster.create_scope_using_rest(bucket=self.bucket_name,scope=self.scope)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.collection)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
+
+
+        #load synonym data  
+        status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
+        if not status:
+            self.fail("Failed to load synonym data")
+        
+        syn_map = response['synonym_map']
+
+        #load source data
+        status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
+        if not status:
+            self.fail("Failed to load synonym source data")
+        
+        #groundtruth store
+        raw_map = response['word_doc_map']
+        word_map = response['final_word_doc_map']
+        
+
+        #create index
+        _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
+        _ = self._create_fts_index_parameterized(index_name="i2",wait_for_index_complete=False)[0]
+        time.sleep(10)
+
+        self.run_wildcard_synonym_query_and_compare(synonym_index="i1",index="i2",rawmap=raw_map,wordmap=word_map,synmap=syn_map,format=self.format)
+    
+    def test_fuzzy_synonym_search(self):
+
+        #start the synonym datagen server on port 5100
+        self.synonym_datagen()
+
+        #create collections for the source collection and synonym collection
+        self._cb_cluster.create_scope_using_rest(bucket=self.bucket_name,scope=self.scope)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.collection)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
+
+
+        #load synonym data  
+        status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
+        if not status:
+            self.fail("Failed to load synonym data")
+        
+        syn_map = response['synonym_map']
+
+        #load source data
+        status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
+        if not status:
+            self.fail("Failed to load synonym source data")
+        
+        #groundtruth store
+        raw_map = response['word_doc_map']
+        word_map = response['final_word_doc_map']
+        
+
+        #create index
+        _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
+        _ = self._create_fts_index_parameterized(index_name="i2",wait_for_index_complete=False)[0]
+        time.sleep(10)
+
+        self.run_fuzzy_synonym_query_and_compare(synonym_index="i1",index="i2",rawmap=raw_map,wordmap=word_map,synmap=syn_map,format=self.format)
+
+    def test_match_phrase_synonym_search(self):
+
+        #start the synonym datagen server on port 5100
+        self.synonym_datagen()
+
+        #create collections for the source collection and synonym collection
+        self._cb_cluster.create_scope_using_rest(bucket=self.bucket_name,scope=self.scope)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.collection)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
+
+
+        #load synonym data  
+        status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
+        if not status:
+            self.fail("Failed to load synonym data")
+        
+        syn_map = response['synonym_map']
+
+        #load source data
+        status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
+        if not status:
+            self.fail("Failed to load synonym source data")
+        
+        #groundtruth store
+        raw_map = response['word_doc_map']
+        word_map = response['final_word_doc_map']
+        
+
+        #create index
+        _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
+        _ = self._create_fts_index_parameterized(index_name="i2",wait_for_index_complete=False)[0]
+        time.sleep(10)
+
+        self.run_match_phrase_synonym_query_and_compare(synonym_index="i1",index="i2",rawmap=raw_map,wordmap=word_map,synmap=syn_map,format=self.format)
+    
+    def test_prefix_synonym_search(self):
+
+        #start the synonym datagen server on port 5100
+        self.synonym_datagen()
+
+        #create collections for the source collection and synonym collection
+        self._cb_cluster.create_scope_using_rest(bucket=self.bucket_name,scope=self.scope)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.collection)
+        self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
+
+
+        #load synonym data  
+        status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
+        if not status:
+            self.fail("Failed to load synonym data")
+        
+        syn_map = response['synonym_map']
+
+        #load source data
+        status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
+        if not status:
+            self.fail("Failed to load synonym source data")
+        
+        #groundtruth store
+        raw_map = response['word_doc_map']
+        word_map = response['final_word_doc_map']
+        
+
+        #create index
+        _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
+        _ = self._create_fts_index_parameterized(index_name="i2",wait_for_index_complete=False)[0]
+        time.sleep(10)
+
+        self.run_prefix_synonym_query_and_compare(synonym_index="i1",index="i2",rawmap=raw_map,wordmap=word_map,synmap=syn_map,format=self.format)
 
     def test_query_type_on_alias(self):
         """

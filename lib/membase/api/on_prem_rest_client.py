@@ -380,6 +380,8 @@ class RestConnection(object):
         http_url = "http://%s:%s/"
         https_url = "https://%s:%s/"
         generic_url = http_url
+        synonym_host = "localhost"
+        synonym_port = 5100
         if CbServer.use_https:
             generic_url = https_url
         url_host = "%s" % self.ip
@@ -387,6 +389,7 @@ class RestConnection(object):
             url_host = "%s" % self.hostname
         self.baseUrl = generic_url % (url_host, self.port)
         self.fts_baseUrl = generic_url % (url_host, self.fts_port)
+        self.synonym_baseUrl = http_url % (synonym_host, synonym_port)
         self.index_baseUrl = generic_url % (url_host, self.index_port)
         self.query_baseUrl = generic_url % (url_host, self.query_port)
         self.capiBaseUrl = generic_url % (url_host, self.capi_port)
@@ -3819,7 +3822,29 @@ class RestConnection(object):
         status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
-        return status
+        return status 
+
+    def load_synonyms(self,bucket="default",scope="_default",collection="_default",workers=100,host="localhost",user="Administrator",password="password",format=1,analyzer="simple"):
+        params = {'bucket': bucket,'scope':scope,'collection':collection,'workers':workers,'host':host,'user':user,'pass':password,'format':format,'analyzer':analyzer}
+        
+        """ generate and push the synonyms to kv"""
+        json_parsed = {}
+        api = self.synonym_baseUrl + "run/syn-loader"
+        status, content, header = self.urllib_request(api, verb='POST', params=json.dumps(params, ensure_ascii=False))
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
+    
+    def load_synonym_source(self,bucket="default",scope="_default",collection="_default",workers=100,host="localhost",user="Administrator",password="password",numDocs=50000,analyzer="simple"):
+        params = {"bucket":bucket,"scope":scope,"collection":collection,"workers":workers,"host":host,"user":user,"pass":password,"numDocs":numDocs,"analyzer":analyzer}
+
+        """ generate and push the source data for synonym testing and returns the groundtruth"""
+        json_parsed = {}
+        api = self.synonym_baseUrl + "run/src-loader"
+        status, content, header = self.urllib_request(api, verb='POST', params=json.dumps(params, ensure_ascii=False))
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
 
     def create_fts_index(self, index_name, params, bucket="_default", scope="_default",mode =None):
         """create or edit fts index , returns {"status":"ok"} on success"""
@@ -4049,8 +4074,9 @@ class RestConnection(object):
             verb="POST",
             params=json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             timeout=timeout)
-
+        
         content = json.loads(content)
+        
         if status:
             return content['total_hits'], content['hits'], content['took'], content['status']
         else:
