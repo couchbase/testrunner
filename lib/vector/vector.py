@@ -108,6 +108,8 @@ class SiftVector(object):
     def __init__(self):
         self.dataset = "siftsmall"
         self.dataset_location = "/data"
+        if os.path.exists(self.dataset_location) != True:
+            self.dataset_location = "."
     def download_sift(self):
         # need to fix this by uploading the tar somewhere and changing this download link eventually
         if os.path.exists(f'{self.dataset_location}/{self.dataset}') != True:
@@ -201,7 +203,13 @@ class IndexVector(object):
         else:
             index_query = index_queries[index_order]
         if use_bhive:
-            index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
+            if custom_index_fields:
+                if custom_name:
+                    index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+                else:
+                    index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+            else:
+                index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE(size, brand) WITH {vector_definition}'
         if use_partition:
             index_query = index_query.split("WITH")[0] + f" PARTITION BY HASH(meta().id) WITH " + index_query.split("WITH")[1]
         print(index_query)
