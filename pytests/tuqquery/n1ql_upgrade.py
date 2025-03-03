@@ -309,6 +309,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.log.info("running mixed-mode test for ansi joins")
         elif phase == "post-upgrade":
             self.run_test_basic_join()
+            self.run_test_outer_join()
         else:
             self.fail("FAIL: (ansi-join) invalid phase: {0}".format(phase))
 
@@ -333,15 +334,35 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
                     self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_scoped")
                     self.run_test_udf_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+                with self.subTest("PRE UDF INLINE NESTED JS LIBRARY TEST"):
+                    self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_global")
+                    self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_inline_nested_js_library(phase=phase,scoping="scoped_scoped")
+                with self.subTest("PRE JS LIBRARY NESTED UDF INLINE TEST"):
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
                 if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
-                    with self.subTest("PRE UDF INLINE JS INLINE TEST"):
+                    with self.subTest("PRE UDF INLINE NESTED JS INLINE TEST"):
                         self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
                         self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
                         self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
+                    with self.subTest("PRE JS INLINE NESTED UDF INLINE TEST"):
+                        self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="global_global")
+                        self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="global_scoped")
+                        self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+                    with self.subTest("PRE JS INLINE NESTED JS INLINE TEST"):
+                        self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="global_global")
+                        self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="global_scoped")
+                        self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
+                    with self.subTest("PRE SEQUENCE TEST"):
+                        self.run_test_sequences(phase=phase)
                 with self.subTest("PRE CBO MIGRATION TEST"):
                     self.run_test_cbo_migration(phase=phase)
                 with self.subTest("PRE UDF JAVASCRIPT TEST"):
                     self.run_test_udf_javascript_migration(phase=phase)
+                with self.subTest("PRE GRANT/REVOKE"):
+                    self.run_test_grant_revoke_role(phase=phase)
         elif phase == "mixed-mode":
             self.log.info("running mixed-mode test for N1QL")
             with self.subTest("MIXED FILTER TEST"):
@@ -359,11 +380,29 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_scoped")
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+            with self.subTest("MIXED UDF INLINE NESTED JS LIBRARY TEST"):
+                self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_global")
+                self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_scoped")
+                self.run_test_udf_inline_nested_js_library(phase=phase,scoping="scoped_scoped")
+            with self.subTest("MIXED JS LIBRARY NESTED UDF INLINE TEST"):
+                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
+                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
+                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
             if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
-                with self.subTest("MIXED UDF INLINE JS INLINE TEST"):
+                with self.subTest("MIXED UDF INLINE NESTED JS INLINE TEST"):
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
+                with self.subTest("MIXED JS INLINE NESTED UDF INLINE TEST"):
+                    self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+                with self.subTest("MIXED JS INLINE NESTED JS INLINE TEST"):
+                    self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
+                with self.subTest("MIXED SEQUENCE TEST"):
+                    self.run_test_sequences(phase=phase)
             with self.subTest("MIXED UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("MIXED UDF N1QL JAVASCRIPT TEST"):
@@ -399,6 +438,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_string_functions()
             with self.subTest("MIXED DATE FUNCTIONS TEST"):
                 self.run_test_date_functions()
+            with self.subTest("MIXED GRANT/REVOKE"):
+                self.run_test_grant_revoke_role(phase=phase)
         elif phase == "post-upgrade":
             with self.subTest("POST FILTER TEST"):
                 self.run_test_filter()
@@ -415,11 +456,27 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_scoped")
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+            with self.subTest("POST UDF INLINE NESTED JS LIBRARY TEST"):
+                self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_global")
+                self.run_test_udf_inline_nested_js_library(phase=phase,scoping="global_scoped")
+                self.run_test_udf_inline_nested_js_library(phase=phase,scoping="scoped_scoped")
+            with self.subTest("POST JS LIBRARY NESTED UDF INLINE TEST"):
+                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_global")
+                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="global_scoped")
+                self.run_test_js_library_nested_udf_inline(phase=phase,scoping="scoped_scoped")
             if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
-                with self.subTest("POST UDF INLINE JS INLINE TEST"):
+                with self.subTest("POST UDF INLINE NESTEDJS INLINE TEST"):
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_global")
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="global_scoped")
                     self.run_test_udf_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
+                with self.subTest("POST JS INLINE NESTED UDF INLINE TEST"):
+                    self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_js_inline_nested_inline(phase=phase,scoping="scoped_scoped")
+                with self.subTest("POST JS INLINE NESTED JS INLINE TEST"):
+                    self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="global_global")
+                    self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="global_scoped")
+                    self.run_test_udf_js_inline_nested_js_inline(phase=phase,scoping="scoped_scoped")
             with self.subTest("POST UDF JAVASCRIPT MIGRATION TEST"):
                 self.run_test_udf_javascript_migration(phase=phase)
             with self.subTest("POST UDF JAVASCRIPT TEST"):
@@ -458,7 +515,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             with self.subTest("POST TRANSACTION TEST"):
                 self.run_test_transaction()
             with self.subTest("POST SEQUENCE TEST"):
-                self.run_test_sequences()
+                self.run_test_sequences(phase=phase)
             with self.subTest("POST BUCKET TEST"):
                 self.run_test_bucket()
             with self.subTest("POST TYPE FUNCTION TEST"):
@@ -469,6 +526,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_string_functions()
             with self.subTest("POST DATE FUNCTIONS TEST"):
                 self.run_test_date_functions()
+            with self.subTest("POST GRANT/REVOKE"):
+                self.run_test_grant_revoke_role(phase=phase)
             if upgrade_type != "offline":
                 with self.subTest("POST PREPARE TEST"):
                     self.run_test_prepare(phase=phase)
@@ -575,6 +634,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query = "select * from default d1 INNER JOIN `travel-sample` t on (d1.join_day == t.id)"
         queries_to_run.append((query, 288)) # 288 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
+    
+    def run_test_outer_join(self):
+        idx_list = []
+        queries_to_run = []
+        index = "CREATE INDEX idx1 on `travel-sample`(id)"
+        idx_list.append((index, ("`travel-sample`", "idx1")))
+        query = "select * from default d1 OUTER JOIN `travel-sample` t on (d1.join_day == t.id)"
+        queries_to_run.append((query, 288)) # 288 for doc-per-day=1
+        self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
     def run_test_cte(self):
         cte_query = "WITH t1 AS (SELECT * FROM `travel-sample` WHERE type = 'airport' and country = 'France') SELECT * FROM t1"
@@ -585,6 +653,38 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         subquery = "SELECT name, city from `travel-sample` WHERE type = 'hotel' and city in ( SELECT RAW a.city FROM `travel-sample` a WHERE type = 'airport' and country = 'France')"
         subquery_results = self.run_cbq_query(subquery)
         self.assertEqual(subquery_results['metrics']['resultCount'], 86)
+    
+    def run_test_grant_revoke_role(self,phase):
+        if phase == "pre-upgrade":
+            testuser = [
+                {'id': 'testgrant', 'name': 'testgrant', 'password': 'password'}
+            ]
+            RbacBase().create_user_source(testuser, 'builtin', self.master)
+            full_permissions = 'bucket_full_access[*]:query_update[*]'
+            # Assign user to role
+            role_list = [
+                {'id': 'testgrant', 'name': 'testgrant', 'roles': f'{full_permissions}', 'password': 'password'}
+            ]
+            RbacBase().add_user_role(role_list, self.rest, 'builtin')
+        test_query = "SELECT * FROM DEFAULT LIMIT 1"
+        try:
+            self.run_cbq_query(test_query)
+            self.fail("User does not have permissions")
+        except Exception as e:
+            pass
+        query = "GRANT Query_Select on default TO testgrant"
+        results = self.run_cbq_query(query)
+        self.assertEqual(results['status'], "success")
+        test_results = self.run_cbq_query(test_query)
+        self.assertEqual(test_results['status'], "success")
+        query = "REVOKE Query_Select on default TO testgrant"
+        results = self.run_cbq_query(query)
+        self.assertEqual(results['status'], "success")
+        try:
+            test_results = self.run_cbq_query(test_query)
+            self.fail("User does not have permissions")
+        except Exception as e:
+            pass
     
     def run_test_filter(self):
         filter_query = "SELECT COUNT(*) FILTER (WHERE city = 'Paris') as count_paris FROM `travel-sample` WHERE type = 'airport'"
@@ -767,6 +867,72 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION nested_funcgg2")
             except Exception as e:
                 self.log.error(str(e))
+    
+    '''There are two ways of creating JS functions currently, this one tests the old js library method'''
+    def run_test_udf_inline_nested_js_library(self, phase, scoping):
+        try:
+            if phase == "pre-upgrade":
+                functions = 'function selectnestedglobal() {\
+                    var query = SELECT airportname FROM `travel-sample` WHERE type = "airport" AND city = "Lyon" ORDER BY airportname;\
+                    var acc = [];\
+                    for (const row of query) {\
+                        acc.push(row);\
+                    }\
+                    return acc;\
+                }\
+                function selectnestedinventory(){\
+                    var query = SELECT airportname FROM airport WHERE type = "airport" AND city = "Lyon" ORDER BY airportname;\
+                    var acc = [];\
+                    for (const row of query) {\
+                        acc.push(row);\
+                    }\
+                    return acc;\
+                }'
+                function_names = ["selectnested","selectnestedinventory"]
+                self.log.info("Create n1ql library")
+                self.create_library("n1ql", functions, function_names)
+                if scoping == "global_scoped":
+                    #global calling scoped
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default._default.nestedjslibrarygs(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegs3(a,b,c) { (SELECT RAW default._default.nestedjslibrarygs(a,b,c)) }")
+                elif scoping == "scoped_scoped":
+                    #scoped calling scoped
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default._default.nestedjslibraryss(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedinliness3(a,b,c) { (SELECT RAW default._default.nestedjslibraryss(a,b,c)) }")
+                else:
+                    #global calling global 
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql"')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg3(a,b,c) { (SELECT RAW nestedjsinlinegg(a,b,c)) }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                if scoping == "scoped_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedinliness3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default._default.nestedinliness3(10,20,30)")
+                elif scoping == "global_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedinlinegs3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedinlinegs3(10,20,30)")
+                else:
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedinlinegg3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedinlinegg3(10,20,30)")
+                self.assertEqual(results_execute['results'], [[[{'airportname': 'Bron'}, {'airportname': 'Lyon Part-Dieu Railway'}, {'airportname': 'Saint Exupery'}]]])
+                self.assertEqual(results_select['results'], [{'$1': [[{'airportname': 'Bron'}, {'airportname': 'Lyon Part-Dieu Railway'}, {'airportname': 'Saint Exupery'}]]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if scoping == "global_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjslibrarygs")
+                    self.run_cbq_query("DROP FUNCTION nestedinlinegs3")
+                elif scoping == "scoped_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjslibraryss")
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedinliness3")
+                else:
+                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                    self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
+                self.log.info("Delete n1ql library")
+                self.delete_library("n1ql")
+            except Exception as e:
+                self.log.error(str(e))
 
     '''There are two ways of creating JS functions currently, this one tests the inline js method'''
     def run_test_udf_inline_nested_js_inline(self, phase, scoping):
@@ -810,6 +976,170 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 else:
                     self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
                     self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
+            except Exception as e:
+                self.log.error(str(e))
+    
+    '''This inline js calls inline udf'''
+    def run_test_udf_js_inline_nested_inline(self, phase, scoping):
+        try:
+            if phase == "pre-upgrade":
+                if scoping == "global_scoped":
+                    #global calling scoped
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs(a,b,c);}'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inlinegs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                elif scoping == "scoped_scoped":
+                    #scoped calling scoped
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness(a,b,c);}'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inliness(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                else:
+                    #global calling global 
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg(a,b,c);}'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION inlinegg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                if scoping == "scoped_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default._default.nestedjsinliness2(10,20,30)")
+                elif scoping == "global_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjsinlinegs2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedjsinlinegs2(10,20,30)")
+                else:
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjsinlinegg2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedjsinlinegg2(10,20,30)")
+                self.assertEqual(results_execute['results'], [[[20]]])
+                self.assertEqual(results_select['results'], [{'$1': [[20]]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if scoping == "global_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs2")
+                    self.run_cbq_query("DROP FUNCTION inlinegs")
+                elif scoping == "scoped_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness2")
+                    self.run_cbq_query("DROP FUNCTION default._default.inliness")
+                else:
+                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg2")
+                    self.run_cbq_query("DROP FUNCTION inlinegg")
+            except Exception as e:
+                self.log.error(str(e))
+    
+    '''There inline js calls js inline udf'''
+    def run_test_udf_js_inline_nested_js_inline(self, phase, scoping):
+        try:
+            if phase == "pre-upgrade":
+                if scoping == "global_scoped":
+                    #global calling scoped
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs(a,b,c);}'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinlinegs(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs(a,b,c) { return a+b+c-40; }'")
+                elif scoping == "scoped_scoped":
+                    #scoped calling scoped
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness(a,b,c);}'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
+                else:
+                    #global calling global 
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg(a,b,c);}'")
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg(a,b,c) { return a+b+c-40; }'")
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                if scoping == "scoped_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default._default.nestedjsinliness3(10,20,30)")
+                elif scoping == "global_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjsinlinegs3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedjsinlinegs3(10,20,30)")
+                else:
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjsinlinegg3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT nestedjsinlinegg3(10,20,30)")
+                self.assertEqual(results_execute['results'], [[[20]]])
+                self.assertEqual(results_select['results'], [{'$1': [[20]]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if scoping == "global_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs3")
+                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegs")
+                elif scoping == "scoped_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness3")
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
+                else:
+                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg3")
+                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+            except Exception as e:
+                self.log.error(str(e))
+    
+    '''JS Library calls inline udf'''
+    def run_test_js_library_nested_udf_inline(self, phase, scoping):
+        try:
+            if phase == "pre-upgrade":
+                functions = 'function selectnestedglobalinline(doctype,cityname) {\
+                    var query = SELECT RAW nestedinlinegglibrary(doctype,cityname);\
+                    var acc = [];\
+                    for (const row of query) {\
+                        acc.push(row);\
+                    }\
+                    return acc;\
+                }\
+                function selectnestedglobalscopedinline(doctype,cityname) {\
+                    var query = SELECT RAW default._default.nestedinlinegslibrary(doctype,cityname);\
+                    var acc = [];\
+                    for (const row of query) {\
+                        acc.push(row);\
+                    }\
+                    return acc;\
+                }\
+                function selectnestedinventoryinline(doctype,cityname){\
+                    var query = SELECT RAW nestedinlinesslibrary(doctype,cityname);\
+                    var acc = [];\
+                    for (const row of query) {\
+                        acc.push(row);\
+                    }\
+                    return acc;\
+                }'
+                function_names = ["selectnestedglobalinline","selectnestedinventoryinline,selectnestedglobalscopedinline"]
+                self.log.info("Create n1ql library")
+                self.create_library("n1ql", functions, function_names)
+                if scoping == "global_scoped":
+                    #global calling scoped
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygs2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalscopedinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nestedinlinegslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname;) }')
+                elif scoping == "scoped_scoped":
+                    #scoped calling scoped
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname;) }')
+                else:
+                    #global calling global 
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION nestedinlinegglibrary(doctype,cityname) { (SELECT airportname FROM `travel-sample` WHERE type = doctype AND city = cityname ORDER BY airportname;)  }')
+            if phase == "mixed-mode" or phase == "post-upgrade":
+                if scoping == "scoped_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjslibrarygg2('airport','Lyon')")
+                    results_select = self.run_cbq_query("SELECT default._default.nestedjslibrarygg2('airport','Lyon')")
+                elif scoping == "global_scoped":
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjslibrarygs2('airport','Lyon')")
+                    results_select = self.run_cbq_query("SELECT nestedjslibrarygs2('airport','Lyon')")
+                else:
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjslibrarygg2('airport','Lyon')")
+                    results_select = self.run_cbq_query("SELECT nestedjslibrarygg2('airport','Lyon')")
+                self.assertEqual(results_execute['results'], [[[{'airportname': 'Bron'}, {'airportname': 'Lyon Part-Dieu Railway'}, {'airportname': 'Saint Exupery'}]]])
+                self.assertEqual(results_select['results'], [{'$1': [[{'airportname': 'Bron'}, {'airportname': 'Lyon Part-Dieu Railway'}, {'airportname': 'Saint Exupery'}]]}])
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+        finally:
+            try:
+                if scoping == "global_scoped":
+                    self.run_cbq_query("DROP FUNCTION nestedjslibrarygs2")
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedinlinegslibrary")
+                elif scoping == "scoped_scoped":
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedjslibraryss2")
+                    self.run_cbq_query("DROP FUNCTION default._default.nestedinlinesslibrary")
+                else:
+                    self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
+                    self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
+                self.log.info("Delete n1ql library")
+                self.delete_library("n1ql")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -1515,12 +1845,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         all_keyspaces_info = results['results'][0]['$1']
         self.assertEqual(all_keyspaces_info, system_keyspaces_info)
 
-    def run_test_sequences(self):
+    def run_test_sequences(self,phase):
         sequence_name = "seq_default_option"
         expected_default = [{'cache': 50, 'cycle': False, 'increment': 1, 'max': 9223372036854775807, 'min': -9223372036854775808, 'path': f'`default`:`default`.`_default`.`{sequence_name}`'}]
-        self.run_cbq_query(f"DROP SEQUENCE `default`.`_default`.{sequence_name} IF EXISTS")
-        self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name}")
-
+        if phase == "pre-upgrade":
+            self.run_cbq_query(f"DROP SEQUENCE `default`.`_default`.{sequence_name} IF EXISTS")
+            self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name}")
         result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
         self.assertEqual(result['results'], expected_default)
 
