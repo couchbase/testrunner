@@ -23,6 +23,10 @@ class EventingCurl(EventingBaseTest):
             self.url= self.input.param('path', None)
             if self.handler_code == 'bucket_op_curl':
                 self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL
+            elif self.handler_code == 'curl_timeout_param':
+                self.handler_code = HANDLER_CODE_CURL.CURL_TIMEOUT_PARAM
+            elif self.handler_code == 'curl_small_timeout_param':
+                self.handler_code = HANDLER_CODE_CURL.CURL_SMALL_TIMEOUT_PARAM
 
         def tearDown(self):
             self.delete_temp_handler_code()
@@ -271,4 +275,11 @@ class EventingCurl(EventingBaseTest):
             self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
             self.verify_doc_count_collections("dst_bucket._default._default", 0)
+            self.undeploy_and_delete_function(body)
+
+        def test_curl_with_different_timeouts_for_individual_requests(self):
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+            self.deploy_function(body)
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
             self.undeploy_and_delete_function(body)
