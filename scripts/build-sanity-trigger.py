@@ -771,49 +771,47 @@ VERSION_DATA = {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "7.6.1": {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "7.6.2": {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "7.6.3": {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "7.6.4": {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "7.6.5": {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "7.6.6": {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "trinity",
     },
     "8.0.0": {
         "platforms": {
-            "centos7": True,
-            "macos": True,
-            "windows": True,
+            "debian12": True
         },
         "testrunner_branch": "master",
     },
