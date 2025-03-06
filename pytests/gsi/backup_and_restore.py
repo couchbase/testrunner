@@ -2450,7 +2450,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 bucket_collection_namespaces = [
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
-                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                    if namespace.split(':')[-1].split(".")[0] == bucket.name]
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2458,16 +2458,16 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
-                print(f"indexes before backup {indexes_before_backup}")
+                self.log.info(f"indexes before backup {indexes_before_backup}")
                 backup_result = backup_client.backup(bucket_collection_namespaces, use_https=self.use_https)
                 self.assertTrue(
                     backup_result[0],
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(60)
+                self.sleep(120)
                 timeout = 0
-                while timeout<=360:
+                while timeout <= 360:
                     index_status = self.index_rest.get_indexer_metadata()['status']
                     if len(index_status) == 0:
                         break
@@ -2476,6 +2476,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 if timeout > 360:
                     self.fail("timeout reached for index drop to happen")
                 if self.decrease_node_count > 0:
+                    map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True,
+                                                                                     map_from_index_nodes=True)
                     nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                     nodes_out_list = []
                     for i in range(len(nodes_out)):
@@ -2534,7 +2536,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.enable_redistribute_indexes()
                 rebalance_task = True
             if rebalance_task:
-                map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, [],
                                                          services=['index'], cluster_config=self.cluster_config)
                 self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
@@ -2554,7 +2555,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
-                self._verify_indexes(indexes_before_backup, indexes_after_replica_repair)
+                self._verify_indexes(indexes_before_backup, indexes_after_replica_repair, new_indexes=True)
                 map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
                 self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
@@ -2623,7 +2624,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 bucket_collection_namespaces = [
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
-                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                    if namespace.split(':')[-1].split(".")[0] == bucket.name]
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2655,7 +2656,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(60)
+                self.sleep(120)
                 self.rest.delete_all_buckets()
 
                 with ThreadPoolExecutor() as executor:
@@ -2762,7 +2763,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 bucket_collection_namespaces = [
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
-                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                    if namespace.split(':')[-1].split(".")[0] == bucket.name]
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2777,7 +2778,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(60)
+                self.sleep(120)
                 timeout = 0
                 while timeout <= 360:
                     index_status = self.index_rest.get_indexer_metadata()['status']

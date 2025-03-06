@@ -279,6 +279,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         Indexes of same category should ensure that the existing shards should be reused
         '''
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        self.index_rest.set_index_settings({"indexer.plasma.sharedFlushBufferMultipler": 1})
         collection_namespace = self.namespaces[0]
         if self.index_type == "scalar":
             scalar_idx_1 = QueryDefinition(index_name='scalar_rgb', index_fields=['color'])

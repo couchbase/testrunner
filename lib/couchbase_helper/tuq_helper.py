@@ -1215,7 +1215,7 @@ class N1QLHelper():
         """
         diffs = DeepDiff(count_before, count_after,
                          ignore_order=True)
-        if diffs:
+        if diffs and 'values_changed' in diffs:
             self.log.info(f"Diffs {diffs}")
             if not item_count_increase:
                 for key in diffs['values_changed']:

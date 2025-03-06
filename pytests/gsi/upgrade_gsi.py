@@ -2359,6 +2359,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
     def test_offline_online_swap_upgrade_shard_dealer(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        if self.initial_version[:3] >= "7.6":
+            self.enable_shard_based_rebalance()
+            self.sleep(10)
+
         collection_namespace = self.namespaces[0]
         if self.index_load_three_pass == "soft_limit":
             scalar_idx_1 = QueryDefinition(index_name='scalar_rgb', index_fields=['color'],
@@ -2386,7 +2390,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             for query in [scalar_query_1, scalar_query_2, scalar_query_3, scalar_query_4]:
                 self.run_cbq_query(query=query, server=self.n1ql_node)
 
-        shard_index_map_before_upgrade = self.get_shards_index_map()
+        if self.initial_version[:3] >= "7.6":
+            shard_index_map_before_upgrade = self.get_shards_index_map()
 
         self.upgrade_and_validate(scan_results_check=False, select_queries=[])
         if self.upgrade_mode == 'offline':
@@ -2415,10 +2420,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                               defer_build=self.defer_build, num_replica=self.num_index_replica)
         self.run_cbq_query(query=scalar_query, server=self.n1ql_node)
 
-        shard_index_map_after_upgrade = self.get_shards_index_map()
+        if self.initial_version[:3] >= "7.6":
+            shard_index_map_after_upgrade = self.get_shards_index_map()
 
         #to check if existing shards were used while creating scalar index
-        self.assertEqual(len(shard_index_map_before_upgrade), len(shard_index_map_after_upgrade), f"map before {shard_index_map_before_upgrade}, map after {shard_index_map_after_upgrade}")
+            self.assertEqual(len(shard_index_map_before_upgrade), len(shard_index_map_after_upgrade), f"map before {shard_index_map_before_upgrade}, map after {shard_index_map_after_upgrade}")
 
         vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'],
                                      dimension=3,

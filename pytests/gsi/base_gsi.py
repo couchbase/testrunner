@@ -90,7 +90,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.partition_fields = self.input.param('partition_fields', None)
         self.partitoned_index = self.input.param('partitioned_index', False)
         self.json_template = self.input.param("json_template", "Person")
-        self.magma_flask_host = self.input.param("magma_flask_host", '172.23.219.57')
+        self.magma_flask_host = self.input.param("magma_flask_host", '172.23.121.85')
         self.magma_flask_port = self.input.param("magma_flask_port", 5000)
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
@@ -2225,6 +2225,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         }
 
         response = requests.post(url, data=params)
+        self.log.info(f"Response from magma server is {response.content}")
         if response.status_code != 200:
             raise Exception(f'exception is {response.content}')
         else:

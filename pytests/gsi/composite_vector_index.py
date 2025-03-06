@@ -164,6 +164,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 bucket, scope, _ = namespace.split('.')
                 self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
 
+
+
         for similarity in ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]:
             for namespace in self.namespaces:
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
@@ -175,7 +177,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           limit=self.scan_limit, is_base64=self.base64,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                          bhive_index=self.bhive_index)
+                                                                          bhive_index=self.bhive_index, description_dimension=self.dimension)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          bhive_index=self.bhive_index)
@@ -275,7 +277,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             query = index_gen_4.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
         except Exception as err:
-            err_msg = 'DISTINCT'
+            err_msg = 'Vector index with any field having array expression is currently not supported'
             self.assertTrue(err_msg in str(err), f"Index with INCLUDE clause is created: {err}")
 
         # indexes with all clause vector field
@@ -358,7 +360,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             executor.submit(self.run_cbq_query, query=query)
             self.sleep(5)
             while timeout < 360:
-                index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
+                index_state = self.index_rest.get_indexer_metadata()['status'][2]['status']
                 if index_state == "Training":
                     break
                 self.sleep(1)
@@ -470,7 +472,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.post_rebalance_action == "data_load":
                 for namespace in self.namespaces:
                     bucket, scope, collection = namespace.split('.')
-
+                    bucket = bucket.split(':')[-1]
                     self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=scope,
                                                     collection=collection, json_template="Cars",
@@ -501,6 +503,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
                     bucket, scope, collection = keyspace.split(".")
+                    bucket = bucket.split(':')[-1]
                     self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                                     percent_update=100, percent_delete=0, workers=16, scope=scope,
                                                     collection=collection, json_template="Cars", timeout=2000,
@@ -1140,6 +1143,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.index_rest.set_index_settings(setting)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        data_node = self.get_nodes_from_services_map(service_type="kv")
         select_queries = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
@@ -1183,11 +1187,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             bucket, scope, collection = keyspace.split(".")
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars", key_prefix="new_doc")
-            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
-                                                    generator=self.gen_create, pause_secs=1,
-                                                    timeout_secs=600, use_magma_loader=True)
-            task.result()
+                                            collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
+                                            create_end=(self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 2))
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
         remote_client = RemoteMachineShellConnection(index_node)
         remote_client.terminate_process(process_name='indexer')
@@ -1244,6 +1247,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         for namespace in self.namespaces:
             bucket, scope, collection = namespace.split('.')
+            bucket = bucket.split(':')[-1]
 
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
@@ -1251,9 +1255,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             output=True, username=self.username, password=self.password,
                                             base64=self.base64,
                                             model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
-                                            start_seq_num=self.num_of_docs_per_collection,
-                                            end=self.num_of_docs_per_collection + 10000)
+                                            create_start=0,
+                                            create_end=10000, dim=384)
+
             self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
+            self.sleep(120)
 
         self.sleep(30)
         # Get count before rollback
@@ -1490,7 +1496,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                     bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
             build_queries.extend(
-                self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+                self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace))
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
@@ -1532,7 +1538,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 10))
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
 
         # verify index count matches bucket item count
         self._verify_bucket_count_with_index_count()
@@ -1570,19 +1576,17 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
         # building index with data not qualified for vector indexes
-        try:
-            query = f"BUILD INDEX ON {collection_namespace}(vector) USING GSI "
-            self.run_cbq_query(query=query, server=self.n1ql_node)
-        except Exception as err:
-            err_msg = 'are less than the minimum number of documents:'
-            self.assertTrue(err_msg in str(err), f"Index with less docs are created: {err}")
-        else:
-            raise Exception("index has been built with less no of centroids")
+
+        query = f"BUILD INDEX ON {collection_namespace}(vector) USING GSI "
+        self.run_cbq_query(query=query, server=self.n1ql_node)
+        status = self.wait_until_indexes_online(timeout=60)
+        self.assertFalse(status, "Index created successfully")
 
         #Loading valid docs for vector indexes
         for namespace in self.namespaces:
             _, keyspace = namespace.split(':')
             bucket, scope, collection = keyspace.split('.')
+            bucket = bucket.split(':')[-1]
 
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
@@ -1590,8 +1594,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             output=True, username=self.username, password=self.password,
                                             base64=self.base64,
                                             model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
-                                            start_seq_num=self.num_of_docs_per_collection,
-                                            end=self.num_of_docs_per_collection + 10000)
+                                            create_start=self.num_of_docs_per_collection,
+                                            create_end=self.num_of_docs_per_collection + 10000)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -1602,6 +1606,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         create_queries = set()
         drop_queries = set()
+
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       prefix='test',
@@ -1614,24 +1619,31 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             create_queries.update(
                 self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                         num_replica=self.num_index_replica,
-                                                        bhive_index=self.bhive_index))
+                                                        bhive_index=self.bhive_index, defer_build=True))
             drop_queries.update(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
+            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions,namespace=namespace)
 
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
 
         timeout = 0
         with ThreadPoolExecutor() as executor:
-            executor.submit(self.gsi_util_obj.create_gsi_indexes, create_queries=create_queries)
+            executor.submit(self.run_cbq_query, query=build_query, server=self.n1ql_node)
             self.sleep(5)
             while timeout < 360:
-                index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
+                index_state = self.index_rest.get_indexer_metadata()['status'][1]['status']
                 if index_state == self.build_phase:
-                    self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries)
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, query_node=self.n1ql_node)
                     break
                 self.sleep(1)
                 timeout = timeout + 1
         if timeout > 360:
             self.fail("timeout exceeded")
+        timeout = 0
+        while timeout < 600:
+            if len(self.index_rest.get_indexer_metadata()['status']) == 0:
+                break
+            self.sleep(5)
+            timeout = timeout + 5
 
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 0, "index not dropped ")
 
@@ -1821,6 +1833,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
+            bucket = bucket.split(':')[-1]
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
@@ -1875,6 +1888,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # change back the modified fields to vectors and re-run scans
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
+            bucket = bucket.split(':')[-1]
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
@@ -1928,15 +1942,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             collection_namespace = self.namespaces[0]
             upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
             self.run_cbq_query(query=upsert_query)
-
-            query_stats_map = {}
-            for query in select_queries:
-                if "ANN" not in query:
-                    continue
-                query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
-                query_stats_map[query] = [recall, accuracy]
-            self.gen_table_view(query_stats_map=query_stats_map,
-                                message=f"quantization value is {self.quantization_algo_description_vector}")
 
             # Fetch no of docs which will be mutated to validate the stats count
             select_query = f"select count(*) from {collection_namespace} where rating = 0"
@@ -2061,6 +2066,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
+
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
@@ -2114,10 +2120,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
+            bucket = bucket.split(':')[-1]
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="update", dim=384,
+                                            op_type="update", dim=384,mutate=1,
                                             update_start=0, update_end=self.num_of_docs_per_collection)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
@@ -2193,7 +2200,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                similarity=self.similarity,
                                                                scan_nprobes=self.scan_nprobes,
                                                                limit=self.scan_limit, is_base64=self.base64,
-                                                               query_use_index_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                                                    "description, descriptionVector",
                                                                    "rating = 2 and "
                                                                    "category in ['Convertible', "
@@ -2265,7 +2272,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                scan_color_vec_1))
         else:
             vector_index = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
-                                         description=f"{self.description}", similarity="L2_SQUARED",
+                                         description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED",
                                          is_base64=self.base64)
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
@@ -2335,12 +2342,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # due to insufficient training vectors
             for namespace in self.namespaces:
                 bucket, scope, collection = namespace.split('.')
+                bucket = bucket.split(':')[-1]
                 num_docs = self.num_of_docs_per_collection
                 self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
                                                 percent_update=0, percent_delete=0, scope=scope,
                                                 collection=collection, json_template=self.json_template,
                                                 output=True, username=self.username, password=self.password,
-                                                create_start=0,
+                                                create_start=0,key_prefix="doc_77",
                                                 create_end=self.num_of_docs_per_collection)
                 self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
@@ -2601,3 +2609,4 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     num_scans_list.append(stats_map[node][keyspace][index]['num_requests'])
         self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
         self.run_cbq_query(query=drop_query)
+
