@@ -108,7 +108,7 @@ class QueryAUSTests(QueryTests):
             self.assertEqual(error['msg'], expected_error)
 
     def test_error_invalid_days(self):
-        expected_error = "Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '[\"Lundi\" \"Mardi\"]' ([]interface {}) for setting 'schedule.days'."
+        expected_error = "Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value 'Lundi' for setting 'schedule.days'."
         aus_schedule = 'UPDATE system:aus SET schedule = {"start_time": "14:40", "end_time": "15:10", "timezone": "America/Los_Angeles", "days": ["Lundi","Mardi"]}'
         try:
             self.run_cbq_query(aus_schedule)
@@ -120,7 +120,7 @@ class QueryAUSTests(QueryTests):
             self.assertEqual(error['msg'], expected_error)
 
     def test_error_empty_days(self):
-        expected_error = "Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '[]' ([]interface {}) for setting 'schedule.days'."
+        expected_error = "Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '[]' for setting 'schedule.days'."
         aus_schedule = 'UPDATE system:aus SET schedule = {"start_time": "14:40", "end_time": "15:10", "timezone": "America/Los_Angeles", "days": []}'
         try:
             self.run_cbq_query(aus_schedule)
