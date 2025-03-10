@@ -187,7 +187,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 for query in select_queries:
                     # self.run_cbq_query(query=create)
-                    if "DISTINCT" in query or if "ANN" not in query:
+                    if "DISTINCT" in query or "ANN" not in query:
                         continue
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                           similarity=similarity,
