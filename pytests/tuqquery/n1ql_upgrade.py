@@ -666,7 +666,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 {'id': 'testgrant', 'name': 'testgrant', 'roles': f'{full_permissions}', 'password': 'password'}
             ]
             RbacBase().add_user_role(role_list, self.rest, 'builtin')
-        test_query = "SELECT * FROM DEFAULT LIMIT 1"
+        test_query = "SELECT * FROM default LIMIT 1"
         try:
             self.run_cbq_query(test_query)
             self.fail("User does not have permissions")
