@@ -7,19 +7,20 @@ import json
 import sys
 import time
 
-import couchbase_core
+#import couchbase_core
 import crc32
 import logger
 from couchbase.cluster import Cluster, ClusterOptions
-from couchbase.cluster import _N1QLQuery
+from couchbase.auth import PasswordAuthenticator
+#from couchbase.cluster import _N1QLQuery
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-from couchbase_core.cluster import PasswordAuthenticator
+#from couchbase_core.cluster import PasswordAuthenticator
 
 from lib.Cb_constants import CBServer
 from lib.Cb_constants.CBServer import CbServer
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
-from couchbase_core.connstr import ConnectionString
+#from couchbase_core.connstr import ConnectionString
 
 
 class SDKClient(object):
@@ -59,28 +60,36 @@ class SDKClient(object):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ", ""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
-        if uhm_options != None:
-            connection_string = "{0}?{1}".format(connection_string, uhm_options)
-        
-        conn_string = ConnectionString.parse(connection_string)
-        
+        query_params = []
+
+        # Add user-defined options
+        if uhm_options:
+            query_params.append(uhm_options)
+
+        # SSL/TLS configuration
         if scheme == "couchbases":
-            conn_string.set_option('certpath', certpath)
-            if not certpath:
-                conn_string.set_option('ssl', 'no_verify')
+            if certpath:
+                query_params.append(f"certpath={certpath}")
+            else:
+                query_params.append("ssl=no_verify")
+
+        # SASL mechanism
+        if sasl_mech:
+            query_params.append(f"sasl_mech_force={sasl_mech}")
+
+        # IPv6 configuration
+        if ipv6:
+            query_params.append("ipv6=allow")
+
+        # Compression settings
+        compression_setting = "on" if compression else "off"
+        query_params.append(f"compression={compression_setting}")
+
+        # Append query parameters to the connection string
+        if query_params:
+            connection_string += f"?{'&'.join(query_params)}"
         
-        if sasl_mech is not None:
-            conn_string.set_option('sasl_mech_force',sasl_mech)
-        
-        if ipv6 == True:
-            conn_string.set_option('ipv6',"allow")
-        
-        if compression == True:
-            conn_string.set_option('compression',"on")
-        else:
-            conn_string.set_option('compression',"off")
-        
-        return conn_string
+        return connection_string
 
     def _createConn(self):
         try:
@@ -894,7 +903,7 @@ class SDKClient(object):
 
     def n1ql_query(self, statement, prepared=False):
         try:
-            return _N1QLQuery(statement, prepared)
+            return self.cluster.query(statement, prepared)
         except CouchbaseException as e:
             raise
 
