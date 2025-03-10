@@ -640,8 +640,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         queries_to_run = []
         index = "CREATE INDEX idx1 on `travel-sample`(id)"
         idx_list.append((index, ("`travel-sample`", "idx1")))
-        query = "select * from default d1 OUTER JOIN `travel-sample` t on (d1.join_day == t.id)"
-        queries_to_run.append((query, 288)) # 288 for doc-per-day=1
+        query = "select * from default d1 RIGHT OUTER JOIN `travel-sample` t on (d1.join_day == t.id)"
+        queries_to_run.append((query, 31591)) # 31591 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
     def run_test_cte(self):
