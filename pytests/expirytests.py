@@ -16,10 +16,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper
-try:
-    from sdk_client import SDKSmartClient
-except:
-    from sdk_client3 import SDKSmartClient
+from sdk_client3 import SDKSmartClient
 from security.rbac_base import RbacBase
 
 class ExpiryTests(unittest.TestCase):
@@ -48,7 +45,7 @@ class ExpiryTests(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
-        
+
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')

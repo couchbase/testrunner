@@ -4,7 +4,6 @@ import time
 from basetestcase import BaseTestCase
 from cb_tools.cbstats import Cbstats
 from couchbase_helper.documentgenerator import BlobGenerator
-from mc_bin_client import MemcachedError
 
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached
@@ -12,7 +11,6 @@ from ep_mc_bin_client import MemcachedClient, MemcachedError
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 
 from remote.remote_util import RemoteMachineShellConnection
-from sdk_client import SDKSmartClient
 
 
 """
@@ -77,18 +75,21 @@ class basic_ops(BaseTestCase):
             self.fail("Exception with del_with meta - {0}".format(exp) )
 
     def test_MB_32114(self):
+        self.log.info("tests started")
         try:
             from sdk_client import SDKClient
         except:
             from sdk_client3 import SDKClient
         import couchbase.subdocument as SD
-
+        self.log.info("import successful")
         rest = RestConnection(self.master)
         client = VBucketAwareMemcached(rest, 'default')
         if self.maxttl:
             self._expiry_pager(self.master)
+        self.log.info("sdk client initiialized")
         sdk_client = SDKClient(scheme='couchbase', hosts=[self.master.ip], bucket='default')
         KEY_NAME = 'key1'
+        self.log.info("sdk client initiialized done")
 
         for i in range(1000):
             mcd = client.memcached(KEY_NAME + str(i))

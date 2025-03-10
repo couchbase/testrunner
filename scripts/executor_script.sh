@@ -32,6 +32,13 @@ if [ "$cherrypick" != "None" ]; then
    sh -c "$cherrypick"
 fi
 
+# Set desired python env
+export PYENV_VERSION="3.10.13"
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init -)"
+pyenv local $PYENV_VERSION
+
 set +e
 echo newState=available>propfile
 newState=available

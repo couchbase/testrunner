@@ -48,7 +48,6 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
 
 from TestInput import TestInputServer, TestInputSingleton
 from lib.Cb_constants.CBServer import CbServer
-import logging
 
 try:
     CHECK_FLAG = False
@@ -1813,7 +1812,7 @@ class ESRunQueryCompare(Task):
     def execute(self, task_manager):
         self.es_compare = True
         should_verify_n1ql = True
-    
+
         try:
             if not self.reduce_query_logging:
                 self.log.info("---------------------------------------"
@@ -1847,7 +1846,7 @@ class ESRunQueryCompare(Task):
 
                 #read from replica validation
                 if self.validation_data:
-                    target_node_stat = 0 
+                    target_node_stat = 0
                     rem_nodes_stat = 0
                     for i in self.fts_nodes:
                         if i.ip == self.fts_target_node.ip:
@@ -1855,7 +1854,7 @@ class ESRunQueryCompare(Task):
                             target_node_stat += RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_replicas",node=i)[1] - prev_map[i.ip]['replica']
                         else:
                             rem_nodes_stat += RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
-                    
+
 
                     self.log.info(f"Target_node_stat : {target_node_stat} || rem_nodes_stat : {rem_nodes_stat}")
                     self.log.info(f"Validation_data : {self.validation_data}")

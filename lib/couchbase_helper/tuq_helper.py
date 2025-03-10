@@ -8,14 +8,8 @@ from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
 import traceback
 from deepdiff import DeepDiff
-
-try:
-    from couchbase.cluster import Cluster
-    from couchbase.cluster import PasswordAuthenticator
-except ImportError:
-    print("couchbasesdk not installed, skipping...")
-    pass
-
+from couchbase.cluster import Cluster
+from couchbase.auth import PasswordAuthenticator
 from lib.Cb_constants.CBServer import CbServer
 
 
@@ -268,30 +262,37 @@ class N1QLHelper():
 
         result = ""
         if use_sdk and ("prepare" not in query.lower()) and ("insert" not in query.lower()):
-            from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
-            sdk_cluster = Cluster('couchbase://' + str(server.ip))
+            from couchbase.n1ql import N1QLQuery, QueryScanConsistency
+            from couchbase.options import QueryOptions, ClusterOptions
             authenticator = PasswordAuthenticator(rest.username, rest.password)
-            sdk_cluster.authenticate(authenticator)
+            sdk_cluster = Cluster('couchbase://' + str(server.ip), ClusterOptions(authenticator))
+            # sdk_cluster.authenticate(authenticator)
+            buckets = {}
             for bucket in self.buckets:
-                cb = sdk_cluster.open_bucket(bucket.name)
+                buckets[bucket.name] = sdk_cluster.bucket(bucket.name)
+            # for bucket in self.buckets:
+            #     cb = sdk_cluster.bucket(bucket.name)
 
-            sdk_query = N1QLQuery(query)
-
+            # sdk_query = N1QLQuery(query)
+            query_options = QueryOptions()
             if 'scan_consistency' in query_params:
                 if query_params['scan_consistency'] == 'REQUEST_PLUS':
-                    sdk_query.consistency = CONSISTENCY_REQUEST  # request_plus is currently mapped to the CONSISTENT_REQUEST constant in the Python SDK
+                    query_options.scan_consistency = QueryScanConsistency.REQUEST_PLUS
                 elif query_params['scan_consistency'] == 'STATEMENT_PLUS':
-                    sdk_query.consistency = STATEMENT_PLUS
+                    query_options.scan_consistency = QueryScanConsistency.STATEMENT_PLUS
                 else:
                     raise ValueError('Unknown consistency')
             # Python SDK returns results row by row, so we need to iterate through all the results
-            row_iterator = cb.n1ql_query(sdk_query)
-            content = []
+            row_iterator = sdk_cluster.query(query, query_options)
+            # content = []
+
             try:
-                for row in row_iterator:
-                    content.append(row)
-                row_iterator.meta['results'] = content
-                result = row_iterator.meta
+                content = [row for row in row_iterator]
+                result = {'results': content, 'metadata': row_iterator.metadata()}
+                # for row in row_iterator:
+                #     content.append(row)
+                # row_iterator.meta['results'] = content
+                # result = row_iterator.meta
             except Exception as e:
                 # This will parse the resulting HTTP error and return only the dictionary containing the query results
                 result = ast.literal_eval(str(e).split("value=")[1].split(", http_status")[0])

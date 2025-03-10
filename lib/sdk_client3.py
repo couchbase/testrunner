@@ -7,19 +7,21 @@ import json
 import sys
 import time
 
-import couchbase_core
+#import couchbase_core
 import crc32
 import logger
-from couchbase.cluster import Cluster, ClusterOptions
-from couchbase.cluster import _N1QLQuery
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
+from couchbase.auth import PasswordAuthenticator
+#from couchbase.cluster import _N1QLQuery
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-from couchbase_core.cluster import PasswordAuthenticator
+#from couchbase_core.cluster import PasswordAuthenticator
 
 from lib.Cb_constants import CBServer
 from lib.Cb_constants.CBServer import CbServer
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
-from couchbase_core.connstr import ConnectionString
+#from couchbase_core.connstr import ConnectionString
 
 
 class SDKClient(object):
@@ -27,11 +29,12 @@ class SDKClient(object):
     sdk_disconnections = 0
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
-    def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
+    def __init__(self, bucket, scheme="couchbases", hosts=["localhost"],
                  ssl_path=None, uhm_options=None, username= None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
-                 sasl_mech=True):
+                 sasl_mech=False):
         if CbServer.use_https:
+            sasl_mech = True
             scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
@@ -51,7 +54,7 @@ class SDKClient(object):
         self.default_timeout = 1
         self._createConn()
         SDKClient.sdk_connections += 1
-        couchbase_core.set_json_converters(json.dumps, json.loads)
+        #couchbase_core.set_json_converters(json.dumps, json.loads)
         self.log = logger.Logger.get_logger()
 
     def _createString(self, scheme="couchbase", bucket=None, hosts=["localhost"], certpath=None,
@@ -59,28 +62,36 @@ class SDKClient(object):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ", ""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
-        if uhm_options != None:
-            connection_string = "{0}?{1}".format(connection_string, uhm_options)
+        query_params = []
 
-        conn_string = ConnectionString.parse(connection_string)
+        # Add user-defined options
+        if uhm_options:
+            query_params.append(uhm_options)
 
+        # SSL/TLS configuration
         if scheme == "couchbases":
-            # conn_string.set_option('certpath', certpath)
-            if not certpath:
-                conn_string.set_option('ssl', 'no_verify')
+            if certpath:
+                query_params.append(f"certpath={certpath}")
+            else:
+                query_params.append("ssl=no_verify")
 
-        # if sasl_mech is not None:
-        #     conn_string.set_option('sasl_mech_force',sasl_mech)
+        # SASL mechanism
+        if sasl_mech:
+            query_params.append(f"sasl_mech_force={sasl_mech}")
 
-        if ipv6 == True:
-            conn_string.set_option('ipv6',"allow")
+        # IPv6 configuration
+        if ipv6:
+            query_params.append("ipv6=allow")
 
-        if compression == True:
-            conn_string.set_option('compression',"on")
-        else:
-            conn_string.set_option('compression',"off")
+        # Compression settings
+        compression_setting = "on" if compression else "off"
+        query_params.append(f"compression={compression_setting}")
 
-        return conn_string
+        # Append query parameters to the connection string
+        if query_params:
+            connection_string += f"?{'&'.join(query_params)}"
+
+        return connection_string
 
     def _createConn(self):
         try:
@@ -894,7 +905,7 @@ class SDKClient(object):
 
     def n1ql_query(self, statement, prepared=False):
         try:
-            return _N1QLQuery(statement, prepared)
+            return self.cluster.query(statement, prepared)
         except CouchbaseException as e:
             raise
 
