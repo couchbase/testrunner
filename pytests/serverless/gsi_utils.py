@@ -415,7 +415,7 @@ class GSIUtils(object):
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {color_vecfield}",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {desc_vecfield}",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
                                                                                scan_desc_vec_2),
