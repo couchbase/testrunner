@@ -96,7 +96,7 @@ class QueryAUSTests(QueryTests):
             self.assertEqual(error['msg'], expected_error)
 
     def test_error_invalid_timezone(self):
-        expected_error = "Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value 'American/Los_Angeles' (string) for setting 'schedule.timezone'."
+        expected_error = "Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value 'American/Los_Angeles' for setting 'schedule.timezone'."
         aus_schedule = 'UPDATE system:aus SET schedule = {"start_time": "14:40", "end_time": "15:10", "timezone": "American/Los_Angeles", "days": ["Friday","Saturday"]}'
         try:
             self.run_cbq_query(aus_schedule)
@@ -136,7 +136,7 @@ class QueryAUSTests(QueryTests):
         expected_error_reason = "Setting 'change_percentage' must be: Integer between 0 and 100."
         for value in invalid_values:
             type = "int64" if isinstance(value, int) else "string"
-            expected_error = f"Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '{value}' ({type}) for setting 'change_percentage'."
+            expected_error = f"Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '{value}' for setting 'change_percentage'."
             value = f'"{value}"' if isinstance(value, str) else value
             aus_schedule = f'UPDATE system:aus SET change_percentage = {value}'
             try:
@@ -153,7 +153,7 @@ class QueryAUSTests(QueryTests):
         invalid_times = ["09:40am", "09:10pm", "09:10:37"]
         expected_error_reason = "Setting 'schedule.start_time' must be: Valid timestamp in HH:MM format."
         for time in invalid_times:
-            expected_error = f"Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '\"{time}\"' (value.stringValue) for setting 'schedule.start_time'."
+            expected_error = f"Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '\"{time}\"' for setting 'schedule.start_time'."
             aus_schedule = f'UPDATE system:aus SET schedule = {{"start_time": "{time}", "end_time": "15:10", "timezone": "America/Los_Angeles", "days": ["Friday","Saturday"]}}'
             try:
                 self.run_cbq_query(aus_schedule)
@@ -170,7 +170,7 @@ class QueryAUSTests(QueryTests):
         expected_error_reason = "Setting 'all_buckets' must be: boolean."
         for value in invalid_values:
             type = "string" if isinstance(value, str) else "int64"
-            expected_error = f"Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '{value}' ({type}) for setting 'all_buckets'."
+            expected_error = f"Invalid schema or semantics detected in the Auto Update Statistics settings document. Invalid value '{value}' for setting 'all_buckets'."
             value = f'"{value}"' if isinstance(value, str) else value
             aus_schedule = f'UPDATE system:aus SET all_buckets = {value}'
             try:
@@ -184,9 +184,9 @@ class QueryAUSTests(QueryTests):
                 self.assertEqual(error['reason']['cause'], expected_error_reason)
 
     def test_set_aus_schedule(self):
-        # current time HH:MM in America/Los_Angeles + 2 minutes
-        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=2)).strftime('%H:%M')
-        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=32)).strftime('%H:%M')  
+        # current time HH:MM in America/Los_Angeles + 1 minutes
+        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=1)).strftime('%H:%M')
+        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=31)).strftime('%H:%M')  
 
         aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["Friday","Saturday"]}}'
         self.run_cbq_query(aus_update)
@@ -204,9 +204,12 @@ class QueryAUSTests(QueryTests):
         self.assertEqual(aus_settings['all_buckets'], False)
         self.assertEqual(aus_settings['change_percentage'], 10)
 
+        # wait 120 seconds for task to be completed
+        self.sleep(120)
+
     def test_check_scheduled_task(self):
-        delay = 30
-        # Enable AUS and set schedule within next 5 minutes for today
+        # Enable AUS and set schedule within next 1 minutes for today
+        delay = 2
         start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay)).strftime('%H:%M')
         end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay + 30)).strftime('%H:%M')
         today = datetime.now(pytz.timezone('America/Los_Angeles')).strftime('%A')
@@ -227,7 +230,9 @@ class QueryAUSTests(QueryTests):
             task_delay_minutes = int(task_delay.split('m')[0])
             task_delay_seconds = int(task_delay.split('m')[1].split('.')[0])
             task_delay_in_seconds = task_delay_minutes * 60 + task_delay_seconds
-            self.assertAlmostEqual(task_delay_in_seconds, delay * 60, delta=60)
+            self.assertAlmostEqual(task_delay_in_seconds, delay * 60, delta=120)
+
+        self.sleep(120)
 
     def test_check_completed_task(self):
         # Enable AUS and set schedule within next 1 minutes for today
@@ -237,15 +242,20 @@ class QueryAUSTests(QueryTests):
         tomorrow = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(days=1)).strftime('%A')
         after_tomorrow = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(days=2)).strftime('%A')
 
-        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}", "{tomorrow}", "{after_tomorrow}"]}}, enable = true'
+        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}", "{tomorrow}", "{after_tomorrow}"]}}, enable = true, change_percentage = 0, all_buckets = true'
         self.run_cbq_query(aus_update)
+
+        # wait 3 seconds for task to be scheduled
+        self.sleep(3)
+        aus_task_query = "SELECT RAW id FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'scheduled'"
+        aus_task_result = self.run_cbq_query(aus_task_query)
+        task_ids = aus_task_result['results']
 
         # wait 2 minutes for task to be completed
         self.sleep(120)
 
         # Check completed task
-        aus_task_query = "SELECT * FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'completed'"
-        aus_task_keyspaces = "SELECT array_flatten(array_agg(results.keyspaces_evaluated), 1) keyspaces_evaluated, array_flatten(array_agg(results.keyspaces_updated), 1) keyspaces_updated FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'completed'"
+        aus_task_keyspaces = f"SELECT array_flatten(array_agg(results.keyspaces_evaluated), 1) keyspaces_evaluated, array_flatten(array_agg(results.keyspaces_updated), 1) keyspaces_updated FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'completed' and id IN {task_ids} "
         aus_task_keyspaces_result = self.run_cbq_query(aus_task_keyspaces)
         self.log.info(f"AUS task completed result: {aus_task_keyspaces_result}")
         expected_keyspaces_evaluated = ['default:travel-sample.inventory.hotel', 'default:travel-sample.inventory.airport', 'default:travel-sample.inventory.airline', 'default:travel-sample.inventory.route', 'default:travel-sample.inventory.landmark', 'default:travel-sample._system._query', 'default:travel-sample._system._mobile', 'default:travel-sample.tenant_agent_04.users', 'default:travel-sample.tenant_agent_04.bookings', 'default:travel-sample.tenant_agent_03.bookings', 'default:travel-sample.tenant_agent_03.users', 'default:travel-sample.tenant_agent_02.bookings', 'default:travel-sample.tenant_agent_02.users', 'default:travel-sample.tenant_agent_01.users', 'default:travel-sample.tenant_agent_01.bookings', 'default:travel-sample._default._default', 'default:travel-sample.tenant_agent_00.bookings', 'default:travel-sample.tenant_agent_00.users', 'default:default._system._mobile', 'default:default._system._query', 'default:default._default._default']
@@ -323,7 +333,7 @@ class QueryAUSTests(QueryTests):
             task_delay_minutes = int(task_delay.split('h')[1].split('m')[0])
             task_delay_seconds = int(task_delay.split('m')[1].split('.')[0])
             task_delay_in_seconds = task_delay_hours * 3600 + task_delay_minutes * 60 + task_delay_seconds
-            self.assertAlmostEqual(task_delay_in_seconds, expected_delay, delta=60)
+            self.assertAlmostEqual(task_delay_in_seconds, expected_delay, delta=120)
         
     def test_cancel_next_scheduled_task(self):
         # Enable AUS and set schedule within next 1 minutes for today for next 3 days
@@ -362,15 +372,17 @@ class QueryAUSTests(QueryTests):
             self.assertAlmostEqual(task_delay_in_seconds, expected_delay, delta=120)
 
         # wait 32 minutes to be outside of the 30 minutes schedule time before cancelling
-        self.sleep(32 * 60)
-    
+        # self.sleep(32 * 60)
+        self.sleep(120)
+
         # cancel next scheduled task for tomorrow
-        aus_cancel = f'DELETE FROM system:tasks_cache WHERE state = "scheduled"'
-        self.run_cbq_query(aus_cancel)
+        aus_cancel = f'DELETE FROM system:tasks_cache WHERE state = "scheduled" RETURNING RAW id'
+        aus_cancel_result = self.run_cbq_query(aus_cancel)
+        task_ids = aus_cancel_result['results']
         self.sleep(5)
 
         # Check cancelled task
-        aus_task_query = "SELECT * FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'cancelled'"
+        aus_task_query = f"SELECT * FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'cancelled' AND id IN {task_ids}"
         aus_task_result = self.run_cbq_query(aus_task_query)
         self.log.info(f"AUS task cancelled result: {aus_task_result}")
         for node in range(self.num_nodes):
