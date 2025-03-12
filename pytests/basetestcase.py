@@ -898,18 +898,23 @@ class OnPremBaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def is_test_failed(self):
-        if hasattr(self, "_outcome"):
-            if hasattr(self._outcome, "errors") and len(self._outcome.errors) > 0:
-                errors = self._outcome.errors
-            elif hasattr(self._outcome, "result") and len(self._output.result.errors) > 0:
-                errors = self._outcome.result.errors
-            else:
-                errors = list()
-            for i in errors:
-                if i[1] is not None:
-                    return True
-        return False
+    def has_test_failed(self):
+        if hasattr(self._outcome, 'errors'):
+            # Python 3.4 - 3.10
+            result = self.defaultTestResult()
+            self._feedErrorsToResult(result, self._outcome.errors)
+        else:
+            # Python 3.11+
+            result = self._outcome.result
+        ok = all(test != self for test, text in result.errors + result.failures)
+        if ok:
+            return False
+        else:
+            self.log.info('Errors/failures seen during test execution of {}. Errors {} and Failures {}'.format(
+                self._testMethodName,
+                result.errors,
+                result.failures))
+            return True
 
     def sleep(self, timeout=15, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
