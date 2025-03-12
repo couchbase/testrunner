@@ -418,3 +418,36 @@ class QueryAUSTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], 13014)
             self.assertEqual(error['msg'], 'User does not have credentials to run queries accessing the system tables. Add role query_system_catalog to allow the statement to run.')
+
+    def test_check_completed_task_with_percent_change(self):
+        # For this test, we assume that previous test have updated bucket stats
+        # Enable AUS and set schedule within next 1 minutes for today for next 3 days
+        delay = 2
+        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay)).strftime('%H:%M')
+        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay + 30)).strftime('%H:%M')
+        today = datetime.now(pytz.timezone('America/Los_Angeles')).strftime('%A')
+        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}"]}}, enable = true, all_buckets = true, change_percentage = 50'
+        self.run_cbq_query(aus_update)
+
+        # wait 3 seconds for task to be scheduled
+        self.sleep(3)
+
+        # get scheduled task ids
+        aus_task_query = "SELECT RAW id FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'scheduled'"
+        aus_task_result = self.run_cbq_query(aus_task_query)
+        task_ids = aus_task_result['results']
+
+        # wait 120 seconds for task to be completed
+        self.sleep(120)
+
+        # Check completed task
+        aus_task_query = f"SELECT * FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'completed' and id IN {task_ids}"
+        aus_task_result = self.run_cbq_query(aus_task_query)
+        self.log.info(f"AUS task completed result: {aus_task_result}")
+
+        # Check keyspaces updated
+        aus_task_keyspaces = f"SELECT array_flatten(array_agg(results.keyspaces_updated), 1) keyspaces_updated FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'completed' and id IN {task_ids} "
+        aus_task_keyspaces_result = self.run_cbq_query(aus_task_keyspaces)
+        self.log.info(f"AUS task keyspaces updated result: {aus_task_keyspaces_result}")
+        keyspaces_updated = aus_task_keyspaces_result['results'][0]['keyspaces_updated']
+        self.assertEqual(keyspaces_updated, None)
