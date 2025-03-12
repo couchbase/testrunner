@@ -899,8 +899,14 @@ class OnPremBaseTestCase(unittest.TestCase):
             pass
 
     def is_test_failed(self):
-        if hasattr(self, "_outcome") and len(self._outcome.errors) > 0:
-            for i in self._outcome.errors:
+        if hasattr(self, "_outcome"):
+            if hasattr(self._outcome, "errors") and len(self._outcome.errors) > 0:
+                errors = self._outcome.errors
+            elif hasattr(self._outcome, "result") and len(self._output.result.errors) > 0:
+                errors = self._outcome.result.errors
+            else:
+                errors = list()
+            for i in errors:
                 if i[1] is not None:
                     return True
         return False
