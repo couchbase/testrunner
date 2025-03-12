@@ -912,11 +912,20 @@ def main():
                         parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
                 branch_to_trigger = options.branch
+                slave_to_use = testsToLaunch[i]['slave']
                 if (testsToLaunch[i]['framework'] == "TAF"
                         and float(options.version[:3]) >= 8
                         and options.branch == "master"
                         and testsToLaunch[i]["support_py3"] == "true"):
+                    # TAF jobs with support_py3=true
                     branch_to_trigger = "master_py3_dev"
+                elif (testsToLaunch[i]['framework'] == "testrunner"
+                        and float(options.version[:3]) >= 8
+                        and options.branch == "sdk4_migration"
+                        and testsToLaunch[i]["support_py3"] == "true"):
+                    # testrunner jobs with support_py3=true
+                    # branch_to_trigger = "sdk4_migration"
+                    slave_to_use = "P0_sdk4"
                 url = launchString.format(options.version,
                                           testsToLaunch[i]['confFile'],
                                           descriptor,
@@ -928,7 +937,7 @@ def main():
                                           testsToLaunch[i]['initNodes'],
                                           testsToLaunch[i]['installParameters'],
                                           branch_to_trigger,
-                                          testsToLaunch[i]['slave'],
+                                          slave_to_use,
                                           urllib.parse.quote(testsToLaunch[i]['owner']),
                                           urllib.parse.quote(
                                               testsToLaunch[i]['mailing_list']),
