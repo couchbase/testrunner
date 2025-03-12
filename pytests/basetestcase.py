@@ -898,7 +898,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         except:
             pass
 
-    def has_test_failed(self):
+    def is_test_failed(self):
         if hasattr(self._outcome, 'errors'):
             # Python 3.4 - 3.10
             result = self.defaultTestResult()
