@@ -261,7 +261,7 @@ class QueryVector(object):
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        query = f'SELECT id, VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
+        query = f'SELECT id, VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} NULLS LAST LIMIT {k}'
         return query
     def vector_ann_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, nprobes=3, direction='ASC', k=100):
         if is_xattr:

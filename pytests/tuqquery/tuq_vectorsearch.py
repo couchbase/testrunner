@@ -221,7 +221,7 @@ class VectorSearchTests(QueryTests):
 
     def test_knn_zero(self):
         vector_zero = np.zeros(self.dimension).tolist()
-        query = f'SELECT id, VECTOR_DISTANCE(vec, {vector_zero}, "{self.distance}") distance FROM default WHERE size = 8 AND brand = "adidas" ORDER BY VECTOR_DISTANCE(vec, {vector_zero}, "{self.distance}") LIMIT 100'
+        query = f'SELECT id, VECTOR_DISTANCE(vec, {vector_zero}, "{self.distance}") distance FROM default WHERE size = 8 AND brand = "adidas" ORDER BY VECTOR_DISTANCE(vec, {vector_zero}, "{self.distance}") NULLS LAST LIMIT 100'
         result = self.run_cbq_query(query)
         for item in result['results']:
             if self.distance in ['L2', 'L2_SQUARED', 'EUCLIDEAN', 'EUCLIDEAN_SQUARED']:
@@ -236,7 +236,7 @@ class VectorSearchTests(QueryTests):
         vector_one = np.ones(self.dimension).tolist()
         vector_scope = 'vector'
         vector_collection = 'zero'
-        query = f'SELECT id, VECTOR_DISTANCE(vec, {vector_one}, "{self.distance}") distance FROM default.{vector_scope}.{vector_collection} WHERE size = 8 AND brand = "adidas" ORDER BY VECTOR_DISTANCE(vec, {vector_one}, "{self.distance}") LIMIT 10'
+        query = f'SELECT id, VECTOR_DISTANCE(vec, {vector_one}, "{self.distance}") distance FROM default.{vector_scope}.{vector_collection} WHERE size = 8 AND brand = "adidas" ORDER BY VECTOR_DISTANCE(vec, {vector_one}, "{self.distance}") NULLS LAST LIMIT 10'
         self.run_cbq_query(f'create scope default.{vector_scope} if not exists')
         self.run_cbq_query(f'create collection default.{vector_scope}.{vector_collection} if not exists')
         data = np.zeros((1000,self.dimension), "float32")
