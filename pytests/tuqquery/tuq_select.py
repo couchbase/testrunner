@@ -150,3 +150,487 @@ class QuerySelectTests(QueryTests):
         result = self.run_cbq_query('SELECT urldecode(TRUE) AS a')
         expected_result = [{"a": None}]
         self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_basic(self):
+        result = self.run_cbq_query('SELECT REDACT(t) FROM [{"a": "abc", "b": "def"}] t')
+        expected_result = [{"$1": {"a": "xxx", "b": "xxx"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_pattern(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "a"}) FROM [{"a": "abc", "b": "def"}] t
+        ''')
+        expected_result = [{"$1": {"a": "xxx", "b": "def"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_custom_mask(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "a", "mask": "*"}) FROM [{"a": "abc", "b": "def"}] t
+        ''')
+        expected_result = [{"$1": {"a": "***", "b": "def"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_mask_length(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"strict": true}) FROM [{
+                "short": "a",
+                "medium": "test",
+                "long": "very_long_string",
+                "special": "!@#$%^&*()"
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "long": "xxxxxxxxxxxxxxxx",
+            "medium": "xxxx",
+            "short": "x",
+            "special": "xxxxxxxxxx"
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_mask_length_with_custom_mask(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": ".*", "regex": true, "mask": "*"}) FROM [{
+                "short": "a",
+                "medium": "test",
+                "long": "very_long_string"
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "short": "*",
+            "medium": "****",
+            "long": "****_****_******"
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_mask_length_vs_fixed(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, 
+                {"pattern": "var1", "mask": "*"},
+                {"pattern": "var2", "mask": "*", "fixedlength": true},
+                {"pattern": "var3", "mask": "#"}
+            ) FROM [{
+                "var1": "short",
+                "var2": "medium_length",
+                "var3": "another_string"
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "var1": "*****",
+            "var2": "*",
+            "var3": "#######_######"
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_omit(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "a", "omit": true}) FROM [{"a": "abc", "b": "def"}] t
+        ''')
+        expected_result = [{"$1": {"b": "def"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_exclude(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "a", "exclude": true}) FROM [{"a": "abc", "b": "xxx"}] t
+        ''')
+        expected_result = [{"$1": {"a": "abc", "b": "xxx"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_regex(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "^a", "regex": true}) FROM [{"a": "abc", "ab": "def", "b": "ghi"}] t
+        ''')
+        expected_result = [{"$1": {"a": "xxx", "ab": "xxx", "b": "ghi"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_ignorecase(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "A", "ignorecase": true}) FROM [{"a": "abc", "b": "def"}] t
+        ''')
+        expected_result = [{"$1": {"a": "xxx", "b": "def"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_with_name(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "a", "name": true}) FROM [{"a": "abc", "b": "def"}] t
+        ''')
+        expected_result = [{"$1": {"f0000": "xxx", "b": "def"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_multiple_filters(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, 
+                {"pattern": "a", "mask": "*"}, 
+                {"pattern": "b", "mask": "#"}
+            ) FROM [{"a": "abc", "b": "def"}] t
+        ''')
+        expected_result = [{"$1": {"a": "***", "b": "###"}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_nested_object(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "a"}) 
+            FROM [{"a": "abc", "nested": {"a": "def", "b": "ghi"}}] t
+        ''')
+        expected_result = [{"$1": {"a": "xxx", "nested": {"a": "xxx", "b": "ghi"}}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_array(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "data"}) 
+            FROM [{"data": ["secret", "public", "secret2", "public2"]}] t
+        ''')
+        expected_result = [{"$1": {"data": ["xxxxxx", "xxxxxx", "xxxxxxx", "xxxxxxx"]}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_array_of_objects(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "password"}) 
+            FROM [{
+                "users": [
+                    {"name": "user1", "password": "pass123"},
+                    {"name": "user2", "password": "pass456"}
+                ]
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "users": [
+                {"name": "user1", "password": "xxxxxxx"},
+                {"name": "user2", "password": "xxxxxxx"}
+            ]
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_complex_nested(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "secret"}, {"pattern": "password"}) 
+            FROM [{
+                "id": "doc1",
+                "metadata": {
+                    "created": "2024-01-01",
+                    "secret_key": "abc123"
+                },
+                "users": [
+                    {
+                        "name": "user1",
+                        "password": "pass123",
+                        "data": {
+                            "public": "visible",
+                            "secret": "hidden"
+                        }
+                    },
+                    {
+                        "name": "user2",
+                        "password": "pass456",
+                        "data": {
+                            "public": "visible",
+                            "secret": "hidden"
+                        }
+                    }
+                ],
+                "settings": {
+                    "public_key": "xyz789",
+                    "secret_token": "token123"
+                }
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "id": "doc1",
+            "metadata": {
+                "created": "2024-01-01",
+                "secret_key": "xxxxxx"
+            },
+            "settings": {
+                "public_key": "xyz789",
+                "secret_token": "xxxxxxxx"
+            },
+            "users": [
+                {
+                    "data": {
+                        "public": "visible",
+                        "secret": "xxxxxx"
+                    },
+                    "name": "user1",
+                    "password": "xxxxxxx",
+                },
+                {
+                    "data": {
+                        "public": "visible",
+                        "secret": "xxxxxx"
+                    },
+                    "name": "user2",
+                    "password": "xxxxxxx",
+                }
+            ]
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_mixed_types(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {"pattern": "secret"}) 
+            FROM [{
+                "data": {
+                    "string": "secret_text",
+                    "number": 12345,
+                    "boolean": true,
+                    "array": ["secret1", 123, true, "secret2"],
+                    "secret_array": ["secret1", 123, true, "secret2"],
+                    "nested": {
+                        "secret_field": "hidden",
+                        "public_field": "visible"
+                    },
+                    "mixed_array": [
+                        "secret_string",
+                        {"secret": "hide_this", "public": "show_this"},
+                        123,
+                        ["nested_secret", "public_data"]
+                    ]
+                }
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "data": {
+                "array": [
+                    "secret1",
+                    123,
+                    True,
+                    "secret2"
+                ],
+                "boolean": True,
+                "mixed_array": [
+                    "secret_string",
+                    {
+                        "public": "show_this",
+                        "secret": "xxxx_xxxx"
+                    },
+                    123,
+                    [
+                        "nested_secret",
+                        "public_data"
+                    ]
+                ],
+                "nested": {
+                    "public_field": "visible",
+                    "secret_field": "xxxxxx"
+                },
+                "number": 12345,
+                "secret_array": [
+                    "xxxxxxx",
+                    111,
+                    True,
+                    "xxxxxxx"
+                ],
+                "string": "secret_text"
+            }
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_complex_exclude(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {
+                "pattern": "secret|password|key",
+                "regex": true,
+                "exclude": true
+            }) FROM [{
+                "id": "doc1",
+                "metadata": {
+                    "created": "2024-01-01",
+                    "secret_key": "abc123",
+                    "api_token": "xyz789",
+                    "public_key": "pub123"
+                },
+                "users": [
+                    {
+                        "name": "user1",
+                        "password": "pass123",
+                        "email": "user1@example.com",
+                        "data": {
+                            "public": "visible",
+                            "secret": "hidden",
+                            "token": "t123",
+                            "preferences": {
+                                "theme": "dark",
+                                "api_key": "k456",
+                                "secret_notes": "note123"
+                            }
+                        }
+                    },
+                    {
+                        "name": "user2",
+                        "password": "pass456",
+                        "email": "user2@example.com",
+                        "data": {
+                            "public": "visible",
+                            "secret": "hidden",
+                            "token": "t456",
+                            "preferences": {
+                                "theme": "light",
+                                "api_key": "k789",
+                                "secret_notes": "note456"
+                            }
+                        }
+                    }
+                ],
+                "settings": {
+                    "public_key": "xyz789",
+                    "secret_token": "token123",
+                    "app_token": "app456",
+                    "credentials": {
+                        "username": "admin",
+                        "password_hash": "hash123",
+                        "api_token": "api789"
+                    }
+                }
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "id": "xxxx",
+            "metadata": {
+                "api_token": "xxxxxx",
+                "created": "1111-11-11",
+                "public_key": "pub123",
+                "secret_key": "abc123"
+            },
+            "settings": {
+                "app_token": "xxxxxx",
+                "credentials": {
+                    "api_token": "xxxxxx",
+                    "password_hash": "hash123",
+                    "username": "xxxxx"
+                },
+                "public_key": "xyz789",
+                "secret_token": "token123"
+            },
+            "users": [
+                {
+                    "data": {
+                        "preferences": {
+                            "api_key": "k456",
+                            "secret_notes": "note123",
+                            "theme": "xxxx"
+                        },
+                        "public": "xxxxxxx",
+                        "secret": "hidden",
+                        "token": "xxxx"
+                    },
+                    "email": "xxxxx@xxxxxxx.xxx",
+                    "name": "xxxxx",
+                    "password": "pass123"
+                },
+                {
+                    "data": {
+                        "preferences": {
+                            "api_key": "k789",
+                            "secret_notes": "note456",
+                            "theme": "xxxxx"
+                        },
+                        "public": "xxxxxxx",
+                        "secret": "hidden",
+                        "token": "xxxx"
+                    },
+                    "email": "xxxxx@xxxxxxx.xxx",
+                    "name": "xxxxx",
+                    "password": "pass456"
+                }
+            ]
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_multiple_excludes(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, {
+                "pattern": "^(name|id|public).*",
+                "regex": true,
+                "exclude": true
+            }, {
+                "pattern": ".*password.*",
+                "regex": true,
+                "exclude": true
+            }) FROM [{
+                "id": "user123",
+                "name": "John Doe",
+                "username": "jdoe",
+                "password": "secret123",
+                "password_hint": "favorite color",
+                "public_profile": {
+                    "display_name": "JD",
+                    "avatar": "url://avatar",
+                    "bio": "Developer"
+                },
+                "private_data": {
+                    "email": "john@example.com",
+                    "phone": "123-456-7890",
+                    "backup_password": "backup123",
+                    "security_questions": [
+                        {
+                            "name_of_question": "First question",
+                            "question": "First pet name?",
+                            "password_reset_answer": "Fluffy"
+                        }
+                    ]
+                }
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "id": "user123",
+            "name": "John Doe",
+            "password": "xxxxxxxxx",
+            "password_hint": "xxxxxxxx xxxxx",
+            "private_data": {
+                "backup_password": "xxxxxxxxx",
+                "email": "xxxx@xxxxxxx.xxx",
+                "phone": "xxx-xxx-xxxx",
+                "security_questions": [
+                    {
+                        "name_of_question": "First question",
+                        "password_reset_answer": "xxxxxx",
+                        "question": "xxxxx xxx xxxx?"
+                    }
+                ]
+            },
+            "public_profile": {
+                "avatar": "xxx://xxxxxx",
+                "bio": "xxxxxxxxx",
+                "display_name": "xx"
+            },
+            "username": "xxxx"
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_filter_order(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, 
+                {"pattern": "secret", "mask": "*"},
+                {"pattern": "secret", "mask": "#"},
+                {"pattern": ".*", "regex": true, "mask": "@"}
+            ) FROM [{
+                "secret_data": "sensitive",
+                "secret_key": "key123",
+                "public_data": "visible"
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "secret_data": "********",
+            "secret_key": "******",
+            "public_data": "@@@@@@@"
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_filter_order_with_exclude(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(t, 
+                {"pattern": "secret", "mask": "*"},
+                {"pattern": "secret", "exclude": true},
+                {"pattern": "public", "mask": "#"}
+            ) FROM [{
+                "secret_data": "sensitive",
+                "secret_key": "key123",
+                "public_data": "visible"
+            }] t
+        ''')
+        expected_result = [{"$1": {
+            "secret_data": "*********",
+            "secret_key": "******",
+            "public_data": "#######"
+        }}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+    
