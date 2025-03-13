@@ -56,6 +56,38 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         if err:
             self.log.info(f"Error setting internal XDCR settings: {err}")
 
+    def block_network_nftables(self, src_cluster, dest_cluster):
+        src_nodes_str = ", ".join([node.ip for node in src_cluster.get_nodes()])
+        for dest_node in dest_cluster.get_nodes():
+            remote_shell_conn = RemoteMachineShellConnection(dest_node)
+            try:
+                cmd = "nft add table inet filter && "
+                cmd += "nft add chain inet filter forward { type filter hook forward priority 0 \; } && " 
+                cmd += "nft add chain inet filter input { type filter hook input priority 0 \; policy accept \; } && "
+                cmd += "nft add chain inet filter output { type filter hook output priority 0 \; policy accept \; } && "
+                cmd += f"nft add rule inet filter input ip saddr {{ {src_nodes_str} }} drop"
+                o, err = remote_shell_conn.execute_command(cmd, use_channel=True, timeout=5)
+                if err:
+                    self.fail(f"Error blocking network with nftables: {err}")
+
+            except Exception as e:
+                self.fail(f"Exception while blocking network with nftables: {e}")
+            finally:
+                remote_shell_conn.disconnect()
+
+    def unblock_network_nftables(self, src_cluster, dest_cluster):
+        for dest_node in dest_cluster.get_nodes():
+            remote_shell_conn = RemoteMachineShellConnection(dest_node)
+            try:
+                cmd = "nft flush ruleset"
+                o, err = remote_shell_conn.execute_command(cmd, use_channel=True, timeout=5)
+                if err:
+                    self.fail(f"Error unblocking network with nftables: {err}")
+
+            except Exception as e:
+                self.fail(f"Exception while unblocking network with nftables: {e}")
+            finally:
+                remote_shell_conn.disconnect()
 
     def test_target_awareness(self):
         self.setup_xdcr_and_load()
@@ -169,3 +201,43 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         if dest_incoming_repls is None:
             self.fail("Replications not added back in dest cluster")
         self.sleep(10, "Delay for server to be ready to recieve requests")
+    
+    def test_network_failure(self):
+        self.setup_xdcr_and_load()
+        self.wait_interval(40, "Waiting for heartbeats to be sent and updated in target cluster")
+        src_outgoing_repls = self.get_outgoing_replications(self.src_master_rest)
+        dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
+
+        self.verify_source_to_dest_replication(src_outgoing_repls, dest_incoming_repls)
+
+        self.set_internal_xdcr_settings(self.src_master, "SrcHeartbeatMinInterval", 10)
+        self.set_internal_xdcr_settings(self.dest_master, "SrcHeartbeatMinInterval", 10)
+
+        # Block network between source and destination clusters
+        self.block_network_nftables(self.src_cluster, self.dest_cluster)
+        self.wait_interval(100, "Waiting for network block to take effect")
+
+        # Verify replication stops or errors occur
+        dest_incoming_repls_after_block = self.get_incoming_replications(self.dest_master_rest)
+        if dest_incoming_repls_after_block is not None:
+           self.fail(f"Replications exists despite network failure.")
+
+        # Unblock network
+        self.unblock_network_nftables(self.src_cluster, self.dest_cluster)
+        self.wait_interval(90, "Waiting for network to be restored")
+
+        # Verify replication resumes
+        dest_incoming_repls_after_unblock = self.get_incoming_replications(self.dest_master_rest)
+        retries = 5
+        count = 0
+        while dest_incoming_repls_after_unblock is None and count < retries:
+            dest_incoming_repls_after_unblock = self.get_incoming_replications(self.dest_master_rest)
+            count += 1
+            self.wait_interval(10, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
+
+        if dest_incoming_repls_after_unblock is None:
+            self.fail("No incoming replications reported by dest cluster after unblocking network")
+
+        self.verify_source_to_dest_replication(src_outgoing_repls, dest_incoming_repls_after_unblock)
+
+        self.log.info("Network failure test completed successfully.")
