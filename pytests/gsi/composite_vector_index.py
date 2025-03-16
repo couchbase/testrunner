@@ -45,6 +45,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # the below setting will be reversed post the resolving of MB-63697
         self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
         self.num_centroids = self.input.param("num_centroids", 256)
+        self.target_process = self.input.param("target_process", "memcached")
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
@@ -1303,6 +1304,248 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after doing a partial roll back from kv side", similarity=self.similarity)
 
+    def test_recovery_projector_crash(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                    skip_default_scope=self.skip_default)
+
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        self.index_rest.set_index_settings(setting)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                    similarity=self.similarity, train_list=None,
+                                                                    scan_nprobes=self.scan_nprobes,
+                                                                    array_indexes=False, bhive_index=self.bhive_index,
+                                                                    limit=self.scan_limit, is_base64=self.base64,
+                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                    num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        index_stats = self.index_rest.get_index_stats()
+
+        for select_query in select_queries:
+            if "ANN" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+
+        doc_count = {}
+        for namespace in self.namespaces:
+            count_query = f"select count(year) from {namespace} where year > 0;"
+            result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
+            doc_count[namespace] = result
+
+        # changing the interval to 10 mins
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 600000}
+        self.index_rest.set_index_settings(setting)
+        disk_snapshots = MultilevelDict()
+        for bucket, indexes in index_stats.items():
+            for index, stats in indexes.items():
+                for key, val in stats.items():
+                    if 'num_disk_snapshots' in key:
+                        disk_snapshots[bucket][index][key] = val
+
+        # Loading new documents so that persisted snapshot wouldn't have these docs
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope,
+                                            collection=collection, json_template="Cars", key_prefix="new_doc")
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_create, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+        remote_client = RemoteMachineShellConnection(data_nodes[0])
+        remote_client.terminate_process(process_name='projector')
+
+        index_stats = self.index_rest.get_index_stats()
+        docs_pending = [f"{bucket}.{index}.{key}:{val}" for bucket, indexes in index_stats.items()
+                        for index, stats in indexes.items()
+                        for key, val in stats.items() if 'num_docs_pending' in key]
+        self.log.info(f"Docs Pending after projector kill: {docs_pending}")
+
+        for bucket, indexes in index_stats.items():
+            for index, stats in indexes.items():
+                for key, val in stats.items():
+                    if 'num_disk_snapshots' in key:
+                        if disk_snapshots[key] != val:
+                            self.fail("new snapshot is created. Adjust the stats")
+        for namespace in self.namespaces:
+            count_query = f"select count(year) from {namespace} where year > 0;"
+            result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
+            self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
+                            "Index hasn't recovered the docs within the given time")
+
+    def test_recovery_memcached_crash(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                    skip_default_scope=self.skip_default)
+
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        self.index_rest.set_index_settings(setting)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                    similarity=self.similarity, train_list=None,
+                                                                    scan_nprobes=self.scan_nprobes,
+                                                                    array_indexes=False, bhive_index=self.bhive_index,
+                                                                    limit=self.scan_limit, is_base64=self.base64,
+                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                    num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        index_stats = self.index_rest.get_index_stats()
+
+        for select_query in select_queries:
+            if "ANN" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+
+        doc_count = {}
+        for namespace in self.namespaces:
+            count_query = f"select count(year) from {namespace} where year > 0;"
+            result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
+            doc_count[namespace] = result
+
+        # changing the interval to 10 mins
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 600000}
+        self.index_rest.set_index_settings(setting)
+        disk_snapshots = MultilevelDict()
+        for bucket, indexes in index_stats.items():
+            for index, stats in indexes.items():
+                for key, val in stats.items():
+                    if 'num_disk_snapshots' in key:
+                        disk_snapshots[bucket][index][key] = val
+
+        # Loading new documents so that persisted snapshot wouldn't have these docs
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope,
+                                            collection=collection, json_template="Cars", key_prefix="new_doc")
+            task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                    generator=self.gen_create, pause_secs=1,
+                                                    timeout_secs=600, use_magma_loader=True)
+            task.result()
+
+        remote_client = RemoteMachineShellConnection(data_nodes[0])
+        remote_client.terminate_process(process_name='memcached')
+
+        index_stats = self.index_rest.get_index_stats()
+        docs_pending = [f"{bucket}.{index}.{key}:{val}" for bucket, indexes in index_stats.items()
+                        for index, stats in indexes.items()
+                        for key, val in stats.items() if 'num_docs_pending' in key]
+        self.log.info(f"Docs Pending after memcached kill: {docs_pending}")
+
+        # check if any rollback has happened
+        num_rollback = self.index_rest.get_num_rollback_stat(bucket=self.buckets[0].name)
+        self.assertGreater(num_rollback, 0, "No rollback has happened")
+
+        for bucket, indexes in index_stats.items():
+            for index, stats in indexes.items():
+                for key, val in stats.items():
+                    if 'num_disk_snapshots' in key:
+                        if disk_snapshots[key] != val:
+                            self.fail("new snapshot is created. Adjust the stats")
+        for namespace in self.namespaces:
+            count_query = f"select count(year) from {namespace} where year > 0;"
+            result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
+            self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
+                            "Index hasn't recovered the docs within the given time")
+
+    def test_crash_and_recovery_scenarios_during_index_building(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                    skip_default_scope=self.skip_default)
+
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        self.index_rest.set_index_settings(setting)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        build_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                    similarity=self.similarity, train_list=None,
+                                                                    scan_nprobes=self.scan_nprobes,
+                                                                    array_indexes=False, bhive_index=self.bhive_index,
+                                                                    limit=self.scan_limit, is_base64=self.base64,
+                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                    defer_build=True, num_replica=1,
+                                                                    bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            build_queries.extend(
+                self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        build_index_tasks = []
+        for build_query in build_queries:
+            build_index_tasks.append(self.cluster.async_build_index(server=self.n1ql_node, query=build_query))
+            self.run_cbq_query(query=build_query, server=self.n1ql_node)
+
+        for task in build_index_tasks:
+            task.result()
+
+        if self.target_process == "memcached":
+            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote.kill_memcached()
+        elif self.target_process == "projector":
+            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote.terminate_process(process_name=self.targetProcess)
+        elif self.target_process == "indexer":
+            remote = RemoteMachineShellConnection(self.index_nodes[0])
+            remote.terminate_process(process_name=self.targetProcess)
+        else:
+            for index_node in index_nodes:
+                remote = RemoteMachineShellConnection(index_node)
+                remote.stop_server()
+            self.sleep(30)
+            for index_node in index_nodes:
+                remote = RemoteMachineShellConnection(index_node)
+                remote.start_server()
+
+        self.wait_until_indexes_online()
+
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="create", dim=384,
+                                            create_start=self.num_of_docs_per_collection,
+                                            create_end=(self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 10))
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+
+        # verify index count matches bucket item count
+        self._verify_bucket_count_with_index_count()
+
+        query_stats_map = {}
+        for query in select_queries:
+            if "ANN" not in query:
+                continue
+            query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
+            query_stats_map[query] = [recall, accuracy]
+        self.gen_table_view(query_stats_map=query_stats_map,
+                            message=f"quantization value is {self.quantization_algo_description_vector}")
+
     def test_create_index_without_vector_data(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -1818,14 +2061,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
-            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="create", dim=384,
                                             create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 2))
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
             query_stats_map = {}
             for query in select_queries:
@@ -2358,11 +2601,3 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     num_scans_list.append(stats_map[node][keyspace][index]['num_requests'])
         self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
         self.run_cbq_query(query=drop_query)
-
-
-
-
-
-
-
-
