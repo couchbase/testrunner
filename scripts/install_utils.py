@@ -220,7 +220,7 @@ class NodeHelper:
             # Explicitly set the profile mode value (if provided by user)
             c_profile = self.profile or params["cluster_profile"]
             if c_profile in ["default", "serverless", "provisioned", "columnar"]:
-                cmd = install_constants.CREATE_SERVERLESS_PROFILE_FILE[key] \
+                cmd = install_constants.CREATE_PROFILE_FILE[key] \
                       % c_profile
                 self.shell.execute_command(cmd)
         # End of Serverless changes

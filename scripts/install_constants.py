@@ -101,16 +101,16 @@ PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "vbucketmigrator", "couchdb",
 
 UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"
 
-# Serverless changes (MB-52406)
+# server profile change
 RM_CONF_PROFILE_FILE = {
     "LINUX_DISTROS": "rm -f /etc/couchbase.d/config_profile"
 }
-CREATE_SERVERLESS_PROFILE_FILE = {
+CREATE_PROFILE_FILE = {
     "LINUX_DISTROS": "mkdir -p /etc/couchbase.d ; "
                      "echo %s > /etc/couchbase.d/config_profile ; "
                      "chmod ugo+r /etc/couchbase.d/"
 }
-# End of serverless change
+# End of profile change
 
 CMDS = {
     "deb": {
