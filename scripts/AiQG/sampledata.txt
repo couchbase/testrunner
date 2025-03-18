@@ -1,0 +1,133 @@
+There are 4 collections in the database: hotel, reviews, users, and bookings. The hotel collection has the following fields:
+{
+  "name": "string",
+  "address": "string",
+  "rooms": "int",
+  "room_types": [
+    {
+      "name": "string",
+      "price": "float",
+      "availability": "int"
+    }
+  ],
+  "rating": "float",
+  "reviews": "int",
+  "amenities": "list",
+  "hotel_id": "string",
+  "country": "string",
+  "free_parking": "boolean",
+  "free_wifi": "boolean",
+  "city": "string",
+  "type": "string",
+  "url": "string",
+  "email": "string",
+  "phone": "string",
+  "geo": {
+    "lat": "float",
+    "long": "float"
+  }
+}
+The reviews collection has the following fields:
+{
+  "review_id": "string",
+  "hotel_id": "string",
+  "review_date": "datetime",
+  "user_id": "string",
+  "ratings": {
+    "Value": "int",
+    "Cleanliness": "int",
+    "Overall": "int",
+    "Check in / front desk": "int",
+    "Rooms": "int"
+  },
+  "comments": "string"
+}
+The users collection has the following fields:
+{
+  "user_id": "string",
+  "username": "string",
+  "name": "string",
+  "email": "string",
+  "phone": "string",
+  "address": "string",
+  "country": "string",
+  "city": "string",
+  "zipcode": "string"
+  }
+The bookings collection has the following fields:
+{
+  "hotel_id": "string",
+  "booking_id": "string",
+  "user_id": "string",
+  "checkin": "datetime",
+  "checkout": "datetime",
+  "room_type": "string",
+  "room_count": "int",
+  "total_price": "float",
+  "payment_method": "string",
+  "payment_status": "string"
+  }
+}
+Your goal is to generate complex sql++ queries.
+'''
+sample_documents = {
+  "hotel": {
+    "name": "Arlette Halvorson",
+    "address": "514 Alonso Stream",
+    "rooms": 100,
+    "room_types": [
+      {"name": "Single", "price": 100.0, "availability": 10},
+      {"name": "Double", "price": 150.0, "availability": 5}
+    ],
+    "rating": 4.5,
+    "reviews": 200,
+    "amenities": ["Free WiFi", "Pool", "Gym"],
+    "hotel_id": "hotel123",
+    "country": "USA",
+    "free_parking": True,
+    "free_wifi": True,
+    "city": "New York",
+    "type": "Hotel",
+    "url": "www.arlettehalvorson.com",
+    "email": "contact@arlettehalvorson.com",
+    "phone": "123-456-7890",
+    "geo": {"lat": 40.7128, "long": -74.0060}
+  },
+  "reviews": {
+    "review_id": "review123",
+    "hotel_id": "hotel123",
+    "review_date": "2023-10-01T12:34:56",
+    "user_id": "user123",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 4,
+      "Overall": 5,
+      "Check in / front desk": 4,
+      "Rooms": 5
+    },
+    "comments": "Great stay, highly recommend!"
+  },
+  "users": {
+    "user_id": "user123",
+    "username": "johndoe",
+    "name": "John Doe",
+    "email": "johndoe@example.com",
+    "phone": "987-654-3210",
+    "address": "123 Main St",
+    "country": "USA",
+    "city": "New York",
+    "zipcode": "10001"
+  },
+  "bookings": {
+    "hotel_id": "hotel123",
+    "booking_id": "booking123",
+    "user_id": "user123",
+    "checkin": "2023-10-10T15:00:00",
+    "checkout": "2023-10-15T11:00:00",
+    "room_type": "Double",
+    "room_count": 1,
+    "total_price": 750.0,
+    "payment_method": "Credit Card",
+    "payment_status": "Paid"
+  }
+}
