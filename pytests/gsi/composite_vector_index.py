@@ -217,6 +217,68 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.rest.delete_bucket(bucket='metadata_bucket')
 
+    def test_composite_vector_sanity_with_new_validations(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        query_stats_map = {}
+        if self.xattr_indexes:
+            for namespace in self.namespaces:
+                bucket, scope, _ = namespace.split('.')
+                self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
+        self.namespaces = ['test_bucket.test_scope_1.test_collection_1']
+        for similarity in ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]:
+            for namespace in self.namespaces:
+                definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                          prefix=f'test_{similarity}',
+                                                                          similarity=similarity, train_list=None,
+                                                                          scan_nprobes=self.scan_nprobes,
+                                                                          array_indexes=False,
+                                                                          xattr_indexes=self.xattr_indexes,
+                                                                          limit=self.scan_limit, is_base64=self.base64,
+                                                                          quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          bhive_index=self.bhive_index)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                         namespace=namespace,
+                                                                         bhive_index=self.bhive_index,
+                                                                         num_replica=1)
+                select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                      namespace=namespace, limit=self.scan_limit)
+                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
+                self.sleep(120)
+                self.wait_until_indexes_online(timeout=1800)
+                self.validate_no_pending_mutations()
+                self.sleep(120)
+                self.compare_item_counts_between_kv_and_gsi()
+                self.backstore_mainstore_check()
+                self.validate_replica_indexes_item_counts()
+                for query in select_queries:
+                    # self.run_cbq_query(query=create)
+                    if "DISTINCT" in query or "ANN" not in query:
+                        continue
+                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
+                                                                                          similarity=similarity,
+                                                                                          scan_consitency=True)
+                    query_stats_map[query] = [recall, accuracy]
+                    # todo validate indexer metadata for indexes
+                codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
+                self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
+                self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
+                self.drop_all_indexes()
+                self.sleep(120)
+                self.check_storage_directory_cleaned_up()
+                if not self.validate_memory_released():
+                    raise AssertionError("Memory not released despite dropping all the indexes")
+                if not self.validate_cpu_normalized():
+                    raise AssertionError("CPU not normalized despite dropping all the indexes")
+                self.validate_cpu_normalized()
+        self.gen_table_view(query_stats_map=query_stats_map,
+                            message=f"quantization value is {self.quantization_algo_description_vector}")
+        for query in query_stats_map:
+            self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
+                                    f"recall for query {query} is less than threshold 70")
+        
+        self.rest.delete_bucket(bucket='metadata_bucket')
+
     def test_create_index_negative_scenarios(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
 

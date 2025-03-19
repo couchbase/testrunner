@@ -3090,6 +3090,424 @@ class BaseSecondaryIndexingTests(QueryTests):
             return False
         return True
 
+    def get_item_counts_from_kv(self):
+        """
+        Gets all indexes and their definitions using N1QL system:indexes
+        Returns a list of dictionaries containing index name and actual count from executing query
+        """
+        query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition` FROM system:indexes"
+        result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        
+        simplified_results = []
+        # Add select query field for each index
+        for index in result['results']:    
+            # Build the keyspace string
+            bucket = index['bucket_id']
+            scope = index.get('scope_id', '_default')
+            collection = index.get('keyspace_id', '_default')
+            keyspace = f"`{bucket}`.`{scope}`.`{collection}`"
+            
+            where_clause = ""
+            if index.get('condition'):
+                where_clause = f" WHERE {index['condition']}"
+                
+            count_query = f"SELECT COUNT(*) FROM {keyspace} {where_clause}"
+            
+            # Execute the count query
+            try:
+                count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=self.n1ql_node)
+                count = count_result['results'][0]['$1']
+            except Exception as e:
+                self.log.error(f"Error executing count query for index {index['name']}: {str(e)}")
+                count = 0
+            
+            # Add only name and count to results
+            simplified_results.append({
+                "name": f"default:{bucket}.{scope}.{collection}.{index['name']}",
+                "count": count
+            })
+            
+        return simplified_results
+    
+    def get_item_counts_from_index_stats(self):
+        """
+        Gets item count for all indexes using the /stats endpoint
+        Returns a list of dictionaries containing index name and aggregated items_count
+        Handles partitioned indexes by summing counts across nodes
+        """
+        index_counts_map = {}  # Use map to aggregate counts
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in indexer_nodes:
+            rest = RestConnection(node)
+            stats = rest.get_index_stats()
+            for index_path, index_stats in stats.items():
+                for key, value in index_stats.items():
+                    if '_system:' in index_path:
+                        continue
+                    index_name = key
+                    items_count = value.get('items_count', 0)
+                    if f"{index_path}.{index_name}" in index_counts_map:
+                        index_counts_map[f"{index_path}.{index_name}"] += items_count
+                    else:
+                        index_counts_map[f"{index_path}.{index_name}"] = items_count
+        
+        # Convert map to list format
+        index_counts = [
+            {"name": name, "count": count} 
+            for name, count in index_counts_map.items()
+        ]
+        return index_counts
+    
+    def compare_item_counts_between_kv_and_gsi(self):
+        kv_map = self.get_item_counts_from_kv()
+        index_map = self.get_item_counts_from_index_stats()
+        self.log.info(f"kv_map : {kv_map}")
+        self.log.info(f"index_map : {index_map}")
+        error_obj = []
+        for kv_dict in kv_map:
+            index_name_in_kv_dict, index_count_in_kv_dict = kv_dict['name'], kv_dict['count']
+            for index_dict in index_map:
+                if index_name_in_kv_dict == index_dict ['name']:
+                    _, index_count_in_index_dict = index_dict['name'], index_dict['count']
+                    break
+            if index_count_in_index_dict != index_count_in_kv_dict:
+                error = {}
+                self.log.error(f"Counts are index map {index_count_in_index_dict} kv map {index_count_in_kv_dict} for index {index_name_in_kv_dict}")
+                error['error'] = f"Counts for index {index_name_in_kv_dict} don't match. index map count {index_count_in_index_dict} kv map count {index_count_in_kv_dict}"
+                error_obj.append(error)
+        if error_obj:
+            raise Exception(f"Counts don't match for the following indexes: {error_obj}")
+    
+    def get_all_array_index_names(self):
+        """Returns a list of all array indexes in the cluster
+        """
+        array_indexes = []
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains array indexing syntax like ALL or DISTINCT
+            if 'definition' in index and ('ALL' in index['definition'] or 'DISTINCT' in index['definition']):
+                array_indexes.append(index['indexName'])
+        return array_indexes
+
+    def get_storage_stats_map(self, node):
+        """
+        Fetches index storage stats from /stats/storage endpoint
+        Args:
+            node: Node to fetch stats from
+        Returns:
+            List of dictionaries containing storage stats for each index
+        """
+        rest = RestConnection(node)
+        api = f"/api/v1/stats/storage"
+        status, content, _ = rest.http_request(api)
+        if not status:
+            raise Exception(f"Error getting storage stats: {content}") 
+        storage_stats = json.loads(content)
+        index_stats = []
+        # Process and format the storage stats
+        for index_path, stats in storage_stats.items():
+            if '_system:' in index_path:
+                continue
+            for index_name, index_stats in stats.items():
+                stat_obj = {
+                    "name": f"{index_path}:{index_name}",
+                    "mainstore_count": index_stats.get("MainStore", {}).get("items_count", 0),
+                    "backstore_count": index_stats.get("BackStore", {}).get("items_count", 0)
+                }
+                index_stats.append(stat_obj)      
+        return index_stats
+
+    def backstore_mainstore_check(self):
+        # Get all index nodes in the cluster
+        idx_node_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # Exclude all array indexes
+        ignore_count_index_list = self.get_all_array_index_names()
+        errors = []
+        for node in idx_node_list:
+            self.log.info(f"Checking stats for node {node}")
+            indexer_rest = RestConnection(node)
+            content = indexer_rest.get_index_storage_stats()
+            for index in list(content.values()):
+                for index_name, stats in index.items():
+                    self.log.info(f"checking for index {index_name}")
+                    if index_name in ignore_count_index_list or "BackStore" not in stats:
+                        continue
+                    if stats["MainStore"]["item_count"] != stats["BackStore"]["item_count"]:
+                        self.log.info(f"Index map as seen during backstore_mainstore_check is {stats}")
+                        self.log.error(f"Item count mismatch in backstore and mainstore for {index_name}")
+                        errors_obj = dict()
+                        errors_obj["type"] = "mismatch in backstore and mainstore"
+                        errors_obj["index_name"] = index_name
+                        errors_obj["mainstore_count"] = stats["MainStore"]["item_count"]
+                        errors_obj["backstore_count"] = stats["BackStore"]["item_count"]
+                        errors.append(errors_obj)
+        if len(errors) > 0:
+            return errors
+        else:
+            self.log.info("backstore_mainstore_check passed. No discrepancies seen.")
+
+    def check_storage_directory_cleaned_up(self, threshold_gb=0.025):
+        """
+        Checks if storage directory is cleaned up
+        Args:
+            threshold_gb (float): Maximum allowed storage space in GB (default: 0.025 GB or ~25MB)
+        """
+        idx_node_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in idx_node_list:
+            rest = RestConnection(node)
+            storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+            used_space = self.get_storage_directory_used_space(node, storage_dir)
+            if used_space > threshold_gb:
+                self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+                raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+    
+    def get_storage_directory_used_space(self, node, storage_dir):
+        """
+        Fetches used space for storage directory
+        Returns:
+            Used space in GB
+        """
+        shell = RemoteMachineShellConnection(node)
+        try:
+            # Use du command to get specific directory size in MB
+            output, error = shell.execute_command(f"du -s --block-size=1M {storage_dir} | cut -f1")
+            if error or not output:
+                self.log.error(f"Error getting disk space for {storage_dir}: {error}")
+            used_space_mb = int(output[0])  # Size in MB
+            used_space = used_space_mb / 1024.0  # Convert MB to GB
+        except Exception as e:
+            self.log.error(f"Error getting storage directory used space: {str(e)}")
+            used_space = None
+        finally:
+            shell.disconnect()
+        return used_space
+    
+    def drop_all_indexes(self):
+        """
+        Drops all indexes in the cluster except system indexes
+        """
+        self.log.info("Dropping all indexes...")
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query = "SELECT bucket_id, scope_id, keyspace_id, name FROM system:indexes WHERE `using`='gsi'"
+        result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
+        for index in result['results']:
+            try:
+                bucket = index['bucket_id']
+                scope = index.get('scope_id', '_default') 
+                collection = index.get('keyspace_id', '_default')
+                index_name = index['name']
+                if bucket == '_system':
+                    continue
+                drop_query = f"DROP INDEX `{index_name}` ON default:`{bucket}`.`{scope}`.`{collection}`"
+                self.log.info(f"Executing: {drop_query}")
+                self.n1ql_helper.run_cbq_query(query=drop_query, server=query_node)
+            except Exception as e:
+                self.log.error(f"Error dropping index {index_name}: {str(e)}")
+        self.log.info("Finished dropping indexes")
+    
+    def validate_replica_indexes_item_counts(self):
+        """
+        Gets item counts for all replica indexes and validates counts match across replicas.
+        Handles both regular and partitioned indexes.
+        Returns:
+            List of dictionaries containing any mismatches found between replica counts
+        """
+        errors = []
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        index_metadata = rest.get_indexer_metadata()['status']
+        
+        # Group indexes by definition ID to compare replicas
+        defn_groups = {}
+        for index in index_metadata:
+            if '_system:' in index['bucket']:
+                continue
+            defn_id = index['defnId']
+            if defn_id not in defn_groups:
+                defn_groups[defn_id] = []
+            defn_groups[defn_id].append(index)
+        
+        # Compare counts across replicas
+        for defn_id, replicas in defn_groups.items():
+            if len(replicas) <= 1:  # Skip non-replica indexes
+                continue
+                
+            # Get counts for each replica
+            replica_counts = {}
+            for replica in replicas:
+                index_name = replica['name']
+                bucket = replica['bucket']
+                scope = replica.get('scope', '_default')
+                collection = replica.get('collection', '_default')
+                replica_id = replica['replicaId']
+                is_partitioned = 'partitionId' in replica
+                
+                # Initialize count for this replica
+                if replica_id not in replica_counts:
+                    replica_counts[replica_id] = {
+                        'name': index_name,
+                        'count': 0,
+                        'nodes': set(),
+                        'is_partitioned': is_partitioned
+                    }
+                
+                # Get stats from all nodes for partitioned indexes, or hosting node for non-partitioned
+                for node in indexer_nodes:
+                    rest = RestConnection(node)
+                    stats = rest.get_index_stats()
+                    index_key = f"default:{bucket}.{scope}.{collection}"
+                    
+                    if index_key in stats:
+                        # For partitioned indexes, need to look for partition suffixes
+                        matching_indexes = []
+                        for stat_index in stats[index_key]:
+                            if is_partitioned:
+                                # Match base name for partitioned indexes
+                                if stat_index.startswith(index_name + " "):
+                                    matching_indexes.append(stat_index)
+                            elif stat_index == index_name:
+                                matching_indexes.append(stat_index)
+                        
+                        # Sum up counts across all partitions/replicas on this node
+                        for matching_index in matching_indexes:
+                            if matching_index in stats[index_key]:
+                                count = stats[index_key][matching_index].get('items_count', 0)
+                                replica_counts[replica_id]['count'] += count
+                                replica_counts[replica_id]['nodes'].add(node.ip)
+            
+            # Compare counts between replicas
+            if len(replica_counts) > 1:
+                base_count = None
+                for replica_id, info in replica_counts.items():
+                    if base_count is None:
+                        base_count = info['count']
+                    elif info['count'] != base_count:
+                        error = {
+                            'definition_id': defn_id,
+                            'index_name': replicas[0]['name'],  # Base index name
+                            'is_partitioned': info['is_partitioned'],
+                            'mismatches': replica_counts,
+                            'error': f"Replica counts don't match for index {replicas[0]['name']}"
+                        }
+                        self.log.error(f"Count mismatch found for index {replicas[0]['name']}: {replica_counts}")
+                        errors.append(error)
+                        break
+                    
+                # Log the successful comparison
+                self.log.info(f"Index {replicas[0]['name']} counts: {replica_counts}")
+        return errors
+    
+    def validate_no_pending_mutations(self, timeout=1800):
+        """
+        Validates that there are no pending mutations by checking num_docs_pending stats.
+        Retries for specified timeout period.
+        
+        Args:
+            timeout (int): Maximum time in seconds to wait for pending mutations to clear
+            
+        Returns:
+            bool: True if no pending mutations found, False otherwise
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            index_stats = self.index_rest.get_index_stats()
+            pending_mutations = []
+            
+            for bucket, indexes in index_stats.items():
+                for index, stats in indexes.items():
+                    for key, val in stats.items():
+                        if 'num_docs_pending' in key and val > 0:
+                            pending_mutations.append(f"{bucket}.{index}.{key}:{val}")
+            
+            if not pending_mutations:
+                return True
+                
+            self.log.info(f"Docs still pending: {pending_mutations}")
+            time.sleep(60)
+        
+        self.log.error(f"Mutations still pending after {timeout} seconds")
+        return False
+
+    def validate_memory_released(self, timeout=300, threshold_ratio=0.1):
+        """
+        Validates that memory has been properly freed up after index operations
+        across all index nodes.
+        
+        Args:
+            timeout (int): Maximum time in seconds to wait for memory to be released
+            threshold_ratio (float): Maximum acceptable ratio of memory_rss/memory_total
+                                (e.g., 0.1 means RSS should be below 10% of total)
+        Returns:
+            bool: True if memory has been properly released on all nodes, False otherwise
+        """
+        end_time = time.time() + timeout
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        
+        while time.time() < end_time:
+            high_memory_nodes = []
+            
+            for node in indexer_nodes:
+                rest = RestConnection(node)
+                index_stats = rest.get_all_index_stats()
+                
+                # Get memory stats for this node
+                memory_rss = index_stats.get('memory_rss', 0)
+                memory_total = index_stats.get('memory_total', 0)
+                
+                if memory_total > 0:  # Avoid division by zero
+                    ratio = memory_rss / memory_total
+                    if ratio > threshold_ratio:
+                        high_memory_nodes.append((node.ip, ratio * 100))
+            
+            if not high_memory_nodes:
+                return True
+                
+            self.log.info(f"Memory still high on nodes: {', '.join([f'{ip}:{ratio:.1f}%' for ip, ratio in high_memory_nodes])}")
+            time.sleep(5)
+        
+        self.log.error(f"Memory not properly released on nodes {high_memory_nodes} after {timeout} seconds")
+        return False
+
+    def validate_cpu_normalized(self, timeout=300, threshold_ratio=0.1):
+        """
+        Validates that CPU usage has returned to normal levels after index operations
+        across all index nodes.
+        
+        Args:
+            timeout (int): Maximum time in seconds to wait for CPU to normalize
+            threshold_percent (float): Maximum acceptable CPU utilization percentage
+                                    (e.g., 10 means CPU should be below 10%)
+        Returns:
+            bool: True if CPU usage is below threshold on all nodes, False otherwise
+        """
+        end_time = time.time() + timeout
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        
+        while time.time() < end_time:
+            high_cpu_nodes = []
+            
+            for node in indexer_nodes:
+                rest = RestConnection(node)
+                index_stats = rest.get_all_index_stats()
+                
+                # Get CPU stats for this node
+                cpu_utilization = index_stats.get('cpu_utilization', 0)
+                num_cpu_core = index_stats.get('num_cpu_core', 0)
+                if num_cpu_core > 0:
+                    utilization_ratio = cpu_utilization / (num_cpu_core * 100)
+                
+                if utilization_ratio > threshold_ratio:
+                    high_cpu_nodes.append((node.ip, cpu_utilization))
+            
+            if not high_cpu_nodes:
+                return True
+                
+            self.log.info(f"CPU still high on nodes: {', '.join([f'{ip}:{cpu:.1f}%' for ip, cpu in high_cpu_nodes])}")
+            time.sleep(5)
+        
+        self.log.error(f"CPU usage remained high on nodes {high_cpu_nodes} after {timeout} seconds")
+        return False
+
 class ConCurIndexOps():
     def __init__(self):
         self.all_indexes_state = {"created": [], "deleted": [], "defer_build": []}
@@ -3201,3 +3619,4 @@ class ConCurIndexOps():
                         index_created = True
 
         return index_created, status
+    
