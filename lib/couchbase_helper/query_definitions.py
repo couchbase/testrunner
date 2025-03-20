@@ -42,7 +42,7 @@ class QueryDefinition(object):
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
                  dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
-                 is_base64=False, include_fields=None, bhive_index=False):
+                 is_base64=False, include_fields=None, bhive_index=False, persist_full_vector=True):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -77,13 +77,14 @@ class QueryDefinition(object):
         self.is_base64 = is_base64
         self.include_fields = include_fields
         self.bhive_index = bhive_index
+        self.persist_full_vector = persist_full_vector
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
                                     num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
                                     missing_indexes=False, missing_field_desc=False, dimension=None, train_list=None,
                                     description=None, similarity=None, scan_nprobes=None, include_fields=None,
-                                    bhive_index=False):
+                                    bhive_index=False, persist_full_vector=True):
         if dimension:
             self.dimension = dimension
         if train_list:
@@ -96,6 +97,7 @@ class QueryDefinition(object):
             self.scan_nprobes = scan_nprobes
         if limit:
             self.limit = limit
+        self.persist_full_vector = persist_full_vector
         if self.is_primary:
             return self.generate_primary_index_create_query(namespace=namespace, deploy_node_info=deploy_node_info,
                                                             defer_build=defer_build, num_replica=num_replica)
@@ -172,6 +174,7 @@ class QueryDefinition(object):
             deployment_plan["similarity"] = self.similarity
         if self.scan_nprobes:
             deployment_plan["scan_nprobes"] = self.scan_nprobes
+        deployment_plan["persist_full_vector"] = self.persist_full_vector
         if self.partition_by_fields:
             if not self.capella_run:
                 deployment_plan["num_partition"] = num_partition
