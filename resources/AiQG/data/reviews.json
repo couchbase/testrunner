@@ -1,0 +1,282 @@
+[
+  {
+    "review_id": "review_001",
+    "hotel_id": "hotel_001",
+    "review_date": "2023-05-15T14:30:00Z",
+    "user_id": "user_001",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 5,
+      "Overall": 4,
+      "Check in / front desk": 5,
+      "Rooms": 4
+    },
+    "comments": "Great location in the heart of New York. The staff was very friendly and the rooms were clean and comfortable. Would definitely stay here again!"
+  },
+  {
+    "review_id": "review_002",
+    "hotel_id": "hotel_002",
+    "review_date": "2023-06-22T09:45:00Z",
+    "user_id": "user_003",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 4,
+      "Rooms": 5
+    },
+    "comments": "Amazing beach resort! The views were spectacular and the service was top-notch. The beach front room was worth every penny."
+  },
+  {
+    "review_id": "review_003",
+    "hotel_id": "hotel_003",
+    "review_date": "2023-02-10T16:15:00Z",
+    "user_id": "user_007",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 5,
+      "Overall": 4,
+      "Check in / front desk": 3,
+      "Rooms": 5
+    },
+    "comments": "Beautiful mountain views and cozy rooms with fireplaces. Perfect for a winter getaway. The hiking trails were amazing!"
+  },
+  {
+    "review_id": "review_004",
+    "hotel_id": "hotel_004",
+    "review_date": "2023-03-05T11:20:00Z",
+    "user_id": "user_014",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 4,
+      "Overall": 4,
+      "Check in / front desk": 5,
+      "Rooms": 3
+    },
+    "comments": "Excellent business hotel with great conference facilities. The location is perfect for meetings in central London. Wi-Fi was fast and reliable."
+  },
+  {
+    "review_id": "review_005",
+    "hotel_id": "hotel_005",
+    "review_date": "2023-04-18T13:40:00Z",
+    "user_id": "user_010",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 4,
+      "Overall": 5,
+      "Check in / front desk": 5,
+      "Rooms": 5
+    },
+    "comments": "This historic inn is a gem in Paris! The antique furnishings and attention to detail made it a truly authentic experience. The tea room was delightful."
+  },
+  {
+    "review_id": "review_006",
+    "hotel_id": "hotel_006",
+    "review_date": "2023-07-30T10:15:00Z",
+    "user_id": "user_016",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 4,
+      "Rooms": 5
+    },
+    "comments": "Paradise found! The overwater bungalow was a dream come true. Crystal clear water, amazing food, and the most attentive staff. Worth every penny."
+  },
+  {
+    "review_id": "review_007",
+    "hotel_id": "hotel_007",
+    "review_date": "2023-08-12T17:50:00Z",
+    "user_id": "user_022",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 4,
+      "Overall": 4,
+      "Check in / front desk": 3,
+      "Rooms": 5
+    },
+    "comments": "Cool, trendy hotel in Berlin. The loft room was spacious and stylish. Loved the rooftop bar and the art gallery. Great for young travelers."
+  },
+  {
+    "review_id": "review_008",
+    "hotel_id": "hotel_008",
+    "review_date": "2023-01-25T12:30:00Z",
+    "user_id": "user_018",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 5,
+      "Rooms": 5
+    },
+    "comments": "The desert experience was magical! The Royal Tent was luxurious and the stargazing deck was unforgettable. The desert safari was the highlight of our trip."
+  },
+  {
+    "review_id": "review_009",
+    "hotel_id": "hotel_009",
+    "review_date": "2023-04-05T09:20:00Z",
+    "user_id": "user_013",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 5,
+      "Rooms": 5
+    },
+    "comments": "An authentic Japanese experience! The traditional room, hot springs, and kaiseki dining were all exceptional. The staff made us feel like family."
+  },
+  {
+    "review_id": "review_010",
+    "hotel_id": "hotel_010",
+    "review_date": "2023-02-18T15:45:00Z",
+    "user_id": "user_009",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 3,
+      "Overall": 4,
+      "Check in / front desk": 5,
+      "Rooms": 3
+    },
+    "comments": "Great budget option in Sydney! The social events were fun and I met travelers from all over the world. The free breakfast was a nice bonus."
+  },
+  {
+    "review_id": "review_011",
+    "hotel_id": "hotel_001",
+    "review_date": "2023-09-10T14:15:00Z",
+    "user_id": "user_008",
+    "ratings": {
+      "Value": 3,
+      "Cleanliness": 4,
+      "Overall": 3,
+      "Check in / front desk": 2,
+      "Rooms": 4
+    },
+    "comments": "The hotel is in a good location, but I found it a bit overpriced for what it offers. The rooms were nice but there was some noise from the street."
+  },
+  {
+    "review_id": "review_012",
+    "hotel_id": "hotel_002",
+    "review_date": "2023-08-05T11:30:00Z",
+    "user_id": "user_006",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 5,
+      "Rooms": 5
+    },
+    "comments": "Perfect beach vacation! The ocean view room had breathtaking views and the private beach was never crowded. The water sports activities were a blast."
+  },
+  {
+    "review_id": "review_013",
+    "hotel_id": "hotel_003",
+    "review_date": "2023-01-15T16:40:00Z",
+    "user_id": "user_028",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 4,
+      "Overall": 4,
+      "Check in / front desk": 4,
+      "Rooms": 5
+    },
+    "comments": "Wonderful winter retreat! The cabin was cozy and warm with amazing mountain views. The ski storage was convenient and the hot tub was perfect after a day on the slopes."
+  },
+  {
+    "review_id": "review_014",
+    "hotel_id": "hotel_004",
+    "review_date": "2023-06-28T10:20:00Z",
+    "user_id": "user_025",
+    "ratings": {
+      "Value": 3,
+      "Cleanliness": 4,
+      "Overall": 3,
+      "Check in / front desk": 4,
+      "Rooms": 3
+    },
+    "comments": "Decent business hotel but the rooms are a bit small. The business center was well-equipped and the location is convenient for meetings in the city."
+  },
+  {
+    "review_id": "review_015",
+    "hotel_id": "hotel_005",
+    "review_date": "2023-05-20T13:10:00Z",
+    "user_id": "user_024",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 5,
+      "Rooms": 5
+    },
+    "comments": "The most romantic hotel in Paris! The heritage room was beautiful and the garden was like stepping back in time. Perfect for our anniversary."
+  },
+  {
+    "review_id": "review_016",
+    "hotel_id": "hotel_006",
+    "review_date": "2023-03-12T15:30:00Z",
+    "user_id": "user_029",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 3,
+      "Rooms": 5
+    },
+    "comments": "The resort is absolutely stunning! The infinity pool overlooking the ocean was my favorite spot. The room was spacious and the bed was incredibly comfortable."
+  },
+  {
+    "review_id": "review_017",
+    "hotel_id": "hotel_007",
+    "review_date": "2023-07-05T18:45:00Z",
+    "user_id": "user_036",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 3,
+      "Overall": 4,
+      "Check in / front desk": 4,
+      "Rooms": 4
+    },
+    "comments": "Great location in Berlin with a cool, artistic vibe. The co-working space was perfect for getting some work done. The cafe serves excellent coffee!"
+  },
+  {
+    "review_id": "review_018",
+    "hotel_id": "hotel_008",
+    "review_date": "2023-09-30T11:15:00Z",
+    "user_id": "user_037",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 5,
+      "Rooms": 4
+    },
+    "comments": "An unforgettable desert experience! The oasis pool was refreshing and the desert safari was thrilling. The authentic restaurant served delicious local cuisine."
+  },
+  {
+    "review_id": "review_019",
+    "hotel_id": "hotel_009",
+    "review_date": "2023-10-10T14:20:00Z",
+    "user_id": "user_034",
+    "ratings": {
+      "Value": 5,
+      "Cleanliness": 5,
+      "Overall": 5,
+      "Check in / front desk": 4,
+      "Rooms": 5
+    },
+    "comments": "A truly authentic Japanese experience. The traditional garden was peaceful and the tea ceremony was fascinating. The hot springs were the perfect way to relax."
+  },
+  {
+    "review_id": "review_020",
+    "hotel_id": "hotel_010",
+    "review_date": "2023-08-22T16:30:00Z",
+    "user_id": "user_032",
+    "ratings": {
+      "Value": 4,
+      "Cleanliness": 3,
+      "Overall": 4,
+      "Check in / front desk": 5,
+      "Rooms": 3
+    },
+    "comments": "Great hostel for meeting other travelers! The communal kitchen was well-equipped and the tour desk helped us plan our Sydney adventures. Good value for money."
+  }
+]

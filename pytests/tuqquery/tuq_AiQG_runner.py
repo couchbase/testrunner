@@ -1,6 +1,7 @@
 import json
 import time
 from lib.membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
 import os
 from .tuq import QueryTests
 from deepdiff import DeepDiff
@@ -10,38 +11,70 @@ class QueryAiQGTests(QueryTests):
     def setUp(self):
         super(QueryAiQGTests, self).setUp()
         self.log.info("==============  QueryAiQGTests setup has started ==============")
-        self.sql_file_path = self.input.param("sql_file_path", "path/to/your/queries.sql")
+        self.sql_file_path = self.input.param("sql_file_path", "resources/AiQG/sql/sample_queries.sql")
         self.query_number = self.input.param("query_number", 0)
         self.query_context = self.input.param("query_context", "default._default")
-        self.log.info("==============  QueryAiQGTests setup has started ==============")
+        self.log.info("==============  QueryAiQGTests setup has ended ==============")
         self.log_config_info()
 
     def suite_setUp(self):
         super(QueryAiQGTests, self).suite_setUp()
         self.log.info("==============  QueryAiQGTests suite_setup has started ==============")
-        # Create collections in default._default scope
+        # Create and load collections in default._default scope
         try:
-            self.run_cbq_query("CREATE COLLECTION default._default.hotel IF NOT EXISTS")
-            self.run_cbq_query("CREATE COLLECTION default._default.reviews IF NOT EXISTS") 
-            self.run_cbq_query("CREATE COLLECTION default._default.bookings IF NOT EXISTS")
-            self.run_cbq_query("CREATE COLLECTION default._default.users IF NOT EXISTS")
-            self.log.info("Created collections: hotel, reviews, bookings, users")
+            collections_config = {
+                'hotel': {'key_field': 'hotel_id', 'prefix': 'hotel'},
+                'reviews': {'key_field': 'review_id', 'prefix': 'review'}, 
+                'bookings': {'key_field': 'booking_id', 'prefix': 'booking'},
+                'users': {'key_field': 'user_id', 'prefix': 'user'}
+            }
+
+            shell = RemoteMachineShellConnection(self.master)
+
+            for collection, config in collections_config.items():
+                # Create collection
+                self.run_cbq_query(f"CREATE COLLECTION default._default.{collection} IF NOT EXISTS")
+                self.log.info(f"Created collection: {collection}")
+
+                # Copy data file to remote
+                src_file = f"resources/AiQG/data/{collection}.json"
+                des_file = f"/tmp/{collection}.json"
+                shell.copy_file_local_to_remote(src_file, des_file)
+                self.log.info(f"Copied {collection} data file to remote")
+
+                # Import data using cbimport
+                import_cmd = f"/opt/couchbase/bin/cbimport json --cluster {self.master.ip} "\
+                           f"--username {self.master.rest_username} "\
+                           f"--password {self.master.rest_password} "\
+                           f"--bucket default "\
+                           f"--scope-collection-exp _default.{collection} "\
+                           f"--format list "\
+                           f"--generate-key \"{config['prefix']}::%{config['key_field']}%\" "\
+                           f"--dataset file:///tmp/{collection}.json"
+                
+                output, error = shell.execute_command(import_cmd)
+                if error:
+                    self.log.error(f"Error importing {collection} data: {error}")
+                    raise Exception(f"Failed to import {collection} data")
+                self.log.info(f"Successfully imported {collection} data: {output}")
+
+            shell.disconnect()
         except Exception as e:
             self.log.error(f"Error creating collections: {str(e)}")
             raise
-        self.log.info("==============  QueryAiQGTests suite_setup has started ==============")
+        self.log.info("==============  QueryAiQGTests suite_setup has ended ==============")
         self.log_config_info()
 
     def tearDown(self):
         self.log_config_info()
         self.log.info("==============  QueryAiQGTests tearDown has started ==============")
-        self.log.info("==============  QueryAiQGTests tearDown has started ==============")
+        self.log.info("==============  QueryAiQGTests tearDown has ended ==============")
         super(QueryAiQGTests, self).tearDown()
 
     def suite_tearDown(self):
         self.log_config_info()
         self.log.info("==============  QueryAiQGTests suite_tearDown has started ==============")
-        self.log.info("==============  QueryAiQGTests suite_tearDown has started ==============")
+        self.log.info("==============  QueryAiQGTests suite_tearDown has ended ==============")
         super(QueryAiQGTests, self).suite_tearDown()
 
     def test_AiQG_runner(self):
@@ -70,9 +103,9 @@ class QueryAiQGTests(QueryTests):
                     result = self.run_cbq_query("SELECT name,keyspace_id,scope_id,bucket_id FROM system:indexes")
                     for index in result['results']:
                         if 'scope_id' not in index or 'bucket_id' not in index:
-                            self.run_cbq_query(f"DROP INDEX {index['keyspace_id']}.{index['name']}")
+                            self.run_cbq_query(f"DROP INDEX default:{index['keyspace_id']}.{index['name']}")
                         else:
-                            self.run_cbq_query(f"DROP INDEX {index['bucket_id']}.{index['scope_id']}.{index['keyspace_id']}.{index['name']}")
+                            self.run_cbq_query(f"DROP INDEX default:{index['bucket_id']}.{index['scope_id']}.{index['keyspace_id']}.{index['name']}")
                     self.log.info("Dropped all existing indexes")
                 except Exception as e:
                     self.log.error(f"Error dropping indexes: {str(e)}")

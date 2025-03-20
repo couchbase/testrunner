@@ -1,0 +1,382 @@
+[
+  {
+    "name": "Grand Plaza Hotel",
+    "address": "123 Main Street, Downtown",
+    "rooms": 150,
+    "room_types": [
+      {
+        "name": "Standard",
+        "price": 99.99,
+        "availability": 45
+      },
+      {
+        "name": "Deluxe",
+        "price": 149.99,
+        "availability": 30
+      },
+      {
+        "name": "Suite",
+        "price": 249.99,
+        "availability": 15
+      }
+    ],
+    "rating": 4.5,
+    "reviews": 324,
+    "amenities": ["Pool", "Gym", "Restaurant", "Bar", "Spa"],
+    "hotel_id": "hotel_001",
+    "country": "United States",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "New York",
+    "type": "Luxury",
+    "url": "www.grandplazahotel.com",
+    "email": "info@grandplazahotel.com",
+    "phone": "+1-212-555-1234",
+    "geo": {
+      "lat": 40.7128,
+      "long": -74.0060
+    }
+  },
+  {
+    "name": "Seaside Resort",
+    "address": "456 Beach Road",
+    "rooms": 200,
+    "room_types": [
+      {
+        "name": "Ocean View",
+        "price": 179.99,
+        "availability": 50
+      },
+      {
+        "name": "Beach Front",
+        "price": 259.99,
+        "availability": 25
+      },
+      {
+        "name": "Presidential Suite",
+        "price": 499.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.8,
+    "reviews": 512,
+    "amenities": ["Private Beach", "Pool", "Spa", "Restaurant", "Water Sports"],
+    "hotel_id": "hotel_002",
+    "country": "Mexico",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Cancun",
+    "type": "Resort",
+    "url": "www.seasideresort.com",
+    "email": "reservations@seasideresort.com",
+    "phone": "+52-998-555-6789",
+    "geo": {
+      "lat": 21.1619,
+      "long": -86.8515
+    }
+  },
+  {
+    "name": "Mountain View Lodge",
+    "address": "789 Alpine Way",
+    "rooms": 75,
+    "room_types": [
+      {
+        "name": "Standard",
+        "price": 129.99,
+        "availability": 30
+      },
+      {
+        "name": "Mountain View",
+        "price": 179.99,
+        "availability": 20
+      },
+      {
+        "name": "Cabin",
+        "price": 229.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.6,
+    "reviews": 287,
+    "amenities": ["Fireplace", "Hiking Trails", "Restaurant", "Ski Storage", "Hot Tub"],
+    "hotel_id": "hotel_003",
+    "country": "Canada",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Banff",
+    "type": "Lodge",
+    "url": "www.mountainviewlodge.com",
+    "email": "stay@mountainviewlodge.com",
+    "phone": "+1-403-555-4321",
+    "geo": {
+      "lat": 51.1784,
+      "long": -115.5708
+    }
+  },
+  {
+    "name": "City Center Hotel",
+    "address": "101 Business District",
+    "rooms": 120,
+    "room_types": [
+      {
+        "name": "Business",
+        "price": 119.99,
+        "availability": 60
+      },
+      {
+        "name": "Executive",
+        "price": 169.99,
+        "availability": 40
+      },
+      {
+        "name": "Penthouse",
+        "price": 299.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.3,
+    "reviews": 412,
+    "amenities": ["Business Center", "Conference Rooms", "Restaurant", "Fitness Center", "Airport Shuttle"],
+    "hotel_id": "hotel_004",
+    "country": "United Kingdom",
+    "free_parking": false,
+    "free_wifi": true,
+    "city": "London",
+    "type": "Business",
+    "url": "www.citycenterhotel.com",
+    "email": "bookings@citycenterhotel.com",
+    "phone": "+44-20-5555-6789",
+    "geo": {
+      "lat": 51.5074,
+      "long": -0.1278
+    }
+  },
+  {
+    "name": "Historic Inn",
+    "address": "222 Heritage Street",
+    "rooms": 35,
+    "room_types": [
+      {
+        "name": "Classic",
+        "price": 149.99,
+        "availability": 15
+      },
+      {
+        "name": "Heritage",
+        "price": 189.99,
+        "availability": 10
+      },
+      {
+        "name": "Royal",
+        "price": 249.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.7,
+    "reviews": 198,
+    "amenities": ["Antique Furnishings", "Garden", "Library", "Tea Room", "Guided Tours"],
+    "hotel_id": "hotel_005",
+    "country": "France",
+    "free_parking": false,
+    "free_wifi": true,
+    "city": "Paris",
+    "type": "Boutique",
+    "url": "www.historicinn.com",
+    "email": "concierge@historicinn.com",
+    "phone": "+33-1-5555-7890",
+    "geo": {
+      "lat": 48.8566,
+      "long": 2.3522
+    }
+  },
+  {
+    "name": "Palm Paradise Resort",
+    "address": "333 Tropical Boulevard",
+    "rooms": 180,
+    "room_types": [
+      {
+        "name": "Garden View",
+        "price": 159.99,
+        "availability": 70
+      },
+      {
+        "name": "Pool View",
+        "price": 199.99,
+        "availability": 50
+      },
+      {
+        "name": "Overwater Bungalow",
+        "price": 399.99,
+        "availability": 20
+      }
+    ],
+    "rating": 4.9,
+    "reviews": 623,
+    "amenities": ["Infinity Pool", "Private Beach", "Spa", "Water Sports", "Multiple Restaurants"],
+    "hotel_id": "hotel_006",
+    "country": "Thailand",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Phuket",
+    "type": "Resort",
+    "url": "www.palmparadise.com",
+    "email": "paradise@palmparadise.com",
+    "phone": "+66-76-555-1234",
+    "geo": {
+      "lat": 7.9519,
+      "long": 98.3381
+    }
+  },
+  {
+    "name": "Urban Loft Hotel",
+    "address": "444 Downtown Avenue",
+    "rooms": 90,
+    "room_types": [
+      {
+        "name": "Studio",
+        "price": 109.99,
+        "availability": 40
+      },
+      {
+        "name": "Loft",
+        "price": 159.99,
+        "availability": 30
+      },
+      {
+        "name": "Penthouse",
+        "price": 279.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.4,
+    "reviews": 356,
+    "amenities": ["Rooftop Bar", "Art Gallery", "Co-working Space", "Bicycle Rental", "Cafe"],
+    "hotel_id": "hotel_007",
+    "country": "Germany",
+    "free_parking": false,
+    "free_wifi": true,
+    "city": "Berlin",
+    "type": "Boutique",
+    "url": "www.urbanlofthotel.com",
+    "email": "stay@urbanlofthotel.com",
+    "phone": "+49-30-5555-6789",
+    "geo": {
+      "lat": 52.5200,
+      "long": 13.4050
+    }
+  },
+  {
+    "name": "Desert Oasis Resort",
+    "address": "555 Sand Dune Road",
+    "rooms": 110,
+    "room_types": [
+      {
+        "name": "Desert View",
+        "price": 149.99,
+        "availability": 45
+      },
+      {
+        "name": "Oasis Suite",
+        "price": 229.99,
+        "availability": 30
+      },
+      {
+        "name": "Royal Tent",
+        "price": 349.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.7,
+    "reviews": 289,
+    "amenities": ["Oasis Pool", "Desert Safari", "Spa", "Stargazing Deck", "Authentic Restaurant"],
+    "hotel_id": "hotel_008",
+    "country": "United Arab Emirates",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Dubai",
+    "type": "Resort",
+    "url": "www.desertoasisresort.com",
+    "email": "bookings@desertoasisresort.com",
+    "phone": "+971-4-555-7890",
+    "geo": {
+      "lat": 25.2048,
+      "long": 55.2708
+    }
+  },
+  {
+    "name": "Sakura Ryokan",
+    "address": "666 Cherry Blossom Lane",
+    "rooms": 40,
+    "room_types": [
+      {
+        "name": "Traditional",
+        "price": 139.99,
+        "availability": 20
+      },
+      {
+        "name": "Garden View",
+        "price": 179.99,
+        "availability": 15
+      },
+      {
+        "name": "Luxury Onsen",
+        "price": 259.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.8,
+    "reviews": 176,
+    "amenities": ["Hot Springs", "Traditional Garden", "Tea Ceremony", "Kaiseki Dining", "Meditation Space"],
+    "hotel_id": "hotel_009",
+    "country": "Japan",
+    "free_parking": false,
+    "free_wifi": true,
+    "city": "Kyoto",
+    "type": "Traditional",
+    "url": "www.sakuraryokan.com",
+    "email": "info@sakuraryokan.com",
+    "phone": "+81-75-555-1234",
+    "geo": {
+      "lat": 35.0116,
+      "long": 135.7681
+    }
+  },
+  {
+    "name": "Southern Cross Backpackers",
+    "address": "777 Traveler's Way",
+    "rooms": 60,
+    "room_types": [
+      {
+        "name": "Dorm Bed",
+        "price": 29.99,
+        "availability": 40
+      },
+      {
+        "name": "Private Room",
+        "price": 69.99,
+        "availability": 15
+      },
+      {
+        "name": "Family Room",
+        "price": 99.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.2,
+    "reviews": 412,
+    "amenities": ["Communal Kitchen", "Laundry", "Free Breakfast", "Tour Desk", "Social Events"],
+    "hotel_id": "hotel_010",
+    "country": "Australia",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Sydney",
+    "type": "Hostel",
+    "url": "www.southerncrossbackpackers.com",
+    "email": "hello@southerncrossbackpackers.com",
+    "phone": "+61-2-5555-6789",
+    "geo": {
+      "lat": -33.8688,
+      "long": 151.2093
+    }
+  }
+]
