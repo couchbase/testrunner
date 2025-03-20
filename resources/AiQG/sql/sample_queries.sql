@@ -1,11 +1,12 @@
-SELECT h.hotel_id, h.name AS hotel_name, h.city, h.country, h.rating, booking_stats.total_bookings, booking_stats.avg_price, booking_stats.most_booked_room FROM hotel h JOIN (SELECT b.hotel_id, COUNT(*) AS total_bookings, AVG(b.total_price) AS avg_price, ARRAY_AGG(b.room_type)[0] AS most_booked_room FROM bookings b GROUP BY b.hotel_id HAVING COUNT(*) > 2) AS booking_stats ON h.hotel_id = booking_stats.hotel_id WHERE h.rating > 4.0 ORDER BY booking_stats.total_bookings DESC, h.rating DESC;
- SELECT h.name AS name1, rt.name as name2, rt.price FROM hotel AS h UNNEST h.room_types AS rt UNNEST h.room_types AS rt2 WHERE rt.availability > 0 AND rt.price < rt2.price;
- SELECT h.name, rt.name FROM hotel AS h UNNEST h.room_types AS rt UNNEST h.room_types AS rt2 WHERE rt.name = rt2.name AND rt.availability <> rt2.availability;
- SELECT h.name, rt.name, r.name FROM hotel AS h UNNEST h.room_types AS rt UNNEST reviews AS r WHERE h.hotel_id = r.hotel_id AND rt.availability > 10 AND r.ratings.Overall > 4;
- SELECT h.name, rt.name, r.comments FROM hotel AS h UNNEST h.room_types AS rt UNNEST reviews AS r WHERE h.hotel_id = r.hotel_id AND r.ratings.Check_in /front desk > 3;
- SELECT h.name, rt.price, b.total_price FROM hotel AS h UNNEST h.room_types AS rt UNNEST bookings AS b WHERE h.hotel_id = b.hotel_id AND rt.name = b.room_type;
- SELECT u.name, h.name, b.total_price FROM users AS u UNNEST bookings AS b UNNEST hotel AS h WHERE u.user_id = b.user_id AND h.hotel_id = b.hotel_id AND b.payment_status = 'Completed';
- SELECT h.name, rt1.name AS room_type1, rt2.name AS room_type2 FROM hotel AS h UNNEST h.room_types AS rt1 UNNEST h.room_types AS rt2 WHERE rt1.price > rt2.price;
- SELECT h.name, rt.name, rt2.name FROM hotel AS h UNNEST h.room_types AS rt UNNEST h.room_types AS rt2 WHERE rt.name != rt2.name AND rt.availability + rt2.availability > 20;
- SELECT h.name, rt.name, r.ratings.Overall FROM hotel AS h UNNEST h.room_types AS rt UNNEST reviews AS r WHERE h.hotel_id = r.hotel_id AND rt.availability BETWEEN 5 AND 15;
-
+SELECT h.name, rt1.name AS room_type1, rt2.name AS room_type2 FROM hotel h UNNEST h.room_types AS rt1 UNNEST h.room_types AS rt2 WHERE rt1.name != rt2.name ORDER BY h.name LIMIT 5 OFFSET 2;
+SELECT h.name, rt.name AS room_type, rt.price FROM hotel h UNNEST h.room_types AS rt LET total_rooms = (SELECT COUNT(*) FROM bookings b WHERE b.hotel_id = h.hotel_id AND b.room_type = rt.name), available_rooms = rt.availability - total_rooms[0] WHERE available_rooms > 0 ORDER BY rt.price LIMIT 10 OFFSET 5;
+SELECT h.name, h.address, rt1.name AS room_type1, rt2.name AS room_type2 FROM hotel h UNNEST h.room_types AS rt1 UNNEST h.room_types AS rt2 LET avg_price = (rt1.price + rt2.price) / 2 WHERE rt1.name != rt2.name AND avg_price < 200 ORDER BY avg_price DESC LIMIT 4 OFFSET 2;
+SELECT h.name, rw.comments, rw.ratings.Overall AS overall_rating FROM hotel h JOIN reviews rw ON h.hotel_id = rw.hotel_id WHERE rw.ratings.Overall > 4 ORDER BY rw.ratings.Overall DESC LIMIT 5 OFFSET 2;
+SELECT b.booking_id, h.name, rt.price * b.room_count AS total_stay_price FROM bookings b JOIN hotel h ON b.hotel_id = h.hotel_id UNNEST h.room_types AS rt WHERE rt.name = b.room_type AND b.checkin >= "2023-10-01" AND b.checkout <= "2023-10-31" ORDER BY total_stay_price ASC LIMIT 8 OFFSET 5;
+SELECT h.city, AVG(rw.ratings.Overall) AS average_rating FROM hotel h JOIN reviews rw ON h.hotel_id = rw.hotel_id GROUP BY h.city HAVING AVG(rw.ratings.Overall) > 4 ORDER BY average_rating DESC LIMIT 6 OFFSET 4;
+SELECT b.booking_id, u.name, b.total_price FROM bookings b JOIN users u ON b.user_id = u.user_id WHERE b.payment_status = "Paid" ORDER BY b.total_price DESC LIMIT 10 OFFSET 10;
+SELECT h.name, h.rating FROM hotel h ORDER BY h.rating DESC OFFSET 5 LIMIT 10;
+SELECT b.booking_id, u.username FROM bookings b JOIN users u ON b.user_id = u.user_id ORDER BY b.checkin DESC OFFSET 3 LIMIT 7;
+SELECT h.city, COUNT(*) AS hotels_count FROM hotel h GROUP BY h.city ORDER BY hotels_count DESC OFFSET 2 LIMIT 5;
+SELECT u.username, SUM(b.total_price) AS total_spent FROM bookings b JOIN users u ON b.user_id = u.user_id WHERE b.payment_status = "Paid" GROUP BY u.username ORDER BY total_spent DESC OFFSET 5 LIMIT 10;
+SELECT rw.review_id, rw.comments FROM reviews rw ORDER BY rw.review_date DESC OFFSET 10 LIMIT 5;
