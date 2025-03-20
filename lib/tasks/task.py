@@ -18,6 +18,8 @@ from pathlib import Path
 import shutil
 from typing import Dict
 
+from click import command
+
 import crc32
 import logger
 import testconstants
@@ -6673,17 +6675,32 @@ class MagmaDocLoader(Task):
         if self.sdk_docloader.op_type == "create" and self.sdk_docloader.create_end == 0:
             self.sdk_docloader.create_end = self.sdk_docloader.end + 1
 
-        command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
+        if self.sdk_docloader.json_template == 'siftBigANN':
+            command = f"java -cp /root/DocLoader/target/magmadocloader/magmadocloader.jar SIFTLoader -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
                   f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \
                   f"-update_s {self.sdk_docloader.update_start} -update_e {self.sdk_docloader.update_end} " \
                   f"-delete_s {self.sdk_docloader.delete_start} -delete_e {self.sdk_docloader.delete_end} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_update} " \
-                  f"-dl {self.sdk_docloader.percent_delete} -rd 0 -mutate {self.sdk_docloader.mutate} " \
-                  f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
+                  f"-dl {self.sdk_docloader.percent_delete} -mutate {self.sdk_docloader.mutate} " \
+                  f"-docSize {self.sdk_docloader.doc_size}  -valueType {self.sdk_docloader.json_template} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
-                  f"-valueType {self.sdk_docloader.json_template} -dim {self.sdk_docloader.dim} " \
-                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} -maxTTL 1800"
+                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
+                  f"-baseVectorsFilePath /data/bigann/ "
+
+        else:
+            command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
+                      f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
+                      f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \
+                      f"-update_s {self.sdk_docloader.update_start} -update_e {self.sdk_docloader.update_end} " \
+                      f"-delete_s {self.sdk_docloader.delete_start} -delete_e {self.sdk_docloader.delete_end} " \
+                      f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_update} " \
+                      f"-dl {self.sdk_docloader.percent_delete} -mutate {self.sdk_docloader.mutate} " \
+                      f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
+                      f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
+                      f"-valueType {self.sdk_docloader.json_template} -dim {self.sdk_docloader.dim} " \
+                      f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
+                      f"-model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} -maxTTL 1800"
 
         self.log.info(command)
         try:

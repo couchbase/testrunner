@@ -561,7 +561,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         continue
                     index_code_book_memory_map[index] = stats_map[node][ks][index]['codebook_mem_usage']
         return index_code_book_memory_map, sum(index_code_book_memory_map.values())
-    
+
     def validate_shard_seggregation(self, shard_index_map):
         index_categories = ['scalar', 'vector', 'bhive']
         for shard, indices in shard_index_map.items():
@@ -2267,11 +2267,11 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
                                                     output=True, username=self.username, password=self.password,
-                                                    key_prefix=key_prefix, base64=base64, model=model)
+                                                   key_prefix=key_prefix, base64=base64, model=model, key_prefix=key_prefix)
                     if self.use_magma_loader:
                         task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
-                                                                generator=self.gen_create, pause_secs=1,
-                                                                timeout_secs=300, use_magma_loader=True)
+                                                                generator=self.gen_create,
+                                                                use_magma_loader=True)
                         task.result()
                     else:
                         tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,

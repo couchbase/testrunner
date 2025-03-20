@@ -178,7 +178,8 @@ class QueryDefinition(object):
             deployment_plan["similarity"] = self.similarity
         if self.scan_nprobes:
             deployment_plan["scan_nprobes"] = self.scan_nprobes
-        deployment_plan["persist_full_vector"] = self.persist_full_vector
+        if self.persist_full_vector is False:
+            deployment_plan["persist_full_vector"] = self.persist_full_vector
         if self.partition_by_fields:
             if not self.capella_run:
                 deployment_plan["num_partition"] = num_partition

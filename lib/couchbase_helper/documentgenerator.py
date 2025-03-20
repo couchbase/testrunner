@@ -775,7 +775,6 @@ class SDKDataLoader(object):
         self.delete_start = delete_start
         self.delete_end = delete_end
 
-
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1
         self.num_ops = self.end - self.start
