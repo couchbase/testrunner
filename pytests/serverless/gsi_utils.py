@@ -802,7 +802,8 @@ class GSIUtils(object):
                                                           num_replica=num_replicas, deploy_node_info=nodes_list,
                                                           train_list=trainlist, dimension=dimension,
                                                           description=description, similarity=similarity,
-                                                          scan_nprobes=scan_nprobes, bhive_index=bhive_index)
+                                                          scan_nprobes=scan_nprobes, bhive_index=bhive_index,
+                                                          persist_full_vector=index_gen.persist_full_vector)
             create_index_list.append(query)
         return create_index_list
 
