@@ -22,71 +22,68 @@ def load_schema_template(file_path: str) -> str:
         print(f"Error loading schema template: {str(e)}")
         return {}
 
-def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_file: str) -> List[str]:
+def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_file: str, seed: int ) -> List[str]:
     """Generate SQL++ queries using LangChain and OpenAI."""
     # Set the OpenAI API key
     os.environ["OPENAI_API_KEY"] = api_key
 
+    if seed is None:
+        seed = 42
+        
     # Initialize the chat model
-    model = init_chat_model("gpt-4o", model_provider="openai")
+    model = init_chat_model("gpt-4o", model_provider="openai", **{"seed": seed })
 
     # Load prompts from file
     try:
         with open(prompts_file, 'r') as f:
-            prompts = f.readlines()
+            prompt_content = f.read()
     except Exception as e:
         print(f"Error loading prompts file: {str(e)}")
         return []
 
-    if not isinstance(prompts, list):
-        print("Prompts file must contain an array of prompts")
-        return []
-
     all_queries = []
 
-    for prompt in prompts:
-        messages = [
-            SystemMessage("You are a Couchbase SQL++/N1QL expert. You are capable of writing complex SQL++/N1QL queries to fetch data from Couchbase."),
-            HumanMessage(f"Please use this JSON template to write the Couchbase SQL++/N1QL queries: {schema_template}"),
-            HumanMessage(prompt),
-            HumanMessage("Generate the queries in a single line ending with semicolon and no extra text, no bullet points, no quotes, no title/summary. Use alias for duplicate field names in the select clause.")
-        ]
+    messages = [
+        SystemMessage("You are a Couchbase SQL++/N1QL expert. You are capable of writing complex SQL++/N1QL queries to fetch data from Couchbase."),
+        HumanMessage(f"Please use this JSON template to write the Couchbase SQL++/N1QL queries: {schema_template}"),
+        HumanMessage(prompt_content),
+        HumanMessage("Generate the queries in a single line ending with semicolon and no extra text, no bullet points, no quotes, no title/summary. Use alias for duplicate field names in the select clause.")
+    ]
 
-        try:
-            # Get the response from the model
-            response = model.invoke(messages)
+    try:
+        # Get the response from the model
+        response = model.invoke(messages)
 
-            # Extract the generated queries
-            generated_text = response.content.strip()
+        # Extract the generated queries
+        generated_text = response.content.strip()
 
-            # Split the text into individual queries
-            queries = []
-            current_query = ""
+        # Split the text into individual queries
+        queries = []
+        current_query = ""
 
-            for line in generated_text.split('\n'):
-                line = line.strip()
-                if not line or line.startswith('--') or line.startswith('#'):
-                    continue
+        for line in generated_text.split('\n'):
+            line = line.strip()
+            if not line or line.startswith('--') or line.startswith('#'):
+                continue
 
-                current_query += " " + line
+            current_query += " " + line
 
-                if line.endswith(';'):
-                    queries.append(current_query.strip())
-                    current_query = ""
-
-            # Add the last query if it doesn't end with a semicolon
-            if current_query.strip():
-                if not current_query.strip().endswith(';'):
-                    current_query += ";"
+            if line.endswith(';'):
                 queries.append(current_query.strip())
+                current_query = ""
 
-            all_queries.extend(queries)
+        # Add the last query if it doesn't end with a semicolon
+        if current_query.strip():
+            if not current_query.strip().endswith(';'):
+                current_query += ";"
+            queries.append(current_query.strip())
 
-        except Exception as e:
-            print(f"Error generating queries with LangChain: {str(e)}")
-            continue
+        all_queries.extend(queries)
 
-    return all_queries  # Limit to the requested number of queries
+    except Exception as e:
+        print(f"Error generating queries with LangChain: {str(e)}")
+
+    return all_queries, seed  # Limit to the requested number of queries
 
 def connect_to_couchbase(ip: str, port: int, username: str, password: str, bucket_name: str) -> Tuple[Cluster, Any]:
     """Connect to Couchbase and return the cluster and bucket objects."""
@@ -154,29 +151,39 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None) -> N
         print(report)
         return
 
-    report = f"""
-Detailed Results:
-----------------
-"""
+    report = "Detailed Results:\n----------------"
 
-    for result in results:
-        report += f"\nQuery #{result['query_number']} - {result['status']}\n"
-        report += f"Timestamp: {result['timestamp']}\n"
-        report += f"Query: {result['query']}\n"
+    # Create files for successful and failed queries
+    stable_queries = "succesful_queries.sql" if not output_file else f"{output_file}_successful.sql"
+    reprompt_queries = "reprompt_queries" if not output_file else f"{output_file}_reprompt"
 
-        if result["status"] == "SUCCESS":
-            report += f"Execution Time: {result['execution_time']:.4f} seconds\n"
-            report += f"Rows Returned: {result.get('row_count', 'N/A')}\n"
-        else:
-            report += f"Error: {result['error']}\n"
+    with open(stable_queries, 'w') as sf, open(reprompt_queries, 'w') as ff:
+        for result in results:
+            report += f"\nQuery #{result['query_number']} - {result['status']}\n"
+            report += f"Timestamp: {result['timestamp']}\n"
+            report += f"Query: {result['query']}\n"
+
+            if result["status"] == "SUCCESS":
+                report += f"Execution Time: {result['execution_time']:.4f} seconds\n"
+                report += f"Rows Returned: {result.get('row_count', 'N/A')}\n"
+                # Write successful query to stable queries file
+                sf.write(f"{result['query']}\n\n")
+            else:
+                report += f"Error: {result['error']}\n"
+                # Write failed query and error to reprompt queries file
+                ff.write(f"-- Query #{result['query_number']}\n")
+                ff.write(f"-- Error: {result['error']}\n")
+                ff.write(f"{result['query']}\n\n")
 
     report += f'''
-N1QL Query Execution Summary
-===========================
-Total Queries: {total_count}
-Successful: {success_count}
-Failed: {total_count - success_count}
-Success Rate: {(success_count / total_count) * 100:.2f}%\n'''
+    N1QL Query Execution Summary
+    ===========================
+    Total Queries: {total_count}
+    Successful: {success_count}
+    Failed: {total_count - success_count}
+    Success Rate: {(success_count / total_count) * 100:.2f}%
+    Successful queries saved to: {stable_queries}
+    Failed queries saved to: {reprompt_queries}\n'''
 
     print(report)
 
@@ -197,6 +204,7 @@ def main():
     parser.add_argument("--openai-key", help="OpenAI API key (required if --generate is used)")
     parser.add_argument("--schema-file", help="schema template file (required if --generate is used)")
     parser.add_argument("--prompts-file", help="textfile containing query generation prompts (required if --generate is used)")
+    parser.add_argument("--seed", type=int, help="Random seed for query generation (optional)")
 
     # Couchbase connection options
     parser.add_argument("--ip", default="127.0.0.1", help="Couchbase server IP address")
@@ -241,10 +249,11 @@ def main():
             schema_template = load_schema_template(args.schema_file)
 
             print(f"Generating queries using LangChain and OpenAI...")
-            queries = generate_queries_with_langchain(
+            queries, seed = generate_queries_with_langchain(
                 args.openai_key,
                 schema_template,
                 args.prompts_file,
+                seed=args.seed
             )
 
             if not queries:
@@ -259,6 +268,7 @@ def main():
                     for query in queries:
                         f.write(f"{query}\n")
                 print(f"Saved generated queries to {args.save_queries}")
+                print(f"Seed used: {seed}")
         else:
             # Parse SQL file
             with open(args.sql_file, 'r') as f:
