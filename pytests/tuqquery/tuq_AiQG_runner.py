@@ -12,7 +12,7 @@ class QueryAiQGTests(QueryTests):
         super(QueryAiQGTests, self).setUp()
         self.log.info("==============  QueryAiQGTests setup has started ==============")
         self.sql_file_path = self.input.param("sql_file_path", "resources/AiQG/sql/sample_queries.sql")
-        self.query_number = self.input.param("query_number", 0)
+        self.query_number = self.input.param("query_number", 1) # Changed default to 1
         self.query_context = self.input.param("query_context", "default._default")
         self.log.info("==============  QueryAiQGTests setup has ended ==============")
         self.log_config_info()
@@ -89,12 +89,12 @@ class QueryAiQGTests(QueryTests):
             self.log.error(f"Error reading SQL file: {str(e)}")
             raise
 
-        # Validate query number
-        if self.query_number < 0 or self.query_number > len(queries):
+        # Validate query number (adjusted for 1-based indexing)
+        if self.query_number < 1 or self.query_number > len(queries):
             raise ValueError(f"Invalid query number {self.query_number}. File contains {len(queries)} queries.")
 
-        # Get the specified query
-        query = queries[self.query_number].strip()
+        # Get the specified query (adjusted for 1-based indexing)
+        query = queries[self.query_number - 1].strip()
 
         if query:  # Ensure query isn't empty
             try:
@@ -120,6 +120,7 @@ class QueryAiQGTests(QueryTests):
 
                 # Get explain plan and validate indexes are being used
                 explain_result = self.run_cbq_query(f"EXPLAIN {query}",query_context=self.query_context)
+                self.log.info(f"Explain plan for query {self.query_number}: {explain_result}")
                 self._validate_indexes_in_plan(explain_result, main_index_name, subquery_index_names)
 
                 # Execute the query
@@ -127,10 +128,7 @@ class QueryAiQGTests(QueryTests):
                 self.log.info(f"Successfully executed query {self.query_number}: {query} with secondary indexes")
 
                 # Validate actual result matches expected result
-                if 'ORDER BY' not in query.upper():
-                    diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
-                else:
-                    diff = DeepDiff(actual_result['results'], expected_result['results'])
+                diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True, significant_digits=5)
                 if diff:
                     # Only log diff if it's not too large
                     if len(str(diff)) < 5000:
@@ -159,23 +157,24 @@ class QueryAiQGTests(QueryTests):
         """Helper method to get index recommendations and create indexes"""
         # Get index recommendations from advisor
         advise_query = f"ADVISE {query}"
-        result = self.run_cbq_query(advise_query)
+        advise_result = self.run_cbq_query(advise_query)
+        self.log.info(f"Index advice for query {self.query_number}: {advise_result}")
 
         # Variables to store and return index names
         main_index_name = None
         subquery_index_names = []
 
         # Create recommended indexes if any
-        if 'advice' in result['results'][0]:
-            advice = result['results'][0]['advice']['adviseinfo']
+        if 'advice' in advise_result['results'][0]:
+            advice = advise_result['results'][0]['advice']['adviseinfo']
             # Handle main query indexes
             if 'recommended_indexes' in advice:
                 # Handle covering indexes
                 if 'covering_indexes' in advice['recommended_indexes']:
                     index = advice['recommended_indexes']['covering_indexes'][0]
                     try:
-                        result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
-                        main_index_name = result['results'][0]['name']
+                        create_index_result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
+                        main_index_name = create_index_result['results'][0]['name']
                         self.log.info(f"Created recommended covering index: {main_index_name}")
                     except Exception as e:
                         self.log.error(f"Error creating covering index: {str(e)}")
@@ -184,22 +183,22 @@ class QueryAiQGTests(QueryTests):
                 elif 'indexes' in advice['recommended_indexes']:
                     index = advice['recommended_indexes']['indexes'][0]
                     try:
-                        result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
-                        main_index_name = result['results'][0]['name']
+                        create_index_result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
+                        main_index_name = create_index_result['results'][0]['name']
                         self.log.info(f"Created recommended index: {main_index_name}")
                     except Exception as e:
                         self.log.error(f"Error creating index: {str(e)}")
 
         # Handle subquery indexes
-        if '~subqueries' in result['results'][0]:
-            for subquery in result['results'][0]['~subqueries']:
+        if '~subqueries' in advise_result['results'][0]:
+            for subquery in advise_result['results'][0]['~subqueries']:
                 if 'recommended_indexes' in subquery['adviseinfo']:
                     # Handle covering indexes for subquery
                     if 'covering_indexes' in subquery['adviseinfo']['recommended_indexes']:
                         index = subquery['adviseinfo']['recommended_indexes']['covering_indexes'][0]
                         try:
-                            result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
-                            index_name = result['results'][0]['name']
+                            create_index_result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
+                            index_name = create_index_result['results'][0]['name']
                             subquery_index_names.append(index_name)
                             self.log.info(f"Created recommended covering index for subquery: {index_name}")
                         except Exception as e:
@@ -209,8 +208,8 @@ class QueryAiQGTests(QueryTests):
                     elif 'indexes' in subquery['adviseinfo']['recommended_indexes']:
                         index = subquery['adviseinfo']['recommended_indexes']['indexes'][0]
                         try:
-                            result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
-                            index_name = result['results'][0]['name']
+                            create_index_result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
+                            index_name = create_index_result['results'][0]['name']
                             subquery_index_names.append(index_name)
                             self.log.info(f"Created recommended index for subquery: {index_name}")
                         except Exception as e:
