@@ -32,33 +32,44 @@ class QueryAiQGTests(QueryTests):
             shell = RemoteMachineShellConnection(self.master)
 
             for collection, config in collections_config.items():
-                # Create collection
-                self.run_cbq_query(f"CREATE COLLECTION default._default.{collection} IF NOT EXISTS")
-                self.log.info(f"Created collection: {collection}")
+                try:
+                    # Create collection
+                    self.run_cbq_query(f"CREATE COLLECTION default._default.{collection} IF NOT EXISTS")
+                    self.log.info(f"Created collection: {collection}")
 
-                # Copy data file to remote
-                src_file = f"resources/AiQG/data/{collection}.json"
-                des_file = f"/tmp/{collection}.json"
-                shell.copy_file_local_to_remote(src_file, des_file)
-                self.log.info(f"Copied {collection} data file to remote")
+                    # Copy data file to remote
+                    src_file = f"resources/AiQG/data/{collection}.json"
+                    des_file = f"/tmp/{collection}.json"
+                    shell.copy_file_local_to_remote(src_file, des_file)
+                    self.log.info(f"Copied {collection} data file to remote")
 
-                # Import data using cbimport
-                import_cmd = f"/opt/couchbase/bin/cbimport json --cluster {self.master.ip} "\
-                           f"--username {self.master.rest_username} "\
-                           f"--password {self.master.rest_password} "\
-                           f"--bucket default "\
-                           f"--scope-collection-exp _default.{collection} "\
-                           f"--format list "\
-                           f"--generate-key \"{config['prefix']}::%{config['key_field']}%\" "\
-                           f"--dataset file:///tmp/{collection}.json"
-                
-                output, error = shell.execute_command(import_cmd)
-                if error:
-                    self.log.error(f"Error importing {collection} data: {error}")
-                    raise Exception(f"Failed to import {collection} data")
-                self.log.info(f"Successfully imported {collection} data: {output}")
+                    # Import data using cbimport
+                    import_cmd = f"/opt/couchbase/bin/cbimport json --cluster {self.master.ip} "\
+                               f"--username {self.master.rest_username} "\
+                               f"--password {self.master.rest_password} "\
+                               f"--bucket default "\
+                               f"--scope-collection-exp _default.{collection} "\
+                               f"--format list "\
+                               f"--generate-key \"{config['prefix']}::%{config['key_field']}%\" "\
+                               f"--dataset file:///tmp/{collection}.json"
+                    
+                    output, error = shell.execute_command(import_cmd)
+                    if error:
+                        self.log.error(f"Error importing {collection} data: {error}")
+                        raise Exception(f"Failed to import {collection} data")
+                    self.log.info(f"Successfully imported {collection} data: {output}")
+
+                    # Create primary index and update statistics
+                    self.run_cbq_query(f"CREATE PRIMARY INDEX idx_primary_{collection} IF NOT EXISTS ON {collection}", query_context=self.query_context)
+                    self.run_cbq_query(f"UPDATE STATISTICS FOR {collection} INDEX(`idx_primary_{collection}`)", query_context=self.query_context)
+                    self.log.info(f"Created primary index and updated statistics for {collection}")
+
+                except Exception as e:
+                    self.log.error(f"Error processing collection {collection}: {str(e)}")
+                    raise
 
             shell.disconnect()
+
         except Exception as e:
             self.log.error(f"Error creating collections: {str(e)}")
             raise
@@ -98,7 +109,7 @@ class QueryAiQGTests(QueryTests):
 
         if query:  # Ensure query isn't empty
             try:
-                # Drop any existing indexes first
+                # Drop any existing indexes and use sequential scan for first query run
                 try:
                     result = self.run_cbq_query("SELECT name,keyspace_id,scope_id,bucket_id FROM system:indexes")
                     for index in result['results']:
