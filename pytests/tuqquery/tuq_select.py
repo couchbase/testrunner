@@ -634,3 +634,23 @@ class QuerySelectTests(QueryTests):
         }}]
         self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
     
+    def test_redact_string_literal(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT("secret")
+        ''')
+        expected_result = [{"$1": "xxxxxx"}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_number_literal(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(123)
+        ''')
+        expected_result = [{"$1": 111}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_array_literal(self):
+        result = self.run_cbq_query('''
+            SELECT REDACT(["secret", 123])
+        ''')
+        expected_result = [{"$1": ["xxxxxx", 111]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
