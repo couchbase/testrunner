@@ -6118,3 +6118,46 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(
                 "The retention_info.json file default retention period is wrong. The output is - "
                 "{}".format(output))
+
+    def test_not_allowed_to_delete_incremental_backups(self):
+        self.log.info("Test to ensure that the incremental backups with dependent backups are not"
+                      "allowed to be deleted")
+
+        # Creating multiple backups forming few cycles (full -> incr -> full)
+        output, error = self.create_backup_for_retention_tests()
+        output = json.loads(output[0])
+
+        # backup_lists contains the name of all the backup taken in the above step. This would be
+        # referenced further in the test
+        backup_lists = []
+        for backup in output["repos"][0]["backups"]:
+            backup_lists.append(backup["date"])
+
+        self.log.info("The backups in the archive repo are - {}".format(backup_lists))
+
+        _, output, error = self.backup_remove(backup_range=backup_lists[2],
+                                              verify_cluster_stats=False)
+        self.log.info("The output of remove command is - {}".format(output))
+
+        final_output = ""
+        for str in output:
+            final_output = final_output + str
+
+        expected_output = "Use '--disable-safe-remove-check' to disable this check if you are sure " \
+                          "you want to remove these backups"
+        if expected_output not in final_output:
+            self.fail("The expected error of not able to remove backup is not present in the "
+                      "output. The output is - {}".format(output))
+
+        self.log.info("Removing incremental backup with --disable-safe-remove-check flag")
+
+        _, output, error = self.backup_remove(backup_range=backup_lists[2],
+                                              verify_cluster_stats=False,
+                                              disable_safe_remove_check=True)
+
+        if error in "Removing of backup failed":
+            self.fail("Error when removing backup from the backups in the repo: {}".format(error))
+
+        expected_output = f"Backup `{backup_lists[2]}` deleted successfully"
+        if expected_output not in output[0]:
+            self.fail("The backup didn't delete successfully. The output is - {}".format(output))

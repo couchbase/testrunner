@@ -1312,7 +1312,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return False, output, "Compacting backup failed."
         remote_client.disconnect()
 
-    def backup_remove(self, backup_range=None, verify_cluster_stats=True):
+    def backup_remove(self, backup_range=None, verify_cluster_stats=True,
+                      disable_safe_remove_check=False):
         args = (
             f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
@@ -1321,6 +1322,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         if backup_range is not None:
             args += " --backups {0}".format(backup_range)
+
+        if disable_safe_remove_check:
+            args += " --disable-safe-remove-check"
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
@@ -3225,6 +3229,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
              self.cli_command_location, subcomand))
 
         return output, error
+
+    def pause_active_repository(self):
+        rest = RestConnection(self.master)
+        params = {}
+        api = rest.baseUrl + f"/api/v1/cluster/self/repository/active/{self.backupset.name}/pause"
+        params = urllib.parse.urlencode(params)
+        return rest._http_request(api, "POST", params)
 
 class Backupset:
     def __init__(self):
