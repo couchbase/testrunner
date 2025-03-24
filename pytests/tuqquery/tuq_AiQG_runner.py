@@ -135,8 +135,83 @@ class QueryAiQGTests(QueryTests):
                 self._validate_indexes_in_plan(explain_result, main_index_name, subquery_index_names)
 
                 # Execute the query
-                actual_result = self.run_cbq_query(query,query_context=self.query_context)
-                self.log.info(f"Successfully executed query {self.query_number}: {query} with secondary indexes")
+                memory_quota = self.input.param("memory_quota", 100)
+                timeout = self.input.param("timeout", "120s")
+                compare_cbo = self.input.param("compare_cbo", False)
+                
+                if compare_cbo:
+                    # Get explain plan without CBO
+                    explain_no_cbo = self.run_cbq_query(f"EXPLAIN {query}", query_context=self.query_context,
+                                                       query_params={'use_cbo': False})
+                    explain_str = str(explain_no_cbo)
+                    # Check that CBO keywords are NOT present when CBO is disabled
+                    if any(keyword in explain_str for keyword in ['optimizer_estimates', 'cardinality', 'fr_cost']):
+                        self.log.error(f"Explain plan without CBO: {explain_no_cbo}")
+                        self.fail(f"Explain plan without CBO should not contain CBO keywords for query {self.query_number}")
+
+                    # Get explain plan with CBO
+                    explain_cbo = self.run_cbq_query(f"EXPLAIN {query}", query_context=self.query_context,
+                                                    query_params={'use_cbo': True})
+                    explain_str = str(explain_cbo)
+                    # Check that CBO keywords are present when CBO is enabled
+                    if not all(keyword in explain_str for keyword in ['optimizer_estimates', 'cardinality', 'fr_cost']):
+                        self.log.error(f"Explain plan with CBO: {explain_cbo}")
+                        self.fail(f"Explain plan with CBO missing required keywords for query {self.query_number}")
+
+                    # Run with CBO disabled
+                    self.log.info(f"Executing query {self.query_number} without CBO...")
+                    result_no_cbo = self.run_cbq_query(query, query_context=self.query_context, 
+                                                      query_params={'memory_quota': memory_quota, 
+                                                                  'timeout': timeout,
+                                                                  'use_cbo': False})
+                    # Parse execution time to milliseconds
+                    time_str_no_cbo = result_no_cbo['metrics']['executionTime']
+                    if time_str_no_cbo.endswith('ms'):
+                        time_no_cbo = float(time_str_no_cbo[:-2])
+                    elif time_str_no_cbo.endswith('s'):
+                        time_no_cbo = float(time_str_no_cbo[:-1]) * 1000
+                    elif time_str_no_cbo.endswith('m'):
+                        time_no_cbo = float(time_str_no_cbo[:-1]) * 60 * 1000
+
+                    self.log.info(f"Executing query {self.query_number} with CBO...")
+                    result_cbo = self.run_cbq_query(query, query_context=self.query_context,
+                                                   query_params={'memory_quota': memory_quota,
+                                                               'timeout': timeout, 
+                                                               'use_cbo': True})
+                    time_str_cbo = result_cbo['metrics']['executionTime']
+                    if time_str_cbo.endswith('ms'):
+                        time_cbo = float(time_str_cbo[:-2])
+                    elif time_str_cbo.endswith('s'):
+                        time_cbo = float(time_str_cbo[:-1]) * 1000
+                    elif time_str_cbo.endswith('m'):
+                        time_cbo = float(time_str_cbo[:-1]) * 60 * 1000
+                    
+                    # Compare results
+                    self.log.info("Comparing results between CBO and non-CBO runs...")
+                    diff = DeepDiff(result_cbo['results'], result_no_cbo['results'], 
+                                  ignore_order=True, significant_digits=5)
+                    if diff:
+                        if len(str(diff)) < 5000:
+                            self.log.error(f"Results do not match between CBO and non-CBO runs for query {self.query_number}. Differences: {diff}")
+                        else:
+                            self.log.error(f"Results do not match between CBO and non-CBO runs for query {self.query_number}. Differences too large to display.")
+                        self.fail(f"Results do not match between CBO and non-CBO runs for query {self.query_number}")
+                    
+                    # Compare execution times from metrics
+                    time_diff_percent = ((time_no_cbo - time_cbo) / time_no_cbo) * 100
+                    self.log.info(f"Query {self.query_number} execution times - No CBO: {time_str_no_cbo}, With CBO: {time_str_cbo}")
+                    self.log.info(f"CBO improved execution time by {time_diff_percent:.1f}%")
+                    
+                    if time_cbo > time_no_cbo * 1.33:  # Allow 33% margin
+                        self.log.error(f"CBO execution was significantly slower for query {self.query_number}")
+                        self.fail(f"CBO execution was {((time_cbo - time_no_cbo) / time_no_cbo) * 100:.1f}% slower than non-CBO for query {self.query_number}")
+                    
+                    actual_result = result_cbo  # Use CBO result for further validation
+                else:
+                    # Original execution path
+                    actual_result = self.run_cbq_query(query, query_context=self.query_context, 
+                                                     query_params={'memory_quota': memory_quota, 'timeout': timeout})
+                    self.log.info(f"Successfully executed query {self.query_number}: {query} with secondary indexes, memory_quota={memory_quota} and timeout={timeout}")
 
                 # Validate actual result matches expected result
                 diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True, significant_digits=5)
