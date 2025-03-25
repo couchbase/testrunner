@@ -15,7 +15,6 @@ The N1QL Query Test Generator consists of:
 ### 1. Generate Queries
 
 Use the `AiQG.py` script to generate complex N1QL queries:
-
 ```
 python scripts/AiQG/AiQG.py --generate \
   --openai-key YOUR_OPENAI_API_KEY \
@@ -87,8 +86,15 @@ The test runner (`pytests/tuqquery/tuq_AiQG_runner.py`) executes the generated q
 1. Running the query without indexes to get expected results
 2. Getting index recommendations from the advisor
 3. Creating recommended indexes
-4. Running the query with indexes
-5. Comparing results to ensure they match
+4. Running the query with indexes and optional parameters:
+   - `memory_quota`: Memory quota in MB for query execution (default: 100)
+   - `timeout`: Query timeout duration (default: "120s")
+   - `compare_cbo`: Enable comparison between CBO and non-CBO execution (default: false)
+5. When `compare_cbo=true`:
+   - Executes query with and without CBO
+   - Compares execution times and results
+   - Validates CBO plan contains required optimization metrics
+6. Comparing results with and without indexes to ensure they match
 
 ## Customization
 

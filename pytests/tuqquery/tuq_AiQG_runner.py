@@ -138,8 +138,10 @@ class QueryAiQGTests(QueryTests):
                 memory_quota = self.input.param("memory_quota", 100)
                 timeout = self.input.param("timeout", "120s")
                 compare_cbo = self.input.param("compare_cbo", False)
-                
+
                 if compare_cbo:
+                    # Wait for 3 seconds for stats to be updated
+                    time.sleep(3)
                     # Get explain plan without CBO
                     explain_no_cbo = self.run_cbq_query(f"EXPLAIN {query}", query_context=self.query_context,
                                                        query_params={'use_cbo': False})
@@ -185,7 +187,7 @@ class QueryAiQGTests(QueryTests):
                         time_cbo = float(time_str_cbo[:-1]) * 1000
                     elif time_str_cbo.endswith('m'):
                         time_cbo = float(time_str_cbo[:-1]) * 60 * 1000
-                    
+
                     # Compare results
                     self.log.info("Comparing results between CBO and non-CBO runs...")
                     diff = DeepDiff(result_cbo['results'], result_no_cbo['results'], 
@@ -196,14 +198,15 @@ class QueryAiQGTests(QueryTests):
                         else:
                             self.log.error(f"Results do not match between CBO and non-CBO runs for query {self.query_number}. Differences too large to display.")
                         self.fail(f"Results do not match between CBO and non-CBO runs for query {self.query_number}")
-                    
+
                     # Compare execution times from metrics
                     time_diff_percent = ((time_no_cbo - time_cbo) / time_no_cbo) * 100
                     self.log.info(f"Query {self.query_number} execution times - No CBO: {time_str_no_cbo}, With CBO: {time_str_cbo}")
                     self.log.info(f"CBO improved execution time by {time_diff_percent:.1f}%")
-                    
+
                     if time_cbo > time_no_cbo * 1.33:  # Allow 33% margin
                         self.log.error(f"CBO execution was significantly slower for query {self.query_number}")
+                        self.log.error(f"Explain plan without CBO: {explain_no_cbo}")
                         self.fail(f"CBO execution was {((time_cbo - time_no_cbo) / time_no_cbo) * 100:.1f}% slower than non-CBO for query {self.query_number}")
                     
                     actual_result = result_cbo  # Use CBO result for further validation
