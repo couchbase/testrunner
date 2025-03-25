@@ -233,20 +233,23 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
     if prompts_file:
         prompt_base = os.path.splitext(prompts_file)[0]
         prompt_base = prompt_base.split('/')[-1]
-        stable_queries = f"{prompt_base}_successful_queries_{seed}.sql"
-        if reprompt:
-            reprompt_queries = f"{prompt_base}_reprompt_queries_{seed}_reprompt.txt"
+        if output_file:
+            successful_queries = f"{output_file}_successful_{seed}.sql"
         else:
-            reprompt_queries = f"{prompt_base}_reprompt_queries_{seed}.txt"
+            successful_queries = f"{prompt_base}_successful_queries_{seed}.sql"
+        if reprompt:
+            if output_file:
+                failed_queries = f"{output_file}_failed_{seed}.txt"
+            else:
+                failed_queries = f"{prompt_base}_reprompt_queries_failed_{seed}.txt"
+        else:
+            failed_queries = f"{prompt_base}_reprompt_queries_{seed}.txt"
     else:
-        stable_queries = "successful_queries.sql" if not output_file else f"{output_file}_successful.sql"
-        if reprompt:
-            reprompt_queries = "reprompt_queries_reprompt.txt" if not output_file else f"{output_file}_reprompt.txt"
-        else:
-            reprompt_queries = "reprompt_queries.txt" if not output_file else f"{output_file}_reprompt.txt"
+        successful_queries = "successful_queries.sql" if not output_file else f"{output_file}_successful.sql"
+        failed_queries = "failed_queries.txt" if not output_file else f"{output_file}_failed.txt"
 
     # Open files in append mode to add to existing files or create new ones
-    with open(stable_queries, 'a+') as sf, open(reprompt_queries, 'a+') as ff:
+    with open(successful_queries, 'a+') as sf, open(failed_queries, 'a+') as ff:
         for result in results:
             report += f"\nQuery #{result['query_number']} - {result['status']}\n"
             report += f"Timestamp: {result['timestamp']}\n"
@@ -271,8 +274,8 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
     Successful: {success_count}
     Failed: {total_count - success_count}
     Success Rate: {(success_count / total_count) * 100:.2f}%
-    Successful queries saved to: {stable_queries}
-    Failed queries saved to: {reprompt_queries}\n'''
+    Successful queries saved to: {successful_queries}
+    Failed queries saved to: {failed_queries}\n'''
 
     print(report)
 
