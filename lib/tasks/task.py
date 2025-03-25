@@ -18,8 +18,6 @@ from pathlib import Path
 import shutil
 from typing import Dict
 
-from click import command
-
 import crc32
 import logger
 import testconstants
