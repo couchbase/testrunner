@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Tuple
 from couchbase.cluster import Cluster, ClusterOptions
 from couchbase.auth import PasswordAuthenticator
 from couchbase.exceptions import CouchbaseException
+import re
 
 # LangChain imports
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -21,6 +22,19 @@ def load_schema_template(file_path: str) -> str:
     except Exception as e:
         print(f"Error loading schema template: {str(e)}")
         return {}
+
+def connect_to_couchbase(ip: str, port: int, username: str, password: str, bucket_name: str) -> Tuple[Cluster, Any]:
+    """Connect to Couchbase and return the cluster and bucket objects."""
+    # Format the connection string with the provided IP and port
+    connection_string = f"couchbase://{ip}:{port}"
+
+    auth = PasswordAuthenticator(username, password)
+    options = ClusterOptions(auth)
+
+    cluster = Cluster(connection_string, options)
+    bucket = cluster.bucket(bucket_name)
+
+    return cluster, bucket
 
 def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_file: str, seed: int ) -> List[str]:
     """Generate SQL++ queries using LangChain and OpenAI."""
@@ -85,18 +99,80 @@ def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_
 
     return all_queries, seed  # Limit to the requested number of queries
 
-def connect_to_couchbase(ip: str, port: int, username: str, password: str, bucket_name: str) -> Tuple[Cluster, Any]:
-    """Connect to Couchbase and return the cluster and bucket objects."""
-    # Format the connection string with the provided IP and port
-    connection_string = f"couchbase://{ip}:{port}"
+def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: str, seed: int, cluster: Cluster, query_bucket: str) -> List[str]:
+    """Reprompt OpenAI to fix failed queries using error messages."""
+    os.environ["OPENAI_API_KEY"] = api_key
 
-    auth = PasswordAuthenticator(username, password)
-    options = ClusterOptions(auth)
+    bucket = cluster.bucket(query_bucket)
 
-    cluster = Cluster(connection_string, options)
-    bucket = cluster.bucket(bucket_name)
+    if seed is None:
+        seed = 42
+    model = init_chat_model("gpt-4", model_provider="openai", **{"seed": seed})
+    fixed_queries = []
 
-    return cluster, bucket
+    try:
+        with open(reprompt_file, 'r') as f:
+            content = f.read()
+            query_blocks = content.split('\n\n')
+
+        for block in query_blocks:
+            lines = block.strip().split('\n')
+            if len(lines) >= 3:
+                # Extract error and query from the block
+                error_line = lines[1].replace('-- Error: ', '')
+                query = lines[2]
+
+                # Parse error details
+                error_code = None
+                error_msg = None
+                
+                if 'first_error_code' in error_line:
+                    # Extract error code and message from the error context
+                    error_match = re.search(r"'first_error_code': (\d+)", error_line)
+                    if error_match:
+                        error_code = error_match.group(1)
+                        try:
+                            finderr_query = f"select e.reason, e.user_action from finderr({error_code}) e"
+                            # Execute the query using the scope
+                            query_result = bucket.query(finderr_query)
+                            # Materialize the results to ensure query execution completes
+                            rows = [row for row in query_result]
+                            additional_info = rows[0]['user_action']
+                            print(f"Additional info: {additional_info}")
+                        except CouchbaseException as e:
+                            raise e
+                        except Exception as e:
+                            raise Exception(f"Unexpected error: {str(e)}")
+                    
+                    msg_match = re.search(r"'first_error_message': \"([^\"]+)\"", error_line)
+                    if msg_match:
+                        error_msg = msg_match.group(1)
+                else:
+                    # For simpler error messages, use the whole line
+                    error_msg = error_line
+
+                messages = [
+                    SystemMessage("You are a Couchbase SQL++/N1QL expert. Fix the following failed query based on the error message."),
+                    HumanMessage(f"Schema template: {schema_template}"),
+                    HumanMessage(f"Failed query: {query}"),
+                    HumanMessage(f"Error code: {error_code}"),
+                    HumanMessage(f"Error message: {error_msg}"),
+                    HumanMessage(f"Additional info: {additional_info}"),
+                    HumanMessage("Return only the fixed query with no additional text or explanation. One query per line.")
+                ]
+
+                response = model.invoke(messages)
+                fixed_query = response.content.strip()
+                
+                if not fixed_query.endswith(';'):
+                    fixed_query += ';'
+                    
+                fixed_queries.append(fixed_query)
+
+    except Exception as e:
+        print(f"Error reprompting queries: {str(e)}")
+
+    return fixed_queries,seed
 
 def execute_queries(cluster: Cluster, queries: List[str], query_context: str = None) -> List[Dict[str, Any]]:
     """Execute each query and track results."""
@@ -141,7 +217,7 @@ def execute_queries(cluster: Cluster, queries: List[str], query_context: str = N
 
     return results
 
-def generate_report(results: List[Dict[str, Any]], output_file: str = None) -> None:
+def generate_report(results: List[Dict[str, Any]], output_file: str = None, prompts_file: str = None, seed: int = None, reprompt: str = None) -> None:
     """Generate a report of query execution results."""
     success_count = sum(1 for r in results if r["status"] == "SUCCESS")
     total_count = len(results)
@@ -153,11 +229,24 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None) -> N
 
     report = "Detailed Results:\n----------------"
 
-    # Create files for successful and failed queries
-    stable_queries = "succesful_queries.sql" if not output_file else f"{output_file}_successful.sql"
-    reprompt_queries = "reprompt_queries" if not output_file else f"{output_file}_reprompt"
+    # Create files for successful and failed queries based on prompt file name
+    if prompts_file:
+        prompt_base = os.path.splitext(prompts_file)[0]
+        prompt_base = prompt_base.split('/')[-1]
+        stable_queries = f"{prompt_base}_successful_queries_{seed}.sql"
+        if reprompt:
+            reprompt_queries = f"{prompt_base}_reprompt_queries_{seed}_reprompt.txt"
+        else:
+            reprompt_queries = f"{prompt_base}_reprompt_queries_{seed}.txt"
+    else:
+        stable_queries = "successful_queries.sql" if not output_file else f"{output_file}_successful.sql"
+        if reprompt:
+            reprompt_queries = "reprompt_queries_reprompt.txt" if not output_file else f"{output_file}_reprompt.txt"
+        else:
+            reprompt_queries = "reprompt_queries.txt" if not output_file else f"{output_file}_reprompt.txt"
 
-    with open(stable_queries, 'w') as sf, open(reprompt_queries, 'w') as ff:
+    # Open files in append mode to add to existing files or create new ones
+    with open(stable_queries, 'a+') as sf, open(reprompt_queries, 'a+') as ff:
         for result in results:
             report += f"\nQuery #{result['query_number']} - {result['status']}\n"
             report += f"Timestamp: {result['timestamp']}\n"
@@ -199,10 +288,11 @@ def main():
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--sql-file", help="Path to the SQL file containing queries")
     input_group.add_argument("--generate", action="store_true", help="Generate queries using LangChain and OpenAI")
+    input_group.add_argument("--reprompt-file", help="Path to file containing failed queries to reprompt")
 
     # Generation options
-    parser.add_argument("--openai-key", help="OpenAI API key (required if --generate is used)")
-    parser.add_argument("--schema-file", help="schema template file (required if --generate is used)")
+    parser.add_argument("--openai-key", help="OpenAI API key (required if --generate or --reprompt-file is used)")
+    parser.add_argument("--schema-file", help="schema template file (required if --generate or --reprompt-file is used)")
     parser.add_argument("--prompts-file", help="textfile containing query generation prompts (required if --generate is used)")
     parser.add_argument("--seed", type=int, help="Random seed for query generation (optional)")
 
@@ -217,7 +307,6 @@ def main():
 
     # Output options
     parser.add_argument("--output", help="Output file for the report (optional)")
-    parser.add_argument("--save-queries", help="Save generated queries to a file (optional)")
 
     args = parser.parse_args()
 
@@ -238,11 +327,26 @@ def main():
         if not os.path.exists(args.prompts_file):
             print(f"Error: Prompts file '{args.prompts_file}' not found")
             return
+    elif args.reprompt_file:
+        if not args.openai_key:
+            print("Error: --openai-key is required when using --reprompt-file")
+            return
+        if not args.schema_file:
+            print("Error: --schema-file is required when using --reprompt-file") 
+            return
+        if not os.path.exists(args.reprompt_file):
+            print(f"Error: Reprompt file '{args.reprompt_file}' not found")
+            return
     elif args.sql_file and not os.path.exists(args.sql_file):
         print(f"Error: SQL file '{args.sql_file}' not found")
         return
 
     try:
+        # Connect to Couchbase
+        print(f"Connecting to Couchbase at {args.ip}:{args.port}...")
+        cluster, bucket = connect_to_couchbase(args.ip, args.port, args.username, args.password, args.bucket)
+        print("Connected successfully")
+        
         # Get queries either from file or by generating them
         if args.generate:
             print(f"Loading schema template from {args.schema_file}...")
@@ -262,13 +366,25 @@ def main():
 
             print(f"Generated {len(queries)} queries.")
 
-            # Save queries to file if requested
-            if args.save_queries:
-                with open(args.save_queries, 'w') as f:
-                    for query in queries:
-                        f.write(f"{query}\n")
-                print(f"Saved generated queries to {args.save_queries}")
-                print(f"Seed used: {seed}")
+        elif args.reprompt_file:
+            print(f"Loading schema template from {args.schema_file}...")
+            schema_template = load_schema_template(args.schema_file)
+
+            print(f"Reprompting failed queries using LangChain and OpenAI...")
+            queries,seed = reprompt_with_langchain(
+                args.openai_key,
+                args.reprompt_file,
+                schema_template,
+                seed=args.seed,
+                cluster=cluster,
+                query_bucket=args.bucket
+            )
+
+            if not queries:
+                print("No queries were fixed. Exiting.")
+                return
+
+            print(f"Fixed {len(queries)} queries.")
         else:
             # Parse SQL file
             with open(args.sql_file, 'r') as f:
@@ -278,17 +394,20 @@ def main():
             queries = [q.strip() for q in content.split(';') if q.strip()]
             print(f"Found {len(queries)} queries in {args.sql_file}")
 
-        # Connect to Couchbase
-        print(f"Connecting to Couchbase at {args.ip}:{args.port}...")
-        cluster, bucket = connect_to_couchbase(args.ip, args.port, args.username, args.password, args.bucket)
-        print("Connected successfully")
-
         # Execute queries
         print(f"Executing queries with context: {args.query_context}...")
         results = execute_queries(cluster, queries, args.query_context)
 
+        file_name = None
+        if args.generate:
+            file_name = args.prompts_file
+        elif args.reprompt_file:
+            file_name = args.reprompt_file.split('_reprompt')[0]
+        else:
+            file_name = None
+
         # Generate report
-        generate_report(results, args.output)
+        generate_report(results, output_file=args.output, prompts_file=file_name, seed=seed, reprompt=args.reprompt_file)
 
     except Exception as e:
         print(f"Error: {str(e)}")
