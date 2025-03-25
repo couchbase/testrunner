@@ -2267,7 +2267,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
                                                     output=True, username=self.username, password=self.password,
-                                                   key_prefix=key_prefix, base64=base64, model=model, key_prefix=key_prefix)
+                                                    key_prefix=key_prefix, base64=base64, model=model)
                     if self.use_magma_loader:
                         task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
                                                                 generator=self.gen_create,
@@ -3097,22 +3097,22 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition` FROM system:indexes"
         result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        
+
         simplified_results = []
         # Add select query field for each index
-        for index in result['results']:    
+        for index in result['results']:
             # Build the keyspace string
             bucket = index['bucket_id']
             scope = index.get('scope_id', '_default')
             collection = index.get('keyspace_id', '_default')
             keyspace = f"`{bucket}`.`{scope}`.`{collection}`"
-            
+
             where_clause = ""
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
-                
+
             count_query = f"SELECT COUNT(*) FROM {keyspace} {where_clause}"
-            
+
             # Execute the count query
             try:
                 count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=self.n1ql_node)
@@ -3120,15 +3120,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             except Exception as e:
                 self.log.error(f"Error executing count query for index {index['name']}: {str(e)}")
                 count = 0
-            
+
             # Add only name and count to results
             simplified_results.append({
                 "name": f"default:{bucket}.{scope}.{collection}.{index['name']}",
                 "count": count
             })
-            
+
         return simplified_results
-    
+
     def get_item_counts_from_index_stats(self):
         """
         Gets item count for all indexes using the /stats endpoint
@@ -3150,14 +3150,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                         index_counts_map[f"{index_path}.{index_name}"] += items_count
                     else:
                         index_counts_map[f"{index_path}.{index_name}"] = items_count
-        
+
         # Convert map to list format
         index_counts = [
-            {"name": name, "count": count} 
+            {"name": name, "count": count}
             for name, count in index_counts_map.items()
         ]
         return index_counts
-    
+
     def compare_item_counts_between_kv_and_gsi(self):
         kv_map = self.get_item_counts_from_kv()
         index_map = self.get_item_counts_from_index_stats()
@@ -3177,7 +3177,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 error_obj.append(error)
         if error_obj:
             raise Exception(f"Counts don't match for the following indexes: {error_obj}")
-    
+
     def get_all_array_index_names(self):
         """Returns a list of all array indexes in the cluster
         """
@@ -3201,7 +3201,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         api = f"/api/v1/stats/storage"
         status, content, _ = rest.http_request(api)
         if not status:
-            raise Exception(f"Error getting storage stats: {content}") 
+            raise Exception(f"Error getting storage stats: {content}")
         storage_stats = json.loads(content)
         index_stats = []
         # Process and format the storage stats
@@ -3214,7 +3214,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     "mainstore_count": index_stats.get("MainStore", {}).get("items_count", 0),
                     "backstore_count": index_stats.get("BackStore", {}).get("items_count", 0)
                 }
-                index_stats.append(stat_obj)      
+                index_stats.append(stat_obj)
         return index_stats
 
     def backstore_mainstore_check(self):
@@ -3260,7 +3260,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             if used_space > threshold_gb:
                 self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
                 raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
-    
+
     def get_storage_directory_used_space(self, node, storage_dir):
         """
         Fetches used space for storage directory
@@ -3281,7 +3281,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         finally:
             shell.disconnect()
         return used_space
-    
+
     def drop_all_indexes(self):
         """
         Drops all indexes in the cluster except system indexes
@@ -3293,7 +3293,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for index in result['results']:
             try:
                 bucket = index['bucket_id']
-                scope = index.get('scope_id', '_default') 
+                scope = index.get('scope_id', '_default')
                 collection = index.get('keyspace_id', '_default')
                 index_name = index['name']
                 if bucket == '_system':
@@ -3304,7 +3304,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             except Exception as e:
                 self.log.error(f"Error dropping index {index_name}: {str(e)}")
         self.log.info("Finished dropping indexes")
-    
+
     def validate_replica_indexes_item_counts(self):
         """
         Gets item counts for all replica indexes and validates counts match across replicas.
@@ -3316,7 +3316,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = RestConnection(indexer_nodes[0])
         index_metadata = rest.get_indexer_metadata()['status']
-        
+
         # Group indexes by definition ID to compare replicas
         defn_groups = {}
         for index in index_metadata:
@@ -3326,12 +3326,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             if defn_id not in defn_groups:
                 defn_groups[defn_id] = []
             defn_groups[defn_id].append(index)
-        
+
         # Compare counts across replicas
         for defn_id, replicas in defn_groups.items():
             if len(replicas) <= 1:  # Skip non-replica indexes
                 continue
-                
+
             # Get counts for each replica
             replica_counts = {}
             for replica in replicas:
@@ -3341,7 +3341,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 collection = replica.get('collection', '_default')
                 replica_id = replica['replicaId']
                 is_partitioned = 'partitionId' in replica
-                
+
                 # Initialize count for this replica
                 if replica_id not in replica_counts:
                     replica_counts[replica_id] = {
@@ -3350,13 +3350,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                         'nodes': set(),
                         'is_partitioned': is_partitioned
                     }
-                
+
                 # Get stats from all nodes for partitioned indexes, or hosting node for non-partitioned
                 for node in indexer_nodes:
                     rest = RestConnection(node)
                     stats = rest.get_index_stats()
                     index_key = f"default:{bucket}.{scope}.{collection}"
-                    
+
                     if index_key in stats:
                         # For partitioned indexes, need to look for partition suffixes
                         matching_indexes = []
@@ -3367,14 +3367,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                                     matching_indexes.append(stat_index)
                             elif stat_index == index_name:
                                 matching_indexes.append(stat_index)
-                        
+
                         # Sum up counts across all partitions/replicas on this node
                         for matching_index in matching_indexes:
                             if matching_index in stats[index_key]:
                                 count = stats[index_key][matching_index].get('items_count', 0)
                                 replica_counts[replica_id]['count'] += count
                                 replica_counts[replica_id]['nodes'].add(node.ip)
-            
+
             # Compare counts between replicas
             if len(replica_counts) > 1:
                 base_count = None
@@ -3392,19 +3392,19 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.log.error(f"Count mismatch found for index {replicas[0]['name']}: {replica_counts}")
                         errors.append(error)
                         break
-                    
+
                 # Log the successful comparison
                 self.log.info(f"Index {replicas[0]['name']} counts: {replica_counts}")
         return errors
-    
+
     def validate_no_pending_mutations(self, timeout=1800):
         """
         Validates that there are no pending mutations by checking num_docs_pending stats.
         Retries for specified timeout period.
-        
+
         Args:
             timeout (int): Maximum time in seconds to wait for pending mutations to clear
-            
+
         Returns:
             bool: True if no pending mutations found, False otherwise
         """
@@ -3412,19 +3412,19 @@ class BaseSecondaryIndexingTests(QueryTests):
         while time.time() < end_time:
             index_stats = self.index_rest.get_index_stats()
             pending_mutations = []
-            
+
             for bucket, indexes in index_stats.items():
                 for index, stats in indexes.items():
                     for key, val in stats.items():
                         if 'num_docs_pending' in key and val > 0:
                             pending_mutations.append(f"{bucket}.{index}.{key}:{val}")
-            
+
             if not pending_mutations:
                 return True
-                
+
             self.log.info(f"Docs still pending: {pending_mutations}")
             time.sleep(60)
-        
+
         self.log.error(f"Mutations still pending after {timeout} seconds")
         return False
 
@@ -3432,7 +3432,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         Validates that memory has been properly freed up after index operations
         across all index nodes.
-        
+
         Args:
             timeout (int): Maximum time in seconds to wait for memory to be released
             threshold_ratio (float): Maximum acceptable ratio of memory_rss/memory_total
@@ -3442,29 +3442,29 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         end_time = time.time() + timeout
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         while time.time() < end_time:
             high_memory_nodes = []
-            
+
             for node in indexer_nodes:
                 rest = RestConnection(node)
                 index_stats = rest.get_all_index_stats()
-                
+
                 # Get memory stats for this node
                 memory_rss = index_stats.get('memory_rss', 0)
                 memory_total = index_stats.get('memory_total', 0)
-                
+
                 if memory_total > 0:  # Avoid division by zero
                     ratio = memory_rss / memory_total
                     if ratio > threshold_ratio:
                         high_memory_nodes.append((node.ip, ratio * 100))
-            
+
             if not high_memory_nodes:
                 return True
-                
+
             self.log.info(f"Memory still high on nodes: {', '.join([f'{ip}:{ratio:.1f}%' for ip, ratio in high_memory_nodes])}")
             time.sleep(5)
-        
+
         self.log.error(f"Memory not properly released on nodes {high_memory_nodes} after {timeout} seconds")
         return False
 
@@ -3472,7 +3472,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         Validates that CPU usage has returned to normal levels after index operations
         across all index nodes.
-        
+
         Args:
             timeout (int): Maximum time in seconds to wait for CPU to normalize
             threshold_percent (float): Maximum acceptable CPU utilization percentage
@@ -3482,29 +3482,29 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         end_time = time.time() + timeout
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         while time.time() < end_time:
             high_cpu_nodes = []
-            
+
             for node in indexer_nodes:
                 rest = RestConnection(node)
                 index_stats = rest.get_all_index_stats()
-                
+
                 # Get CPU stats for this node
                 cpu_utilization = index_stats.get('cpu_utilization', 0)
                 num_cpu_core = index_stats.get('num_cpu_core', 0)
                 if num_cpu_core > 0:
                     utilization_ratio = cpu_utilization / (num_cpu_core * 100)
-                
+
                 if utilization_ratio > threshold_ratio:
                     high_cpu_nodes.append((node.ip, cpu_utilization))
-            
+
             if not high_cpu_nodes:
                 return True
-                
+
             self.log.info(f"CPU still high on nodes: {', '.join([f'{ip}:{cpu:.1f}%' for ip, cpu in high_cpu_nodes])}")
             time.sleep(5)
-        
+
         self.log.error(f"CPU usage remained high on nodes {high_cpu_nodes} after {timeout} seconds")
         return False
 
@@ -3619,4 +3619,3 @@ class ConCurIndexOps():
                         index_created = True
 
         return index_created, status
-    
