@@ -9,6 +9,7 @@ __created_on__ = "19/06/24 03:27 pm"
 """
 import datetime
 import json
+from copy import deepcopy
 
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +28,7 @@ from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
 from threading import Thread
 import random
+
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -158,6 +160,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_composite_vector_sanity(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        self.bhive_composite_comparison = self.input.param("bhive_composite_comparison", True)
         query_stats_map = {}
         if self.xattr_indexes:
             for namespace in self.namespaces:
@@ -165,11 +168,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
 
 
-
-        for similarity in ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]:
+        simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
+        query_comparison_list = []
+        if self.bhive_composite_comparison:
+            self.bhive_index = True
+            similarity = random.choice(simlarity_list)
+            simlarity_list = [similarity]
+        for similarity in simlarity_list:
             for namespace in self.namespaces:
+                if self.bhive_index:
+                    prefix = f'test_{similarity}_bhive'
+                else:
+                    prefix = f'test_{similarity}_composite'
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                          prefix=f'test_{similarity}',
+                                                                          prefix=prefix,
                                                                           similarity=similarity, train_list=None,
                                                                           scan_nprobes=self.scan_nprobes,
                                                                           array_indexes=False,
@@ -204,16 +216,27 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 for query in drop_queries:
                     self.run_cbq_query(query=query, server=self.n1ql_node)
+                self.bhive_index = False
+                if self.bhive_composite_comparison:
+                    query_stats_map_new = deepcopy(query_stats_map)
+                    query_stats_map = {}
+                    query_comparison_list.append(query_stats_map_new)
+                    self.gen_table_view(query_stats_map=query_stats_map_new,
+                                        message=f"Bhive is  {self.bhive_index}")
 
             # self.run_cbq_query(query=drop)
-        self.gen_table_view(query_stats_map=query_stats_map,
-                            message=f"quantization value is {self.quantization_algo_description_vector}")
-        for query in query_stats_map:
-            self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
-                                    f"recall for query {query} is less than threshold 70")
-            #uncomment the below code snippet to do assertions for accuracy
-            # self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
-            #                         f"accuracy for query {query} is less than threshold 70")
+        if not self.bhive_composite_comparison:
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+            query_comparison_list.append(query_stats_map)
+
+        for query_stats_map in query_comparison_list:
+            for query in query_stats_map:
+                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
+                                        f"recall for query {query} is less than threshold 70")
+                #uncomment the below code snippet to do assertions for accuracy
+                # self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
+                #                         f"accuracy for query {query} is less than threshold 70")
 
         self.rest.delete_bucket(bucket='metadata_bucket')
 
@@ -276,7 +299,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for query in query_stats_map:
             self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
                                     f"recall for query {query} is less than threshold 70")
-        
+
         self.rest.delete_bucket(bucket='metadata_bucket')
 
     def test_create_index_negative_scenarios(self):
@@ -1104,7 +1127,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message, similarity=self.similarity)
 
     def test_replica_repair(self):
-        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.memory_fill = self.input.param("memory_fill", False)
         self.enable_shard_based_rebalance()
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
@@ -1117,10 +1141,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector, bhive_index=self.bhive_index)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=self.num_index_replica,
-                                                                     defer_build=True)
+                                                                     defer_build=True, bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
@@ -1130,7 +1154,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online(defer_build=True)
 
         # rebalancing out an indexer node
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_node],
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_node[0]],
                                                  services=['index'], cluster_config=self.cluster_config)
         rebalance.result()
 
@@ -1139,14 +1163,29 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
         self.wait_until_indexes_online()
 
-        #rebalancing in indexer node
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node], [],
-                                                 services=['index'], cluster_config=self.cluster_config)
-        rebalance.result()
+        if self.memory_fill:
+            for node in index_node:
+                node_rest = RemoteMachineShellConnection(node)
+                cmd = "stress --vm 1 --vm-bytes $(awk '/MemTotal/ {printf \"%d\n\", $2;}' /proc/meminfo)k"
+                node_rest.execute_command(command=cmd)
+                node_rest.disconnect()
+        try:
+            # rebalancing in indexer node
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node[0]], [],
+                                                     services=['index'], cluster_config=self.cluster_config)
+            rebalance.result()
 
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
-        for index in index_metadata:
-            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+            index_metadata = self.index_rest.get_indexer_metadata()['status']
+            if self.memory_fill:
+                for index in index_metadata:
+                    self.assertNotEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+            else:
+                for index in index_metadata:
+                    self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+        except Exception as ex:
+            raise ex
+        finally:
+            self.kill_stress_tool()
 
     def test_vector_indexes_after_bucket_flush(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -2672,3 +2711,134 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
         self.run_cbq_query(query=drop_query)
 
+
+    def test_coexistence_and_precedence_bhive_composite(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        collection_namespace = self.namespaces[0]
+
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_vec2 = list(self.encoder.encode(desc_2))
+
+        scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
+        composite_vector_index = QueryDefinition("composite_vector_index",
+                                          index_fields=['rating', 'descriptionVector Vector',
+                                                        'category'],
+                                          dimension=384,
+                                          description=f"IVF,{self.quantization_algo_description_vector}",
+                                          similarity="COSINE",
+                                          scan_nprobes=self.scan_nprobes,
+                                          limit=self.scan_limit, is_base64=self.base64,
+                                          query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                              "description, descriptionVector",
+                                              "rating = 2 and "
+                                              "category in ['Convertible', "
+                                              "'Luxury Car', 'Supercar']",
+                                              scan_desc_vec_1))
+
+        bhive_index = QueryDefinition("bhive_index",
+                                              index_fields=['rating', 'descriptionVector Vector',
+                                                            'category'],
+                                              dimension=384,
+                                              description=f"IVF,{self.quantization_algo_description_vector}",
+                                              similarity="COSINE",
+                                              scan_nprobes=self.scan_nprobes,
+                                              limit=self.scan_limit, is_base64=self.base64,
+                                              query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                  "description, descriptionVector",
+                                                  "rating = 2 and "
+                                                  "category in ['Convertible', "
+                                                  "'Luxury Car', 'Supercar']",
+                                                  scan_desc_vec_1), bhive_index=True)
+
+        select_queries = []
+        for idx in [composite_vector_index, bhive_index]:
+            create_query = idx.generate_index_create_query(namespace=collection_namespace)
+            self.run_cbq_query(query=create_query, server=self.n1ql_node)
+            select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
+                                                                namespace=collection_namespace)[0]
+            select_queries.append(select_query)
+
+        for query in [composite_vector_index, bhive_index]:
+            select_query_with_explain = f"""EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query],
+                                                                                          namespace=collection_namespace,
+                                                                                          limit=self.scan_limit)[0]}"""
+            index_used_select_query = \
+                self.run_cbq_query(query=select_query_with_explain, server=self.n1ql_node)['results'][0]['plan']['~children'][0]['~children'][
+                    0][
+                    'index']
+            self.log.info(index_used_select_query)
+            self.assertEqual(index_used_select_query, bhive_index.index_name, 'bhive index was not the most preferred index')
+
+    def test_replica_repair_with_less_nodes(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.enable_shard_based_rebalance()
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        select_queries = set()
+        namespace_index_map = {}
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      prefix='test',
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replica,
+                                                                     defer_build=True, bhive_index=self.bhive_index)
+            select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                       namespace=namespace, limit=self.scan_limit))
+            namespace_index_map[namespace] = definitions
+
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.wait_until_indexes_online(defer_build=True)
+
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+
+        for namespace in namespace_index_map:
+            definition_list = namespace_index_map[namespace]
+            for definitions in definition_list:
+                self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
+                                          action='drop_replica', replica_id=1)
+                self.sleep(20)
+                self.wait_until_indexes_online()
+
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{index['indexName']}")
+
+        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+        # rebalancing out for replica repair
+        index_node_out = index_node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_node_out],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+
+        # rebalancing in for replica repair
+        index_node_in = index_node
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node_in], [],
+                                                 services=['index'], cluster_config=self.cluster_config)
+        rebalance.result()
+
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+
+
+        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
+
+        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
+                                                       map_after_rebalance=map_after_rebalance,
+                                                       stats_map_before_rebalance=stats_before_rebalance,
+                                                       stats_map_after_rebalance=stats_after_rebalance,
+                                                       item_count_increase=False,
+                                                       per_node=True, skip_array_index_item_count=False)

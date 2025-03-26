@@ -1464,7 +1464,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 #         kv_gsi_validation.compare_data_between_kv_and_index()
                 #         self.assertLess(len(kv_gsi_validation.result['failed_docs']), 1,
                 #                         'Some docs of kv gsi verification failed')
-                self.sleep(3600)
                 self.create_index_in_batches(num_batches=1, replica_count=1)
                 self.wait_until_indexes_online()
                 if self.upgrade_mode == 'offline':
@@ -2258,8 +2257,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector)
-            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, defer_build=True, num_replica=self.num_index_replica)
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector, bhive_index=self.bhive_index)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, defer_build=True, num_replica=self.num_index_replica, bhive_index=self.bhive_index)
             build_queries = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))

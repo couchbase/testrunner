@@ -1802,13 +1802,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 shell = RemoteMachineShellConnection(node)
                 executor_main.submit(shell.execute_command, cmd)
 
-    def kill_stress_tool(self):
-        nodes = self.servers
-        for node in nodes:
-            shell = RemoteMachineShellConnection(node)
-            shell.execute_command('pkill stress')
-            shell.execute_command('pkill iotop')
-
     def fill_up_disk(self, disk_fill_percent=10):
         self.log.info("Will check the disk usage on all indexer nodes")
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

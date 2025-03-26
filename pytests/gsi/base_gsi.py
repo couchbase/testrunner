@@ -594,6 +594,13 @@ class BaseSecondaryIndexingTests(QueryTests):
             shard_index_map[key] = list(set(shard_index_map[key]))
         return shard_index_map
 
+    def kill_stress_tool(self):
+        nodes = self.servers
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command('pkill stress')
+            shell.execute_command('pkill iotop')
+
     def _return_maps(self, perNode=False, map_from_index_nodes=False):
         if map_from_index_nodes:
             index_map = self.get_index_map_from_index_endpoint()
