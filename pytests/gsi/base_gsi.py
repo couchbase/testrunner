@@ -146,7 +146,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
-        self.dimension = self.input.param("dimension", None)
+        self.dimension = self.input.param("dimension", 384)
         self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
