@@ -238,7 +238,10 @@ class QueryAiQGTests(QueryTests):
         if '~subqueries' in explain_result['results'][0]:
             if subquery_index_names:
                 for subquery_index in subquery_index_names:
-                    self.assertTrue(subquery_index in str(explain_result['results'][0]['~subqueries']), f"Subquery index {subquery_index} is not being used in the query plan please check the plan{explain_result['results'][0]['plan']}")
+                    if subquery_index == "no-keyspace":
+                        self.log.info("Skipping index check for subquery as no keyspace found")
+                    else:
+                        self.assertTrue(subquery_index in str(explain_result['results'][0]['~subqueries']), f"Subquery index {subquery_index} is not being used in the query plan please check the plan{explain_result['results'][0]['plan']}")
             else:
                 self.fail("No subquery indexes are being used in the query plan")
 
@@ -282,22 +285,32 @@ class QueryAiQGTests(QueryTests):
         if '~subqueries' in advise_result['results'][0]:
             for subquery in advise_result['results'][0]['~subqueries']:
                 if 'recommended_indexes' in subquery['adviseinfo']:
+                    # Handle no index recommendation at this time
+                    if subquery['adviseinfo']['recommended_indexes'] == "No index recommendation at this time: no keyspace found.":
+                        self.log.info(f"No index recommendation at this time for subquery: {subquery['adviseinfo']['recommended_indexes']}")
+                        index_name = "no-keyspace"
+                        subquery_index_names.append(index_name)
                     # Handle covering indexes for subquery
-                    if 'covering_indexes' in subquery['adviseinfo']['recommended_indexes']:
+                    elif 'covering_indexes' in subquery['adviseinfo']['recommended_indexes']:
                         index = subquery['adviseinfo']['recommended_indexes']['covering_indexes'][0]
                         try:
-                            create_index_result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
+                            # Add "IF NOT EXISTS" after index name
+                            index_stmt = index['index_statement']
+                            index_stmt = index_stmt.replace(" ON ", " IF NOT EXISTS ON ")
+                            create_index_result = self.run_cbq_query(index_stmt, query_context=self.query_context)
                             index_name = create_index_result['results'][0]['name']
                             subquery_index_names.append(index_name)
                             self.log.info(f"Created recommended covering index for subquery: {index_name}")
                         except Exception as e:
                             self.log.error(f"Error creating covering index for subquery: {str(e)}")
-
                     # Handle regular indexes for subquery if no covering indexes
                     elif 'indexes' in subquery['adviseinfo']['recommended_indexes']:
                         index = subquery['adviseinfo']['recommended_indexes']['indexes'][0]
                         try:
-                            create_index_result = self.run_cbq_query(index['index_statement'],query_context=self.query_context)
+                            # Add "IF NOT EXISTS" after index name
+                            index_stmt = index['index_statement']
+                            index_stmt = index_stmt.replace(" ON ", " IF NOT EXISTS ON ")
+                            create_index_result = self.run_cbq_query(index_stmt, query_context=self.query_context)
                             index_name = create_index_result['results'][0]['name']
                             subquery_index_names.append(index_name)
                             self.log.info(f"Created recommended index for subquery: {index_name}")
