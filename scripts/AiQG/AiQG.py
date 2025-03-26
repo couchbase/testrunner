@@ -64,6 +64,7 @@ def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_
     Unnest must be on array field.
     Avoid duplicate unnest aliases.
     Subquery must always be given an alias unless it is in the where clause.
+    Subquery can be used in select, from or where clauses.
     Use alias for duplicate field names in the select clause.'''
 
     messages = [

@@ -1,0 +1,1 @@
+Generate 100 queries with CTEs that use subqueries inside the CTE. Some of the queries should have subquery which uses reference to the CTE.
