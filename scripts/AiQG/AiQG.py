@@ -57,11 +57,21 @@ def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_
 
     all_queries = []
 
+    additional_query_rules = '''Do not unnest let variables.
+    Do not use alias in having clause.
+    Duplicate fields need to be aliased in the select clause.
+    Unnest must come after from and before where.
+    Unnest must be on array field.
+    Avoid duplicate unnest aliases.
+    Subquery must always be given an alias unless it is in the where clause.
+    Use alias for duplicate field names in the select clause.'''
+
     messages = [
         SystemMessage("You are a Couchbase SQL++/N1QL expert. You are capable of writing complex SQL++/N1QL queries to fetch data from Couchbase."),
         HumanMessage(f"Please use this JSON template to write the Couchbase SQL++/N1QL queries: {schema_template}"),
         HumanMessage(prompt_content),
-        HumanMessage("Generate the queries in a single line ending with semicolon and no extra text, no bullet points, no quotes, no title/summary. Use alias for duplicate field names in the select clause.")
+        HumanMessage(additional_query_rules),
+        HumanMessage("Generate the queries in a single line ending with semicolon and no extra text, no bullet points, no quotes, no title/summary. No query numbers.")
     ]
 
     try:
@@ -258,8 +268,10 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
             if result["status"] == "SUCCESS":
                 report += f"Execution Time: {result['execution_time']:.4f} seconds\n"
                 report += f"Rows Returned: {result.get('row_count', 'N/A')}\n"
+                # Format query to remove new lines and extra spaces
+                formatted_query = ' '.join(result['query'].split())
                 # Write successful query to stable queries file
-                sf.write(f"{result['query']}\n\n")
+                sf.write(f"{formatted_query}\n")
             else:
                 report += f"Error: {result['error']}\n"
                 # Write failed query and error to reprompt queries file
