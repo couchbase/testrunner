@@ -4709,3 +4709,15 @@ class QuerySanityTests(QueryTests):
         result = self.run_cbq_query(unnest_query, query_params={'memory_quota': 1000})
         expected_result = [{"sa1": [{"id": 300, "type": "doc"}]}]
         self.assertEqual(result['results'], expected_result)
+
+    # MB-65862
+    def test_array_distinct_null_values(self):
+        self.fail_if_no_buckets()
+        # insert data into default collection
+        upsert_query = 'UPSERT INTO default(KEY k, VALUE v) SELECT "k"||TO_STR(d) AS k, {"cc1":IMOD(d,2), "cc2":null} AS v FROM ARRAY_RANGE(0,4) AS d'
+        self.run_cbq_query(upsert_query)
+        # query the data with array_distinct
+        query = 'SELECT  d1.cc1, ARRAY_DISTINCT(ARRAY_AGG(d1)) AS aa FROM (SELECT d.* FROM default AS d WHERE cc1 = 0) AS d1 GROUP BY d1.cc1'
+        result = self.run_cbq_query(query)
+        expected_result = [{"cc1": 0, "aa": [{"cc1": 0, "cc2": None}]}]
+        self.assertEqual(result['results'], expected_result)
