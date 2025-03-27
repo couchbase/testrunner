@@ -8568,3 +8568,33 @@ class QueriesIndexTests(QueryTests):
             # Drop the index
             self.query = f"DROP INDEX {index_name} ON {query_bucket} USING GSI"
             self.run_cbq_query()
+
+    def test_covering_with_upper(self):
+        self.fail_if_no_buckets()
+        # create collection1 in default bucket        
+        self.query = "CREATE COLLECTION collection1"
+        self.run_cbq_query(query_context='default._default')
+
+        # insert documents into collection1
+        self.query = "insert into collection1 (key, value) values ('key::1', {'name':'John'})"
+        self.run_cbq_query(query_context='default._default')
+
+        # create indexes on collection1
+        self.query = "create index idx_name_1 on collection1(name, upper(name))"
+        self.run_cbq_query(query_context='default._default')
+        self.query = "create index idx_name_2 on collection1(name)"
+        self.run_cbq_query(query_context='default._default')
+
+        # query collection1 with index index_name_1
+        self.query = "select upper(name) from collection1 use index (idx_name_1) where name = 'John' group by name"
+        result_index_1 = self.run_cbq_query(query_context='default._default')
+        self.log.info(f"Query result: {result_index_1}")
+
+        # query collection1 with index index_name_2
+        self.query = "select upper(name) from collection1 use index (idx_name_2) where name = 'John' group by name"
+        result_index_2 = self.run_cbq_query(query_context='default._default')
+        self.log.info(f"Query result: {result_index_2}")
+
+        # assert the result
+        self.assertEqual(result_index_1['results'][0]['$1'], 'JOHN', "Result from index index_name_1 is not correct")
+        self.assertEqual(result_index_2['results'][0]['$1'], 'JOHN', "Result from index index_name_2 is not correct")
