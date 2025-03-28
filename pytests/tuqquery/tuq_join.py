@@ -1021,3 +1021,36 @@ class JoinTests(QuerySanityTests):
         ]
         result = self.run_cbq_query(left_join)
         self.assertEqual(result['results'], expected)
+
+    def test_MB65976(self):
+        # create collection mb65976 if not exists
+        self.query = "CREATE COLLECTION mb65976 IF NOT EXISTS"
+        self.run_cbq_query(query_context='default._default')
+
+        # drop primary index on mb65976 collection if exists
+        self.query = "DROP PRIMARY INDEX IF EXISTS ON mb65976"
+        self.run_cbq_query(query_context='default._default')
+
+        # insert documents into mb65976 collection
+        self.run_cbq_query('UPSERT INTO mb65976 VALUES ("k_001", {"type": "airline", "c20":1, "c21": 10})', query_context='default._default')
+        self.run_cbq_query('UPSERT INTO mb65976 VALUES ("k_002", {"type": "airline", "c20":2, "c21": 20})', query_context='default._default')
+        self.run_cbq_query('UPSERT INTO mb65976 VALUES ("k_003", {"type": "airline", "c20":3, "c21": 30})', query_context='default._default')
+        self.run_cbq_query('UPSERT INTO mb65976 VALUES ("k_011", {"type": "airport", "docType": "0", "c1": 1, "c2": 2, "c3":3, "c4": 4})', query_context='default._default')
+        self.run_cbq_query('UPSERT INTO mb65976 VALUES ("k_012", {"type": "airport", "docType": "0", "c1": 2, "c2": 4, "c3":6, "c4": 8})', query_context='default._default')
+
+        # create index on mb65976 collection if not exists
+        self.run_cbq_query("CREATE INDEX ix11 IF NOT EXISTS ON mb65976 (c20,c21) PARTITION BY hash(c20) WHERE type = 'airline' AND c20 != c21", query_context='default._default')
+        self.run_cbq_query("CREATE INDEX ix12 IF NOT EXISTS ON mb65976 (c1, c2,c3,c4) WHERE type = 'airport' AND docType = '0'", query_context='default._default')
+
+        # explain query with use_cbo=True
+        explain_query = '''EXPLAIN SELECT 1 FROM mb65976 AS a 
+        LEFT JOIN mb65976 AS b USE HASH(BUILD) ON b.type = "airport" AND a.c20 = b.c1 AND b.docType = "0"
+        WHERE a.type = "airline" AND a.c20 != a.c21 AND b.c1 IS MISSING'''
+        explain_result = self.run_cbq_query(explain_query, query_context='default._default', query_params={'use_cbo': True})
+        self.log.info(f"Explain result: {explain_result}")
+
+        # Check explain contains ix11 and ix12 and not sequentialscan index
+        self.log.info("Check explain uses ix11 and ix12 and not sequentialscan index")
+        self.assertTrue('ix11' in str(explain_result), "ix11 is not in explain result")
+        self.assertTrue('ix12' in str(explain_result), "ix12 is not in explain result")
+        self.assertTrue('sequentialscan' not in str(explain_result), "sequentialscan is in explain result")
