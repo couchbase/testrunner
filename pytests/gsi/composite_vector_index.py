@@ -611,6 +611,342 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.validate_scans_for_recall_and_accuracy(select_query=select_queries)
 
+    def test_kv_rebalance(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results before rebalance operation", similarity=self.similarity)
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+            if self.rebalance_type == 'rebalance_in':
+                add_nodes = [self.servers[3]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[], services=['kv'])
+            elif self.rebalance_type == 'rebalance_swap':
+                add_nodes = [self.servers[3]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[data_nodes[0]], services=['kv'])
+            elif self.rebalance_type == 'rebalance_out':
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                                    to_remove=[data_nodes[0]], services=['kv'])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            self.gsi_util_obj.query_event.clear()
+            self.sleep(30)
+
+            # Todo: Add metadata validation
+            if self.post_rebalance_action == "data_load":
+                for namespace in self.namespaces:
+                    keyspace = namespace.split(":")[-1]
+                    bucket, scope, collection = keyspace.split(".")
+                    self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                    percent_update=0, percent_delete=0, scope=scope,
+                                                    collection=collection, json_template="Cars",
+                                                    output=True, username=self.username, password=self.password,
+                                                    base64=self.base64,
+                                                    model=self.data_model, workers=10, timeout=1500,
+                                                    key_prefix="doc_77",
+                                                    create_start=self.num_of_docs_per_collection,
+                                                    create_end=self.num_of_docs_per_collection + 10000)
+                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+            if self.post_rebalance_action == "mutations":
+                for namespace in self.namespaces:
+                    keyspace = namespace.split(":")[-1]
+                    bucket, scope, collection = keyspace.split(".")
+                    self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                                    percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                                    collection=collection, json_template="Cars", timeout=2000,
+                                                    op_type="update", mutate=1, dim=384,
+                                                    update_start=0, update_end=self.num_of_docs_per_collection)
+                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+            self.sleep(60)
+            _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+            index_item_count_map = {}
+            for node in stats:
+                for namespace in stats[node]:
+                    for index in stats[node][namespace]:
+                        if index not in index_item_count_map:
+                            index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                        else:
+                            index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            for index in index_item_count_map:
+                if "Partial" in index:
+                    continue
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after rebalance operation", similarity=self.similarity)
+
+    def test_kv_rebalance_failure_or_rebalance_stop_and_retry_with_indexes(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+            add_nodes = [self.servers[3]]
+            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                to_remove=[data_nodes[0]], services=['kv'])
+            if self.cancel_rebalance:
+                # stop ongoing rebalance
+                self.rest.stop_rebalance()
+            else:
+                # fail rebalance operation and then retry
+                self.stop_server(self.servers[self.nodes_init])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+
+            self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                        to_remove=[], services=[])
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            self.gsi_util_obj.query_event.clear()
+
+    def test_kv_autofailover_and_remove_node_with_indexes(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+
+            # perform auto failover of KV node
+            data_node = RemoteMachineShellConnection(data_nodes[1])
+            data_node.stop_server()
+            self.sleep(40, "Wait for autofailover")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [], [data_node])
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+            _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+            index_item_count_map = {}
+            for node in stats:
+                for namespace in stats[node]:
+                    for index in stats[node][namespace]:
+                        if index not in index_item_count_map:
+                            index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                        else:
+                            index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            for index in index_item_count_map:
+                if "Partial" in index:
+                    continue
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+    def kv_node_failover_recovery_and_addback_with_indexes(self):
+        recovery_type = self.input.param('recovery_type', 'full')
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+
+            # perform failover of KV node
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=[data_nodes[2]], graceful=False)
+            failover_task.result()
+
+            self.rest.add_back_node("ns_1@{}".format(data_nodes[2].ip))
+            self.rest.set_recovery_type("ns_1@{}".format(data_nodes[2].ip), recovery_type)
+            self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            msg = "rebalance failed while recovering failover nodes {0}".format(
+                self.server_to_fail[0])
+            self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+
+            _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+            index_item_count_map = {}
+            for node in stats:
+                for namespace in stats[node]:
+                    for index in stats[node][namespace]:
+                        if index not in index_item_count_map:
+                            index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                        else:
+                            index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            for index in index_item_count_map:
+                if "Partial" in index:
+                    continue
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+    def test_kv_and_indexing_rebalance_operations_with_different_topologies(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results before rebalance operation", similarity=self.similarity)
+
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                            percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="create", dim=384,
+                                            create_start=self.num_of_docs_per_collection,
+                                            create_end=(self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 2))
+            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_create)
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+            if self.rebalance_type == 'rebalance_in':
+                add_nodes = [self.servers[4]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[], services=['kv'])
+            elif self.rebalance_type == 'rebalance_swap':
+                add_nodes = [self.servers[4]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[data_nodes[0]], services=['kv'])
+            elif self.rebalance_type == 'rebalance_out':
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                                    to_remove=[data_nodes[0]])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            self.gsi_util_obj.query_event.clear()
+
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template="Cars", timeout=2000,
+                                            op_type="update", mutate=1, dim=384,
+                                            update_start=0,
+                                            update_end=(self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 2))
+            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_update)
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+            if self.rebalance_type == 'rebalance_in':
+                add_nodes = [self.servers[5]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[], services=['index'])
+            elif self.rebalance_type == 'rebalance_swap':
+                add_nodes = [self.servers[5]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[data_nodes[0]], services=['index'])
+            elif self.rebalance_type == 'rebalance_out':
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                                    to_remove=[data_nodes[0]])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            self.gsi_util_obj.query_event.clear()
+
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if "Partial" in index:
+                    continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after rebalance operation", similarity=self.similarity)
+
     def test_drop_build_indexes_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         query_list = []
