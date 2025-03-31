@@ -445,9 +445,9 @@ class GSIUtils(object):
         descVec2 = list(self.encoder.encode(desc_2))
 
         scan_color_vec_1 = f"ANN({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes}, false)"
-        scan_color_vec_2 = f"ANN({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes}, true)"
+        scan_color_vec_2 = f"ANN({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes}, false)"
         scan_desc_vec_1 = f"ANN({desc_vecfield}, {descVec1}, '{similarity}', {scan_nprobes}, false)"
-        scan_desc_vec_2 = f"ANN({desc_vecfield}, {descVec2}, '{similarity}', {scan_nprobes}, true)"
+        scan_desc_vec_2 = f"ANN({desc_vecfield}, {descVec2}, '{similarity}', {scan_nprobes}, false)"
 
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
@@ -477,7 +477,7 @@ class GSIUtils(object):
                             index_fields=[f'{desc_vecfield} VECTOR'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, persist_full_vector=False,
+                            train_list=train_list, limit=limit,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield},"
                                                                               f" {scan_desc_vec_1}",
                                                                               scan_desc_vec_2)))
@@ -503,7 +503,7 @@ class GSIUtils(object):
                             index_fields=[f'{color_vecfield} VECTOR'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
                             scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, persist_full_vector=False,
+                            train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"{color_vecfield}",
                                                                                "year > 1980 OR "
                                                                                "fuel = 'Diesel' ",

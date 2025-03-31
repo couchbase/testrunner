@@ -49,6 +49,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.num_centroids = self.input.param("num_centroids", 256)
         self.target_process = self.input.param("target_process", "memcached")
         self.bhive_recovery_log_string = self.input.param("bhive_recovery_log_string", "bhiveSlice::doRecovery")
+        # set rerank factor to 0
+        self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
