@@ -1536,9 +1536,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector, bhive_index=self.bhive_index)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=1)
+                                                                     num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
@@ -1555,6 +1555,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             except Exception as ex:
                 if "unable to flush bucket" not in str(ex):
                     self.fail("flushing bucket failed with unexpected error message")
+        self.sleep(60)
+        #adding validations for item count post flushing of bucket
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            self.assertEqual(index_item_count_map[index], 0, f"stats {stats}")
 
         try:
             # Running the scan on an empty bucket
@@ -1566,6 +1579,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # restoring and running queries again to validate recall percentage
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
+        self.sleep(60)
+        # adding validations for item count post recovery of bucket
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if 'partial' in index:
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection // 5,
+                                 f"rollback of indexes havent happened {stats}")
+            else:
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+
 
         for select_query in select_queries:
             if "ANN" not in select_query:
@@ -2893,7 +2925,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_2 = "A red color car with 4 or 5 star safety rating"
         descVec2 = list(self.encoder.encode(desc_2))
         scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
-        # query to ensure only 750K docs have vector fields of the dimension on which the vector index created
+        # query to ensure only specified num of docs have vector fields of the dimension on which the vector index created
         modification_query = f"UPDATE {collection_namespace} SET descriptionVector = [100,100,100,1000,1000] WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
         self.run_cbq_query(query=modification_query)
 
@@ -2905,12 +2937,23 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                        query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                            f"category, descriptionVector",
                                            'category in ["Sedan", "Luxury Car"] ',
-                                           scan_desc_vec_2))
+                                           scan_desc_vec_2), bhive_index=self.bhive_index)
 
-        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
+        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False, bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
 
         #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection - self.num_centroids, f"stats {stats}")
 
     def test_codebook_memory_indexer_restart(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
