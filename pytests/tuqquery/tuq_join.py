@@ -1054,3 +1054,37 @@ class JoinTests(QuerySanityTests):
         self.assertTrue('ix11' in str(explain_result), "ix11 is not in explain result")
         self.assertTrue('ix12' in str(explain_result), "ix12 is not in explain result")
         self.assertTrue('sequentialscan' not in str(explain_result), "sequentialscan is in explain result")
+
+    def test_MB65949(self):
+        try:
+            # create collection mb65949 if not exists
+            self.run_cbq_query("CREATE COLLECTION mb65949 IF NOT EXISTS", query_context='default._default')
+            self.run_cbq_query("DROP PRIMARY INDEX IF EXISTS ON mb65949", query_context='default._default')
+
+            # insert documents into mb65949 collection
+            insert_query = '''UPSERT INTO mb65949 (key _k, value _v)
+            SELECT "key" || lpad(tostring(i), 10, "0") AS _k,
+            {"c1": i, "c2": imod(i, 8191), "c3": imod(i, 160000), "c4": imod(Random(), 100001), "c5": lpad(tostring(i), 256, "0"), "c6": lpad(tostring(i), 2048, "0")} AS _v
+            FROM ARRAY_RANGE(0, 512000) AS i'''
+            self.run_cbq_query(insert_query, query_context='default._default')
+
+            # create index on mb65949 collection
+            self.run_cbq_query("CREATE INDEX ix1 ON mb65949 (c3, c4, c1, c5)", query_context='default._default')
+
+            # wait for stats to be updated
+            self.sleep(10)
+
+            # explain query with use_cbo=True
+            explain_query = '''EXPLAIN SELECT /*+ ORDERED */ ta.c3, META(ta).id AS docId
+            FROM (SELECT c3, MAX(c4) AS c4 FROM mb65949 WHERE c3 IS NOT MISSING AND c4 IS NOT MISSING GROUP BY c3) AS tb
+            INNER JOIN mb65949 ta ON ta.c3 = tb.c3 AND ta.c4 = tb.c4
+            WHERE ta.c1 <= 300 AND ta.c2 >= 10'''
+            explain_result = self.run_cbq_query(explain_query, query_context='default._default', query_params={'use_cbo': True})
+            self.log.info(f"Explain result: {explain_result}")
+
+            # check explain does not contain NestedLoopJoin but contains HashJoin
+            self.log.info("Check explain does not contain NestedLoopJoin but contains HashJoin")
+            self.assertTrue('NestedLoopJoin' not in str(explain_result), "NestedLoopJoin is in explain result")
+            self.assertTrue('HashJoin' in str(explain_result), "HashJoin is not in explain result")
+        finally:
+            self.run_cbq_query("DROP COLLECTION mb65949 IF EXISTS", query_context='default._default')
