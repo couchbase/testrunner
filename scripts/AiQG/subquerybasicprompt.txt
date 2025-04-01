@@ -1,0 +1,1 @@
+Give me queries that contain subqueries in the select clause, from clause, and where clause. Generate 100 queries like this.

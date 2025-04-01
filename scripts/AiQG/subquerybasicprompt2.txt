@@ -1,0 +1,4 @@
+Give me queries that contain subqueries in the select clause. Generate 25 queries like this.
+Give me queries that contain subqueries in the from clause. Generate 25 queries like this.
+Give me queries that contain subqueries in the where clause. Generate 25 queries like this.
+Give me queries that contain subqueries in the select clause, from clause, and where clause. Generate 25 queries like this.
