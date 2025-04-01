@@ -1,0 +1,1 @@
+Generate 50 test queries based on following JIRA https://jira.issues.couchbase.com/browse/MB-63024

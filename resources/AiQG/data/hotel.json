@@ -378,5 +378,385 @@
       "lat": -33.8688,
       "long": 151.2093
     }
+  },
+  {
+    "name": "Nordic Ice Hotel",
+    "address": "888 Arctic Circle",
+    "rooms": 45,
+    "room_types": [
+      {
+        "name": "Ice Room",
+        "price": 199.99,
+        "availability": 20
+      },
+      {
+        "name": "Snow Suite",
+        "price": 299.99,
+        "availability": 15
+      },
+      {
+        "name": "Aurora Suite",
+        "price": 399.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.6,
+    "reviews": 245,
+    "amenities": ["Northern Lights Viewing", "Ice Bar", "Husky Sledding", "Sauna", "Winter Activities"],
+    "hotel_id": "hotel_011",
+    "country": "Sweden",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Kiruna",
+    "type": "Specialty",
+    "url": "www.nordicicehotel.com",
+    "email": "stay@nordicicehotel.com",
+    "phone": "+46-980-555-1234",
+    "geo": {
+      "lat": 67.8558,
+      "long": 20.2253
+    }
+  },
+  {
+    "name": "Venetian Palace",
+    "address": "999 Canal Grande",
+    "rooms": 85,
+    "room_types": [
+      {
+        "name": "Canal View",
+        "price": 189.99,
+        "availability": 35
+      },
+      {
+        "name": "Palazzo Suite",
+        "price": 289.99,
+        "availability": 25
+      },
+      {
+        "name": "Doge Suite",
+        "price": 459.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.8,
+    "reviews": 378,
+    "amenities": ["Gondola Service", "Italian Restaurant", "Wine Cellar", "Art Gallery", "Mask Making Workshop"],
+    "hotel_id": "hotel_012",
+    "country": "Italy",
+    "free_parking": false,
+    "free_wifi": true,
+    "city": "Venice",
+    "type": "Historic",
+    "url": "www.venetianpalace.com",
+    "email": "info@venetianpalace.com",
+    "phone": "+39-041-555-7890",
+    "geo": {
+      "lat": 45.4408,
+      "long": 12.3155
+    }
+  },
+  {
+    "name": "Safari Lodge",
+    "address": "111 Savannah Road",
+    "rooms": 30,
+    "room_types": [
+      {
+        "name": "Safari Tent",
+        "price": 249.99,
+        "availability": 15
+      },
+      {
+        "name": "Luxury Tent",
+        "price": 349.99,
+        "availability": 10
+      },
+      {
+        "name": "Tree House",
+        "price": 449.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.9,
+    "reviews": 156,
+    "amenities": ["Game Drives", "Bush Dining", "Pool", "Observation Deck", "Cultural Tours"],
+    "hotel_id": "hotel_013",
+    "country": "Kenya",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Maasai Mara",
+    "type": "Safari Lodge",
+    "url": "www.safarilodge.com",
+    "email": "reservations@safarilodge.com",
+    "phone": "+254-20-555-1234",
+    "geo": {
+      "lat": -1.2921,
+      "long": 36.8219
+    }
+  },
+  {
+    "name": "Andes Adventure Resort",
+    "address": "222 Mountain Pass",
+    "rooms": 65,
+    "room_types": [
+      {
+        "name": "Mountain Room",
+        "price": 139.99,
+        "availability": 30
+      },
+      {
+        "name": "Valley View Suite",
+        "price": 199.99,
+        "availability": 25
+      },
+      {
+        "name": "Condor Suite",
+        "price": 299.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.5,
+    "reviews": 234,
+    "amenities": ["Hiking Tours", "Climbing Gear", "Hot Springs", "Local Cuisine", "Adventure Sports"],
+    "hotel_id": "hotel_014",
+    "country": "Peru",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Cusco",
+    "type": "Adventure Resort",
+    "url": "www.andesadventure.com",
+    "email": "info@andesadventure.com",
+    "phone": "+51-84-555-6789",
+    "geo": {
+      "lat": -13.5319,
+      "long": -71.9675
+    }
+  },
+  {
+    "name": "Mediterranean Villa",
+    "address": "333 Coastal Road",
+    "rooms": 55,
+    "room_types": [
+      {
+        "name": "Sea View",
+        "price": 169.99,
+        "availability": 25
+      },
+      {
+        "name": "Villa Suite",
+        "price": 249.99,
+        "availability": 20
+      },
+      {
+        "name": "Presidential Villa",
+        "price": 399.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.7,
+    "reviews": 312,
+    "amenities": ["Private Beach", "Mediterranean Restaurant", "Yacht Rental", "Wine Tasting", "Olive Grove Tours"],
+    "hotel_id": "hotel_015",
+    "country": "Greece",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Santorini",
+    "type": "Villa Resort",
+    "url": "www.mediterraneanvilla.com",
+    "email": "stay@mediterraneanvilla.com",
+    "phone": "+30-22860-555-1234",
+    "geo": {
+      "lat": 36.3932,
+      "long": 25.4615
+    }
+  },
+  {
+    "name": "Rainforest Eco Lodge",
+    "address": "444 Jungle Path",
+    "rooms": 25,
+    "room_types": [
+      {
+        "name": "Eco Cabin",
+        "price": 129.99,
+        "availability": 15
+      },
+      {
+        "name": "Treehouse",
+        "price": 179.99,
+        "availability": 8
+      },
+      {
+        "name": "Canopy Suite",
+        "price": 229.99,
+        "availability": 2
+      }
+    ],
+    "rating": 4.6,
+    "reviews": 187,
+    "amenities": ["Wildlife Tours", "Canopy Walks", "Organic Restaurant", "Bird Watching", "Sustainability Center"],
+    "hotel_id": "hotel_016",
+    "country": "Costa Rica",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Monteverde",
+    "type": "Eco Lodge",
+    "url": "www.rainforestecolodge.com",
+    "email": "eco@rainforestecolodge.com",
+    "phone": "+506-2645-555-7890",
+    "geo": {
+      "lat": 10.3010,
+      "long": -84.8097
+    }
+  },
+  {
+    "name": "Shanghai Skyline Hotel",
+    "address": "555 Financial District",
+    "rooms": 300,
+    "room_types": [
+      {
+        "name": "City View",
+        "price": 159.99,
+        "availability": 120
+      },
+      {
+        "name": "Executive Suite",
+        "price": 259.99,
+        "availability": 50
+      },
+      {
+        "name": "Chairman Suite",
+        "price": 459.99,
+        "availability": 10
+      }
+    ],
+    "rating": 4.7,
+    "reviews": 589,
+    "amenities": ["Sky Bar", "Business Center", "Spa", "Fine Dining", "Luxury Shopping"],
+    "hotel_id": "hotel_017",
+    "country": "China",
+    "free_parking": false,
+    "free_wifi": true,
+    "city": "Shanghai",
+    "type": "Luxury",
+    "url": "www.shanghaiskyline.com",
+    "email": "info@shanghaiskyline.com",
+    "phone": "+86-21-5555-1234",
+    "geo": {
+      "lat": 31.2304,
+      "long": 121.4737
+    }
+  },
+  {
+    "name": "Outback Station Stay",
+    "address": "666 Red Earth Road",
+    "rooms": 20,
+    "room_types": [
+      {
+        "name": "Bush Room",
+        "price": 89.99,
+        "availability": 10
+      },
+      {
+        "name": "Station Suite",
+        "price": 139.99,
+        "availability": 8
+      },
+      {
+        "name": "Homestead Room",
+        "price": 189.99,
+        "availability": 2
+      }
+    ],
+    "rating": 4.4,
+    "reviews": 145,
+    "amenities": ["Bush BBQ", "Horse Riding", "Aboriginal Tours", "Star Gazing", "Farm Activities"],
+    "hotel_id": "hotel_018",
+    "country": "Australia",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Alice Springs",
+    "type": "Station Stay",
+    "url": "www.outbackstation.com",
+    "email": "stay@outbackstation.com",
+    "phone": "+61-8-5555-6789",
+    "geo": {
+      "lat": -23.6980,
+      "long": 133.8807
+    }
+  },
+  {
+    "name": "Arctic Research Station Hotel",
+    "address": "777 Polar Circle",
+    "rooms": 15,
+    "room_types": [
+      {
+        "name": "Research Room",
+        "price": 149.99,
+        "availability": 8
+      },
+      {
+        "name": "Arctic Suite",
+        "price": 199.99,
+        "availability": 5
+      },
+      {
+        "name": "Observatory Suite",
+        "price": 299.99,
+        "availability": 2
+      }
+    ],
+    "rating": 4.3,
+    "reviews": 89,
+    "amenities": ["Research Center", "Observatory", "Arctic Library", "Expedition Equipment", "Scientific Tours"],
+    "hotel_id": "hotel_019",
+    "country": "Norway",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Svalbard",
+    "type": "Research Station",
+    "url": "www.arcticresearchhotel.com",
+    "email": "research@arctichotel.com",
+    "phone": "+47-79-555-1234",
+    "geo": {
+      "lat": 78.2232,
+      "long": 15.6267
+    }
+  },
+  {
+    "name": "Bedouin Camp Resort",
+    "address": "888 Desert Trail",
+    "rooms": 40,
+    "room_types": [
+      {
+        "name": "Traditional Tent",
+        "price": 119.99,
+        "availability": 20
+      },
+      {
+        "name": "Luxury Desert Tent",
+        "price": 189.99,
+        "availability": 15
+      },
+      {
+        "name": "Royal Oasis Suite",
+        "price": 289.99,
+        "availability": 5
+      }
+    ],
+    "rating": 4.5,
+    "reviews": 267,
+    "amenities": ["Camel Treks", "Desert Camping", "Traditional Music", "Bedouin Cuisine", "Sand Boarding"],
+    "hotel_id": "hotel_020",
+    "country": "Jordan",
+    "free_parking": true,
+    "free_wifi": true,
+    "city": "Wadi Rum",
+    "type": "Desert Camp",
+    "url": "www.bedouincamp.com",
+    "email": "desert@bedouincamp.com",
+    "phone": "+962-3-555-7890",
+    "geo": {
+      "lat": 29.5833,
+      "long": 35.4167
+    }
   }
 ]
