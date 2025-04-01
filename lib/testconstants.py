@@ -64,9 +64,8 @@ WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchb
 WIN_CB_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/"
 WIN_CB_PATH_PARA = "/cygdrive/c/Program Files/Couchbase/Server/"
 WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
-WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
-                        "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",
-                        "chrome.exe", "cbq-engine.exe"]
+WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "ISBEW64.*",
+                        "bash.exe", "cbq-engine.exe"]
 WIN_PROCESSES_SPAWNED = ["backup.exe", "cbas.exe", "cbft.exe", "cbq-engine.exe", "erl.exe", "eventing-producer.exe",
                          "goxdcr.exe", "indexer.exe", "java.exe", "memcached.exe", "projector.exe" "prometheus.exe",
                          "saslauthd-port.exe", "eventing-consumer.exe"]
