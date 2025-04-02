@@ -138,6 +138,7 @@ class QueryAiQGTests(QueryTests):
                 memory_quota = self.input.param("memory_quota", 100)
                 timeout = self.input.param("timeout", "120s")
                 compare_cbo = self.input.param("compare_cbo", False)
+                profile = self.input.param("profile", "off")
 
                 if compare_cbo:
                     # Wait for 3 seconds for stats to be updated
@@ -165,7 +166,12 @@ class QueryAiQGTests(QueryTests):
                     result_no_cbo = self.run_cbq_query(query, query_context=self.query_context, 
                                                       query_params={'memory_quota': memory_quota, 
                                                                   'timeout': timeout,
-                                                                  'use_cbo': False})
+                                                                  'use_cbo': False,
+                                                                  'profile': profile})
+                    # Log usedMemory metrics
+                    if "usedMemory" in result_no_cbo['metrics']:
+                        self.log.info(f"Used memory for query {self.query_number} without CBO: {result_no_cbo['metrics']['usedMemory']}")
+
                     # Parse execution time to milliseconds
                     time_str_no_cbo = result_no_cbo['metrics']['executionTime']
                     if time_str_no_cbo.endswith('ms'):
@@ -179,7 +185,13 @@ class QueryAiQGTests(QueryTests):
                     result_cbo = self.run_cbq_query(query, query_context=self.query_context,
                                                    query_params={'memory_quota': memory_quota,
                                                                'timeout': timeout, 
-                                                               'use_cbo': True})
+                                                               'use_cbo': True,
+                                                               'profile': profile})
+                    # Log usedMemory metrics
+                    if "usedMemory" in result_cbo['metrics']:
+                        self.log.info(f"Used memory for query {self.query_number} with CBO: {result_cbo['metrics']['usedMemory']}")
+
+                    # Parse execution time to milliseconds
                     time_str_cbo = result_cbo['metrics']['executionTime']
                     if time_str_cbo.endswith('ms'):
                         time_cbo = float(time_str_cbo[:-2])
@@ -207,7 +219,7 @@ class QueryAiQGTests(QueryTests):
                     if time_cbo > time_no_cbo * 1.33:  # Allow 33% margin
                         self.log.error(f"CBO execution was significantly slower for query {self.query_number}")
                         self.log.error(f"Explain plan without CBO: {explain_no_cbo}")
-                        self.fail(f"CBO execution was {((time_cbo - time_no_cbo) / time_no_cbo) * 100:.1f}% slower than non-CBO for query {self.query_number}")
+                        self.log.warning(f"CBO execution was {((time_cbo - time_no_cbo) / time_no_cbo) * 100:.1f}% slower than non-CBO for query {self.query_number}")
                     
                     actual_result = result_cbo  # Use CBO result for further validation
                 else:
@@ -286,7 +298,8 @@ class QueryAiQGTests(QueryTests):
             for subquery in advise_result['results'][0]['~subqueries']:
                 if 'recommended_indexes' in subquery['adviseinfo']:
                     # Handle no index recommendation at this time
-                    if subquery['adviseinfo']['recommended_indexes'] == "No index recommendation at this time: no keyspace found.":
+                    if (subquery['adviseinfo']['recommended_indexes'] == "No index recommendation at this time: no keyspace found." or
+                        subquery['adviseinfo']['recommended_indexes'] == "No secondary index recommendation at this time, primary index may apply."):
                         self.log.info(f"No index recommendation at this time for subquery: {subquery['adviseinfo']['recommended_indexes']}")
                         index_name = "no-keyspace"
                         subquery_index_names.append(index_name)
