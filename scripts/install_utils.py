@@ -168,8 +168,8 @@ class NodeHelper:
                         self.shell.execute_command(
                             self.actions_dict[self.info.deliverable_type]["uninstall"].replace("installed-msi",
                                                                                                     installed_msi[0]))
-                for browser in install_constants.WIN_BROWSERS:
-                    self.shell.execute_command("taskkill /F /IM " + browser + " /T")
+                #for browser in install_constants.WIN_BROWSERS:
+                #    self.shell.execute_command("taskkill /F /IM " + browser + " /T")
             else:
                 duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["uninstall"]
                 start_time = time.time()
