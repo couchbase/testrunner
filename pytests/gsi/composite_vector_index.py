@@ -280,7 +280,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         continue
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                           similarity=similarity,
-                                                                                          scan_consitency=True)
+                                                                                          scan_consitency=True,
+                                                                                          variable_limit=True)
                     query_stats_map[query] = [recall, accuracy]
                     # todo validate indexer metadata for indexes
                 codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
@@ -1397,7 +1398,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                  "category in ['Convertible', "
                                                                  "'Luxury Car', 'Supercar']",
                                                                  scan_color_vec_2),
-                                                             partition_by_fields=['meta().id']
+                                                             partition_by_fields=['meta().id'],
+                                                             bhive_index=self.bhive_index
                                                              )
 
         non_partitioned_index_color_rgb_vector = QueryDefinition("non_partitioned_colorRGBVector",
@@ -1413,7 +1415,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                      "rating = 2 and "
                                                                      "category in ['Convertible', "
                                                                      "'Luxury Car', 'Supercar']",
-                                                                     scan_color_vec_2)
+                                                                     scan_color_vec_2),
+                                                                 bhive_index=self.bhive_index
                                                                  )
 
         message = f"quantization value is {self.quantization_algo_description_vector}"
@@ -1431,7 +1434,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    "category in ['Convertible', "
                                                                    "'Luxury Car', 'Supercar']",
                                                                    scan_desc_vec_2),
-                                                               partition_by_fields=['meta().id']
+                                                               partition_by_fields=['meta().id'],
+                                                               bhive_index=self.bhive_index
                                                                )
 
         non_partitioned_index_description_vector = QueryDefinition("non_partitioned_descriptionVector",
@@ -1447,7 +1451,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                        "rating = 2 and "
                                                                        "category in ['Convertible', "
                                                                        "'Luxury Car', 'Supercar']",
-                                                                       scan_desc_vec_2)
+                                                                       scan_desc_vec_2), bhive_index=self.bhive_index
                                                                    )
 
         select_queries = []
@@ -2191,7 +2195,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                               "rating = 2 and "
                                               "category in ['Convertible', "
                                               "'Luxury Car', 'Supercar']",
-                                              scan_desc_vec_1))
+                                              scan_desc_vec_1), bhive_index=self.bhive_index)
 
         vector_index_cosine = QueryDefinition("vector_index_cosine",
                                               index_fields=['rating', 'descriptionVector Vector',
@@ -2206,7 +2210,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                   "rating = 2 and "
                                                   "category in ['Convertible', "
                                                   "'Luxury Car', 'Supercar']",
-                                                  scan_desc_vec_2))
+                                                  scan_desc_vec_2), bhive_index=self.bhive_index)
 
         select_queries = []
         for idx in [vector_index_L2, vector_index_cosine]:
@@ -2248,7 +2252,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                               "rating = 2 and "
                                               "category in ['Convertible', "
                                               "'Luxury Car', 'Supercar']",
-                                              scan_desc_vec_1))
+                                              scan_desc_vec_1), bhive_index=self.bhive_index)
         create_query = vector_index_L2.generate_index_create_query(namespace=collection_namespace)
         self.run_cbq_query(query=create_query, server=self.n1ql_node)
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index_L2],
@@ -3007,7 +3011,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    "description, descriptionVector",
                                                                    "fuel = \"LPG\"",
                                                                    scan_desc_vec_2),
-                                                               partition_by_fields=['fuel']
+                                                               partition_by_fields=['fuel'],
+                                                               bhive_index=self.bhive_index
                                                                )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
         self.run_cbq_query(query=index)
@@ -3038,7 +3043,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    "description, descriptionVector",
                                                                    "fuel = \"LPG\" and rating = 3",
                                                                    scan_desc_vec_2),
-                                                               partition_by_fields=['fuel, rating']
+                                                               partition_by_fields=['fuel, rating'],
+                                                               bhive_index=self.bhive_index
                                                                )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
                                                                                  num_partition=8)
@@ -3071,7 +3077,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    "description, descriptionVector",
                                                                    "fuel = \"LPG\" and rating = 3 and manufacturer in [\"Chevrolet\", \"Lexus\"]",
                                                                    scan_desc_vec_2),
-                                                               partition_by_fields=['fuel, rating, manufacturer']
+                                                               partition_by_fields=['fuel, rating, manufacturer'],
+                                                               bhive_index=self.bhive_index
                                                                )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
                                                                                  num_partition=8)

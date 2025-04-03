@@ -463,7 +463,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("namespaces created successfully")
         self.log.info(self.namespaces)
 
-    def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False):
+    def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False,
+                                               variable_limit=False):
+        if variable_limit:
+            self.scan_limit = random.choice([10, 20, 50, 100])
+            select_query = select_query.replace("LIMIT 100", f"LIMIT {self.scan_limit}")
         faiss_query = self.convert_to_faiss_queries(select_query=select_query)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
@@ -491,10 +495,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             else:
                 value = list_of_vectors_to_be_indexed_on_faiss[idx]
             faiss_closest_vectors.append(value)
+
         if scan_consitency:
             gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node, scan_consistency=self.scan_consistency)['results']
         else:
             gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
+
+        if variable_limit:
+            self.assertEqual(len(gsi_query_res), self.scan_limit, f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
+
         gsi_query_vec_list = []
 
         for v in gsi_query_res:
