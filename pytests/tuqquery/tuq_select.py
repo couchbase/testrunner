@@ -654,3 +654,114 @@ class QuerySelectTests(QueryTests):
         ''')
         expected_result = [{"$1": ["xxxxxx", 111]}]
         self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_simple_statement(self):
+        result = self.run_cbq_query('''
+            SELECT EVALUATE("SELECT 1+1")
+        ''')
+        expected_result = [{"$1": [{"$1": 2}]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_with_named_params(self):
+        result = self.run_cbq_query('''
+            SELECT EVALUATE("SELECT $x + $y", {"x": 5, "y": 3}) 
+        ''')
+        expected_result = [{"$1": [{"$1": 8}]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_with_positional_params(self):
+        result = self.run_cbq_query('''
+            SELECT EVALUATE("SELECT $1 + $2", [10, 20])
+        ''')
+        expected_result = [{"$1": [{"$1": 30}]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_with_subquery(self):
+        result = self.run_cbq_query('''
+            SELECT EVALUATE("SELECT x FROM [1,2,3] x WHERE x > $threshold", 
+                          {"threshold": 1})
+        ''')
+        expected_result = [{"$1": [{"x": 2}, {"x": 3}]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_invalid_statement(self):
+        try:
+            self.run_cbq_query('''
+                SELECT EVALUATE("INVALID SQL")
+            ''')
+            self.fail("Expected query to fail with invalid SQL")
+        except CBQError as ex:
+            self.assertTrue("syntax error" in str(ex).lower())
+
+    def test_evaluate_missing_params(self):
+        try:
+            self.run_cbq_query('''
+                SELECT EVALUATE("SELECT $x + $y")
+            ''')
+            self.fail("Expected query to fail due to missing parameters")
+        except CBQError as ex:
+            self.assertTrue("no value for named parameter" in str(ex).lower())
+
+    def test_evaluate_missing_positional_params(self):
+        try:
+            self.run_cbq_query('''
+                SELECT EVALUATE("SELECT $1 + $2", [10])
+            ''')
+            self.fail("Expected query to fail due to missing positional parameters")
+        except CBQError as ex:
+            self.assertTrue("no value for positional parameter" in str(ex).lower())
+
+    def test_evaluate_extra_positional_params(self):
+        result = self.run_cbq_query('''
+            SELECT EVALUATE("SELECT $1 + $2", [10, 20, 30])
+        ''')
+        expected_result = [{"$1": [{"$1": 30}]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_extra_named_params(self):
+        result = self.run_cbq_query('''
+            SELECT EVALUATE("SELECT $x + $y", {"x": 10, "y": 20, "z": 30})
+        ''')
+        expected_result = [{"$1": [{"$1": 30}]}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_in_from_clause(self):
+        result = self.run_cbq_query('''
+            SELECT * FROM (EVALUATE("SELECT $x + $y", {"x": 10, "y": 20})) AS t
+        ''')
+        expected_result = [{"t": {"$1": 30}}]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_evaluate_privileges(self):
+        try:
+            # Drop test_user if it exists
+            self.run_cbq_query('''
+                DROP USER test_user
+            ''')
+        except CBQError as ex:
+            self.log.info(f"Error dropping user: {ex}")
+        # create test_user with password password
+        self.run_cbq_query('''
+            CREATE USER test_user PASSWORD "password"
+        ''')
+        # grant write privileges to test_user on default bucket
+        self.run_cbq_query('''
+            GRANT query_update ON `default` TO test_user
+        ''')
+        # try to evaluate a statement with the user
+        try:
+            self.run_cbq_query('''
+                SELECT EVALUATE("SELECT * FROM `default` LIMIT 1")
+            ''', username="test_user", password="password")
+            self.fail("Expected query to fail due to insufficient privileges")
+        except CBQError as ex:
+            self.assertTrue("user does not have credentials" in str(ex).lower())
+
+    def test_evaluate_update_statement(self):
+        try:
+            self.run_cbq_query('''
+                SELECT EVALUATE("UPDATE `default` SET val = $x", {"x": 10})
+            ''')
+            self.fail("Expected query to fail due to not being readonly")
+        except CBQError as ex:
+            self.assertTrue("not a readonly request" in str(ex).lower())
