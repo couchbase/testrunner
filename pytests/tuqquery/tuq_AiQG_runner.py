@@ -5,7 +5,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 import os
 from .tuq import QueryTests
 from deepdiff import DeepDiff
-
+import re
 class QueryAiQGTests(QueryTests):
 
     def setUp(self):
@@ -139,8 +139,39 @@ class QueryAiQGTests(QueryTests):
                 timeout = self.input.param("timeout", "120s")
                 compare_cbo = self.input.param("compare_cbo", False)
                 profile = self.input.param("profile", "off")
+                compare_udf = self.input.param("compare_udf", False)
 
-                if compare_cbo:
+                # if compare_udf then create inline sql++ udf with query
+                if compare_udf:
+                    udf_name = f"udf_query_{self.query_number}"
+                    query = query.rstrip(';')
+                    
+                    # Check if query has a predicate with a string value
+                    predicate = re.search(r"\s+(\w+)\.(\w+) = \"([^\"]+)\"", query, re.IGNORECASE)
+
+                    if predicate:
+                        field = predicate.group(2)
+                        value = predicate.group(3)
+                        query = query.replace(f'"{value}"', f"param_{field}")
+                        self.run_cbq_query(f"CREATE OR REPLACE FUNCTION {udf_name}(param_{field}) {{ ({query}) }}", 
+                                         query_context=self.query_context)
+                        udf_query = f"SELECT {udf_name}('{value}')"
+                    else:
+                        self.run_cbq_query(f"CREATE OR REPLACE FUNCTION {udf_name}() {{ ({query}) }}", 
+                                         query_context=self.query_context)
+                        udf_query = f"SELECT {udf_name}()"
+
+                    # Check explain plan for udf query
+                    explain_udf = self.run_cbq_query(f"EXPLAIN FUNCTION {udf_name}", query_context=self.query_context)
+                    self.log.info(f"Explain plan for UDF query {self.query_number}: {explain_udf}")
+                    self._validate_indexes_in_plan(explain_udf, main_index_name, subquery_index_names, True)
+
+                    # Execute udf query
+                    actual_result = self.run_cbq_query(udf_query, 
+                                                      query_context=self.query_context,
+                                                      query_params={'memory_quota': memory_quota, 'timeout': timeout})
+                    self.log.info(f"Successfully executed query {self.query_number} with UDF: {query}")
+                elif compare_cbo:
                     # Wait for 3 seconds for stats to be updated
                     time.sleep(3)
                     # Get explain plan without CBO
@@ -229,7 +260,10 @@ class QueryAiQGTests(QueryTests):
                     self.log.info(f"Successfully executed query {self.query_number}: {query} with secondary indexes, memory_quota={memory_quota} and timeout={timeout}")
 
                 # Validate actual result matches expected result
-                diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True, significant_digits=5)
+                if compare_udf:
+                    diff = DeepDiff(actual_result['results'][0]['$1'], expected_result['results'], ignore_order=True, significant_digits=5)
+                else:
+                    diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True, significant_digits=5)
                 if diff:
                     # Only log diff if it's not too large
                     if len(str(diff)) < 5000:
@@ -241,10 +275,13 @@ class QueryAiQGTests(QueryTests):
                 self.log.error(f"Error details for query {self.query_number}: {str(e)}")
                 self.fail(f"Error executing query {self.query_number}: {query}")
 
-    def _validate_indexes_in_plan(self, explain_result, main_index_name, subquery_index_names):
+    def _validate_indexes_in_plan(self, explain_result, main_index_name, subquery_index_names, is_udf=False):
         # Check main index usage
         if main_index_name:
-            self.assertTrue(main_index_name in str(explain_result['results'][0]['plan']), f"Main index {main_index_name} is not being used in the query plan please check the plan{explain_result['results'][0]['plan']}")
+            if is_udf:
+                self.assertTrue(main_index_name in str(explain_result['results'][0]['plans']), f"Main index {main_index_name} is not being used in the query plan please check the plan{explain_result['results'][0]['plans']}")
+            else:
+                self.assertTrue(main_index_name in str(explain_result['results'][0]['plan']), f"Main index {main_index_name} is not being used in the query plan please check the plan{explain_result['results'][0]['plan']}")
 
         # Check subquery indexes usage
         if '~subqueries' in explain_result['results'][0]:
