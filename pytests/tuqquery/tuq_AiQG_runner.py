@@ -140,6 +140,11 @@ class QueryAiQGTests(QueryTests):
                 compare_cbo = self.input.param("compare_cbo", False)
                 profile = self.input.param("profile", "off")
                 compare_udf = self.input.param("compare_udf", False)
+                compare_prepared = self.input.param("compare_prepared", False)
+                node1 = self.servers[0]
+                node2 = node1
+                if len(self.servers) > 1:
+                    node2 = self.servers[1]
 
                 # if compare_udf then create inline sql++ udf with query
                 if compare_udf:
@@ -154,23 +159,39 @@ class QueryAiQGTests(QueryTests):
                         value = predicate.group(3)
                         query = query.replace(f'"{value}"', f"param_{field}")
                         self.run_cbq_query(f"CREATE OR REPLACE FUNCTION {udf_name}(param_{field}) {{ ({query}) }}", 
-                                         query_context=self.query_context)
+                                         query_context=self.query_context, server=node1)
+                        self.log.info(f"Successfully created UDF {udf_name} on node {node1.ip}")
                         udf_query = f"SELECT {udf_name}('{value}')"
                     else:
                         self.run_cbq_query(f"CREATE OR REPLACE FUNCTION {udf_name}() {{ ({query}) }}", 
-                                         query_context=self.query_context)
+                                         query_context=self.query_context, server=node1)
+                        self.log.info(f"Successfully created UDF {udf_name} on node {node1.ip}")
                         udf_query = f"SELECT {udf_name}()"
 
                     # Check explain plan for udf query
                     explain_udf = self.run_cbq_query(f"EXPLAIN FUNCTION {udf_name}", query_context=self.query_context)
                     self.log.info(f"Explain plan for UDF query {self.query_number}: {explain_udf}")
-                    self._validate_indexes_in_plan(explain_udf, main_index_name, subquery_index_names, True)
+                    self._validate_indexes_in_plan(explain_udf, main_index_name, subquery_index_names, "udf")
 
                     # Execute udf query
                     actual_result = self.run_cbq_query(udf_query, 
                                                       query_context=self.query_context,
-                                                      query_params={'memory_quota': memory_quota, 'timeout': timeout})
-                    self.log.info(f"Successfully executed query {self.query_number} with UDF: {query}")
+                                                      query_params={'memory_quota': memory_quota, 'timeout': timeout}, server=node2)
+                    self.log.info(f"Successfully executed query {self.query_number} with UDF on node {node2.ip}: {query}")
+                elif compare_prepared:
+                    # prepare query
+                    prepared_query = self.run_cbq_query(f"PREPARE prepared_query_{self.query_number} FROM {query}", query_context=self.query_context, server=node1)
+                    self.log.info(f"Successfully prepared query {self.query_number} on node {node1.ip}: {prepared_query}")
+
+                    # execute prepared query with profile timings to get explain plan
+                    actual_result = self.run_cbq_query(f"EXECUTE prepared_query_{self.query_number}", query_context=self.query_context,
+                                                      query_params={'memory_quota': memory_quota, 'timeout': timeout, 'profile': 'timings'}, server=node2)
+                    self.log.info(f"Successfully executed query {self.query_number} with prepared query on node {node2.ip}: {query}")
+
+                    # Check explain plan for prepared query
+                    explain_prepared = actual_result['profile']['executionTimings']
+                    self.log.info(f"Explain plan for prepared query {self.query_number}: {explain_prepared}")
+                    self._validate_indexes_in_plan(explain_prepared, main_index_name, subquery_index_names, "prepared")
                 elif compare_cbo:
                     # Wait for 3 seconds for stats to be updated
                     time.sleep(3)
@@ -275,24 +296,36 @@ class QueryAiQGTests(QueryTests):
                 self.log.error(f"Error details for query {self.query_number}: {str(e)}")
                 self.fail(f"Error executing query {self.query_number}: {query}")
 
-    def _validate_indexes_in_plan(self, explain_result, main_index_name, subquery_index_names, is_udf=False):
+    def _validate_indexes_in_plan(self, explain_result, main_index_name, subquery_index_names, type="query"):
+        explain_subqueries = None
+        if type == "udf":
+            explain_plan = explain_result['results'][0]['plans']
+            explain_subqueries = explain_result['results'][0]
+        elif type == "prepared":
+            explain_plan = explain_result['~child']
+            if '~subqueries' in explain_result:
+                explain_subqueries = explain_result['~subqueries']
+        else:
+            explain_plan = explain_result['results'][0]['plan']
+            if '~subqueries' in explain_result['results'][0]:
+                explain_subqueries = explain_result['results'][0]['~subqueries']
+
         # Check main index usage
         if main_index_name:
-            if is_udf:
-                self.assertTrue(main_index_name in str(explain_result['results'][0]['plans']), f"Main index {main_index_name} is not being used in the query plan please check the plan{explain_result['results'][0]['plans']}")
-            else:
-                self.assertTrue(main_index_name in str(explain_result['results'][0]['plan']), f"Main index {main_index_name} is not being used in the query plan please check the plan{explain_result['results'][0]['plan']}")
+            self.log.info(f"Checking main index: {main_index_name} in explain")
+            self.assertTrue(main_index_name in str(explain_plan), f"Main index {main_index_name} is not being used in the query plan please check the plan{explain_plan}")
 
         # Check subquery indexes usage
-        if '~subqueries' in explain_result['results'][0]:
-            if subquery_index_names:
-                for subquery_index in subquery_index_names:
-                    if subquery_index == "no-keyspace":
-                        self.log.info("Skipping index check for subquery as no keyspace found")
+        if subquery_index_names:
+            for subquery_index in subquery_index_names:
+                self.log.info(f"Checking subquery index: {subquery_index} in explain")
+                if subquery_index == "no-keyspace":
+                    self.log.info("Skipping index check for subquery as no keyspace found")
+                else:
+                    if explain_subqueries:
+                        self.assertTrue(subquery_index in str(explain_subqueries), f"Subquery index {subquery_index} is not being used in the query plan please check the plan{explain_subqueries}")
                     else:
-                        self.assertTrue(subquery_index in str(explain_result['results'][0]['~subqueries']), f"Subquery index {subquery_index} is not being used in the query plan please check the plan{explain_result['results'][0]['plan']}")
-            else:
-                self.fail("No subquery indexes are being used in the query plan")
+                        self.fail("No subquery indexes are being used in the query plan")
 
     def _create_recommended_indexes(self, query):
         """Helper method to get index recommendations and create indexes"""

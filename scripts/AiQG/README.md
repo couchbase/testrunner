@@ -90,11 +90,23 @@ The test runner (`pytests/tuqquery/tuq_AiQG_runner.py`) executes the generated q
    - `memory_quota`: Memory quota in MB for query execution (default: 100)
    - `timeout`: Query timeout duration (default: "120s")
    - `compare_cbo`: Enable comparison between CBO and non-CBO execution (default: false)
+   - `compare_udf`: Enable comparison using inline SQL++ UDF (default: false)
+   - `compare_prepared`: Enable comparison using prepared statements (default: false)
 5. When `compare_cbo=true`:
    - Executes query with and without CBO
    - Compares execution times and results
    - Validates CBO plan contains required optimization metrics
-6. Comparing results with and without indexes to ensure they match
+6. When `compare_udf=true`:
+   - Creates inline SQL++ UDF from query
+   - If query has string predicate (e.g. field = "value"), converts it to parameterized form
+   - Executes UDF with original predicate value as parameter
+   - Validates UDF results match original query results
+7. When `compare_prepared=true`:
+   - Prepares query using PREPARE statement
+   - Executes prepared query with profile timings
+   - Validates prepared query results match original results
+   - Checks explain plan for index usage
+8. Comparing results with and without indexes to ensure they match
 
 ## Customization
 
