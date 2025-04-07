@@ -8572,3 +8572,62 @@ class QueriesIndexTests(QueryTests):
         AND NVL(t1.known_field2,0)
         '''
         self.run_cbq_query(query_context='default._default', query_params={'use_cbo': True})
+
+    # MB-66160
+    def test_invalid_use_index(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query("DROP INDEX ix1 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix2 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix3 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix4 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix5 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix6 IF EXISTS ON default")
+        try:
+            # create index on default bucket
+            self.run_cbq_query("CREATE INDEX ix1 IF NOT EXISTS ON default(c2 INCLUDE MISSING, c1, c11, c12, c13, c14)")
+            self.run_cbq_query("CREATE INDEX ix2 IF NOT EXISTS ON default(c1, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix3 IF NOT EXISTS ON default(c11, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix4 IF NOT EXISTS ON default(c12, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix5 IF NOT EXISTS ON default(c13, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix6 IF NOT EXISTS ON default(c14, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+
+            # run explain query
+            explain_query = '''
+            EXPLAIN SELECT f1, f2
+            FROM default
+            WHERE c2 = 100
+            AND (ANY v IN arr1 SATISFIES v.a1 >= 0 END AND
+                 ANY v IN arr1 SATISFIES v.a2 <= 100 END)
+            AND (c1 = 0 OR c11 = 1 OR c12 = 2 OR c13 = 3 OR c14 = 4)
+            '''
+            explain_result = self.run_cbq_query(explain_query, query_params={'use_cbo': False})
+            self.log.info(f"Explain without hint result: {explain_result}")
+
+            # check ix1 is used in explain result
+            self.assertTrue('ix1' in str(explain_result['results'][0]['plan']))
+
+            explain_query_use_index = '''
+            EXPLAIN SELECT f1, f2
+            FROM default USE INDEX(dummy)
+            WHERE c2 = 100
+            AND (ANY v IN arr1 SATISFIES v.a1 >= 0 END AND
+                 ANY v IN arr1 SATISFIES v.a2 <= 100 END)
+            AND (c1 = 0 OR c11 = 1 OR c12 = 2 OR c13 = 3 OR c14 = 4)
+            '''
+            explain_result_use_index = self.run_cbq_query(explain_query_use_index, query_params={'use_cbo': False})
+            self.log.info(f"Explain with hint result: {explain_result_use_index}")
+
+            # check hint is invalid in explain result
+            self.assertTrue('Invalid indexes specified: dummy' in str(explain_result_use_index['results'][0]['optimizer_hints']))
+
+            # check ix1 is used in explain result
+            self.assertTrue('ix1' in str(explain_result_use_index['results'][0]['plan']))
+
+        finally:
+            # drop index
+            self.run_cbq_query("DROP INDEX ix1 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix2 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix3 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix4 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix5 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix6 IF EXISTS ON default")
