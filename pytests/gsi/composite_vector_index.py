@@ -960,6 +960,275 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after rebalance operation", similarity=self.similarity)
 
+    def test_kv_and_indexing_failover_and_recovery_sequentially(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results before failover and recovery operation", similarity=self.similarity)
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+
+            # failover and recover KV and indexing node sequentially
+            for node in data_nodes[2], index_nodes[2]:
+                failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
+                failover_task.result()
+
+                self.rest.add_back_node("ns_1@{}".format(node.ip))
+                self.rest.set_recovery_type("ns_1@{}".format(node.ip), recovery_type)
+                self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                msg = "rebalance failed while recovering failover nodes {0}".format(
+                    node)
+                self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+
+            self.gsi_util_obj.query_event.clear()
+
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if "Partial" in index:
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after failover and recovery operation", similarity=self.similarity)
+
+    def test_kv_and_indexing_failover_and_rebalance_out_sequentially(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results before failover and recovery operation", similarity=self.similarity)
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+
+            # failover and recover KV and indexing node sequentially
+            for node in data_nodes[2], index_nodes[2]:
+                failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
+                failover_task.result()
+
+                self.rest.add_back_node("ns_1@{}".format(node.ip))
+                self.rest.set_recovery_type("ns_1@{}".format(node.ip), recovery_type)
+                self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                msg = "rebalance failed while recovering failover nodes {0}".format(
+                    node)
+                self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+
+            self.gsi_util_obj.query_event.clear()
+
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if "Partial" in index:
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after failover and recovery operation", similarity=self.similarity)
+
+    def test_kv_and_indexing_rebalance_concurrently(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results before rebalance operation", similarity=self.similarity)
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+            if self.rebalance_type == 'rebalance_in':
+                add_nodes = [self.servers[3]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[], services=['kv:n1ql', 'index'])
+            elif self.rebalance_type == 'rebalance_swap':
+                add_nodes = [self.servers[3]]
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv:n1ql', 'index'])
+            elif self.rebalance_type == 'rebalance_out':
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv:n1ql', 'index'])
+            task.result()
+            rebalance_status = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            self.gsi_util_obj.query_event.clear()
+            self.sleep(30)
+
+            # Todo: Add metadata validation
+            if self.post_rebalance_action == "data_load":
+                for namespace in self.namespaces:
+                    keyspace = namespace.split(":")[-1]
+                    bucket, scope, collection = keyspace.split(".")
+                    self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                    percent_update=0, percent_delete=0, scope=scope,
+                                                    collection=collection, json_template="Cars",
+                                                    output=True, username=self.username, password=self.password,
+                                                    base64=self.base64,
+                                                    model=self.data_model, workers=10, timeout=1500,
+                                                    key_prefix="doc_77",
+                                                    create_start=self.num_of_docs_per_collection,
+                                                    create_end=self.num_of_docs_per_collection + 10000)
+                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+            if self.post_rebalance_action == "mutations":
+                for namespace in self.namespaces:
+                    keyspace = namespace.split(":")[-1]
+                    bucket, scope, collection = keyspace.split(".")
+                    self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                                    percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                                    collection=collection, json_template="Cars", timeout=2000,
+                                                    op_type="update", mutate=1, dim=384,
+                                                    update_start=0, update_end=self.num_of_docs_per_collection)
+                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+            self.sleep(60)
+            _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+            index_item_count_map = {}
+            for node in stats:
+                for namespace in stats[node]:
+                    for index in stats[node][namespace]:
+                        if index not in index_item_count_map:
+                            index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                        else:
+                            index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            for index in index_item_count_map:
+                if "Partial" in index:
+                    continue
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after rebalance operation", similarity=self.similarity)
+
+    def test_kv_and_indexing_failover_and_recovery_concurrently(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results before failover and recovery operation", similarity=self.similarity)
+
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node)
+
+            # failover and recover KV and indexing node concurrently
+            nodes_to_failover = [data_nodes[2], index_nodes[2]]
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=nodes_to_failover, graceful=False)
+            failover_task.result()
+
+            for node in nodes_to_failover:
+                self.rest.add_back_node("ns_1@{}".format(node.ip))
+                self.rest.set_recovery_type("ns_1@{}".format(node.ip), recovery_type)
+
+            self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            msg = "rebalance failed while recovering failover nodes {0} and {1}".format(nodes_to_failover[0], 
+                                                                                        nodes_to_failover[1])
+            self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+
+            self.gsi_util_obj.query_event.clear()
+
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if "Partial" in index:
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message="results after failover and recovery operation", similarity=self.similarity)
+
     def test_drop_build_indexes_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         query_list = []
