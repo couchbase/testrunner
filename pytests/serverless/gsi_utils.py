@@ -1395,11 +1395,12 @@ class GSIUtils(object):
         # Single vector + single scalar field + partitioned on meta().id
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVectorPart1',
-                            index_fields=['name', f'emb VECTOR'],
+                            index_fields=['name', 'emb VECTOR'],
                             dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, emb, {vec_1}",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"name, emb,"
+                                                                               f" {vec_1}",
                                                                                'name like "%Dil" ',
                                                                                vec_1
                                                                                ),

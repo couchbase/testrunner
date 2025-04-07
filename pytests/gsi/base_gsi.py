@@ -571,6 +571,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                     index_code_book_memory_map[index] = stats_map[node][ks][index]['codebook_mem_usage']
         return index_code_book_memory_map, sum(index_code_book_memory_map.values())
 
+    def get_partial_indexes_name_list(self):
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        partial_index_list = []
+        for index in index_metadata:
+            if "where" in index:
+                partial_index_list.append(index['indexName'])
+        return partial_index_list
+
     def validate_shard_seggregation(self, shard_index_map):
         index_categories = ['scalar', 'vector', 'bhive']
         for shard, indices in shard_index_map.items():
@@ -2735,11 +2743,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
-    def check_gsi_logs_for_shard_transfer(self):
+    def check_gsi_logs_for_shard_transfer(self, log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer", msg="File transfer based rebalance "):
         """ Checks if file transfer based rebalance is triggered.
         """
         count = 0
-        log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer"
         log_validated = False
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not indexer_nodes:
@@ -2757,12 +2764,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                 count = int(count)
             shell.disconnect()
             if count > 0:
-                self.log.info(f"===== File transfer based rebalance triggered "
+                self.log.info(f"=====  {msg} triggered"
                               f"as validated from the log on {server.ip}=====. The no. of occurrences - {count}")
                 log_validated = True
                 break
         if not log_validated:
-            self.log.info(f"===== File transfer based rebalance not triggered."
+            self.log.info(f"===== {msg} not triggered."
                           f"No log lines matching string {log_string} seen on any of the indexer nodes.")
         return log_validated
 

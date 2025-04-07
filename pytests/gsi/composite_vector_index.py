@@ -48,6 +48,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
         self.num_centroids = self.input.param("num_centroids", 256)
         self.target_process = self.input.param("target_process", "memcached")
+        self.bhive_recovery_log_string = self.input.param("bhive_recovery_log_string", "bhiveSlice::doRecovery")
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
@@ -62,6 +63,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def suite_tearDown(self):
         pass
 
+    def kill_indexer(self, index_node):
+        remote = RemoteMachineShellConnection(index_node)
+        remote.execute_command(command="pkill indexer")
+        remote.disconnect()
+
+    def kill_memcached(self, data_node):
+        remote = RemoteMachineShellConnection(data_node)
+        remote.execute_command(command="pkill memecached")
+        remote.disconnect()
     def gen_table_view(self, query_stats_map, message="query stats"):
         table = TableView(self.log.info)
         table.set_headers(['Query', 'Recall', 'Accuracy'])
@@ -1783,6 +1793,137 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after doing a partial roll back from kv side", similarity=self.similarity)
 
+    def test_recovery_post_deleting_recovery_files(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        self.index_rest.set_index_settings(setting)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replica, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+        # deleting recovery files
+        storage_dir = self.index_rest.get_indexer_internal_stats()['indexer.storage_dir']
+        for index_node in index_nodes:
+            remote = RemoteMachineShellConnection(index_node)
+            remote.execute_command(
+                command=f"find {storage_dir} -mindepth 1 -maxdepth 1 -type d ! -name \"*primary*\" -exec bash -c 'cd {{}}/mainIndex/recovery 2>/dev/null && ls -t | head -n 1 | xargs -I {{}} rm -f {{}}' \;")
+            remote.disconnect()
+
+        self.sleep(10)
+
+        for index_node in index_nodes:
+            self.kill_indexer(index_node=index_node)
+            self.sleep(10)
+
+        self.wait_until_indexes_online()
+
+        # adding validations for item count post recovery of bucket
+        partial_index_list = self.get_partial_indexes_name_list()
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if index in partial_index_list:
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection // 5,
+                                 f"rollback of indexes havent happened {stats}")
+            else:
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        #log validation for recovery of bhive indexes
+        is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
+        self.assertTrue(is_log_validation, "bhive recovery point not found in logs")
+
+    def test_crash_indexer_data_nodes(self):
+        self.kill_parallel = self.input.param("kill_parallel", False)
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        self.index_rest.set_index_settings(setting)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        select_queries = []
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=self.num_index_replica, bhive_index=self.bhive_index)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+
+
+        if self.kill_parallel:
+            with ThreadPoolExecutor() as executor:
+                for i in range(1, 11):
+                    futures = [executor.submit(self.kill_indexer, node) for node in index_nodes]
+                    futures.extend([executor.submit(self.kill_memcached, node) for node in data_nodes])
+
+                for future in futures:
+                    future.result()
+
+        else:
+            for i in range(1, 11):
+                for index_node in index_nodes:
+                    self.kill_indexer(index_node=index_node)
+                    self.sleep(30)
+
+            for i in range(1, 11):
+                for data_node in data_nodes:
+                    self.kill_memcached(data_node=data_node)
+
+        self.wait_until_indexes_online()
+
+        # adding validations for item count post recovery of bucket
+        partial_index_list = self.get_partial_indexes_name_list()
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if index in partial_index_list:
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection // 5,
+                                 f"rollback of indexes havent happened {stats}")
+            else:
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        #log validation for recovery of bhive indexes
+        is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
+        self.assertTrue(is_log_validation, "bhive recovery point not found in logs")
     def test_recovery_projector_crash(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                     skip_default_scope=self.skip_default)
@@ -2265,7 +2406,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         copy_distance_list = distance_list[:]
 
         self.assertEqual(sorted(copy_distance_list), distance_list, "distance projection for the query is incorrect")
-
 
     def test_scans_after_vector_field_mutations(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
@@ -2859,7 +2999,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_random_sampling_across_keyspaces(self):
-        self.use_named_namespace = self.input.param("use_named_keyspace", True)
+        self.use_named_namespace = self.input.param("use_named_namespace", True)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         collection_namespace = self.namespaces[0]
         #required to get the ground truth data
@@ -2896,6 +3036,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.namespaces.append(namespace)
             n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
             self.n1ql_helper.create_scope(server=n1ql_node, bucket_name=self.buckets[0].name, scope_name="test_scope_2")
+            self.sleep(30)
             self.n1ql_helper.create_collection(server=n1ql_node, bucket_name=self.buckets[0].name, scope_name="test_scope_2", collection_name="test_collection_2")
         else:
             namespace = "test_bucket._default._default"
@@ -2947,17 +3088,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=query)
 
         #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
-        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
-        index_item_count_map = {}
-        for node in stats:
-            for namespace in stats[node]:
-                for index in stats[node][namespace]:
-                    if index not in index_item_count_map:
-                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
-                    else:
-                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
-        for index in index_item_count_map:
-            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection - self.num_centroids, f"stats {stats}")
+        index_stats = self.index_rest.get_index_stats()
+        for namespace in index_stats:
+            for index in index_stats[namespace]:
+                if "primary" in index:
+                    continue
+                else:
+                    self.assertEqual(index_stats[namespace][index]['items_count'], self.num_centroids, "indexes with docs of other dimensions have been indexed")
 
     def test_codebook_memory_indexer_restart(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
