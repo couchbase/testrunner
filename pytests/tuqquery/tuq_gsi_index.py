@@ -8546,3 +8546,29 @@ class QueriesIndexTests(QueryTests):
         # assert the result
         self.assertEqual(result_index_1['results'][0]['$1'], 'JOHN', "Result from index index_name_1 is not correct")
         self.assertEqual(result_index_2['results'][0]['$1'], 'JOHN', "Result from index index_name_2 is not correct")
+
+    def test_MB66129(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query("CREATE COLLECTION collection1 IF NOT EXISTS", query_context='default._default')
+        self.run_cbq_query("CREATE COLLECTION collection2 IF NOT EXISTS", query_context='default._default')
+
+        # create index on collection2
+        self.query = "CREATE INDEX idx_name_1 IF NOT EXISTS on collection2(`known_field` INCLUDE MISSING,`fx`,`jf1021067`,`jf1021072_copy`,`known_field2`)"
+        self.run_cbq_query(query_context='default._default')
+
+        # run query 1
+        self.query = "SELECT * FROM collection2 AS t1 WHERE t1.known_field2 = 0 or NVL(t1.known_field,'') = 'something'"
+        self.run_cbq_query(query_context='default._default', query_params={'use_cbo': True})
+
+        # run query 2
+        self.query = '''
+        SELECT jf1021075_copy AS p0,known_field2 AS p1,known_field2 AS p2,jf1021075_copy AS p3,
+            (SELECT COUNT(1) FROM collection1 AS t2 WHERE t1.fx > t2.f1) AS x 
+        FROM collection2 AS t1
+        WHERE jf1021070_copy NOT LIKE "%_voBRyciaOpmp4FPm%"
+        AND (known_field2 = 0 OR jf1021070_copy > "hFE_DVU4bWA9J4yRP")
+        AND jf1021075_copy != false
+        AND NVL(t1.known_field,"") != "something"
+        AND NVL(t1.known_field2,0)
+        '''
+        self.run_cbq_query(query_context='default._default', query_params={'use_cbo': True})
