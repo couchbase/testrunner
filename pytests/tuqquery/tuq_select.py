@@ -765,3 +765,159 @@ class QuerySelectTests(QueryTests):
             self.fail("Expected query to fail due to not being readonly")
         except CBQError as ex:
             self.assertTrue("not a readonly request" in str(ex).lower())
+
+    def test_redact_ifmissing(self):
+        # redact the id of the parent object if it is missing 
+        result = self.run_cbq_query('''
+            SELECT {
+                "parent": {
+                    "id": IFMISSING(REDACT(doc.parent.id, { "pattern": ".*", "regex": true, "mask": "*" }), "******"),
+                    "name": doc.parent.name },
+                "child": { "id": doc.child.id, "name": doc.child.name }
+                } 
+            FROM [{"parent":{"name": "joe", "id": "joe-abc"}, "child": {"name": "jim", "id":"jim-123"}}] doc
+        ''')
+        expected_result = [
+        {
+            "$1": {
+                "child": {
+                    "id": "jim-123",
+                    "name": "jim"
+                },
+                "parent": {
+                    "id": "***-***",
+                    "name": "joe"
+                }
+            }
+        }
+        ]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+        
+        result = self.run_cbq_query('''
+            SELECT {
+                "parent": {
+                    "id": IFMISSING(REDACT(doc.parent.id, { "pattern": ".*", "regex": true, "mask": "*" }), "******"),
+                    "name": doc.parent.name },
+                "child": { "id": doc.child.id, "name": doc.child.name }
+                } 
+            FROM [{"parent":{"name": "joe"}, "child": {"name": "jim", "id":"jim-123"}}] doc
+        ''')
+        expected_result = [
+        {
+            "$1": {
+                "child": {
+                    "id": "jim-123",
+                    "name": "jim"
+                },
+                "parent": {
+                    "id": "******",
+                    "name": "joe"
+                }
+            }
+        }
+        ]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_ifnull(self):
+        result = self.run_cbq_query('''
+            SELECT {
+                "parent": {
+                    "id": IFNULL(REDACT(doc.parent.id, { "pattern": ".*", "regex": true, "mask": "*" }), "******"),
+                    "name": doc.parent.name },
+                "child": { "id": doc.child.id, "name": doc.child.name }
+                } 
+            FROM [{"parent":{"name": "joe", "id": "joe-abc"}, "child": {"name": "jim", "id":"jim-123"}}] doc
+        ''')
+        expected_result = [
+        {
+            "$1": {
+                "child": {
+                    "id": "jim-123", 
+                    "name": "jim"
+                },
+                "parent": {
+                    "id": "***-***",
+                    "name": "joe"
+                }
+            }
+        }
+        ]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+        result = self.run_cbq_query('''
+            SELECT {
+                "parent": {
+                    "id": IFNULL(REDACT(doc.parent.id, { "pattern": ".*", "regex": true, "mask": "*" }), "******"),
+                    "name": doc.parent.name },
+                "child": { "id": doc.child.id, "name": doc.child.name }
+                } 
+            FROM [{"parent":{"name": "joe", "id": null}, "child": {"name": "jim", "id":"jim-123"}}] doc
+        ''')
+        expected_result = [
+        {
+            "$1": {
+                "child": {
+                    "id": "jim-123",
+                    "name": "jim"
+                },
+                "parent": {
+                    "id": "******",
+                    "name": "joe"
+                }
+            }
+        }
+        ]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_case(self):   
+        result = self.run_cbq_query('''
+            SELECT {
+                "parent": {
+                    "id": CASE WHEN REDACT(doc.parent.id) IS NULL THEN "******" ELSE REDACT(doc.parent.id) END,
+                    "name": doc.parent.name },
+                "child": { "id": doc.child.id, "name": doc.child.name }
+            } 
+            FROM [{"parent":{"name": "joe", "id": null}, "child": {"name": "jim", "id":"jim-123"}}] doc
+        ''')
+        expected_result = [
+        {
+            "$1": {
+                "child": {
+                    "id": "jim-123",
+                    "name": "jim"
+                },
+                "parent": {
+                    "id": "******",
+                    "name": "joe"
+                }
+            }
+        }
+        ]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_redact_field_selection(self):
+        result = self.run_cbq_query('''
+            SELECT {
+                "parent": {
+                    "name": doc.parent.name,
+                    "id": REDACT(doc.parent.id, {"mask": "*"})
+                },
+                "child": doc.child
+            }
+            FROM [{"parent":{"name": "joe", "id": "joe-123"}, "child": {"name": "jim", "id":"jim-123"}}] doc
+        ''')
+        expected_result = [
+        {
+            "$1": {
+                "child": {
+                    "id": "jim-123",
+                    "name": "jim"   
+                },
+                "parent": {
+                    "id": "***-***",
+                    "name": "joe"
+                }
+            }
+        }
+        ]
+        self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
