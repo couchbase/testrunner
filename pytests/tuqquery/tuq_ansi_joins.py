@@ -151,7 +151,7 @@ class QueryANSIJOINSTests(QueryTests):
         self.assertTrue("HashJoin" in str(plan))
         # Ensure that the build side is d
         self.assertTrue('d' in plan['~children'][1]['build_aliases'], f"Build alias is wrong please check {plan}")
-        queries_to_run.append((query_1, 2))
+        queries_to_run.append((query_1, 4))
 
         self.run_common_body(queries_to_run=queries_to_run)
 
