@@ -117,6 +117,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.use_cbo = self.input.param("use_cbo", False)
         self.xattr_indexes = self.input.param("xattr_indexes", False)
         self.create_query_node_pattern = r"create .*?index (.*?) on .*?nodes':.*?\[(.*?)].*?$"
+        self.bhive_sample_vector = [3.0, 9.0, 17.0, 78.0, 83.0, 15.0, 10.0, 8.0, 101.0, 109.0, 21.0, 8.0, 3.0, 2.0, 9.0, 64.0, 39.0, 31.0, 18.0, 80.0, 55.0, 10.0, 2.0, 12.0, 7.0, 7.0, 26.0, 58.0, 32.0, 6.0, 4.0, 3.0, 14.0, 2.0, 13.0, 28.0, 37.0, 19.0, 47.0, 59.0, 109.0, 22.0, 2.0, 6.0, 18.0, 15.0, 20.0, 109.0, 30.0, 8.0, 11.0, 44.0, 109.0, 54.0, 19.0, 32.0, 17.0, 21.0, 15.0, 22.0, 12.0, 28.0, 101.0, 35.0, 66.0, 11.0, 9.0, 30.0, 68.0, 35.0, 30.0, 75.0, 106.0, 103.0, 26.0, 50.0, 76.0, 20.0, 8.0, 13.0, 51.0, 41.0, 63.0, 109.0, 40.0, 2.0, 3.0, 15.0, 36.0, 49.0, 21.0, 13.0, 12.0, 9.0, 36.0, 37.0, 52.0, 37.0, 24.0, 34.0, 19.0, 3.0, 13.0, 23.0, 21.0, 8.0, 3.0, 20.0, 68.0, 56.0, 79.0, 60.0, 99.0, 36.0, 7.0, 28.0, 78.0, 41.0, 7.0, 21.0, 74.0, 26.0, 3.0, 15.0, 34.0, 15.0, 12.0, 27.0]
         # current value of n1ql_feat_ctrl disables sequential scan. To enable it set value to 0x4c
         self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "16460")
         if self.aws_access_key_id:

@@ -6670,17 +6670,20 @@ class MagmaDocLoader(Task):
             self.sdk_docloader.create_end = self.sdk_docloader.end + 1
 
         if self.sdk_docloader.json_template == 'siftBigANN':
-            command = f"java -cp /root/DocLoader/target/magmadocloader/magmadocloader.jar SIFTLoader -n {self.server.ip} " \
+            command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar SIFTLoader -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
                   f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \
                   f"-update_s {self.sdk_docloader.update_start} -update_e {self.sdk_docloader.update_end} " \
                   f"-delete_s {self.sdk_docloader.delete_start} -delete_e {self.sdk_docloader.delete_end} " \
+                  f"-expiry_s {self.sdk_docloader.expiry_start} -expiry_e {self.sdk_docloader.expiry_end} " \
+                  f"-read_s {self.sdk_docloader.read_start} -read_e {self.sdk_docloader.read_end} " \
+                  f"-ex {self.sdk_docloader.percent_expiry} -rd {self.sdk_docloader.percent_read} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_update} " \
                   f"-dl {self.sdk_docloader.percent_delete} -mutate {self.sdk_docloader.mutate} " \
                   f"-docSize {self.sdk_docloader.doc_size}  -valueType {self.sdk_docloader.json_template} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
                   f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
-                  f"-baseVectorsFilePath /data/bigann/ "
+                  f"-baseVectorsFilePath /data/bigann"
 
         else:
             command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
