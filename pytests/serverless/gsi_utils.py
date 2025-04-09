@@ -466,7 +466,7 @@ class GSIUtils(object):
                             index_fields=[f'{color_vecfield} VECTOR'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
                             scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            train_list=train_list, limit=limit, 
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{color_vecfield},"
                                                                               f" {scan_color_vec_1}",
                                                                               scan_color_vec_1)))
@@ -488,7 +488,7 @@ class GSIUtils(object):
                             index_fields=[f'{desc_vecfield} VECTOR'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            train_list=train_list, limit=limit, 
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield}",
                                                                                "rating = 2 and "
                                                                                "category in ['Convertible', "
@@ -516,7 +516,7 @@ class GSIUtils(object):
                             index_where_clause='rating > 3',
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            train_list=train_list, limit=limit, 
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {desc_vecfield}",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
