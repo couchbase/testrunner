@@ -2305,3 +2305,24 @@ class WindowFunctionsTest(QueryTests):
 
         self.run_cbq_query('CREATE INDEX ix_primary ON {0}(primary_key);'.format(query_bucket))
         self._wait_for_index_online(bucket=bucket_name, index_name='ix_primary')
+
+    def test_MB53353(self):
+        query = '''
+        SELECT  x.a AS a,
+        SUM(x.a) OVER (PARTITION BY x.c ORDER BY x.a ROWS BETWEEN CURRENT ROW AND unbounded FOLLOWING) AS aSum
+        FROM [
+        {"a":0,"c":'one'},
+        {"a":1,"c":'one'},
+        {"a":4,"c":'one'},
+        {"a":7,"c":'one'}
+        ] AS x
+        ORDER BY a ASC
+        '''
+        result = self.run_cbq_query(query)
+        expected = [
+            {'a': 0, 'aSum': 12},
+            {'a': 1, 'aSum': 12},
+            {'a': 4, 'aSum': 11},
+            {'a': 7, 'aSum': 7}
+        ]
+        self.assertEqual(result['results'], expected, f"We got unexpected result {result['results']}")
