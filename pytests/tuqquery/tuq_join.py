@@ -1088,3 +1088,24 @@ class JoinTests(QuerySanityTests):
             self.assertTrue('HashJoin' in str(explain_result), "HashJoin is not in explain result")
         finally:
             self.run_cbq_query("DROP COLLECTION mb65949 IF EXISTS", query_context='default._default')
+
+    def test_MB65746(self):
+        try:
+            # create collection mb65746 and indexes if not exists
+            self.run_cbq_query("CREATE COLLECTION mb65746 IF NOT EXISTS", query_context='default._default')
+            self.run_cbq_query("DROP INDEX ix1 IF EXISTS ON mb65746", query_context='default._default')
+            self.run_cbq_query("DROP INDEX ix2 IF EXISTS ON mb65746", query_context='default._default')
+            self.run_cbq_query("CREATE INDEX ix1 ON mb65746(status,owner,type)", query_context='default._default')
+            self.run_cbq_query("CREATE INDEX ix2 ON mb65746(type,date,owner) WHERE type NOT IN ['a1','a2']", query_context='default._default')
+            
+            # run explain query with use_cbo=False
+            explain_query = "EXPLAIN SELECT * FROM mb65746 WHERE type='xx' AND owner='{owner}' AND status IN ['open','close']"
+            explain_result = self.run_cbq_query(explain_query, query_context='default._default', query_params={'use_cbo': False})
+            self.log.info(f"Explain result: {explain_result}")
+
+            # Check explain does not contain IntersectScan and contains ix1
+            self.log.info("Check explain does not contain IntersectScan and contains ix1")
+            self.assertTrue('IntersectScan' not in str(explain_result), "IntersectScan is in explain result")
+            self.assertTrue('ix1' in str(explain_result), "ix1 is not in explain result")
+        finally:
+            self.run_cbq_query("DROP COLLECTION mb65746 IF EXISTS", query_context='default._default')
