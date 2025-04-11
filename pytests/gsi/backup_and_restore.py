@@ -153,7 +153,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.assertEqual(
                     idx_after_restore['status'], "Created", msg=msg)
 
-                self.assertEqual(self.num_index_replicas,
+                self.assertEqual(self.num_index_replica,
                                  idx_after_restore['numReplica'], msg=msg)
 
                 self.assertEqual(idx_before_backup['numPartition'],
@@ -784,9 +784,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         """
         if len(self.indexer_nodes) < 2:
             self.fail("Atleast 2 indexer required")
-        if self.num_index_replicas == 0 or\
-                self.num_index_replicas >= len(self.indexer_nodes):
-            self.num_index_replicas = len(self.indexer_nodes) - 1
+        if self.num_index_replica == 0 or\
+                self.num_index_replica >= len(self.indexer_nodes):
+            self.num_index_replica = len(self.indexer_nodes) - 1
         self._drop_indexes(self.rest.get_indexer_metadata()['status'])
         replica_index = QueryDefinition(
             "replica_index",
@@ -798,7 +798,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
-            num_replica=self.num_index_replicas
+            num_replica=self.num_index_replica
         )
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
@@ -808,7 +808,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         indexer_stats_before_backup = self.rest.get_indexer_metadata()
         replica_indexes_before_backup = indexer_stats_before_backup['status']
         self.assertEqual(
-            len(replica_indexes_before_backup), self.num_index_replicas + 1)
+            len(replica_indexes_before_backup), self.num_index_replica + 1)
         indexes_before_backup = [
             index for index in replica_indexes_before_backup
             if index['indexName'] == replica_index.index_name]
@@ -836,7 +836,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         time.sleep(30)
         indexes_after_restore = [index for index in self.rest.get_indexer_metadata()['status']
                                  if index['indexName'] == replica_index.index_name]
-        if len(index_nodes) > self.num_index_replicas:
+        if len(index_nodes) > self.num_index_replica:
             self.assertEqual(len(indexes_after_restore), len(indexes_before_backup))
         else:
             self.assertEqual(len(indexes_after_restore), len(index_nodes))
@@ -1000,9 +1000,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
     def test_backup_restore_with_duplicate_replica_index_name(self):
         if len(self.indexer_nodes) < 2:
             self.fail("Atleast 2 indexer required")
-        if self.num_index_replicas == 0 or\
-                self.num_index_replicas >= len(self.indexer_nodes):
-            self.num_index_replicas = len(self.indexer_nodes) - 1
+        if self.num_index_replica == 0 or\
+                self.num_index_replica >= len(self.indexer_nodes):
+            self.num_index_replica = len(self.indexer_nodes) - 1
         bucket = self.buckets[0].name
         scope = self.rest.get_bucket_scopes(bucket)[0]
         collection = self.rest.get_scope_collections(bucket, scope)[0]
@@ -1019,7 +1019,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
-            num_replica=self.num_index_replicas
+            num_replica=self.num_index_replica
         )
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
@@ -1058,7 +1058,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
-            num_replica=self.num_index_replicas
+            num_replica=self.num_index_replica
         )
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
@@ -1082,7 +1082,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         msg = "indexes before backup: {0}\nindexes after restore: {1}".format(
             basic_indexes_before_backup, basic_indexes_after_restore)
         self.assertEqual(len(basic_indexes_after_restore),
-                         self.num_index_replicas + 1, msg=msg)
+                         self.num_index_replica + 1, msg=msg)
 
     def test_backup_restore_with_duplicate_index_name_different_fields(self):
         """

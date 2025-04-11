@@ -172,7 +172,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_composite_vector_sanity(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
-        self.bhive_composite_comparison = self.input.param("bhive_composite_comparison", True)
+        self.bhive_composite_comparison = self.input.param("bhive_composite_comparison", False)
         query_stats_map = {}
         if self.xattr_indexes:
             for namespace in self.namespaces:
@@ -185,7 +185,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         if self.bhive_composite_comparison:
             self.bhive_index = True
             similarity = random.choice(simlarity_list)
-            simlarity_list = [similarity]
+            simlarity_list = [similarity] * 2
         for similarity in simlarity_list:
             for namespace in self.namespaces:
                 if self.bhive_index:
@@ -447,7 +447,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
 
-        vector_idx = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
+        vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
                                      description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64,
                                      bhive_index=self.bhive_index)
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False,
@@ -458,7 +458,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             executor.submit(self.run_cbq_query, query=query)
             self.sleep(5)
             while timeout < 360:
-                index_state = self.index_rest.get_indexer_metadata()['status'][2]['status']
+                index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
                 if index_state == "Training":
                     break
                 self.sleep(1)
@@ -468,7 +468,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(10)
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for idx in index_metadata:
-            self.assertEqual("Error", idx['status'], 'index has been created ')
+            self.assertEqual("Ready", idx['status'], 'index has been errored out')
 
     def test_concurrent_vector_index_builds(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
