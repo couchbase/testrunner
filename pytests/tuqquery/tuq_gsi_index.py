@@ -8643,3 +8643,17 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query("DROP INDEX ix4 IF EXISTS ON default")
             self.run_cbq_query("DROP INDEX ix5 IF EXISTS ON default")
             self.run_cbq_query("DROP INDEX ix6 IF EXISTS ON default")
+
+    def test_MB52090(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query("CREATE COLLECTION mb52090 IF NOT EXISTS", query_context='default._default')
+        self.run_cbq_query('CREATE INDEX ix2 IF NOT EXISTS ON mb52090(c1) WHERE type LIKE "airport%"', query_context='default._default')
+
+        explain_query = '''
+        EXPLAIN SELECT 1 FROM mb52090 WHERE c1 = 10 AND type LIKE $atype
+        '''
+        explain_result = self.run_cbq_query(explain_query, query_context='default._default', query_params={'$atype': '"airport%"'})
+        self.log.info(f"Explain result: {explain_result}")
+
+        # check ix2 is used in explain result
+        self.assertTrue('ix2' in str(explain_result['results'][0]['plan']))
