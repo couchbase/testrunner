@@ -59,6 +59,8 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED_RECOVERY
         elif handler_code == 'ondeploy_test':
             self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP
+        elif handler_code == 'ondeploy_test_pause_resume':
+            self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_PAUSE_RESUME
         else:
             self.handler_code = "handler_code/ABO/insert_recovery.js"
         if self.is_expired:
@@ -1352,4 +1354,23 @@ class EventingRecovery(EventingBaseTest):
         self.log.info("Pools Default Statistics: {0}".format(json_response))
         self.sleep(10)
         self.wait_for_handler_state(body['appname'], "deployed")
+        self.undeploy_and_delete_function(body)
+
+    def test_ondeploy_after_stopping_couchbase_server_while_resume_is_triggered(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name,self.handler_code)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 1)
+        self.pause_function(body)
+        self.resume_function(body, wait_for_resume=False)
+        #Node killed during the "resuming..." state
+        self.stop_server(eventing_node, True)
+        self.log.info("Couchbase stopped on the eventing node")
+        self.start_server(eventing_node)
+        rest_conn = RestConnection (eventing_node)
+        json_response = rest_conn.cluster_status()
+        self.log.info("Pools Default Statistics: {0}".format(json_response))
+        self.sleep(10)
+        #Function goes back to the "resuming..." state which is the previous state and then gets deployed
+        self.wait_for_handler_state(body ['appname'], "deployed")
         self.undeploy_and_delete_function(body)

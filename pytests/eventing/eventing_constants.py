@@ -104,6 +104,7 @@ class HANDLER_CODE_ONDEPLOY:
     ONDEPLOY_SOURCE_BUCKET_MUTATION = 'handler_code/ondeploy_source_bucket_mutation.js'
     ONDEPLOY_TLS_N2N = 'handler_code/ondeploy_tls_n2n.js'
     ONDEPLOY_REBALANCE = 'handler_code/ondeploy_rebalance.js'
+    ONDEPLOY_PAUSE_RESUME = 'handler_code/ondeploy_pause_resume.js'
 
 
 class HANDLER_CODE_ERROR:
