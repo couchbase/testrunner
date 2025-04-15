@@ -10,6 +10,7 @@ __created_on__ = "19/06/24 03:27 pm"
 import datetime
 import json
 from copy import deepcopy
+import string
 
 import requests
 from concurrent.futures import ThreadPoolExecutor
@@ -51,8 +52,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.system_failure_scenario = self.input.param("system_failure_scenario", None)
         self.corrupt_file_type = self.input.param("corrupt_file_type", None)        
         self.bhive_recovery_log_string = self.input.param("bhive_recovery_log_string", "bhiveSlice::doRecovery")
+        self.num_indexes_batch = self.input.param("num_indexes_batch", 3)
         # set rerank factor to 0
         self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
+
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
@@ -850,7 +853,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
     def kv_node_failover_recovery_and_addback_with_indexes(self):
-        recovery_type = self.input.param('recovery_type', 'full')
+        self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -880,7 +883,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             failover_task.result()
 
             self.rest.add_back_node("ns_1@{}".format(data_nodes[2].ip))
-            self.rest.set_recovery_type("ns_1@{}".format(data_nodes[2].ip), recovery_type)
+            self.rest.set_recovery_type("ns_1@{}".format(data_nodes[2].ip), self.recovery_type)
             self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
             msg = "rebalance failed while recovering failover nodes {0}".format(
                 self.server_to_fail[0])
@@ -1042,7 +1045,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 failover_task.result()
 
                 self.rest.add_back_node("ns_1@{}".format(node.ip))
-                self.rest.set_recovery_type("ns_1@{}".format(node.ip), recovery_type)
+                self.rest.set_recovery_type("ns_1@{}".format(node.ip), self.recovery_type)
                 self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                 msg = "rebalance failed while recovering failover nodes {0}".format(
                     node)
@@ -1102,7 +1105,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 failover_task.result()
 
                 self.rest.add_back_node("ns_1@{}".format(node.ip))
-                self.rest.set_recovery_type("ns_1@{}".format(node.ip), recovery_type)
+                self.rest.set_recovery_type("ns_1@{}".format(node.ip), self.recovery_type)
                 self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                 msg = "rebalance failed while recovering failover nodes {0}".format(
                     node)
@@ -1250,7 +1253,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             for node in nodes_to_failover:
                 self.rest.add_back_node("ns_1@{}".format(node.ip))
-                self.rest.set_recovery_type("ns_1@{}".format(node.ip), recovery_type)
+                self.rest.set_recovery_type("ns_1@{}".format(node.ip), self.recovery_type)
 
             self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
             msg = "rebalance failed while recovering failover nodes {0} and {1}".format(nodes_to_failover[0], 
@@ -2303,6 +2306,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         remote_client = RemoteMachineShellConnection(data_nodes[0])
         remote_client.terminate_process(process_name='projector')
 
+
         index_stats = self.index_rest.get_index_stats()
         docs_pending = [f"{bucket}.{index}.{key}:{val}" for bucket, indexes in index_stats.items()
                         for index, stats in indexes.items()
@@ -3202,7 +3206,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                'color like "%%blue%%" ',
                                                scan_color_vec_1))
         else:
-            vector_index = QueryDefinition(index_name='vector', index_fields=['description VECTOR'], dimension=384,
+            vector_index = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
                                          description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED",
                                          is_base64=self.base64)
 
@@ -3683,3 +3687,238 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                        stats_map_after_rebalance=stats_after_rebalance,
                                                        item_count_increase=False,
                                                        per_node=True, skip_array_index_item_count=False)
+
+    def test_skewed_bhive_composite_co_existence_test(self):
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        collection_namespace = self.namespaces[0]
+        select_queries = set()
+        namespace_index_map = {}
+        self.enable_shard_based_rebalance()
+        for batch in range(0, self.num_indexes_batch):
+            for namespace in self.namespaces:
+                if self.bhive_index:
+                    prefix = "bhive_"+''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                else:
+                    prefix = "composite_vector_" +''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                          prefix=prefix,
+                                                                          similarity=self.similarity, train_list=None,
+                                                                          scan_nprobes=self.scan_nprobes,
+                                                                          array_indexes=False,
+                                                                          limit=self.scan_limit, is_base64=self.base64,
+                                                                          quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          bhive_index=self.bhive_index)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                         num_replica=self.num_index_replica,
+                                                                         defer_build=True, bhive_index=self.bhive_index)
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                           namespace=namespace, limit=self.scan_limit))
+                namespace_index_map[namespace] = definitions
+
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.wait_until_indexes_online()
+
+        self.bhive_index = not self.bhive_index
+        if self.bhive_index:
+            prefix = "bhive"
+        else:
+            prefix = "composite"
+
+        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+        desc_vec2 = list(self.encoder.encode(desc_2))
+
+        scan_desc_vec_1 = f"APPROX_VECTOR_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
+
+        idx_1 = QueryDefinition(f"{prefix}_rating_desc_vector",
+                                      index_fields=['rating', 'descriptionVector Vector',
+                                                    'category'],
+                                      dimension=384,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity=self.similarity,
+                                      scan_nprobes=self.scan_nprobes,
+                                      limit=self.scan_limit, is_base64=self.base64,
+                                      query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                          "description, descriptionVector",
+                                          "rating = 2 and "
+                                          "category in ['Convertible', "
+                                          "'Luxury Car', 'Supercar']",
+                                          scan_desc_vec_1), bhive_index=self.bhive_index, persist_full_vector=True)
+
+        idx_2 = QueryDefinition(index_name=f"{prefix}_desc_vector",
+                        index_fields=['descriptionVector VECTOR'],
+                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                        similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                        train_list=self.trainlist, limit=self.scan_limit, persist_full_vector=True,
+                        query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{scan_desc_vec_1},"
+                                                                          f" {scan_desc_vec_1}",
+                                                                          scan_desc_vec_1), bhive_index=self.bhive_index)
+
+
+        for idx in [idx_1, idx_2]:
+            create_query = idx.generate_index_create_query(namespace=collection_namespace)
+            self.run_cbq_query(query=create_query, server=self.n1ql_node)
+            select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
+                                                                namespace=collection_namespace)[0]
+            select_queries.update(select_query)
+
+        self.wait_until_indexes_online()
+
+        self.validate_no_pending_mutations()
+        self.compare_item_counts_between_kv_and_gsi()
+        self.backstore_mainstore_check()
+        self.validate_replica_indexes_item_counts()
+
+        # validating shard seggregation
+        shard_map = self.get_shards_index_map()
+        self.validate_shard_seggregation(shard_index_map=shard_map)
+
+        partial_indexes_list = self.get_partial_indexes_name_list()
+
+        #validating item count
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if index in partial_indexes_list:
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        #validating recall
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message=f"results of skewed towards bhive {self.bhive_index}", similarity=self.similarity, stats_assertion=False)
+
+        self.drop_all_indexes()
+        self.sleep(120)
+        self.check_storage_directory_cleaned_up()
+        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
+        # if not self.validate_memory_released():
+        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        if not self.validate_cpu_normalized():
+            raise AssertionError("CPU not normalized despite dropping all the indexes")
+
+    def test_batch_index_create_drop_bhive_composite_combo(self):
+        self.index_category_dropped = self.input.param("index_category_dropped", "composite_vector")
+        self.enable_shard_based_rebalance()
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        select_queries = set()
+        namespace_index_map = {}
+        for index_type in ['composite_vector', 'bhive']:
+            namespace_index_map[index_type] = []
+            if index_type == 'composite_vector':
+                self.bhive_index = False
+            else:
+                self.bhive_index = True
+            for batch in range(0, self.num_indexes_batch):
+                for namespace in self.namespaces:
+                    if self.bhive_index:
+                        prefix = "bhive_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    else:
+                        prefix = "composite_vector_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                              prefix=prefix,
+                                                                              similarity=self.similarity, train_list=None,
+                                                                              scan_nprobes=self.scan_nprobes,
+                                                                              array_indexes=False,
+                                                                              limit=self.scan_limit, is_base64=self.base64,
+                                                                              quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                              quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                              bhive_index=self.bhive_index)
+                    create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                             namespace=namespace,
+                                                                             num_replica=self.num_index_replica,
+                                                                             defer_build=False, bhive_index=self.bhive_index)
+                    select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                               namespace=namespace, limit=self.scan_limit))
+
+
+                    namespace_index_map[index_type].append(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
+
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.wait_until_indexes_online()
+        self.validate_no_pending_mutations()
+        self.compare_item_counts_between_kv_and_gsi()
+        self.backstore_mainstore_check()
+        self.validate_replica_indexes_item_counts()
+
+        # validating shard seggregation
+        shard_map = self.get_shards_index_map()
+        self.validate_shard_seggregation(shard_index_map=shard_map)
+
+        partial_indexes_list = self.get_partial_indexes_name_list()
+
+        # validating item count
+        _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+        index_item_count_map = {}
+        for node in stats:
+            for namespace in stats[node]:
+                for index in stats[node][namespace]:
+                    if index not in index_item_count_map:
+                        index_item_count_map[index] = stats[node][namespace][index]["items_count"]
+                    else:
+                        index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        for index in index_item_count_map:
+            if index in partial_indexes_list:
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+
+        #dropping a particular category(bhive/composite) of indexes
+        for query_list in namespace_index_map[self.index_category_dropped]:
+            for drop_query in query_list:
+                self.run_cbq_query(query=drop_query)
+
+        if self.index_category_dropped == 'composite_vector':
+            self.bhive_index = True
+        else:
+            self.bhive_index = False
+
+        for batch in range(0, self.num_indexes_batch):
+            for namespace in self.namespaces:
+                if self.bhive_index:
+                    prefix = "bhive " + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                else:
+                    prefix = "composite_vector " + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                          prefix=prefix,
+                                                                          similarity=self.similarity, train_list=None,
+                                                                          scan_nprobes=self.scan_nprobes,
+                                                                          array_indexes=False,
+                                                                          limit=self.scan_limit, is_base64=self.base64,
+                                                                          quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          bhive_index=self.bhive_index)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                         namespace=namespace,
+                                                                         num_replica=self.num_index_replica,
+                                                                         defer_build=True, bhive_index=self.bhive_index)
+                select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                           namespace=namespace, limit=self.scan_limit))
+
+
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+
+        self.wait_until_indexes_online()
+        self.validate_no_pending_mutations()
+        self.compare_item_counts_between_kv_and_gsi()
+        self.backstore_mainstore_check()
+        self.validate_replica_indexes_item_counts()
+
+        # validating recall
+        self.display_recall_and_accuracy_stats(select_queries=select_queries,
+                                               message=f"results of skewed towards bhive {self.bhive_index}",
+                                               similarity=self.similarity, stats_assertion=False)
+
+        self.drop_all_indexes()
+        self.sleep(120)
+        self.check_storage_directory_cleaned_up()
+        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
+        # if not self.validate_memory_released():
+        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        if not self.validate_cpu_normalized():
+            raise AssertionError("CPU not normalized despite dropping all the indexes")

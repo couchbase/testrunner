@@ -161,7 +161,7 @@ class GSIUtils(object):
 
         # Primary Query
         if not skip_primary:
-            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            prim_index_name = f'#primary_scalar_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
                                 query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color", 'colorHex like "#8f%%"'),
@@ -454,7 +454,7 @@ class GSIUtils(object):
 
         # Primary Query
         if not skip_primary:
-            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            prim_index_name = f'#primary_scalar_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
                                 query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color", 'colorHex like "#8f%%"'),

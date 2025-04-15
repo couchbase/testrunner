@@ -3212,6 +3212,29 @@ class BaseSecondaryIndexingTests(QueryTests):
                 array_indexes.append(index['indexName'])
         return array_indexes
 
+    def get_all_primary_index_names(self):
+        """Returns a list of all primary indexes in the cluster
+        """
+        primary_index = []
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains primary indexing syntax like PRIMARY
+            if 'definition' in index and ('isPrimary' in index):
+                primary_index.append(index['indexName'])
+        return primary_index
+
+    def get_all_bhive_index_names(self):
+        """Returns a list of all bhive indexes in the cluster
+        """
+        bhive_index = []
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains bhive indexing syntax like VECTOR
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
+            if 'definition' in index and ('VECTOR' in index['definition'][:14]):
+                bhive_index.append(index['indexName'])
+        return bhive_index
+
     def get_storage_stats_map(self, node):
         """
         Fetches index storage stats from /stats/storage endpoint
@@ -3245,6 +3268,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         idx_node_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # Exclude all array indexes
         ignore_count_index_list = self.get_all_array_index_names()
+        primary_index_list = self.get_all_primary_index_names()
+        bhive_index_list = self.get_all_bhive_index_names()
         errors = []
         for node in idx_node_list:
             self.log.info(f"Checking stats for node {node}")
@@ -3253,16 +3278,22 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index in list(content.values()):
                 for index_name, stats in index.items():
                     self.log.info(f"checking for index {index_name}")
+                    if index_name in primary_index_list:
+                        continue
                     if index_name in ignore_count_index_list or "BackStore" not in stats:
                         continue
-                    if stats["MainStore"]["item_count"] != stats["BackStore"]["item_count"]:
+                    if index in bhive_index_list:
+                        key = "item_count"
+                    else:
+                        key = "items_count"
+                    if stats["MainStore"][key] != stats["BackStore"][key]:
                         self.log.info(f"Index map as seen during backstore_mainstore_check is {stats}")
                         self.log.error(f"Item count mismatch in backstore and mainstore for {index_name}")
                         errors_obj = dict()
                         errors_obj["type"] = "mismatch in backstore and mainstore"
                         errors_obj["index_name"] = index_name
-                        errors_obj["mainstore_count"] = stats["MainStore"]["item_count"]
-                        errors_obj["backstore_count"] = stats["BackStore"]["item_count"]
+                        errors_obj["mainstore_count"] = stats["MainStore"][key]
+                        errors_obj["backstore_count"] = stats["BackStore"][key]
                         errors.append(errors_obj)
         if len(errors) > 0:
             return errors
