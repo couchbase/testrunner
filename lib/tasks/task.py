@@ -1714,10 +1714,6 @@ class ESBulkLoadGeneratorTask(Task):
                     "_id": key,
                 }
             }
-            if self.dataset == "geojson":
-                es_doc[self.op_type]["_type"] = "_doc"
-            else:
-                es_doc[self.op_type]["_type"] = doc['type']
 
             es_bulk_docs.append(json.dumps(es_doc))
             if self.op_type == "create":
@@ -6723,9 +6719,7 @@ class SDKLoadDocumentsTask(Task):
                   f"-st {self.sdk_docloader.start+start_seq_num_shift} -en {self.sdk_docloader.end+start_seq_num_shift} -o {self.sdk_docloader.output} -sd {self.sdk_docloader.shuffle_docs} --secure {self.sdk_docloader.secure} -cpl {self.sdk_docloader.capella}"
         if self.sdk_docloader.es_compare:
             command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
-                self.sdk_docloader.es_port) + \
-                      " -es_login " + str(self.sdk_docloader.es_login) + " -es_password " + str(
-                self.sdk_docloader.es_password)
+                self.sdk_docloader.es_port)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = self.sdk_docloader.fields_to_update if self.sdk_docloader.fields_to_update else ""
             if len(arr_fields_to_update) > 0:

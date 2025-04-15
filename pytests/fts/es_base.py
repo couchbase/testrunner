@@ -38,7 +38,7 @@ class BLEVE:
             "analysis": {
                 "analyzer": {
                     "default": {
-                        "type":      "standard",
+                        "type": "standard",
                         "stopwords": STOPWORDS
                     }
                 }
@@ -49,66 +49,60 @@ class BLEVE:
     CUSTOM_ANALYZER = {
         "settings": {
             "analysis": {
-                "analyzer": {
-                },
+                "analyzer": {},
                 "char_filter": {
                     "mapping": {
                         "type": "mapping",
-                        "mappings": [
-                            "f => ph"
-                        ]
+                        "mappings": ["f => ph"]
                     }
                 },
-                "tokenizer":{
-                    "alphanumeric":{
-                        "type":"pattern",
-                        "pattern":"[^a-zA-Z0-9_]"
+                "tokenizer": {
+                    "alphanumeric": {
+                        "type": "pattern",
+                        "pattern": "[^a-zA-Z0-9_]"
                     }
                 },
                 "filter": {
                     "back_edge_ngram": {
-                        "type":"edgeNGram",
-                        "min_gram":3,
-                        "max_gram":5,
-                        "side":"back"
+                        "type": "edge_ngram",
+                        "min_gram": 3,
+                        "max_gram": 5
                     },
                     "front_edge_ngram": {
-                        "type": "edgeNGram",
+                        "type": "edge_ngram",
                         "min_gram": 3,
-                        "max_gram": 5,
-                        "side": "front"
+                        "max_gram": 5
                     },
                     "ngram": {
-                        "type": "nGram",
+                        "type": "ngram",
                         "min_gram": 3,
-                        "max_gram": 5,
-                        "side": "front"
+                        "max_gram": 5
                     },
                     "keyword_marker": {
-                        "type":"keyword_marker",
-                        "keywords":STOPWORDS
+                        "type": "keyword_marker",
+                        "keywords": STOPWORDS
                     },
                     "stopwords": {
-                        "type":"stop",
-                        "stopwords":STOPWORDS
+                        "type": "stop",
+                        "stopwords_path": "stopwords.txt"
                     },
                     "length": {
-                        "type":"length",
-                        "min":3,
-                        "max":5
+                        "type": "length",
+                        "min": 3,
+                        "max": 5
                     },
                     "shingle": {
-                        "type":"shingle",
-                        "max_shingle_size":5,
-                        "min_shingle_size":2,
-                        "output_unigrams":"false",
-                        "output_unigrams_if_no_shingles":"false",
-                        "token_separator":"",
-                        "filler_token":""
+                        "type": "shingle",
+                        "max_shingle_size": 5,
+                        "min_shingle_size": 2,
+                        "output_unigrams": False,
+                        "output_unigrams_if_no_shingles": False,
+                        "token_separator": "",
+                        "filler_token": ""
                     },
                     "truncate": {
-                        "length": 10,
-                        "type": "truncate"
+                        "type": "truncate",
+                        "length": 10
                     },
                     "cjk_bigram": {
                         "type": "cjk_bigram"
@@ -292,6 +286,7 @@ class ElasticSearchBase(object):
                 'PUT')
             if status:
                 self.__indices.append(index_name)
+                self.enable_scroll(index_name=index_name)
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
 
@@ -308,6 +303,7 @@ class ElasticSearchBase(object):
                 'PUT', json.dumps(BLEVE.STD_ANALYZER))
             if status:
                 self.__indices.append(index_name)
+                self.enable_scroll(index_name=index_name)
         except Exception as e:
             raise Exception("Could not create index with ES std analyzer : %s"
                             % e)
@@ -328,6 +324,9 @@ class ElasticSearchBase(object):
             # Create an ES custom index definition
             map = {"mappings": es_mapping, "settings": es_settings['settings']}
 
+            if "geo" in es_mapping['properties']:
+                map['mappings']['properties']['geo'] = {"type": "geo_point","ignore_malformed": False,"ignore_z_value": True}
+
         # Create ES index
         try:
             self.__log.info("Creating %s with mapping %s"
@@ -338,6 +337,7 @@ class ElasticSearchBase(object):
                 json.dumps(map))
             if status:
                 self.__log.info("SUCCESS: ES index created with above mapping")
+                self.enable_scroll(index_name=index_name)
             else:
                 raise Exception("Could not create ES index")
         except Exception as e:
@@ -362,6 +362,15 @@ class ElasticSearchBase(object):
                 json.dumps(pipeline_mapping))
         if status:
                 self.__log.info("SUCCESS: ES circle ingestion pipeline created")
+    
+    def enable_scroll(self, index_name="es_index"):
+        try:
+            status, content, _ = self._http_request(
+                self.__connection_url + index_name +'/_settings',
+                'PUT',
+                json.dumps({"index": {"max_result_window": 1000000}}))
+        except Exception as e:
+            raise e
 
     def populate_es_settings(self, fts_custom_analyzers_def):
         """

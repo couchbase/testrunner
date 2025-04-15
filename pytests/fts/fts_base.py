@@ -6016,11 +6016,9 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("Creating a geo-index on Elasticsearch...")
             self.es.delete_indices()
             es_mapping = {
-                "earthquake": {
-                    "properties": {
-                        "geo": {
-                            "type": "geo_point"
-                        }
+                "properties": {
+                    "geo": {
+                        "type": "geo_point"
                     }
                 }
             }
