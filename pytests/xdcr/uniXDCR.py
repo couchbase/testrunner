@@ -971,3 +971,46 @@ class unidirectional(XDCRNewBaseTest):
                 self.fail("Docs in source bucket is not 0 after maxttl has elapsed")
         self._wait_for_replication_to_catchup()
 
+    def test_replication_existence_after_target_bucket_delete(self):
+        """
+        Test for MB-23798: XDCR should not auto-delete replications if the target bucket is deleted
+        """
+        src_rest = RestConnection(self.src_master)
+        dest_rest = RestConnection(self.dest_master)
+        bucket_name = self._input.param("bucket_name", None)
+        if bucket_name is None:
+            bucket_name = "default"
+            self.setup_xdcr()
+        else:
+            # Create bucket on source and target (load no of items in each)
+            src_create_success = src_rest.create_bucket(bucket=bucket_name)
+            if src_create_success:
+                self.log.info("Created bucket on source cluster")
+            dest_create_success = dest_rest.create_bucket(bucket=bucket_name)
+            if dest_create_success:
+                self.log.info("Created bucket on dest cluster")
+            if not (src_create_success and dest_create_success):
+                self.fail("Bucket creation failed on clusters")
+            src_rest.add_remote_cluster(self.dest_master.ip, 
+                                        self.dest_master.port, 
+                                        self.dest_master.rest_username, 
+                                        self.dest_master.rest_password,
+                                        "new_repl")
+            src_rest.start_replication("continuous", bucket_name, "new_repl", "xmem", bucket_name)
+        
+        doc_gen = BlobGenerator("docs", "seed", 512, end=100)
+        self.src_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
+
+        # Delete bucket on target
+        dest_delete_bucket = dest_rest.delete_bucket(bucket=bucket_name)
+        if not dest_delete_bucket:
+            self.fail("Failure occurred while deleting bucket on dest")
+
+        # Verify if replication still present
+        try:
+            repl = src_rest.get_replication_for_buckets(src_bucket_name=bucket_name, dest_bucket_name=bucket_name)
+            if repl is not None:
+                self.log.info("Replication still exists after target bucket deletion")
+        except XDCRException as e:
+            self.fail(f"Exception while verifying existence of replication: {e}")
+
