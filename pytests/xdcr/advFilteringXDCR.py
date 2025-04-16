@@ -3,7 +3,7 @@ import time
 
 from membase.api.rest_client import RestConnection
 from scripts.edgyjson.main import JSONDoc
-
+from lib.remote.remote_util import RemoteMachineShellConnection
 from .xdcrnewbasetests import XDCRNewBaseTest
 
 
@@ -62,6 +62,19 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         except Exception as e:
             self.fail(
                 "Errors encountered while loading data: {0}".format(str(e)))
+
+    def load_docs_with_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000, scope="_default", collection="_default", command_timeout=10):
+        server_shell = RemoteMachineShellConnection(server)
+        cmd = f"/opt/couchbase/bin/cbc-pillowfight -u Administrator -P password -U couchbase://localhost/"\
+            f"{bucket} -I {items} -m {docsize} -M {docsize} -B {batch} --rate-limit={rate_limit} --populate-only --collection {scope}.{collection}"
+        self.log.info("Executing '{0}'...".format(cmd))
+        output, error  = server_shell.execute_command(cmd, timeout=command_timeout, use_channel=True)
+        if output:
+            self.log.info(f"Output: {output}")
+        if error:
+            self.fail(f"Failed to load docs in cluster in {bucket}.{scope}.{collection}")
+        server_shell.disconnect()
+        self.log.info(f"Data loaded into {bucket}.{scope}.{collection} successfully")
 
     def verify_results(self):
         rdirection = self._input.param("rdirection", "unidirection")
@@ -127,3 +140,38 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
 
         if not self.skip_validation:
             self.verify_results()
+
+    def test_xdcr_with_filter_for_binary(self):
+        rdirection = self._input.param("rdirection", "unidirection")
+        items = self._input.param("items", 100)
+        exclude_binary = self._input.param("filter_binary", False)
+        should_be_filtered = False   # should binary docs be filtered
+        self.wait_interval(10, "Wait for initial replication setup")
+        replications = self.src_rest.get_replications()
+        for repl in replications:
+            # Assuming src and dest bucket of the replication have the same name
+            bucket = repl['source']
+            if repl['filterExpression']:
+                exp_in_brackets = '( ' + str(repl['filterExpression']) + ' )'
+                if bucket in self.filter_exp.keys():
+                    self.filter_exp[bucket].add(exp_in_brackets)
+                else:
+                    self.filter_exp[bucket] = {exp_in_brackets}
+        filter_exp = self.filter_exp['default']
+        if "META()" in filter_exp:
+            should_be_filtered = True
+        if exclude_binary:
+            self.src_rest.set_xdcr_param("default", "default", "filterBinary", "true")
+            self.log.info("Set filterBinary to be True")
+
+        self.load_docs_with_pillowfight(self.src_master, items=items, bucket="default", batch=1000, docsize=300)
+        self.sleep(10, "sleeping after inserting binary docs")
+
+        if should_be_filtered:
+            if self._if_docs_count_match_on_servers():
+                self.log.info("Binary docs filtered and count matches")
+            else:
+                self.fail("Binary docs were not replicated")
+        else:
+            if self._if_docs_count_match_on_servers():
+                self.fail("Binary docs were replicated when they were not supposed to")
