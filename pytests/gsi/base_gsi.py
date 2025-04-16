@@ -155,7 +155,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
-        self.dimension = self.input.param("dimension", None)
         self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
@@ -433,7 +432,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         repo = filename.split('.')[0]
         remote_client.execute_command("rm -rf backup")
         if type == 'windows':
-            couchbase_root_dir = '"C:\\Program Files\\Couchbase\\Server\\bin\\cbbackupmgr"'
+            couchbase_root_dir = '"/cygdrive/c/Program Files/Couchbase/Server/bin/cbbackupmgr"'
         else:
             couchbase_root_dir = "/opt/couchbase/bin/cbbackupmgr"
         backup_config_cmd = f"{couchbase_root_dir} config --archive backup/ --repo {repo}"
@@ -442,7 +441,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         if "failed" in out[0]:
             self.fail(out)
         self.log.info("unzip the backup repo before restoring it")
-        unzip_cmd = f"unzip -o {filename}"
+        if type == 'windows':
+            unzip_cmd = f'powershell -command "Expand-Archive -Path \'C:\\cygwin64\\home\\Administrator\\{filename}\' -DestinationPath \'C:\\cygwin64\\home\\Administrator\\\'"'
+        else:
+            unzip_cmd = f"unzip -o {filename}"
         remote_client.execute_command(command=unzip_cmd)
         restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
                       f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
