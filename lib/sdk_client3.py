@@ -55,31 +55,31 @@ class SDKClient(object):
         self.log = logger.Logger.get_logger()
 
     def _createString(self, scheme="couchbase", bucket=None, hosts=["localhost"], certpath=None,
-                      uhm_options="", ipv6=False, compression=True, sasl_mech=None):
+                      uhm_options=None, ipv6=False, compression=True, sasl_mech=None):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ", ""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
         if uhm_options != None:
             connection_string = "{0}?{1}".format(connection_string, uhm_options)
-        
+
         conn_string = ConnectionString.parse(connection_string)
-        
+
         if scheme == "couchbases":
             conn_string.set_option('certpath', certpath)
             if not certpath:
                 conn_string.set_option('ssl', 'no_verify')
-        
+
         if sasl_mech is not None:
             conn_string.set_option('sasl_mech_force',sasl_mech)
-        
+
         if ipv6 == True:
             conn_string.set_option('ipv6',"allow")
-        
+
         if compression == True:
             conn_string.set_option('compression',"on")
         else:
-            conn_string.set_option('compression',"off")
-        
+            conn_string.set_option('compression', "off")
+
         return conn_string
 
     def _createConn(self):

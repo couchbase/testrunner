@@ -3237,6 +3237,40 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         params = urllib.parse.urlencode(params)
         return rest._http_request(api, "POST", params)
 
+    def create_bucket_for_continuous_backup(self, bucket_name, interval_time, history_retention_seconds=86400,
+                                            history_retention_bytes=16106127360):
+
+        command = f"curl -v http://{self.master.ip}:8091/pools/default/buckets \
+                          -u {self.master.rest_username}:{self.master.rest_password} \
+                          -d name={bucket_name} \
+                          -d ramQuota=256 \
+                          -d storageBackend=magma \
+                          -d continuousBackupEnabled=true \
+                          -d continuousBackupLocation=/tmp/continuous_backup \
+                          -d historyRetentionSeconds={history_retention_seconds} \
+                          -d historyRetentionBytes={history_retention_bytes} \
+                          -d durabilityMinLevel=majority \
+                          -d replicaNumber=0 \
+                          -d continuousBackupInterval={interval_time} \
+                          -d historyRetentionCollectionDefault=true"
+
+        remote_client = RemoteMachineShellConnection(self.master)
+        output, error = remote_client.execute_command(command)
+
+        return output, error
+
+    def restore_continuous_backup(self, time):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        command = "{}cbcontbk restore -c {} -u {} -p {} -l /tmp/continuous_backup -T {} -a {} -r " \
+                  "{} -d /tmp/restoreContBk".format(self.cli_command_location, self.master.ip,
+                              self.master.rest_username, self.master.rest_password, time,
+                              self.backupset.directory, self.backupset.name)
+
+        output, error = remote_client.execute_command(command)
+
+        return output, error
+
 class Backupset:
     def __init__(self):
         self.backup_host = None
