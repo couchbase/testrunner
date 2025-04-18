@@ -406,11 +406,11 @@ class QueryCurlTests(QueryTests):
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
         # Test for a website in production (the website above is only used to provide json endpoints with fake data)
-        curl_output = self.shell.execute_command("%s http://data.colorado.gov/resource/4ykn-tg5h.json/"
+        curl_output = self.shell.execute_command("%s https://data.colorado.gov/resource/4ykn-tg5h.json/"
                                                  % self.curl_path)
         self.log.info(curl_output)
         expected_curl = self.convert_list_to_json(curl_output[0])
-        url = "'http://data.colorado.gov/resource/4ykn-tg5h.json/'"
+        url = "'https://data.colorado.gov/resource/4ykn-tg5h.json/'"
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
