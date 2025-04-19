@@ -3475,7 +3475,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None, variable_node = None):
+                                    use_collections=False, dataset=None, variable_node = None,ignore_wiki=False):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3488,7 +3488,8 @@ class CouchbaseCluster:
                                                             use_collections=use_collections,
                                                             dataset=dataset,
                                                             reduce_query_logging=self.reduce_query_logging,
-                                                            variable_node = variable_node)
+                                                            variable_node = variable_node,
+                                                            ignore_wiki=ignore_wiki)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -5494,9 +5495,10 @@ class FTSBaseTest(unittest.TestCase):
                                         "conjunction", "disjunction"]
         """
         from .random_query_generator.rand_query_gen import FTSESQueryGenerator
+        self.doc_maps = int(TestInputSingleton.input.param("doc_maps", 1))
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
                                         seed=seed, dataset=self.dataset,
-                                        fields=index.smart_query_fields)
+                                        fields=index.smart_query_fields,doc_map_count=self.doc_maps)
         for fts_query in query_gen.fts_queries:
             index.fts_queries.append(
                 json.loads(json.dumps(fts_query, ensure_ascii=False)))
@@ -6338,7 +6340,7 @@ class FTSBaseTest(unittest.TestCase):
         return load_tasks
 
     def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,
-                              dataset=None):
+                              dataset=None,ignore_wiki=False):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -6354,7 +6356,8 @@ class FTSBaseTest(unittest.TestCase):
                 query_index=count,
                 n1ql_executor=n1ql_executor,
                 use_collections=use_collections,
-                dataset=dataset))
+                dataset=dataset,
+                ignore_wiki=ignore_wiki))
 
         num_queries = len(tasks)
 
@@ -6365,7 +6368,6 @@ class FTSBaseTest(unittest.TestCase):
                 failed_queries.append(task.query_index + 1)
 
         if fail_count:
-            
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))

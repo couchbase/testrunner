@@ -25,6 +25,7 @@ class StableTopFTS(FTSBaseTest):
 
     def setUp(self):
         super(StableTopFTS, self).setUp()
+        self.ignore_wiki = False
         self.log.info("Modifying quotas for each services in the cluster")
         try:
             RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
@@ -684,7 +685,11 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
-        self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index)
+        if self.dataset == "all" and int(TestInputSingleton.input.param("doc_maps", 1)) == 1:
+            #ignoring wiki results from the elastic result to match couchbase behaviour
+            self.ignore_wiki = True
+        
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index,ignore_wiki=self.ignore_wiki)
 
     def test_collection_index_data_mutations(self):
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()

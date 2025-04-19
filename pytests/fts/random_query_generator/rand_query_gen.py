@@ -81,7 +81,7 @@ class QUERY_TYPE:
 class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def __init__(self, num_queries=1, query_type=None, seed=0, dataset="emp",
-                 fields=None):
+                 fields=None,doc_map_count=1):
         """
         FTS(Bleve) and equivalent ES(Lucene) query generator for employee dataset
         (JsonDocGenerator in couchbase_helper/documentgenerator.py)
@@ -96,6 +96,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         self.query_types = query_type
         self.dataset = dataset
         self.smart_queries = False
+        self.doc_map_count = doc_map_count
         if fields and query_type == ['N1QL_MATCH_PHRASE']:
             self.fields = {}
             add_only_match = False
@@ -189,6 +190,38 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             query_str = query_str.replace(key, val)
         return json.loads(query_str)
 
+    def inject_type_filter(self, query_dict, type_value):
+        if "bool" in query_dict:
+            filters = query_dict["bool"].get("filter", [])
+            
+            # If filter is a dict, convert it into a list
+            if isinstance(filters, dict):
+                filters = [filters]
+            
+            # If filter is missing, start with an empty list
+            if not isinstance(filters, list):
+                filters = []
+
+            # Add the type filter
+            filters.append({"term": {"type": type_value}})
+            
+            # Update back the filters
+            query_dict["bool"]["filter"] = filters
+
+        else:
+            # If not a bool query, wrap it
+            original_query = query_dict.copy()
+            query_dict.clear()
+            query_dict["bool"] = {
+                "must": original_query,
+                "filter": [
+                    {"term": {"type": type_value}}
+                ]
+            }
+
+        return query_dict
+
+
     def construct_queries(self):
         while self.iterator < self.queries_to_generate:
             fieldname = self.get_random_value(self.query_types)
@@ -199,6 +232,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 continue
             fts_query = self.replace_underscores(fts_query)
             es_query = self.replace_underscores(es_query)
+
             self.fts_queries.append(fts_query)
             self.es_queries.append(es_query)
             if fieldname == "vector_type":

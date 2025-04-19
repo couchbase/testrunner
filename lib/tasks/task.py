@@ -1741,7 +1741,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None):
+                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None,ignore_wiki=False):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1760,6 +1760,7 @@ class ESRunQueryCompare(Task):
         self.dataset = dataset
         self.reduce_query_logging = reduce_query_logging
         self.variable_node = variable_node
+        self.ignore_wiki = ignore_wiki
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1867,7 +1868,7 @@ class ESRunQueryCompare(Task):
                 self.passed = False
             es_hits = 0
             if self.es and self.es_query and "vector" not in self.fts_query:
-                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset)
+                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset,ignore_wiki=self.ignore_wiki)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
                               (json.dumps(self.es_query, ensure_ascii=False),
                                self.es_index_name,
@@ -2025,8 +2026,8 @@ class ESRunQueryCompare(Task):
     def run_fts_query(self, query, score=''):
         return self.fts_index.execute_query(query, score=score,variable_node =self.variable_node)
 
-    def run_es_query(self, query,dataset=None):
-        return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset)
+    def run_es_query(self, query,dataset=None,ignore_wiki=False):
+        return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset,ignore_wiki=ignore_wiki)
 
 
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
