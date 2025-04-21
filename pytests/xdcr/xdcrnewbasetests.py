@@ -153,6 +153,7 @@ class REPL_PARAM:
     MAPPING_RULES = "colMappingRules"
     MIGRATION_MODE = "collectionsMigrationMode"
     MIRRORING_MODE = "collectionsMirroringMode"
+    CONFLICT_LOGGING = "conflictLogging"
 
 
 class TEST_XDCR_PARAM:
@@ -176,7 +177,7 @@ class TEST_XDCR_PARAM:
     MAPPING_RULES = "colmapping_rules"
     MIGRATION_MODE = "migration_mode"
     MIRRORING_MODE = "mirroring_mode"
-
+    CONFLICT_LOGGING = "conflict_logging"
     @staticmethod
     def get_test_to_create_repl_param_map():
         return {
@@ -199,7 +200,8 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.EXPLICIT_MAPPING: REPL_PARAM.EXPLICIT_MAPPING,
             TEST_XDCR_PARAM.MAPPING_RULES: REPL_PARAM.MAPPING_RULES,
             TEST_XDCR_PARAM.MIGRATION_MODE: REPL_PARAM.MIGRATION_MODE,
-            TEST_XDCR_PARAM.MIRRORING_MODE: REPL_PARAM.MIRRORING_MODE
+            TEST_XDCR_PARAM.MIRRORING_MODE: REPL_PARAM.MIRRORING_MODE,
+            TEST_XDCR_PARAM.CONFLICT_LOGGING: REPL_PARAM.CONFLICT_LOGGING
         }
 
 
@@ -220,6 +222,7 @@ class XDCR_PARAM:
     XDCR_PRIORITY = "xdcrPriority"
     XDCR_DESIRED_LATENCY = "xdcrDesiredLatency"
     XDCR_COMPRESSION_TYPE = "xdcrCompressionType"
+    XDCR_CONFLICT_LOGGING = "xdcrConflictLogging"
 
 
 class CHECK_AUDIT_EVENT:
@@ -943,6 +946,12 @@ class XDCReplication:
             self.__test_xdcr_params.update(
                 dict(list(zip(argument_split[::2], argument_split[1::2])))
             )
+            
+            # Skip conflict_logging parameter to avoid issues with replication creation
+            if TEST_XDCR_PARAM.CONFLICT_LOGGING in self.__test_xdcr_params:
+                print(f"Skipping conflict_logging parameter in XDCReplication.__parse_test_xdcr_params")
+                del self.__test_xdcr_params[TEST_XDCR_PARAM.CONFLICT_LOGGING]
+                
         if 'filter_expression' in self.__test_xdcr_params:
             ex = self.__test_xdcr_params['filter_expression']
             if len(ex) > 0:
@@ -1427,6 +1436,12 @@ class CouchbaseCluster:
 
     def set_global_checkpt_interval(self, value):
         self.set_xdcr_param("checkpointInterval", value)
+
+    def set_conflict_logging_settings(self, value):
+        self.set_xdcr_param("conflictLogging", value)
+
+    def get_conflict_logging_settings(self):
+        return self.get_xdcr_param("conflictLogging")
 
     def get_internal_setting(self, param):
         import json
@@ -3890,6 +3905,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                       "for reason")
 
     def get_collection_info(self, bucket, master):
+        print("Getting collection info for bucket: ", bucket)
+        print("Master: ", master)
         shell = RemoteMachineShellConnection(master)
         nameOutput, error = shell.execute_cbstats(bucket, "collections",
                                                    cbadmin_user="Administrator",
@@ -3906,17 +3923,18 @@ class XDCRNewBaseTest(unittest.TestCase):
                 # collection_names.append(x.split(":name:")[1].strip())
         return collection_info, error
 
-    def get_incoming_replications(self, server_rest):
-
+    def get_incoming_replications(self, master):
         incoming_repl_uri = "xdcr/sourceClusters"
-        status, content, _ = server_rest._http_request(api = server_rest.baseUrl + incoming_repl_uri, method="GET", timeout=60)
+        status, content, _ = master._http_request(api = master.baseUrl + incoming_repl_uri, method="GET", timeout=60)
         if status:
             return json.loads(content)
         return None
 
-    def get_outgoing_replications(self, server_rest):
+    def get_outgoing_replications(self, master):
         outgoing_repl_uri = "pools/default/remoteClusters"
-        status, content, _ = server_rest._http_request(api = server_rest.baseUrl + outgoing_repl_uri, method="GET", timeout=60)
+        auth_user, auth_pass = master.username, master.password
+        auth = "Basic " + base64.b64encode(f"{auth_user}:{auth_pass}".encode('utf-8')).decode('utf-8')
+        status, content, _ = master._http_request(api = master.baseUrl + outgoing_repl_uri, method="GET", timeout=60)
         if status:
             return json.loads(content)
         return None
@@ -4033,7 +4051,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     print(f"DOCS COUNT DID NOT MATCH SRC:{src_count}, TARGET:{dest_count}")
                     docs_match_map[bucket.name] = False
         return all(docs_match_map.values())
-    def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute"):
+    def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute", exclude_paths=[]):
 
         _count1 = _count2 = 0
         for cb_cluster in self.__cb_clusters:
@@ -4064,7 +4082,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                             nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
-                                _count2 += node["interestingStats"]["curr_items"]
+                                _count2 += node["interestingStats"]["curr_items"]                        
+
                         self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
                                    format(bucket.name, _count1, _count2))
@@ -4087,9 +4106,48 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 self.log.info(dest_collections_info)
                                 _count2 -= dest_collections_info["_query"]
                                 _count2 -= dest_collections_info["_mobile"]
+
+                        self.log.info(f"Count1: {_count1}, Count2: {_count2}")
+
+                        self.log.info(f"Excluding paths: {exclude_paths}")
+                        
+                        for path in exclude_paths:
+                            self.log.info(f"Excluding {path} from count")
+                            if bucket.name in path.split(".")[1]:
+                                self.log.info(f"Bucket {bucket.name} in path {path}")
+                                docs_to_exclude_src = 0
+                                docs_to_exclude_dest = 0
+                                cluster_nodes = cb_cluster.get_nodes() if path.split(".")[0] == "C1" else remote_cluster.get_dest_cluster().get_nodes()
+                                for node in cluster_nodes:
+                                    self.log.info(f"Node {node.ip}")
+                                    collections_info = self.get_collection_info(bucket, node)[0]
+                                    self.log.info(f"Collections info for bucket {node.ip}: {collections_info}")
+                                    if path.split(".")[-1] in collections_info:
+                                        print("Path: ", path.split(".")[-1])
+                                        print(path)
+                                        if path.split(".")[0] == "C1":                                            
+                                            docs_to_exclude_src += collections_info[path.split(".")[-1]]
+                                            self.log.info(f"Docs to exclude src: {docs_to_exclude_src}")
+                                        
+                                        if path.split(".")[0] == "C2":
+                                            docs_to_exclude_dest += collections_info[path.split(".")[-1]]
+                                            self.log.info(f"Docs to exclude dest: {docs_to_exclude_dest}")
+                                    else:
+                                        self.log.info(f"Collection {path.split('.')[-1]} not found in collections info")
+                                
+                                _count1 -= docs_to_exclude_src
+                                self.log.info(f"Count1 after excluding {path}: {_count1}")
+                                self.log.info(f"Docs to exclude src: {docs_to_exclude_src}")
+                                _count2 -= docs_to_exclude_dest
+                                self.log.info(f"Count2 after excluding {path}: {_count2}")
+                                self.log.info(f"Docs to exclude dest: {docs_to_exclude_dest}")
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
+                        for node in cb_cluster.get_nodes():
+                            self.log.info(f"Node {node.ip}")
+                            collections_info = self.get_collection_info(bucket, node)[0]
+                            self.log.info(f"Collections info for bucket {node.ip}: {collections_info}")
                         self.fail("Not all items replicated in {0} sec for {1} "
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
