@@ -6042,7 +6042,23 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return json.loads(content)
-
+    '''
+    Get eventing stats of a single function
+    '''
+    def get_eventing_stats_per_function(self, name, function_scope=None, seqs_processed=False):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/stats/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        if seqs_processed:
+            url = url + "&type=full"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
     '''
             Cleanup eventing
     '''
