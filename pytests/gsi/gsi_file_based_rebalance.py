@@ -1219,7 +1219,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.wait_until_indexes_online()
 
     def test_disable_move_node_replicas_to_maintain_shard_affinity(self):
-        if self.cb_version[:4] < "7.6.6":
+        if self.cb_version[:5] < "7.6.6":
             self.skipTest("Not applicable less than 7.6.6")
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
