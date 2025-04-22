@@ -3,10 +3,14 @@ import random
 from datetime import datetime, timedelta
 from faker import Faker
 import argparse
-
+import os
 class HotelDataGenerator:
-    def __init__(self):
+    def __init__(self, seed=42):
+        # Set random seed for reproducibility
+        random.seed(seed)
         self.fake = Faker()
+        Faker.seed(seed)
+
         # Initialize base data
         self.room_types = [
             {"name": "Standard", "price_range": (80, 150)},
@@ -154,10 +158,15 @@ def main():
     parser.add_argument('--users', type=int, default=80, help='Number of users to generate')
     parser.add_argument('--bookings', type=int, default=100, help='Number of bookings to generate')
     parser.add_argument('--reviews', type=int, default=40, help='Number of reviews to generate')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducible data generation')
+    parser.add_argument('--output-dir', type=str, default='.', help='Directory to output generated files')
     
     args = parser.parse_args()
     
-    generator = HotelDataGenerator()
+    # Create output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    generator = HotelDataGenerator(seed=args.seed)
     
     # Generate data
     hotels = generator.generate_hotels(args.hotels)
@@ -166,22 +175,23 @@ def main():
     reviews = generator.generate_reviews(args.reviews, hotels, users)
     
     # Save to files
-    with open('hotel.json', 'w') as f:
+    with open(os.path.join(args.output_dir, 'hotel.json'), 'w') as f:
         json.dump(hotels, f, indent=2)
     
-    with open('users.json', 'w') as f:
+    with open(os.path.join(args.output_dir, 'users.json'), 'w') as f:
         json.dump(users, f, indent=2)
     
-    with open('bookings.json', 'w') as f:
+    with open(os.path.join(args.output_dir, 'bookings.json'), 'w') as f:
         json.dump(bookings, f, indent=2)
     
-    with open('reviews.json', 'w') as f:
+    with open(os.path.join(args.output_dir, 'reviews.json'), 'w') as f:
         json.dump(reviews, f, indent=2)
     
     print(f"Generated {len(hotels)} hotels")
     print(f"Generated {len(users)} users")
     print(f"Generated {len(bookings)} bookings")
     print(f"Generated {len(reviews)} reviews")
+    print(f"Files saved in: {args.output_dir}")
 
 if __name__ == "__main__":
     main()

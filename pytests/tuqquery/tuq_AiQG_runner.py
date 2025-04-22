@@ -1,4 +1,3 @@
-import json
 import time
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -14,6 +13,7 @@ class QueryAiQGTests(QueryTests):
         self.sql_file_path = self.input.param("sql_file_path", "resources/AiQG/sql/sample_queries.sql")
         self.query_number = self.input.param("query_number", 1) # Changed default to 1
         self.query_context = self.input.param("query_context", "default._default")
+        self.gen_hotel_data = self.input.param("gen_hotel_data", False)
         self.log.info("==============  QueryAiQGTests setup has ended ==============")
         self.log_config_info()
 
@@ -29,8 +29,19 @@ class QueryAiQGTests(QueryTests):
                 'users': {'key_field': 'user_id', 'prefix': 'user'}
             }
 
-            shell = RemoteMachineShellConnection(self.master)
+            # Generate data locally using gen.py
+            if self.gen_hotel_data:
+                self.log.info("Generating test data...")
+                gen_cmd = "python3 resources/AiQG/data/gen.py --hotels 30000 --users 100000 --bookings 150000 --reviews 50000 --seed 42 --output-dir resources/AiQG/data"
+                self.log.info(f"Running command: {gen_cmd}")
+                output = os.system(gen_cmd)
+                error = output != 0
+                if error:
+                    self.log.error(f"Error generating data: {error}")
+                    raise Exception(f"Failed to generate data")
+                self.log.info("Successfully generated test data")
 
+            shell = RemoteMachineShellConnection(self.master)
             for collection, config in collections_config.items():
                 try:
                     # Create collection
