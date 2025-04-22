@@ -674,3 +674,31 @@ class PlannerGSI(BaseSecondaryIndexingTests):
                 host = index['hosts'][0].split(':')[0]
                 self.assertTrue(host not in least_loaded_node,
                                 "Equivalent index replica created on least loaded node, not maintaining HA")
+    def test_alter_index_equivalent_partitioned_index(self):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if len(index_nodes) < 4:
+            self.fail("Need 3 index nodes")
+        self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection, json_template=self.json_template)
+        collection_namespace = self.namespaces[0]
+        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in index_nodes]
+        for _ in range(7):
+            idx_1 = QueryDefinition(index_name='idx_1', index_fields=['name'], partition_by_fields=['meta().id'])
+            idx_2 = QueryDefinition(index_name='idx_2', index_fields=['name'], partition_by_fields=['meta().id'])
+            query_1 = idx_1.generate_index_create_query(namespace=collection_namespace, num_replica=1, num_partition=50, deploy_node_info=deploy_nodes)
+            query_2 = idx_2.generate_index_create_query(namespace=collection_namespace, num_replica=0, num_partition=50, deploy_node_info=deploy_nodes)
+            for query in [query_1, query_2]:
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+            alter_query = f'ALTER INDEX {idx_2.index_name} ON {collection_namespace} WITH' \
+                        f'{{"action":"replica_count", "num_replica": 1}};'
+            try:
+                self.run_cbq_query(query=alter_query)
+            except Exception as e:
+                self.log.info(str(e))
+                self.fail(str(e))
+
+            drop_query_1 = idx_1.generate_index_drop_query(namespace=collection_namespace)
+            drop_query_2 = idx_2.generate_index_drop_query(namespace=collection_namespace)
+            for query in [drop_query_1, drop_query_2]:
+                self.run_cbq_query(query=query)
+
