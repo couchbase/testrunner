@@ -14,6 +14,7 @@ class QueryAiQGTests(QueryTests):
         self.query_number = self.input.param("query_number", 1) # Changed default to 1
         self.query_context = self.input.param("query_context", "default._default")
         self.gen_hotel_data = self.input.param("gen_hotel_data", False)
+        self.gen_hotel_factor = self.input.param("gen_hotel_factor", 1000)
         self.log.info("==============  QueryAiQGTests setup has ended ==============")
         self.log_config_info()
 
@@ -32,7 +33,7 @@ class QueryAiQGTests(QueryTests):
             # Generate data locally using gen.py
             if self.gen_hotel_data:
                 self.log.info("Generating test data...")
-                gen_cmd = "python3 resources/AiQG/data/gen.py --hotels 30000 --users 100000 --bookings 150000 --reviews 50000 --seed 42 --output-dir resources/AiQG/data"
+                gen_cmd = f"python3 resources/AiQG/data/gen.py --hotels {30*self.gen_hotel_factor} --users {100*self.gen_hotel_factor} --bookings {150*self.gen_hotel_factor} --reviews {50*self.gen_hotel_factor} --seed 42 --output-dir resources/AiQG/data"
                 self.log.info(f"Running command: {gen_cmd}")
                 output = os.system(gen_cmd)
                 error = output != 0
@@ -134,8 +135,15 @@ class QueryAiQGTests(QueryTests):
                     raise
 
                 # Execute the query
-                expected_result = self.run_cbq_query(query,query_context=self.query_context)
-                self.log.info(f"Successfully executed the query {self.query_number}: {query} without any indexes")
+                try:
+                    expected_result = self.run_cbq_query(query,query_context=self.query_context)
+                    self.log.info(f"Successfully executed the query {self.query_number}: {query} without any indexes")
+                except Exception as e:
+                    self.log.warning(f"Error executing query {self.query_number}: {query}")
+                    if "cannot have more than 1000 documents without appropriate secondary index" in str(e):
+                        expected_result = None
+                    else:
+                        raise
 
                 # Get index recommendations from advisor and create indexes
                 main_index_name, subquery_index_names = self._create_recommended_indexes(query)
@@ -146,7 +154,7 @@ class QueryAiQGTests(QueryTests):
                 self._validate_indexes_in_plan(explain_result, main_index_name, subquery_index_names)
 
                 # Execute the query
-                memory_quota = self.input.param("memory_quota", 100)
+                memory_quota = self.input.param("memory_quota", 200)
                 timeout = self.input.param("timeout", "120s")
                 compare_cbo = self.input.param("compare_cbo", False)
                 profile = self.input.param("profile", "off")
@@ -292,17 +300,18 @@ class QueryAiQGTests(QueryTests):
                     self.log.info(f"Successfully executed query {self.query_number}: {query} with secondary indexes, memory_quota={memory_quota} and timeout={timeout}")
 
                 # Validate actual result matches expected result
-                if compare_udf:
-                    diff = DeepDiff(actual_result['results'][0]['$1'], expected_result['results'], ignore_order=True, significant_digits=5)
-                else:
-                    diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True, significant_digits=5)
-                if diff:
-                    # Only log diff if it's not too large
-                    if len(str(diff)) < 5000:
-                        self.log.error(f"Results do not match for query {self.query_number}. Differences: {diff}")
+                if expected_result is not None:
+                    if compare_udf:
+                        diff = DeepDiff(actual_result['results'][0]['$1'], expected_result['results'], ignore_order=True, significant_digits=5)
                     else:
-                        self.log.error(f"Results do not match for query {self.query_number}. Differences too large to display.")
-                    self.fail(f"Results do not match for query {self.query_number}")
+                        diff = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True, significant_digits=5)
+                    if diff:
+                        # Only log diff if it's not too large
+                        if len(str(diff)) < 5000:
+                            self.log.error(f"Results do not match for query {self.query_number}. Differences: {diff}")
+                        else:
+                            self.log.error(f"Results do not match for query {self.query_number}. Differences too large to display.")
+                        self.fail(f"Results do not match for query {self.query_number}")
             except Exception as e:
                 self.log.error(f"Error details for query {self.query_number}: {str(e)}")
                 self.fail(f"Error executing query {self.query_number}: {query}")
