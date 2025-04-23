@@ -636,6 +636,50 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
+    def generate_car_data_index_definition_scalar(self, index_name_prefix=None, skip_primary=False):
+        definitions_list = []
+        if not index_name_prefix:
+            index_name_prefix = "car" + str(uuid.uuid4()).replace("-", "")
+
+        # Single field GSI Query - price
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'price', index_fields=['price'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("price", "price > 0")))
+
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("id", "id is not NULL"),
+                                is_primary=True))
+
+        # GSI index on multiple fields - basic car details
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'manufacturer_model_year',
+                            index_fields=['manufacturer', 'model', 'year'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'year > 1900 AND '
+                                                                      'manufacturer = "Hyundai"')))
+
+        # GSI index on rating and category
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'rating_category',
+                            index_fields=['rating', 'category'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'rating > 2 AND '
+                                                                      'category = "Subcompact"')))
+
+        # GSI index with array fields - evaluation features
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'smart_features',
+                            index_fields=['DISTINCT ARRAY sf FOR sf IN evaluation[0].`smart features` END'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("*",
+                                                                      'ANY sf IN evaluation[0].`smart features` '
+                                                                      'SATISFIES sf LIKE "%%display%%" END')))
+        self.batch_size = len(definitions_list)
+        return definitions_list
+
     def generate_hotel_data_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
@@ -1713,7 +1757,7 @@ class GSIUtils(object):
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
                                   quantization_algo_description_vector=None, is_base64=False, bhive_index=False,
-                                  xattr_indexes=False, description_dimension=384, persist_full_vector=True):
+                                  xattr_indexes=False, description_dimension=384, persist_full_vector=True, scalar=False):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -1750,6 +1794,9 @@ class GSIUtils(object):
                                                                                          xattr_indexes=xattr_indexes,
                                                                                          quantization_algo_color_vector=quantization_algo_color_vector,
                                                                                          quantization_algo_description_vector=quantization_algo_description_vector)
+            elif scalar:
+                definition_list = self.generate_car_data_index_definition_scalar(index_name_prefix=prefix,
+                                                                            skip_primary=skip_primary)
             else:
                 definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
                                                                                    skip_primary=skip_primary,
