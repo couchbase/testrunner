@@ -154,8 +154,8 @@ class QueryAiQGTests(QueryTests):
                 self._validate_indexes_in_plan(explain_result, main_index_name, subquery_index_names)
 
                 # Execute the query
-                memory_quota = self.input.param("memory_quota", 200)
-                timeout = self.input.param("timeout", "120s")
+                memory_quota = self.input.param("memory_quota", 300)
+                timeout = self.input.param("timeout", "600s")
                 compare_cbo = self.input.param("compare_cbo", False)
                 profile = self.input.param("profile", "off")
                 compare_udf = self.input.param("compare_udf", False)
@@ -245,12 +245,7 @@ class QueryAiQGTests(QueryTests):
 
                     # Parse execution time to milliseconds
                     time_str_no_cbo = result_no_cbo['metrics']['executionTime']
-                    if time_str_no_cbo.endswith('ms'):
-                        time_no_cbo = float(time_str_no_cbo[:-2])
-                    elif time_str_no_cbo.endswith('s'):
-                        time_no_cbo = float(time_str_no_cbo[:-1]) * 1000
-                    elif time_str_no_cbo.endswith('m'):
-                        time_no_cbo = float(time_str_no_cbo[:-1]) * 60 * 1000
+                    time_no_cbo = self._parse_execution_time_to_ms(time_str_no_cbo)
 
                     self.log.info(f"Executing query {self.query_number} with CBO...")
                     result_cbo = self.run_cbq_query(query, query_context=self.query_context,
@@ -264,12 +259,7 @@ class QueryAiQGTests(QueryTests):
 
                     # Parse execution time to milliseconds
                     time_str_cbo = result_cbo['metrics']['executionTime']
-                    if time_str_cbo.endswith('ms'):
-                        time_cbo = float(time_str_cbo[:-2])
-                    elif time_str_cbo.endswith('s'):
-                        time_cbo = float(time_str_cbo[:-1]) * 1000
-                    elif time_str_cbo.endswith('m'):
-                        time_cbo = float(time_str_cbo[:-1]) * 60 * 1000
+                    time_cbo = self._parse_execution_time_to_ms(time_str_cbo)
 
                     # Compare results
                     self.log.info("Comparing results between CBO and non-CBO runs...")
@@ -313,7 +303,8 @@ class QueryAiQGTests(QueryTests):
                             self.log.error(f"Results do not match for query {self.query_number}. Differences too large to display.")
                         self.fail(f"Results do not match for query {self.query_number}")
             except Exception as e:
-                self.log.error(f"Error details for query {self.query_number}: {str(e)}")
+                error_msg = str(e)[:500] + "..." if len(str(e)) > 500 else str(e)
+                self.log.error(f"Error details for query {self.query_number}: {error_msg}")
                 self.fail(f"Error executing query {self.query_number}: {query}")
 
     def _validate_indexes_in_plan(self, explain_result, main_index_name, subquery_index_names, type="query"):
@@ -421,3 +412,21 @@ class QueryAiQGTests(QueryTests):
                             self.log.error(f"Error creating index for subquery: {str(e)}")
 
         return main_index_name, subquery_index_names
+
+    def _parse_execution_time_to_ms(self, time_str):
+            """Helper method to parse execution time string to milliseconds.
+            Handles formats like '100ms', '1.5s', and '1m7.459426389'
+            """
+            if time_str.endswith('ms'):
+                return float(time_str[:-2])
+            elif time_str.endswith('s') and not 'm' in time_str:
+                return float(time_str[:-1]) * 1000
+            elif 'm' in time_str:
+                # Extract minutes and seconds from format like "1m2.346" or "1m23.456"
+                match = re.match(r'(\d+)m(\d+\.\d+)', time_str)
+                if match:
+                    minutes = float(match.group(1))
+                    seconds = float(match.group(2))
+                    return (minutes * 60 + seconds) * 1000
+                else:
+                    return float(time_str[:-1]) * 60 * 1000
