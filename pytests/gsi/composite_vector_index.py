@@ -50,7 +50,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.num_centroids = self.input.param("num_centroids", 256)
         self.target_process = self.input.param("target_process", "memcached")
         self.system_failure_scenario = self.input.param("system_failure_scenario", None)
-        self.corrupt_file_type = self.input.param("corrupt_file_type", None)        
+        self.corrupt_file_type = self.input.param("corrupt_file_type", None)
         self.bhive_recovery_log_string = self.input.param("bhive_recovery_log_string", "bhiveSlice::doRecovery")
         self.num_indexes_batch = self.input.param("num_indexes_batch", 3)
         # set rerank factor to 0
@@ -220,7 +220,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 for query in select_queries:
                     # self.run_cbq_query(query=create)
-                    if "DISTINCT" in query or "ANN" not in query:
+                    if "DISTINCT" in query or "ANN_DISTANCE" not in query:
                         continue
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                           similarity=similarity,
@@ -340,7 +340,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 raise e
             for query in select_queries:
                 self.run_cbq_query(query=create_queries[-1])
-                if "DISTINCT" in query or "ANN" not in query:
+                if "DISTINCT" in query or "ANN_DISTANCE" not in query:
                     continue
                 # TODO uncomment after limit logic is fixed.
                 # query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
@@ -1343,7 +1343,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.rest.set_recovery_type("ns_1@{}".format(node.ip), self.recovery_type)
 
             self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
-            msg = "rebalance failed while recovering failover nodes {0} and {1}".format(nodes_to_failover[0], 
+            msg = "rebalance failed while recovering failover nodes {0} and {1}".format(nodes_to_failover[0],
                                                                                         nodes_to_failover[1])
             self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
 
@@ -1725,9 +1725,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
         desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
 
-        scan_color_vec_1 = f"ANN(colorRGBVector, [43.0, 133.0, 178.0], '{self.similarity}', {self.scan_nprobes})"
+        scan_color_vec_1 = f"ANN_DISTANCE(colorRGBVector, [43.0, 133.0, 178.0], '{self.similarity}', {self.scan_nprobes})"
         collection_namespace = self.namespaces[0]
         # indexes with more than one vector field
         trained_index_color_rgb_vector = QueryDefinition(index_name="trained_rgb",
@@ -1796,12 +1796,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         color_vec_2 = [90.0, 33.0, 18.0]
-        scan_color_vec_2 = f"ANN(colorRGBVector, {color_vec_2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_color_vec_2 = f"ANN_DISTANCE(colorRGBVector, {color_vec_2}, '{self.similarity}', {self.scan_nprobes})"
 
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
         desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
 
         partitioned_index_color_rgb_vector = QueryDefinition("partitioned_colorRGBVector",
                                                              index_fields=['rating', 'colorRGBVector Vector',
@@ -1967,7 +1967,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
         for select_query in select_queries:
-            if "ANN" not in select_query:
+            if "ANN_DISTANCE" not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
@@ -2022,7 +2022,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
 
         for select_query in select_queries:
-            if "ANN" not in select_query:
+            if "ANN_DISTANCE" not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
@@ -2053,7 +2053,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_stats = self.index_rest.get_index_stats()
 
         for select_query in select_queries:
-            if "ANN" not in select_query:
+            if "ANN_DISTANCE" not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
@@ -2358,7 +2358,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_stats = self.index_rest.get_index_stats()
 
         for select_query in select_queries:
-            if "ANN" not in select_query:
+            if "ANN_DISTANCE" not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
@@ -2438,7 +2438,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_stats = self.index_rest.get_index_stats()
 
         for select_query in select_queries:
-            if "ANN" not in select_query:
+            if "ANN_DISTANCE" not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
@@ -2568,7 +2568,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query_stats_map = {}
         for query in select_queries:
-            if "ANN" not in query:
+            if "ANN_DISTANCE" not in query:
                 continue
             query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
             query_stats_map[query] = [recall, accuracy]
@@ -2730,8 +2730,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
         desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
-        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, 'COSINE', {self.scan_nprobes})"
+        scan_desc_vec_1 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, 'COSINE', {self.scan_nprobes})"
         vector_index_L2 = QueryDefinition("vector_index_L2",
                                           index_fields=['rating', 'descriptionVector Vector',
                                                         'category'],
@@ -2788,7 +2788,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
         desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_1 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
         vector_index_L2 = QueryDefinition("vector_index_L2",
                                           index_fields=['rating', 'descriptionVector Vector',
                                                         'category'],
@@ -2865,7 +2865,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             query_stats_map = {}
             for query in select_queries:
-                if "ANN" not in query:
+                if "ANN_DISTANCE" not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
@@ -2920,7 +2920,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             query_stats_map = {}
             for query in select_queries:
-                if "ANN" not in query:
+                if "ANN_DISTANCE" not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
@@ -3043,7 +3043,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             query_stats_map = {}
             for query in select_queries:
-                if "ANN" not in query:
+                if "ANN_DISTANCE" not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
@@ -3100,7 +3100,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             query_stats_map = {}
             for query in select_queries:
-                if "ANN" not in query:
+                if "ANN_DISTANCE" not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
@@ -3157,7 +3157,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             while datetime.datetime.now() < end_time:
                 query_stats_map = {}
                 for query in select_queries:
-                    if "ANN" not in query:
+                    if "ANN_DISTANCE" not in query:
                         continue
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                     query_stats_map[query] = [recall, accuracy]
@@ -3213,7 +3213,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_vec2 = list(self.encoder.encode(desc_2))
         collection_namespace = self.namespaces[0]
 
-        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
         partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
                                                                index_fields=['rating', 'descriptionVector Vector',
                                                                              'category'],
@@ -3277,7 +3277,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             modification_query = f"UPDATE {collection_namespace} SET descriptionVector = \"hello\" WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
         self.run_cbq_query(query=modification_query)
         color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
-        scan_color_vec_1 = f"ANN(colorRGBVector, {color_vec_1}, '{self.similarity}', {self.scan_nprobes})"
+        scan_color_vec_1 = f"ANN_DISTANCE(colorRGBVector, {color_vec_1}, '{self.similarity}', {self.scan_nprobes})"
 
         #creating index
         if self.is_partial:
@@ -3416,7 +3416,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=primary_idx)
         desc_2 = "A red color car with 4 or 5 star safety rating"
         descVec2 = list(self.encoder.encode(desc_2))
-        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
 
         vector_index = QueryDefinition('oneScalarOneVectorLeading',
                         index_fields=['descriptionVector VECTOR', 'category'],
@@ -3478,7 +3478,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=primary_idx)
         desc_2 = "A red color car with 4 or 5 star safety rating"
         descVec2 = list(self.encoder.encode(desc_2))
-        scan_desc_vec_2 = f"ANN(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
         # query to ensure only specified num of docs have vector fields of the dimension on which the vector index created
         modification_query = f"UPDATE {collection_namespace} SET descriptionVector = [100,100,100,1000,1000] WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
         self.run_cbq_query(query=modification_query)
@@ -3543,7 +3543,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_vec2 = list(self.encoder.encode(desc_2))
         collection_namespace = self.namespaces[0]
 
-        scan_desc_vec_2 = f"ANN(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
 
         #creating partitioned index with partition on a single key
         partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
@@ -3651,7 +3651,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
         desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_desc_vec_1 = f"ANN(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
+        scan_desc_vec_1 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
         composite_vector_index = QueryDefinition("composite_vector_index",
                                           index_fields=['rating', 'descriptionVector Vector',
                                                         'category'],

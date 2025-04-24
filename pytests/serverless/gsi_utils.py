@@ -141,19 +141,19 @@ class GSIUtils(object):
         desc_vec1 = list(self.encoder.encode(desc_1))
         desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_color_vec_1 = f"ANN({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes})"
-        scan_color_vec_2 = f"ANN({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes})"
-        scan_desc_vec_1 = f"ANN({desc_vecfield}, {desc_vec1}, '{similarity}', {scan_nprobes})"
-        scan_desc_vec_2 = f"ANN({desc_vecfield}, {desc_vec2}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_1 = f"ANN_DISTANCE({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes})"
+        scan_color_vec_2 = f"ANN_DISTANCE({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_1 = f"ANN_DISTANCE({desc_vecfield}, {desc_vec1}, '{similarity}', {scan_nprobes})"
+        scan_desc_vec_2 = f"ANN_DISTANCE({desc_vecfield}, {desc_vec2}, '{similarity}', {scan_nprobes})"
 
         if is_base64:
-            scan_color_vec_1 = (f"ANN(DECODE_VECTOR({color_vecfield}, false), {color_vec_1},"
+            scan_color_vec_1 = (f"ANN_DISTANCE(DECODE_VECTOR({color_vecfield}, false), {color_vec_1},"
                                 f" '{similarity}', {scan_nprobes})")
-            scan_color_vec_2 = (f"ANN(DECODE_VECTOR({color_vecfield}, false), {color_vec_2},"
+            scan_color_vec_2 = (f"ANN_DISTANCE(DECODE_VECTOR({color_vecfield}, false), {color_vec_2},"
                                 f" '{similarity}', {scan_nprobes})")
-            scan_desc_vec_1 = (f"ANN(DECODE_VECTOR({desc_vecfield}, false), {desc_vec1},"
+            scan_desc_vec_1 = (f"ANN_DISTANCE(DECODE_VECTOR({desc_vecfield}, false), {desc_vec1},"
                                f" '{similarity}', {scan_nprobes})")
-            scan_desc_vec_2 = (f"ANN(DECODE_VECTOR({desc_vecfield},false), {desc_vec2},"
+            scan_desc_vec_2 = (f"ANN_DISTANCE(DECODE_VECTOR({desc_vecfield},false), {desc_vec2},"
                                f" '{similarity}', {scan_nprobes})")
 
         if not index_name_prefix:
@@ -329,7 +329,7 @@ class GSIUtils(object):
                                                    persist_full_vector=True):
         definitions_list = []
 
-        query_vec = f"ANN(embedding, embVector,  '{similarity}', {scan_nprobes})",
+        query_vec = f"ANN_DISTANCE(embedding, embVector,  '{similarity}', {scan_nprobes})",
         if not index_name_prefix:
             index_name_prefix = "shoe_idx_" + str(uuid.uuid4()).replace("-", "")[5]
         # Primary Query
@@ -444,10 +444,10 @@ class GSIUtils(object):
         descVec1 = list(self.encoder.encode(desc_1))
         descVec2 = list(self.encoder.encode(desc_2))
 
-        scan_color_vec_1 = f"ANN({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes}, false)"
-        scan_color_vec_2 = f"ANN({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes}, false)"
-        scan_desc_vec_1 = f"ANN({desc_vecfield}, {descVec1}, '{similarity}', {scan_nprobes}, false)"
-        scan_desc_vec_2 = f"ANN({desc_vecfield}, {descVec2}, '{similarity}', {scan_nprobes}, false)"
+        scan_color_vec_1 = f"ANN_DISTANCE({color_vecfield}, {color_vec_1}, '{similarity}', {scan_nprobes}, false)"
+        scan_color_vec_2 = f"ANN_DISTANCE({color_vecfield}, {color_vec_2}, '{similarity}', {scan_nprobes}, false)"
+        scan_desc_vec_1 = f"ANN_DISTANCE({desc_vecfield}, {descVec1}, '{similarity}', {scan_nprobes}, false)"
+        scan_desc_vec_2 = f"ANN_DISTANCE({desc_vecfield}, {descVec2}, '{similarity}', {scan_nprobes}, false)"
 
         if not index_name_prefix:
             index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
@@ -466,7 +466,7 @@ class GSIUtils(object):
                             index_fields=[f'{color_vecfield} VECTOR'],
                             dimension=3, description=f"IVF,{quantization_algo_color_vector}", similarity=similarity,
                             scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, 
+                            train_list=train_list, limit=limit,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{color_vecfield},"
                                                                               f" {scan_color_vec_1}",
                                                                               scan_color_vec_1)))
@@ -488,7 +488,7 @@ class GSIUtils(object):
                             index_fields=[f'{desc_vecfield} VECTOR'],
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, 
+                            train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield}",
                                                                                "rating = 2 and "
                                                                                "category in ['Convertible', "
@@ -516,7 +516,7 @@ class GSIUtils(object):
                             index_where_clause='rating > 3',
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, 
+                            train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {desc_vecfield}",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
@@ -1380,7 +1380,7 @@ class GSIUtils(object):
                   0.091918945, -2.234375, 1.6318359, -1.3945312, 2.4726562, 0.62353516, 0.6645508, 4.6171875, 1.7382812,
                   -0.87109375, 0.19482422, -0.22351074, -2.8808594, -0.453125, -0.94873047, -0.3564453, 0.003227234,
                   1.5966797, 1.0058594, 0.54003906, -0.22290039]
-        vec_1 = f"ANN(emb, {vector}, '{similarity}', {scan_nprobes})"
+        vec_1 = f"ANN_DISTANCE(emb, {vector}, '{similarity}', {scan_nprobes})"
 
         # single vector field
         definitions_list.append(

@@ -547,9 +547,9 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def extract_vector_field_and_query_vector(self, query):
         if self.base64:
-            pattern = r"ANN\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
+            pattern = r"ANN_DISTANCE\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
         else:
-            pattern = r"ANN\(\s*(.*?),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
+            pattern = r"ANN_DISTANCE\(\s*(.*?),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
         matches = re.search(pattern, query)
 
         if matches:
@@ -3572,24 +3572,24 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.cleanup_info = {}  # Single variable to store all cleanup information
         if not hasattr(self, 'system_failure_scenario'):
             return
-            
+
         self.log.info(f"Running system failure scenario: {self.system_failure_scenario}")
-        
+
         if self.system_failure_scenario == "disk_full":
             self.cleanup_info = self.fill_up_disk(disk_fill_percent=90)
-            
+
         elif self.system_failure_scenario == "lower_file_descriptor_limit":
             self.cleanup_info = self.lower_file_descriptor_limit()
-            
+
         elif self.system_failure_scenario == "limit_open_files":
             self.cleanup_info = self.limit_open_files()
-            
+
         elif self.system_failure_scenario == "rename_2i_data_files":
             self.cleanup_info = self.rename_2i_data_files()
 
         elif self.system_failure_scenario == "remove_folder_permissions":
             self.cleanup_info = self.revoke_folder_permissions()
-        
+
         elif self.system_failure_scenario == "simulate_disk_corruption":
             self.cleanup_info = self.simulate_disk_corruption()
 
@@ -3721,7 +3721,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         Lowers the file descriptor limit on all index nodes to simulate resource constraints.
         Returns a dict mapping nodes to their cleanup commands.
-        
+
         Args:
             limit (int): The new file descriptor limit to set (default: 256)
         Returns:
@@ -3730,7 +3730,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(f"Lowering file descriptor limit to {limit} on index nodes")
         nodes_cleanup_dict = {}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         for node in index_nodes:
             shell = RemoteMachineShellConnection(node)
             try:
@@ -3747,11 +3747,11 @@ class BaseSecondaryIndexingTests(QueryTests):
                 output, error = shell.execute_command(cmd)
                 new_limit = int(output[0])
                 self.log.info(f"New file descriptor limit on {node.ip}: {new_limit}")
-                
+
                 if new_limit != limit:
                     self.log.error(f"Failed to set file descriptor limit on {node.ip}. Expected: {limit}, Got: {new_limit}")
                 # Store cleanup command to restore original limit
-                nodes_cleanup_dict[node] = f"ulimit -n {original_limit}"    
+                nodes_cleanup_dict[node] = f"ulimit -n {original_limit}"
             except Exception as e:
                 self.log.error(f"Error setting file descriptor limit on {node.ip}: {str(e)}")
             finally:
@@ -3762,7 +3762,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         Limits the number of open files on all index nodes by modifying /etc/security/limits.conf.
         Returns a dict mapping nodes to their cleanup commands.
-        
+
         Args:
             limit (int): The new open files limit to set (default: 256)
         Returns:
@@ -3771,20 +3771,20 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(f"Setting open files limit to {limit} on index nodes")
         nodes_cleanup_dict = {}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         for node in index_nodes:
             shell = RemoteMachineShellConnection(node)
             try:
                 # Backup original limits.conf
                 cmd = "cp /etc/security/limits.conf /etc/security/limits.conf.bak"
                 shell.execute_command(cmd)
-                
+
                 # Get current open files limit
                 cmd = "cat /proc/sys/fs/file-max"
                 output, error = shell.execute_command(cmd)
                 original_limit = int(output[0])
                 self.log.info(f"Current open files limit on {node.ip}: {original_limit}")
-                
+
                 # Add new limits to limits.conf
                 limits_entry = f"""
                 *         hard    nofile      {limit}
@@ -3794,149 +3794,149 @@ class BaseSecondaryIndexingTests(QueryTests):
                 """
                 cmd = f"echo '{limits_entry}' >> /etc/security/limits.conf"
                 shell.execute_command(cmd)
-                
+
                 # Apply new limits
                 cmd = f"sysctl -w fs.file-max={limit}"
                 shell.execute_command(cmd)
-                
+
                 # Verify new limit
                 cmd = "cat /proc/sys/fs/file-max"
                 output, error = shell.execute_command(cmd)
                 new_limit = int(output[0])
                 self.log.info(f"New open files limit on {node.ip}: {new_limit}")
-                
+
                 if new_limit != limit:
                     self.log.error(f"Failed to set open files limit on {node.ip}. Expected: {limit}, Got: {new_limit}")
-                
+
                 # Store cleanup command to restore original config
                 cleanup_cmd = "mv /etc/security/limits.conf.bak /etc/security/limits.conf; "
                 cleanup_cmd += f"sysctl -w fs.file-max={original_limit}"
                 nodes_cleanup_dict[node] = cleanup_cmd
-                
+
             except Exception as e:
                 self.log.error(f"Error setting open files limit on {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
-                
+
         return nodes_cleanup_dict
 
     def rename_2i_data_files(self, rename_pattern="corrupted_%s"):
         """
         Renames all folders/files under the 2i data directory to simulate corruption scenarios.
-        
+
         Args:
             rename_pattern (str): Pattern to use when renaming files. Default: "corrupted_%s"
                                 The %s will be replaced with original filename
-                                
+
         Returns:
             dict: Mapping of nodes to lists of original->new filename pairs for cleanup
         """
         self.log.info(f"Renaming files in 2i data directory using pattern: {rename_pattern}")
         nodes_files_map = {}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         for node in index_nodes:
             try:
                 shell = RemoteMachineShellConnection(node)
                 rest = RestConnection(node)
-                
+
                 # Get storage directory path
                 storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
                 renamed_files = []
-                
+
                 # Find all files/directories under storage directory
                 cmd = f"find {storage_dir} -mindepth 1"
                 output, error = shell.execute_command(cmd)
-                
+
                 if error:
                     self.log.error(f"Error finding files in 2i directory on {node.ip}: {error}")
                     continue
-                
+
                 # Sort in reverse order to handle nested directories correctly
                 items = sorted([item.strip() for item in output if item.strip()], reverse=True)
-                
+
                 # Select N random items to rename
                 num_files = min(len(items), 5)  # Default to 5 files if not specified
                 items_to_rename = random.sample(items, num_files)
-                
+
                 # Rename selected files/directories
                 for item in items_to_rename:
                     try:
                         dirname = os.path.dirname(item)
                         basename = os.path.basename(item)
                         new_name = os.path.join(dirname, rename_pattern % basename)
-                        
+
                         cmd = f"mv {item} {new_name}"
                         output, error = shell.execute_command(cmd)
-                        
+
                         if error:
                             self.log.error(f"Error renaming {item} on {node.ip}: {error}")
                             continue
-                            
+
                         renamed_files.append((item, new_name))
                         self.log.info(f"Renamed on {node.ip}: {item} -> {new_name}")
-                        
+
                     except Exception as e:
                         self.log.error(f"Error renaming {item} on {node.ip}: {str(e)}")
-                
+
                 if renamed_files:
                     nodes_files_map[node] = renamed_files
-                    
+
             except Exception as e:
                 self.log.error(f"Error processing node {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
-                
+
         return nodes_files_map
 
     def restore_2i_data_files(self, nodes_files_map):
         """
         Restores previously renamed 2i data files to their original names.
-        
+
         Args:
             nodes_files_map (dict): Mapping of nodes to lists of original->new filename pairs
                                   as returned by rename_2i_data_files()
         """
         self.log.info("Restoring renamed 2i data files")
-        
+
         for node, renamed_files in nodes_files_map.items():
             try:
                 shell = RemoteMachineShellConnection(node)
-                
+
                 # Sort in reverse order to handle nested directories correctly
                 for original, renamed in sorted(renamed_files, reverse=True):
                     try:
                         cmd = f"mv {renamed} {original}"
                         output, error = shell.execute_command(cmd)
-                        
+
                         if error:
                             self.log.error(f"Error restoring {renamed} to {original} on {node.ip}: {error}")
                             continue
-                            
+
                         self.log.info(f"Restored on {node.ip}: {renamed} -> {original}")
-                        
+
                     except Exception as e:
                         self.log.error(f"Error restoring {renamed} to {original} on {node.ip}: {str(e)}")
-                        
+
             except Exception as e:
                 self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
-    
+
     def revoke_folder_permissions(self, permission="000"):
         """
         Revokes permissions on all folders/files under the 2i data directory.
-        
+
         Args:
             permission (str): Permission string in octal format (default: "000" for no permissions)
-                            
+
         Returns:
             dict: Mapping of nodes to lists of paths and their original permissions for cleanup
         """
         self.log.info(f"Revoking permissions in 2i data directory using permission: {permission}")
         nodes_perms_map = {}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         for node in index_nodes:
             try:
                 shell = RemoteMachineShellConnection(node)
@@ -3961,25 +3961,25 @@ class BaseSecondaryIndexingTests(QueryTests):
                         if error:
                             self.log.error(f"Error getting permissions for {item} on {node.ip}: {error}")
                             continue
-                            
+
                         original_perm = output[0]
-                        
+
                         # Change permissions
                         cmd = f"chmod {permission} {item}"
                         output, error = shell.execute_command(cmd)
-                        
+
                         if error:
                             self.log.error(f"Error changing permissions for {item} on {node.ip}: {error}")
                             continue
-                            
+
                         modified_paths.append((item, original_perm))
                         self.log.info(f"Changed permissions on {node.ip}: {item} from {original_perm} to {permission}")
-                        
+
                     except Exception as e:
                         self.log.error(f"Error modifying permissions for {item} on {node.ip}: {str(e)}")
                 if modified_paths:
                     nodes_perms_map[node] = modified_paths
-                    
+
             except Exception as e:
                 self.log.error(f"Error processing node {node.ip}: {str(e)}")
             finally:
@@ -3989,57 +3989,57 @@ class BaseSecondaryIndexingTests(QueryTests):
     def restore_folder_permissions(self, nodes_perms_map):
         """
         Restores previously modified permissions of 2i data files to their original values.
-        
+
         Args:
             nodes_perms_map (dict): Mapping of nodes to lists of paths and their original permissions
                                 as returned by revoke_folder_permissions()
         """
         self.log.info("Restoring permissions of 2i data files")
-        
+
         for node, modified_paths in nodes_perms_map.items():
             try:
                 shell = RemoteMachineShellConnection(node)
-                
+
                 # Sort in reverse order to handle nested directories correctly
                 for path, original_perm in sorted(modified_paths, reverse=True):
                     try:
                         cmd = f"chmod {original_perm} {path}"
                         output, error = shell.execute_command(cmd)
-                        
+
                         if error:
                             self.log.error(f"Error restoring permissions for {path} on {node.ip}: {error}")
                             continue
-                            
+
                         self.log.info(f"Restored permissions on {node.ip}: {path} to {original_perm}")
-                        
+
                     except Exception as e:
                         self.log.error(f"Error restoring permissions for {path} on {node.ip}: {str(e)}")
-                        
+
             except Exception as e:
                 self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
-    
+
     def skew_node_clocks(self, skew_minutes=30):
         """
         Introduces clock skew on index nodes by adjusting the system time.
         Note: This is a fallback method that may be less reliable with Xen virtualization.
-        
+
         Args:
             skew_minutes (int): Number of minutes to skew the clock (positive = forward, negative = backward)
                             Default is 30 minutes ahead
-                            
+
         Returns:
             dict: Mapping of nodes to cleanup commands that restore original time
         """
         self.log.warning("Using fallback clock adjustment method which may be less reliable with Xen virtualization")
         nodes_cleanup_dict = {}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         for node in index_nodes:
             try:
                 shell = RemoteMachineShellConnection(node)
-                
+
                 # Get current time for cleanup
                 cmd = "date '+%Y-%m-%d %H:%M:%S'"
                 output, error = shell.execute_command(cmd)
@@ -4057,42 +4057,42 @@ class BaseSecondaryIndexingTests(QueryTests):
                     cmd = f"date -s '+{node_skew} minutes'"
                 else:
                     cmd = f"date -s '{node_skew} minutes'"
-                
+
                 output, error = shell.execute_command(cmd)
                 if error:
                     self.log.error(f"Error adjusting time on {node.ip}: {error}")
                     continue
-                
+
                 # Verify the change
                 cmd = "date '+%Y-%m-%d %H:%M:%S'"
                 output, error = shell.execute_command(cmd)
                 new_time = output[0]
                 self.log.info(f"Adjusted clock on {node.ip} from {original_time} to {new_time}")
-                
+
                 # Store cleanup command
                 cleanup_cmd_list = ["systemctl start systemd-timesyncd", "systemctl start ntp", "systemctl start ntpd", "systemctl start chronyd"]
                 nodes_cleanup_dict[node] = cleanup_cmd_list
-                
+
             except Exception as e:
                 self.log.error(f"Error adjusting clock on {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
         return nodes_cleanup_dict
-    
+
     def simulate_disk_corruption(self, num_files=5,):
         """
         Simulates disk corruption in index storage files.
-        
+
         Args:
             num_files (int): Number of files to corrupt
-            
+
         Returns:
             dict: Mapping of nodes to lists of corrupted files and their backups
         """
         corrupt_file_type = getattr(self, 'corrupt_file_type', 'config')
         nodes_files_map = {}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        
+
         for node in index_nodes:
             try:
                 shell = RemoteMachineShellConnection(node)
@@ -4126,10 +4126,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if not storage_files:
                     self.log.info(f"No files found in {storage_dir} on {node.ip}")
                     continue
-                    
+
                 # Select random files to corrupt
                 target_files = random.sample(storage_files, min(num_files, len(storage_files)))
-                
+
                 for target_file in target_files:
                     try:
                         backup_file = f"{target_file}.bak"
@@ -4148,46 +4148,46 @@ class BaseSecondaryIndexingTests(QueryTests):
                         self.log.info(f"Corrupted file {target_file} on {node.ip}")
                     except Exception as e:
                         self.log.error(f"Error corrupting file {target_file} on {node.ip}: {str(e)}")
-                
+
                 if corrupted_files:
                     nodes_files_map[node] = corrupted_files
-                    
+
             except Exception as e:
                 self.log.error(f"Error corrupting files on {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
-                
+
         return nodes_files_map
 
     def restore_corrupted_files(self, nodes_files_map):
         """
         Restores corrupted files from their backups.
-        
+
         Args:
             nodes_files_map (dict): Mapping of nodes to lists of corrupted files and their backups
                                 as returned by simulate_disk_corruption()
         """
         self.log.info("Restoring corrupted files from backups")
-        
+
         for node, corrupted_files in nodes_files_map.items():
             try:
                 shell = RemoteMachineShellConnection(node)
-                
+
                 for corrupted_file, backup_file in corrupted_files:
                     try:
                         # Restore from backup
                         cmd = f"mv {backup_file} {corrupted_file}"
                         output, error = shell.execute_command(cmd)
-                        
+
                         if error:
                             self.log.error(f"Error restoring {corrupted_file} from {backup_file} on {node.ip}: {error}")
                             continue
-                            
+
                         self.log.info(f"Restored {corrupted_file} on {node.ip}")
-                        
+
                     except Exception as e:
                         self.log.error(f"Error restoring {corrupted_file} on {node.ip}: {str(e)}")
-                        
+
             except Exception as e:
                 self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
             finally:
