@@ -206,7 +206,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           limit=self.scan_limit, is_base64=self.base64,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                          bhive_index=self.bhive_index, description_dimension=self.dimension)
+                                                                          bhive_index=self.bhive_index, description_dimension=self.dimension,
+                                                                         )
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          bhive_index=self.bhive_index)
@@ -257,7 +258,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.rest.delete_bucket(bucket='metadata_bucket')
 
-    def test_composite_vector_sanity_with_system_failures(self):
+    def test_bhive_with_system_failures(self):
         try:
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
             self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
@@ -279,14 +280,18 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                         limit=self.scan_limit, is_base64=self.base64,
                                                                         quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                         quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                        bhive_index=self.bhive_index)
+                                                                        bhive_index=True)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                     namespace=namespace,
                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                 namespace=namespace, limit=self.scan_limit)
+            metadata_dict_from_definitions = self.form_vector_index_metadata_dict_from_index_definitions(definitions)
             self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
             self.wait_until_indexes_online(timeout=1800)
+            metadata_dict_from_stats = self.get_vector_index_metadata_dict()
+            if metadata_dict_from_stats != metadata_dict_from_definitions:
+                raise AssertionError("Metadata dictionary from definitions and stats are not the same")
             self.validate_no_pending_mutations()
             self.compare_item_counts_between_kv_and_gsi()
             self.backstore_mainstore_check()
@@ -300,20 +305,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.system_failure_scenario:
                 self.sleep(300)
                 self.log.info("Waiting for 5 minutes after running chaos action")
-                definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                    prefix=f'test_{similarity}_system_failure',
-                                                                    similarity=similarity, train_list=None,
-                                                                    scan_nprobes=self.scan_nprobes,
-                                                                    array_indexes=False,
-                                                                    xattr_indexes=self.xattr_indexes,
-                                                                    limit=self.scan_limit, is_base64=self.base64,
-                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                    bhive_index=self.bhive_index)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                    namespace=namespace,
-                                                                    bhive_index=self.bhive_index,
-                                                                    num_replica=1)
+                for i in range(3):
+                    definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                        prefix=f'test_{similarity}_system_failure_{i}',
+                                                                        similarity=similarity, train_list=None,
+                                                                        scan_nprobes=self.scan_nprobes,
+                                                                        array_indexes=False,
+                                                                        xattr_indexes=self.xattr_indexes,
+                                                                        limit=self.scan_limit, is_base64=self.base64,
+                                                                        quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                        quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                        bhive_index=self.bhive_index)
+                    create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                        namespace=namespace,
+                                                                        bhive_index=self.bhive_index,
+                                                                        num_replica=1)
                 try:
                     self.gsi_util_obj.async_create_indexes(create_queries=[create_queries[1]], database=namespace)
                 except Exception as e:
@@ -363,6 +369,87 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.rest.delete_bucket(bucket='metadata_bucket')
         finally:
             self.cleanup_post_failure_scenario()
+            self.drop_all_indexes()
+    
+    def test_bhive_scan_inline_filtering_num_rows_filtered_num_rows_scanned(self):
+        try:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+            #TODO remove once rerank factor issue is fixed
+            self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
+            query_stats_map = {}
+            if self.xattr_indexes:
+                for namespace in self.namespaces:
+                    bucket, scope, _ = namespace.split('.')
+                    self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
+            self.namespaces = ['test_bucket.test_scope_1.test_collection_1']
+            similarity = "COSINE"
+            namespace = self.namespaces[0]
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                        prefix=f'test_{similarity}',
+                                                                        similarity=similarity, train_list=None,
+                                                                        scan_nprobes=self.scan_nprobes,
+                                                                        array_indexes=False,
+                                                                        xattr_indexes=self.xattr_indexes,
+                                                                        limit=self.scan_limit, is_base64=self.base64,
+                                                                        quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                        quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                        bhive_index=self.bhive_index)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                    namespace=namespace,
+                                                                    bhive_index=self.bhive_index)
+            select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
+                                                                namespace=namespace, limit=self.scan_limit)
+            metadata_dict_from_definitions = self.form_vector_index_metadata_dict_from_index_definitions(definitions)
+            self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
+            self.wait_until_indexes_online(timeout=1800)
+            query_index_map = self.get_queries_with_inline_filters(select_queries)
+            namespace_colon = namespace.replace(".", ":")
+            query_inline_filter_map = {f"default:{namespace_colon}:{index}": queries for index, queries in query_index_map.items()}
+            metadata_dict_from_stats = self.get_vector_index_metadata_dict()
+            if metadata_dict_from_stats != metadata_dict_from_definitions:
+                raise AssertionError("Metadata dictionary from definitions and stats are not the same")
+            self.validate_no_pending_mutations()
+            self.compare_item_counts_between_kv_and_gsi()
+            self.backstore_mainstore_check()
+            self.validate_replica_indexes_item_counts()
+            for index in query_inline_filter_map:
+                self.run_cbq_query(query=query_inline_filter_map[index])
+            self.sleep(120)
+            index_stats = self.get_index_stats(perNode=True)
+            for node in index_stats:
+                for bucket_path in index_stats[node]:
+                    for index in index_stats[node][bucket_path]:
+                        index_path = f"{bucket_path}:{index}"
+                        index_path = index_path.replace(".", ".")
+                        if index_path in query_inline_filter_map:
+                            num_rows_scanned = index_stats[node][bucket_path][index]["num_rows_scanned"] 
+                            self.log.info(f"num_rows_scanned for {index_path} on {node} is {num_rows_scanned}")
+                            num_rows_filtered = index_stats[node][bucket_path][index]["num_rows_filtered"]
+                            self.log.info(f"num_rows_filtered for {index_path} on {node} is {num_rows_filtered}")
+                            if num_rows_filtered == 0:
+                                raise AssertionError(f"num_rows_filtered for {index_path} on {node} is 0")
+                            if num_rows_scanned == 0:
+                                raise AssertionError(f"num_rows_scanned for {index_path} on {node} is 0")
+            codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
+            self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
+            self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
+            self.drop_all_indexes()
+            self.sleep(120)
+            self.check_storage_directory_cleaned_up()
+            # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
+            # if not self.validate_memory_released():
+            #     raise AssertionError("Memory not released despite dropping all the indexes")
+            if not self.validate_cpu_normalized():
+                raise AssertionError("CPU not normalized despite dropping all the indexes")
+            # self.gen_table_view(query_stats_map=query_stats_map,
+                                # message=f"quantization value is {self.quantization_algo_description_vector}")
+             # TODO uncomment after limit logic is fixed.
+            # for query in query_stats_map:
+            #     self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
+            #                             f"recall for query {query} is less than threshold 70")
+
+            self.rest.delete_bucket(bucket='metadata_bucket')
+        finally:
             self.drop_all_indexes()
 
     def test_create_index_negative_scenarios(self):

@@ -4192,6 +4192,160 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
+                
+    def get_vector_index_metadata_dict(self):
+        """
+        Fetches index metadata and returns a dictionary with index details
+        Returns:
+            dict: Dictionary with index name as key and metadata as nested dict
+        """
+        index_metadata = {}
+        try:
+            metadata = self.index_rest.get_indexer_metadata()['status']
+            for index in metadata:
+                index_name = index.get('indexName', '')
+                definition = index.get('definition', '')
+                
+                # Extract similarity from WITH clause
+                if 'WITH' in definition:
+                    # Initialize metadata dict for this index
+                    index_metadata[index_name] = {
+                        'similarity': None,
+                        'description': None, 
+                        'train_list': None,
+                        'nprobes': None
+                    }
+                    with_clause = definition.split('WITH')[1].strip()
+                    try:
+                        with_dict = json.loads(with_clause)
+                        index_metadata[index_name]['similarity'] = with_dict.get('similarity')
+                        index_metadata[index_name]['description'] = with_dict.get('description') 
+                        index_metadata[index_name]['train_list'] = with_dict.get('train_list')
+                        index_metadata[index_name]['nprobes'] = with_dict.get('scan_nprobes')
+                        
+                    except Exception as e:
+                        self.log.error(f"Error processing index {index_name}: {str(e)}")
+                        raise
+        except Exception as e:
+            self.log.error(f"Error getting index metadata: {str(e)}")
+            raise
+        # Validate that no fields are None
+        required_fields = ['similarity', 'description']
+        for index_name, metadata in index_metadata.items():
+            for field in required_fields:
+                if metadata.get(field) is None:
+                    raise Exception(f"Required field '{field}' is missing in index {index_name}")
+        return index_metadata
+
+    def form_vector_index_metadata_dict_from_index_definitions(self, index_definitions):
+        metadata_dict = {}
+        for definition in index_definitions:
+            if "primary" in definition.index_name:
+                continue
+            metadata_dict[definition.index_name] = {
+                "similarity": definition.similarity,
+                "description": definition.description,
+                "train_list": definition.train_list,
+                "nprobes": definition.scan_nprobes
+            }
+        return metadata_dict
+    
+    def get_queries_with_inline_filters(self, select_queries):
+        """
+        Identifies queries that have inline filtering by comparing WHERE clause conditions 
+        with index conditions.
+        
+        Args:
+            select_queries (list): List of select queries to analyze
+            
+        Returns:
+            dict: Dictionary mapping index names to their corresponding queries with inline filters
+                 e.g., {"idx1": "select 1", "idx2": "select 2"}
+        """
+        result = {}
+        
+        for query in select_queries:
+            try:
+                # Get query explain plan
+                explain = self.n1ql_helper.run_cbq_query(
+                    query=f"EXPLAIN {query}",
+                    server=self.n1ql_node
+                )
+                
+                plan = explain['results'][0]['plan']
+                
+                # Check for Filter operator in explain plan
+                if self._has_filter_operator(plan):
+                    # Extract index name from plan and map it to the query
+                    index_name = self._extract_index_name(plan)
+                    if index_name:
+                        result[index_name] = query
+                    
+            except Exception as e:
+                self.log.error(f"Error analyzing query for inline filters: {query}")
+                self.log.error(f"Error details: {str(e)}")
+                
+        return result
+
+    def _extract_index_name(self, plan):
+        """
+        Recursively extracts the index name from an explain plan by looking for IndexScan operator.
+        
+        Args:
+            plan (dict): Explain plan or sub-plan to check
+            
+        Returns:
+            str: Index name if found, None otherwise
+        """
+        if isinstance(plan, dict):
+            # Check if current node is an IndexScan
+            if plan.get('#operator', '').startswith('IndexScan'):
+                return plan.get('index')
+                
+            # Recursively check all values
+            for value in plan.values():
+                if isinstance(value, (dict, list)):
+                    result = self._extract_index_name(value)
+                    if result:
+                        return result
+                    
+        # Handle list of child operators
+        elif isinstance(plan, list):
+            for item in plan:
+                result = self._extract_index_name(item)
+                if result:
+                    return result
+                    
+        return None
+
+    def _has_filter_operator(self, plan):
+        """
+        Recursively checks if an explain plan contains a Filter operator.
+        
+        Args:
+            plan (dict): Explain plan or sub-plan to check
+            
+        Returns:
+            bool: True if plan contains a Filter operator
+        """
+        # Check if current node is a Filter operator
+        if isinstance(plan, dict):
+            if plan.get('#operator') == 'Filter':
+                return True
+                
+            # Recursively check children
+            for key, value in plan.items():
+                if isinstance(value, (dict, list)):
+                    if self._has_filter_operator(value):
+                        return True
+                        
+        # Check list of child operators
+        elif isinstance(plan, list):
+            for item in plan:
+                if self._has_filter_operator(item):
+                    return True
+                    
+        return False
 
 class ConCurIndexOps():
     def __init__(self):
