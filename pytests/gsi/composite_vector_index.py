@@ -53,9 +53,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.corrupt_file_type = self.input.param("corrupt_file_type", None)
         self.bhive_recovery_log_string = self.input.param("bhive_recovery_log_string", "bhiveSlice::doRecovery")
         self.num_indexes_batch = self.input.param("num_indexes_batch", 3)
+        self.shard_based_rebalance = self.input.param("file_based_rebalance", False)
         # set rerank factor to 0
         self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
-
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
@@ -639,6 +639,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_rebalance(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
         self.index_rest.set_index_settings(redistribute)
+        if self.shard_based_rebalance:
+            self.enable_shard_based_rebalance()
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=False)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -759,7 +761,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     for index in index_item_count_map:
                         self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-
+        if self.shard_based_rebalance:
+            self.validate_shard_affinity()
+            self.sleep(30)
+            if not self.check_gsi_logs_for_shard_transfer():
+                raise Exception("Shard based rebalance not triggered")
         self.validate_scans_for_recall_and_accuracy(select_query=select_queries)
 
     def test_kv_rebalance(self):
