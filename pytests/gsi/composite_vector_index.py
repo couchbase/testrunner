@@ -199,7 +199,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     prefix = f'test_{similarity}_composite'
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                           prefix=prefix,
-                                                                          similarity=similarity, train_list=None,
+                                                                          similarity=similarity,
+                                                                          train_list=self.trainlist,
                                                                           scan_nprobes=self.scan_nprobes,
                                                                           array_indexes=False,
                                                                           xattr_indexes=self.xattr_indexes,
@@ -370,7 +371,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         finally:
             self.cleanup_post_failure_scenario()
             self.drop_all_indexes()
-    
+
     def test_bhive_scan_inline_filtering_num_rows_filtered_num_rows_scanned(self):
         try:
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -422,7 +423,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         index_path = f"{bucket_path}:{index}"
                         index_path = index_path.replace(".", ".")
                         if index_path in query_inline_filter_map:
-                            num_rows_scanned = index_stats[node][bucket_path][index]["num_rows_scanned"] 
+                            num_rows_scanned = index_stats[node][bucket_path][index]["num_rows_scanned"]
                             self.log.info(f"num_rows_scanned for {index_path} on {node} is {num_rows_scanned}")
                             num_rows_filtered = index_stats[node][bucket_path][index]["num_rows_filtered"]
                             self.log.info(f"num_rows_filtered for {index_path} on {node} is {num_rows_filtered}")

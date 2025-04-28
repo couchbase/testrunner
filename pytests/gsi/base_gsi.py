@@ -155,7 +155,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
-        self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.scan_limit = self.input.param("scan_limit", 100)
@@ -4192,7 +4191,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
             finally:
                 shell.disconnect()
-                
+
     def get_vector_index_metadata_dict(self):
         """
         Fetches index metadata and returns a dictionary with index details
@@ -4205,13 +4204,13 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index in metadata:
                 index_name = index.get('indexName', '')
                 definition = index.get('definition', '')
-                
+
                 # Extract similarity from WITH clause
                 if 'WITH' in definition:
                     # Initialize metadata dict for this index
                     index_metadata[index_name] = {
                         'similarity': None,
-                        'description': None, 
+                        'description': None,
                         'train_list': None,
                         'nprobes': None
                     }
@@ -4219,10 +4218,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                     try:
                         with_dict = json.loads(with_clause)
                         index_metadata[index_name]['similarity'] = with_dict.get('similarity')
-                        index_metadata[index_name]['description'] = with_dict.get('description') 
+                        index_metadata[index_name]['description'] = with_dict.get('description')
                         index_metadata[index_name]['train_list'] = with_dict.get('train_list')
                         index_metadata[index_name]['nprobes'] = with_dict.get('scan_nprobes')
-                        
+
                     except Exception as e:
                         self.log.error(f"Error processing index {index_name}: {str(e)}")
                         raise
@@ -4249,21 +4248,21 @@ class BaseSecondaryIndexingTests(QueryTests):
                 "nprobes": definition.scan_nprobes
             }
         return metadata_dict
-    
+
     def get_queries_with_inline_filters(self, select_queries):
         """
-        Identifies queries that have inline filtering by comparing WHERE clause conditions 
+        Identifies queries that have inline filtering by comparing WHERE clause conditions
         with index conditions.
-        
+
         Args:
             select_queries (list): List of select queries to analyze
-            
+
         Returns:
             dict: Dictionary mapping index names to their corresponding queries with inline filters
                  e.g., {"idx1": "select 1", "idx2": "select 2"}
         """
         result = {}
-        
+
         for query in select_queries:
             try:
                 # Get query explain plan
@@ -4271,29 +4270,29 @@ class BaseSecondaryIndexingTests(QueryTests):
                     query=f"EXPLAIN {query}",
                     server=self.n1ql_node
                 )
-                
+
                 plan = explain['results'][0]['plan']
-                
+
                 # Check for Filter operator in explain plan
                 if self._has_filter_operator(plan):
                     # Extract index name from plan and map it to the query
                     index_name = self._extract_index_name(plan)
                     if index_name:
                         result[index_name] = query
-                    
+
             except Exception as e:
                 self.log.error(f"Error analyzing query for inline filters: {query}")
                 self.log.error(f"Error details: {str(e)}")
-                
+
         return result
 
     def _extract_index_name(self, plan):
         """
         Recursively extracts the index name from an explain plan by looking for IndexScan operator.
-        
+
         Args:
             plan (dict): Explain plan or sub-plan to check
-            
+
         Returns:
             str: Index name if found, None otherwise
         """
@@ -4301,30 +4300,30 @@ class BaseSecondaryIndexingTests(QueryTests):
             # Check if current node is an IndexScan
             if plan.get('#operator', '').startswith('IndexScan'):
                 return plan.get('index')
-                
+
             # Recursively check all values
             for value in plan.values():
                 if isinstance(value, (dict, list)):
                     result = self._extract_index_name(value)
                     if result:
                         return result
-                    
+
         # Handle list of child operators
         elif isinstance(plan, list):
             for item in plan:
                 result = self._extract_index_name(item)
                 if result:
                     return result
-                    
+
         return None
 
     def _has_filter_operator(self, plan):
         """
         Recursively checks if an explain plan contains a Filter operator.
-        
+
         Args:
             plan (dict): Explain plan or sub-plan to check
-            
+
         Returns:
             bool: True if plan contains a Filter operator
         """
@@ -4332,19 +4331,19 @@ class BaseSecondaryIndexingTests(QueryTests):
         if isinstance(plan, dict):
             if plan.get('#operator') == 'Filter':
                 return True
-                
+
             # Recursively check children
             for key, value in plan.items():
                 if isinstance(value, (dict, list)):
                     if self._has_filter_operator(value):
                         return True
-                        
+
         # Check list of child operators
         elif isinstance(plan, list):
             for item in plan:
                 if self._has_filter_operator(item):
                     return True
-                    
+
         return False
 
 class ConCurIndexOps():
