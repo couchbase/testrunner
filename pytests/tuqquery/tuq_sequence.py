@@ -201,6 +201,7 @@ class QuerySequenceTests(QueryTests):
 
         self.run_cbq_query(f"CREATE SCOPE {self.bucket}.scope1 if not exists")
         self.run_cbq_query(f"CREATE SCOPE {self.bucket}.scope2 if not exists")
+        self.sleep(3)
         self.run_cbq_query(f"DROP SEQUENCE {self.bucket}.scope1.{sequence_name} IF EXISTS")
         self.run_cbq_query(f"DROP SEQUENCE {self.bucket}.scope2.{sequence_name} IF EXISTS")
 
