@@ -173,7 +173,7 @@ class QueryUpdateStatsTests(QueryTests):
 
     def test_update_stats_timeout(self):
         error_code = 5360
-        error_message = "Update Statistics timeout (2 seconds) exceeded"
+        error_message = "Update Statistics timeout (2 seconds) exceeded."
         update_stats = f"UPDATE STATISTICS `{self.bucket_name}`(city, country) WITH {{'update_statistics_timeout':2}}"
         try:
             stats = self.run_cbq_query(query=update_stats)
