@@ -1341,6 +1341,39 @@ class EventingRecovery(EventingBaseTest):
         self.verify_doc_count_collections("default.scope0.collection1", 1)
         self.undeploy_and_delete_function(body)
 
+    #MB-66217 
+    def test_is_balanced_after_restarting_eventing_producer(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        self.deploy_function(body)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        self.kill_producer(eventing_node)
+        self.sleep(120)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        else:
+            self.wait_for_handler_state(body['appname'], "deployed")
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        rest_conn = RestConnection(eventing_node)
+        json_response = rest_conn.cluster_status()
+        self.log.info("Pools Default Statistics: {0}".format(json_response))
+        is_balanced=json_response['balanced']
+        if not is_balanced:
+            servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
+            self.assertFalse('eventing' in servicesNeedRebalance,
+                    msg="Eventing Nodes are not balanced after restarting eventing producer, need rebalance."  )
+
     def test_ondeploy_after_stopping_couchbase_server(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name,self.handler_code)
