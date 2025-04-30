@@ -626,3 +626,15 @@ class QueryAdviseTests(QueryTests):
         advise_query = 'ADVISE SELECT meta().id FROM default WHERE type = "xx" AND (REGEXP_CONTAINS (c1, "^[0-9;]*$") OR  c1 IS MISSING  OR  c1 is null)'
         result = self.run_cbq_query(advise_query)
         self.log.info(f"Advise result is: {result['results']}")
+
+    def test_advise_nested_subquery(self):
+        query = "SELECT (SELECT 3 ) AS a3, (SELECT 1 AS a21, (SELECT 2 AS a22 ) AS a22 ) AS a2"
+        result = self.run_cbq_query(f'ADVISE {query}')
+        self.log.info(f"Advise result is: {result['results']}")
+
+        subqueries = ["select 3", "select 2 as `a22`", "select 1 as `a21`, (select 2 as `a22`) as `a22`"]
+        # check main query
+        self.assertEqual(query, result['results'][0]['query'], f"Main query {query} not found")
+        # check nested subqueries
+        for subquery in result['results'][0]['~subqueries']:
+            self.assertTrue(subquery['subquery'] in subqueries, f"Subquery {subquery} not found")
