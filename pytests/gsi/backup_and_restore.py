@@ -2257,6 +2257,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                          query_node=query_node)
             self.wait_until_indexes_online()
+            self.item_count_related_validations()
             self.validate_shard_affinity()
             query_results_before_backup = self.run_scans_and_return_results(select_queries)
             for bucket in self.buckets:
@@ -2442,6 +2443,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
             self.wait_until_indexes_online()
+            self.item_count_related_validations()
 
             for bucket in self.buckets:
                 backup_client = IndexBackupClient(self.master,
@@ -2502,6 +2504,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     restore_result[0],
                     "restore failed for {0} with {1}".format(
                         bucket_collection_namespaces, restore_result[1]))
+                self.item_count_related_validations()
                 self.log.info("Will copy restore log from backup client node to logs folder")
                 logs_path = self.input.param("logs_folder", "/tmp")
                 logs_path_final = os.path.join(logs_path, 'restore.log')
@@ -2527,6 +2530,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self._build_indexes(indexes_after_restore)
                 self.wait_until_indexes_online()
                 self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
+
 
             self.wait_until_indexes_online()
             rebalance_task = False
@@ -2565,6 +2569,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                item_count_increase=False,
                                                                per_node=True, skip_array_index_item_count=False)
                 self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
+                self.drop_index_node_resources_utilization_validations()
 
         finally:
             if backup_client:
@@ -2754,6 +2759,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                         similarity="L2_SQUARED")
             query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_replica=self.num_index_replica)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.item_count_related_validations()
 
 
             for bucket in self.buckets:
@@ -2837,6 +2843,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
 
                 shard_index_map = self.get_shards_index_map()
                 self.validate_shard_seggregation(shard_index_map=shard_index_map)
+                self.drop_index_node_resources_utilization_validations()
 
 
         finally:

@@ -555,9 +555,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             query = f"BUILD INDEX ON {collection_namespace}({idx}) USING GSI "
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.sleep(5)
+        
+        self.item_count_related_validations()
 
         meta_data = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(meta_data), 2, f'indexes are not built metadata {meta_data}')
+        
+        self.drop_index_node_resources_utilization_validations()
 
     def test_build_idx_less_than_required_centroids(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -604,9 +608,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for node in index_nodes:
                 self._kill_all_processes_index(server=node)
         self.sleep(10)
+        self.item_count_related_validations()
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for idx in index_metadata:
             self.assertEqual("Ready", idx['status'], 'index has been errored out')
+        self.drop_index_node_resources_utilization_validations()
 
     def test_concurrent_vector_index_builds(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -633,8 +639,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in index_build_list:
                 executor.submit(self.run_cbq_query, query=query)
         self.wait_until_indexes_online(timeout=600)
+        self.item_count_related_validations()
         meta_data = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(meta_data), len(self.namespaces) * 2, f"indexes are not created meta data {meta_data}")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_rebalance(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
@@ -659,6 +667,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        self.wait_until_indexes_online(timeout=600)
+        self.item_count_related_validations()
         code_book_memory_map_before_rebalance, aggregated_code_book_memory_before_rebalance = self.get_per_index_codebook_memory_usage()
         # Recall and accuracy check
         for select_query in select_queries:
@@ -767,6 +777,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if not self.check_gsi_logs_for_shard_transfer():
                 raise Exception("Shard based rebalance not triggered")
         self.validate_scans_for_recall_and_accuracy(select_query=select_queries)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -787,6 +798,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        
+        self.wait_until_indexes_online(timeout=600)
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before rebalance operation", similarity=self.similarity)
@@ -853,6 +867,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after rebalance operation", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance_failure_or_rebalance_stop_and_retry_with_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -874,6 +889,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        
+        self.item_count_related_validations()
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
@@ -896,6 +913,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
+        self.drop_index_node_resources_utilization_validations()
 
     def test_kv_autofailover_and_remove_node_with_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -916,6 +934,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        self.wait_until_indexes_online(timeout=600)
+        self.sleep(10)
+        self.item_count_related_validations()
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -945,6 +966,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if "Partial" in index:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+        self.drop_index_node_resources_utilization_validations()
 
     def kv_node_failover_recovery_and_addback_with_indexes(self):
         self.recovery_type = self.input.param('recovery_type', 'full')
@@ -966,6 +988,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        self.wait_until_indexes_online(timeout=600)
+        self.sleep(10)
+        self.item_count_related_validations()
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -996,6 +1021,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if "Partial" in index:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_rebalance_operations_with_different_topologies(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -1018,6 +1044,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        self.wait_until_indexes_online(timeout=600)
+        self.sleep(10)
+        self.item_count_related_validations()
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before rebalance operation", similarity=self.similarity)
 
@@ -1103,6 +1132,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after rebalance operation", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_failover_and_recovery_sequentially(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -1487,7 +1517,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        self.wait_until_indexes_online()
+        
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before reducing num replica count",
@@ -1531,6 +1562,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after increasing num replica count", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_alter_replica_restricted_nodes(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1559,7 +1591,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        self.wait_until_indexes_online()
+        
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before moving indexes to specifc node",
@@ -1592,6 +1625,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after moving indexes to specifc node", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_alter_index_alter_replica_id(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1617,7 +1651,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        self.wait_until_indexes_online()
+        
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before dropping replica id", stats_assertion=False, similarity=self.similarity)
@@ -1661,6 +1696,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_alter_move_index(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1691,7 +1727,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        self.wait_until_indexes_online()
+        
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before move index via alter query",
@@ -1726,6 +1763,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after move index via alter query", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_scan_comparison_between_trained_and_untrained_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -1789,6 +1827,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 defer_build = False
             query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+        self.wait_until_indexes_online(timeout=600)
+        self.sleep(10)
+        self.item_count_related_validations()
         for query in [trained_index_color_rgb_vector, trained_index_description_vector]:
             select_query_with_explain = f"EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query], namespace=collection_namespace, limit=self.scan_limit)[0]}"
             index_used_select_query = \
@@ -1796,6 +1837,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     0][
                     'index']
             self.assertEqual(index_used_select_query, query.index_name, 'trained index not used for scans')
+        self.drop_index_node_resources_utilization_validations()
 
     def test_compare_results_between_partitioned_and_non_partitioned_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -1888,8 +1930,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                 namespace=collection_namespace,
                                                                 index_name=idx.index_name)[0]
             select_queries.append(select_query)
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message, similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_replica_repair(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1926,7 +1970,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(30)
 
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
-        self.wait_until_indexes_online()
+        
+        self.item_count_related_validations()
 
         if self.memory_fill:
             for node in index_node:
@@ -1947,6 +1992,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             else:
                 for index in index_metadata:
                     self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+            self.drop_index_node_resources_utilization_validations()
         except Exception as ex:
             raise ex
         finally:
@@ -1972,6 +2018,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        
+        self.item_count_related_validations()
 
         for select_query in select_queries:
             if "ANN_DISTANCE" not in select_query:
@@ -2025,6 +2073,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                  f"rollback of indexes havent happened {stats}")
             else:
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+        
 
 
 
@@ -2032,6 +2081,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if "ANN_DISTANCE" not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_recover_from_disk_snapshot(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -2057,7 +2107,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        
+        self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
+        
 
         for select_query in select_queries:
             if "ANN_DISTANCE" not in select_query:
@@ -2110,6 +2163,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
                              "Index hasn't recovered the docs within the given time")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_partial_rollback(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -2132,7 +2186,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
                                                  query_node=self.n1ql_node)
-        self.wait_until_indexes_online()
+        
+        self.item_count_related_validations()
 
         self.log.info("Stopping persistence on NodeA & NodeB")
         data_nodes = self.get_nodes_from_services_map(service_type="kv",
@@ -2207,6 +2262,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count()
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after doing a partial roll back from kv side", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_recovery_post_deleting_recovery_files(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -2232,6 +2288,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        
+        self.item_count_related_validations()
         # deleting recovery files
         storage_dir = self.index_rest.get_indexer_internal_stats()['indexer.storage_dir']
         for index_node in index_nodes:
@@ -2269,6 +2327,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         #log validation for recovery of bhive indexes
         is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
         self.assertTrue(is_log_validation, "bhive recovery point not found in logs")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_crash_indexer_data_nodes(self):
         self.kill_parallel = self.input.param("kill_parallel", False)
@@ -2295,6 +2354,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        
+        self.item_count_related_validations()
 
 
         if self.kill_parallel:
@@ -2339,6 +2400,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         #log validation for recovery of bhive indexes
         is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
         self.assertTrue(is_log_validation, "bhive recovery point not found in logs")
+        self.drop_index_node_resources_utilization_validations()
+
     def test_recovery_projector_crash(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                     skip_default_scope=self.skip_default)
@@ -2362,6 +2425,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
 
         for select_query in select_queries:
@@ -2418,6 +2482,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
                             "Index hasn't recovered the docs within the given time")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_recovery_memcached_crash(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -2442,6 +2507,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
 
         for select_query in select_queries:
@@ -2501,6 +2567,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
                             "Index hasn't recovered the docs within the given time")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_crash_and_recovery_scenarios_during_index_building(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -2530,6 +2597,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        self.item_count_related_validations()
         build_index_tasks = []
         for build_query in build_queries:
             build_index_tasks.append(self.cluster.async_build_index(server=self.n1ql_node, query=build_query))
@@ -2581,6 +2649,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             query_stats_map[query] = [recall, accuracy]
         self.gen_table_view(query_stats_map=query_stats_map,
                             message=f"quantization value is {self.quantization_algo_description_vector}")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_create_index_without_vector_data(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
@@ -2629,8 +2698,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
+        self.item_count_related_validations()
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1,
                          "Index not created successfully")
+        self.drop_index_node_resources_utilization_validations()
+
 
     def test_drop_multiple_indexes_in_training_state(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -2655,6 +2727,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
 
+        self.item_count_related_validations()
         timeout = 0
         with ThreadPoolExecutor() as executor:
             executor.submit(self.run_cbq_query, query=build_query, server=self.n1ql_node)
@@ -2676,6 +2749,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             timeout = timeout + 5
 
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 0, "index not dropped ")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_kill_memecached_during_index_training(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -2705,6 +2779,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         for data in meta_data:
             self.assertEqual(data['status'], 'Error', "state is not errored out")
+        self.item_count_related_validations()
+        self.drop_index_node_resources_utilization_validations()
 
     def test_scalar_scans_on_vector_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -2721,6 +2797,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         create_query = query_definition_1.generate_index_create_query(namespace=collection_namespace)
 
         self.run_cbq_query(query=create_query, server=self.n1ql_node)
+        self.item_count_related_validations()
 
         select_query = \
             self.gsi_util_obj.get_select_queries(definition_list=[query_definition_1], namespace=collection_namespace)[
@@ -2729,6 +2806,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         res = self.run_cbq_query(query=select_query, server=self.n1ql_node)
 
         self.assertEqual(len(res["results"]), self.scan_limit, "Expected no of results not returned")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_scans_on_different_distance_functions(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -2777,6 +2855,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                 namespace=collection_namespace)[0]
             select_queries.append(select_query)
 
+        self.item_count_related_validations()
+
         for query in [vector_index_L2, vector_index_cosine]:
             select_query_with_explain = f"""EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query],
                                                                                           namespace=collection_namespace,
@@ -2787,6 +2867,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     'index']
             self.log.info(index_used_select_query)
             self.assertEqual(index_used_select_query, query.index_name, 'trained index not used for scans')
+        self.drop_index_node_resources_utilization_validations()
 
     def test_distance_projection_scans(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -2812,6 +2893,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                               scan_desc_vec_1), bhive_index=self.bhive_index)
         create_query = vector_index_L2.generate_index_create_query(namespace=collection_namespace)
         self.run_cbq_query(query=create_query, server=self.n1ql_node)
+        self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index_L2],
                                                             namespace=collection_namespace)[0]
         distance_list = []
@@ -2822,6 +2904,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         copy_distance_list = distance_list[:]
 
         self.assertEqual(sorted(copy_distance_list), distance_list, "distance projection for the query is incorrect")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_scans_after_vector_field_mutations(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
@@ -2858,6 +2941,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            self.item_count_related_validations()
 
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
@@ -2870,6 +2954,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             update_start=0, update_end=self.num_of_docs_per_collection)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
+            self.item_count_related_validations()
+
             query_stats_map = {}
             for query in select_queries:
                 if "ANN_DISTANCE" not in query:
@@ -2878,6 +2964,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            self.drop_index_node_resources_utilization_validations()
+
 
     def test_scans_after_adding_invalid_input_for_vector_fields_and_change_it_back(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
@@ -2905,6 +2993,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in create_queries:
                 self.run_cbq_query(query=query)
 
+            self.item_count_related_validations()
+
             # Add invalid/scalar values for vector fields in some of the docs and run scans
             collection_namespace = self.namespaces[0]
             upsert_query = (f"update {collection_namespace} set colorRGBVector = 12 and "
@@ -2913,6 +3003,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             for query in select_queries:
                 self.run_cbq_query(query=query)
+
+            self.item_count_related_validations()
 
             # change back the modified fields to vectors and re-run scans
             keyspace = namespace.split(":")[-1]
@@ -2942,6 +3034,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             error_msg_and_doc_count = (f'"The value of a VECTOR expression is expected to be an array of floats. '
                                        f'Found non-array type":{doc_count}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
+            self.drop_index_node_resources_utilization_validations()
 
     def test_scans_after_removing_vector_field_from_some_docs(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -2967,19 +3060,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in create_queries:
                 self.run_cbq_query(query=query)
 
+            self.item_count_related_validations()
+
             # make vector field null for some of the docs and run scans
             collection_namespace = self.namespaces[0]
             upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
             self.run_cbq_query(query=upsert_query)
+
+            self.item_count_related_validations()
 
             # Fetch no of docs which will be mutated to validate the stats count
             select_query = f"select count(*) from {collection_namespace} where rating = 0"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
 
+
             error_msg_and_doc_count = (f'"The value of a VECTOR expression is expected to be an array of floats. '
                                        f'Found non-array type":{doc_count}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
+            self.drop_index_node_resources_utilization_validations()
 
     def test_scans_after_updating_dimensions_of_vector_field_and_reverting_back(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
@@ -3015,6 +3114,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            self.item_count_related_validations()
 
             # Updating dimensions of vector fields for subset of documents and running scans
             keyspace = namespace.split(":")[-1]
@@ -3026,6 +3126,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             update_start=0, update_end=10000)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
+            self.item_count_related_validations()
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
@@ -3033,6 +3134,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_query = f"select count(*) from {namespace} where rating > 2"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
+
+            self.item_count_related_validations()
 
             error_msg_and_doc_count = (f'"Length of VECTOR in incoming document is different from '
                                        f'the expected dimension":{doc_count}')
@@ -3048,6 +3151,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             update_start=0, update_end=10000)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
+            self.item_count_related_validations()
+
             query_stats_map = {}
             for query in select_queries:
                 if "ANN_DISTANCE" not in query:
@@ -3056,6 +3161,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            self.drop_index_node_resources_utilization_validations()
 
     def test_scans_with_incremental_workload_for_composite_vector_index(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
@@ -3091,6 +3197,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            self.item_count_related_validations()
 
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
@@ -3114,8 +3221,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
 
+            self.item_count_related_validations()
+
             # verify index count matches bucket item count
             self._verify_bucket_count_with_index_count()
+            self.drop_index_node_resources_utilization_validations()
 
     def test_scans_with_expiry_workload_for_composite_vector_index(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
@@ -3145,6 +3255,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                   limit=self.scan_limit)
             for create in create_queries:
                 self.run_cbq_query(query=create)
+            self.item_count_related_validations()
 
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
@@ -3172,12 +3283,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                     message=f"quantization value is {self.quantization_algo_description_vector}")
                 self.sleep(5, "waiting before re-running queries")
 
+            self.item_count_related_validations()
             # verify index count matches bucket item count
             self._verify_bucket_count_with_index_count()
 
             # validate that number of indexed docs are zero for all the indexes
             index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             self.assertTrue(self.check_if_index_count_zero(definitions, index_nodes))
+            self.drop_index_node_resources_utilization_validations()
 
     def test_run_scans_on_dgm(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -3199,6 +3312,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
                                                  query_node=self.n1ql_node)
         self.wait_until_indexes_online()
+        self.item_count_related_validations()
         # self.sleep(300)
         self.run_continous_query = True
         self.query_node = self.n1ql_node
@@ -3213,6 +3327,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results getting rr less than {self.desired_rr}%", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_partitioned_index_vector_fields_mutation(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -3240,6 +3355,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         create_idx_query = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
         self.run_cbq_query(query=create_idx_query)
+        self.item_count_related_validations()
         # The below query is to ensure that all the vector fields are made into scalar fields
         update_query = f"update {collection_namespace} set descriptionVector = 'abcd' where rating is not null"
         self.run_cbq_query(query=update_query)
@@ -3268,6 +3384,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector],
                                                             namespace=collection_namespace)[0]
         self.run_cbq_query(query=select_query)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_retry_index_training_and_dynamic_centroid_number(self):
         self.is_partial = self.input.param("is_partial", False)
@@ -3306,9 +3423,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
+        self.item_count_related_validations()
 
         status = self.wait_until_indexes_online()
         self.assertTrue(status)
+        self.drop_index_node_resources_utilization_validations()
 
 
     def test_rebalance_operation_with_errored_out_indexes(self):
@@ -3359,6 +3478,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        self.item_count_related_validations()
         with ThreadPoolExecutor() as executor:
             add_nodes = [self.servers[3]]
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
@@ -3413,6 +3533,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if "DISTINCT" in select_query:
                     continue
                 self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_random_sampling_across_keyspaces(self):
         self.use_named_namespace = self.input.param("use_named_namespace", True)
@@ -3436,6 +3557,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
+        self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index],
                                                             namespace=collection_namespace)[0]
         _, recall_before_random_sampling, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query, similarity=self.similarity,
@@ -3476,6 +3598,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         diff = recall_after_random_sampling - recall_before_random_sampling
         threshold = (self.threshold_percentage / 100) * recall_before_random_sampling
         self.assertLess(diff, threshold, f"diff {diff}, threshold {threshold}")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_mixed_dimension_data(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -3502,6 +3625,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False, bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
+        self.item_count_related_validations()
 
         #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
         index_stats = self.index_rest.get_index_stats()
@@ -3511,6 +3635,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     continue
                 else:
                     self.assertEqual(index_stats[namespace][index]['items_count'], self.num_centroids, "indexes with docs of other dimensions have been indexed")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_codebook_memory_indexer_restart(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -3529,6 +3654,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
         self.wait_until_indexes_online()
+        self.item_count_related_validations()
 
         code_book_memory_map_before_rebalance, aggregated_code_book_memory_before_rebalance = self.get_per_index_codebook_memory_usage()
         # restart indexer process on index_nodes
@@ -3543,6 +3669,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
                              f"Codebook memory has changed for index {index}")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_partition_elimination(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
@@ -3569,6 +3696,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
         self.run_cbq_query(query=index)
+        self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
         self.run_cbq_query(select_query)
         drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
@@ -3602,6 +3730,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
                                                                                  num_partition=8)
         self.run_cbq_query(query=index)
+        self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
         self.run_cbq_query(select_query)
         drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
@@ -3636,6 +3765,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
                                                                                  num_partition=8)
         self.run_cbq_query(query=index)
+        self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
         self.run_cbq_query(select_query)
         drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
@@ -3697,6 +3827,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                 namespace=collection_namespace)[0]
             select_queries.append(select_query)
 
+        self.item_count_related_validations()
         for query in [composite_vector_index, bhive_index]:
             select_query_with_explain = f"""EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query],
                                                                                           namespace=collection_namespace,
@@ -3707,6 +3838,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     'index']
             self.log.info(index_used_select_query)
             self.assertEqual(index_used_select_query, bhive_index.index_name, 'bhive index was not the most preferred index')
+        self.drop_index_node_resources_utilization_validations()
 
     def test_replica_repair_with_less_nodes(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -3856,12 +3988,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                 namespace=collection_namespace)[0]
             select_queries.update(select_query)
 
-        self.wait_until_indexes_online()
-
-        self.validate_no_pending_mutations()
-        self.compare_item_counts_between_kv_and_gsi()
-        self.backstore_mainstore_check()
-        self.validate_replica_indexes_item_counts()
+        self.item_count_related_validations()
 
         # validating shard seggregation
         shard_map = self.get_shards_index_map()
@@ -3888,14 +4015,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results of skewed towards bhive {self.bhive_index}", similarity=self.similarity, stats_assertion=False)
 
-        self.drop_all_indexes()
-        self.sleep(120)
-        self.check_storage_directory_cleaned_up()
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
-        if not self.validate_cpu_normalized():
-            raise AssertionError("CPU not normalized despite dropping all the indexes")
+        self.drop_index_node_resources_utilization_validations()
 
     def test_batch_index_create_drop_bhive_composite_combo(self):
         self.index_category_dropped = self.input.param("index_category_dropped", "composite_vector")
@@ -3935,11 +4055,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     namespace_index_map[index_type].append(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
 
                     self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        self.wait_until_indexes_online()
-        self.validate_no_pending_mutations()
-        self.compare_item_counts_between_kv_and_gsi()
-        self.backstore_mainstore_check()
-        self.validate_replica_indexes_item_counts()
+        self.item_count_related_validations()
 
         # validating shard seggregation
         shard_map = self.get_shards_index_map()
@@ -3997,22 +4113,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
 
-        self.wait_until_indexes_online()
-        self.validate_no_pending_mutations()
-        self.compare_item_counts_between_kv_and_gsi()
-        self.backstore_mainstore_check()
-        self.validate_replica_indexes_item_counts()
+        self.item_count_related_validations()
 
         # validating recall
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results of skewed towards bhive {self.bhive_index}",
                                                similarity=self.similarity, stats_assertion=False)
-
-        self.drop_all_indexes()
-        self.sleep(120)
-        self.check_storage_directory_cleaned_up()
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
-        if not self.validate_cpu_normalized():
-            raise AssertionError("CPU not normalized despite dropping all the indexes")
+        self.drop_index_node_resources_utilization_validations()

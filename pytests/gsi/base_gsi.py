@@ -2337,6 +2337,24 @@ class BaseSecondaryIndexingTests(QueryTests):
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
 
+    def item_count_related_validations(self):
+        self.wait_until_indexes_online()
+        self.sleep(10)
+        self.validate_no_pending_mutations()
+        self.sleep(120)
+        self.compare_item_counts_between_kv_and_gsi()
+        self.backstore_mainstore_check()
+        self.validate_replica_indexes_item_counts()
+
+    def drop_index_node_resources_utilization_validations(self):
+        self.drop_all_indexes()
+        self.sleep(120)
+        self.check_storage_directory_cleaned_up()
+        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
+        # if not self.validate_memory_released():
+        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        if not self.validate_cpu_normalized():
+            raise AssertionError("CPU not normalized despite dropping all the indexes")
     def update_master_node(self):
         for server in self.servers:
             try:

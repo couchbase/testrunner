@@ -1429,6 +1429,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 select_queries = self.create_index_in_batches(replica_count=1, scalar=scalar)
                 hotel_data_set_index_fields = ['price', 'free_breakfast,avg_rating', 'city,avg_rating,country', 'name']
                 self.wait_until_indexes_online()
+                if self.upgrade_to >= "8.0":
+                    self.item_count_related_validations()
                 uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
                                                  update_end=self.num_of_docs_per_collection + 1,
                                                  select_queries=select_queries,
@@ -1476,6 +1478,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 #                         'Some docs of kv gsi verification failed')
                 self.create_index_in_batches(num_batches=1, replica_count=1)
                 self.wait_until_indexes_online()
+                if self.upgrade_to >= "8.0":
+                    self.item_count_related_validations()
                 if self.upgrade_mode == 'offline':
                     index_names_after_upgrade = self.get_all_indexes_in_the_cluster()
                     indexes_created_post_upgrade = []
@@ -1495,6 +1499,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     index_list_before = self.get_all_indexes_in_the_cluster()
                     self.post_upgrade_validate_vector_index(index_list_before=index_list_before,
                                                             cluster_profile="provsioned")
+                self.drop_index_node_resources_utilization_validations()
 
                 # Will uncomment the below code post MB-59107
                 # if not self.check_gsi_logs_for_shard_transfer():
@@ -1516,6 +1521,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         self.create_index_in_batches(num_batches=1, replica_count=1, scalar=True, dataset=self.json_template)
         self.wait_until_indexes_online()
+        self.item_count_related_validations()
 
         #upgrading all the nodes in provisioned in the test
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
@@ -1565,6 +1571,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         self.wait_until_indexes_online()
+        self.item_count_related_validations()
 
         #enabling shard affinity
         self.enable_shard_based_rebalance()
@@ -1665,6 +1672,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results post upgrade and multiple rebalances with shard affinity enables/disabled",
                                                similarity=self.similarity, stats_assertion=True)
+        self.item_count_related_validations()
+        self.sleep(30)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_combination_upgrade_test(self):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
