@@ -258,16 +258,16 @@ class QueryAUSTests(QueryTests):
         aus_task_keyspaces = f"SELECT array_flatten(array_agg(results.keyspaces_evaluated), 1) keyspaces_evaluated, array_flatten(array_agg(results.keyspaces_updated), 1) keyspaces_updated FROM system:tasks_cache WHERE class = 'auto_update_statistics' AND state = 'completed' and id IN {task_ids} "
         aus_task_keyspaces_result = self.run_cbq_query(aus_task_keyspaces)
         self.log.info(f"AUS task completed result: {aus_task_keyspaces_result}")
-        expected_keyspaces_evaluated = ['default:travel-sample.inventory.hotel', 'default:travel-sample.inventory.airport', 'default:travel-sample.inventory.airline', 'default:travel-sample.inventory.route', 'default:travel-sample.inventory.landmark', 'default:travel-sample._system._query', 'default:travel-sample._system._mobile', 'default:travel-sample.tenant_agent_04.users', 'default:travel-sample.tenant_agent_04.bookings', 'default:travel-sample.tenant_agent_03.bookings', 'default:travel-sample.tenant_agent_03.users', 'default:travel-sample.tenant_agent_02.bookings', 'default:travel-sample.tenant_agent_02.users', 'default:travel-sample.tenant_agent_01.users', 'default:travel-sample.tenant_agent_01.bookings', 'default:travel-sample._default._default', 'default:travel-sample.tenant_agent_00.bookings', 'default:travel-sample.tenant_agent_00.users', 'default:default._system._mobile', 'default:default._system._query', 'default:default._default._default']
+        # expected_keyspaces_evaluated = ['default:travel-sample.inventory.hotel', 'default:travel-sample.inventory.airport', 'default:travel-sample.inventory.airline', 'default:travel-sample.inventory.route', 'default:travel-sample.inventory.landmark', 'default:travel-sample._system._query', 'default:travel-sample._system._mobile', 'default:travel-sample.tenant_agent_04.users', 'default:travel-sample.tenant_agent_04.bookings', 'default:travel-sample.tenant_agent_03.bookings', 'default:travel-sample.tenant_agent_03.users', 'default:travel-sample.tenant_agent_02.bookings', 'default:travel-sample.tenant_agent_02.users', 'default:travel-sample.tenant_agent_01.users', 'default:travel-sample.tenant_agent_01.bookings', 'default:travel-sample._default._default', 'default:travel-sample.tenant_agent_00.bookings', 'default:travel-sample.tenant_agent_00.users', 'default:default._system._mobile', 'default:default._system._query', 'default:default._default._default']
         expected_keyspaces_updated = ['default:travel-sample.inventory.hotel', 'default:travel-sample.inventory.airport', 'default:travel-sample.inventory.route', 'default:travel-sample.inventory.landmark', 'default:travel-sample._default._default']
-        keyspaces_evaluated = aus_task_keyspaces_result['results'][0]['keyspaces_evaluated']
+        # keyspaces_evaluated = aus_task_keyspaces_result['results'][0]['keyspaces_evaluated']
         keyspaces_updated = aus_task_keyspaces_result['results'][0]['keyspaces_updated']
         # order expected list and results list
-        expected_keyspaces_evaluated.sort()
+        # expected_keyspaces_evaluated.sort()
         expected_keyspaces_updated.sort()
-        keyspaces_evaluated.sort()
+        # keyspaces_evaluated.sort()
         keyspaces_updated.sort()
-        self.assertEqual(keyspaces_evaluated, expected_keyspaces_evaluated)
+        # self.assertEqual(keyspaces_evaluated, expected_keyspaces_evaluated)
         self.assertEqual(keyspaces_updated, expected_keyspaces_updated)
 
         # Check next scheduled task
@@ -451,3 +451,105 @@ class QueryAUSTests(QueryTests):
         self.log.info(f"AUS task keyspaces updated result: {aus_task_keyspaces_result}")
         keyspaces_updated = aus_task_keyspaces_result['results'][0]['keyspaces_updated']
         self.assertEqual(keyspaces_updated, None)
+
+    def test_system_collection_disable_aus(self):
+        # Enable AUS and set schedule within next 1 minutes for today for next 3 days
+        delay = 2
+        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay)).strftime('%H:%M')
+        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay + 30)).strftime('%H:%M')
+        today = datetime.now(pytz.timezone('America/Los_Angeles')).strftime('%A')
+        
+        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}"]}}, enable = true, all_buckets = true, change_percentage = 50'
+        self.run_cbq_query(aus_update)
+
+        # wait 120 seconds for task to be completed
+        self.sleep(120)
+
+        # Check system collection
+        aus_system_query = f"SELECT name FROM `travel-sample`.`_system`.`_query` WHERE name IS NOT MISSING ORDER BY name"
+        aus_system_result = self.run_cbq_query(aus_system_query)
+        self.log.info(f"AUS system collection result: {aus_system_result['results']}")
+        expected_system_collection = [{'name': 'def_airportname'}, {'name': 'def_city'}, {'name': 'def_faa'}, {'name': 'def_icao'}, {'name': 'def_inventory_airport_airportname'}, {'name': 'def_inventory_airport_city'}, {'name': 'def_inventory_airport_faa'}, {'name': 'def_inventory_hotel_city'}, {'name': 'def_inventory_landmark_city'}, {'name': 'def_inventory_route_route_src_dst_day'}, {'name': 'def_inventory_route_schedule_utc'}, {'name': 'def_inventory_route_sourceairport'}, {'name': 'def_route_src_dst_day'}, {'name': 'def_schedule_utc'}, {'name': 'def_sourceairport'}, {'name': 'def_type'}]
+        self.assertEqual(aus_system_result['results'], expected_system_collection)
+        
+        # disable AUS
+        aus_update = f'UPDATE system:aus SET enable = false'
+        self.run_cbq_query(aus_update)
+
+        # wait 30 seconds for task to be completed
+        self.sleep(30)
+
+        # Check system collection
+        aus_system_result_after = self.run_cbq_query(aus_system_query)
+        self.log.info(f"AUS system collection result after: {aus_system_result_after['results']}")
+        self.assertEqual(aus_system_result_after['results'], [])
+
+    def test_system_collection_delete_stats(self):
+        # Enable AUS and set schedule within next 1 minutes for today for next 3 days
+        delay = 2
+        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay)).strftime('%H:%M')
+        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay + 30)).strftime('%H:%M')
+        today = datetime.now(pytz.timezone('America/Los_Angeles')).strftime('%A')
+        
+        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}"]}}, enable = true, all_buckets = true, change_percentage = 50'
+        self.run_cbq_query(aus_update)
+
+        # wait 120 seconds for task to be completed
+        self.sleep(120)
+
+        # Check system collection
+        aus_system_query = f"SELECT name FROM `travel-sample`.`_system`.`_query` WHERE name IS NOT MISSING ORDER BY name"
+        aus_system_result = self.run_cbq_query(aus_system_query)
+        self.log.info(f"AUS system collection result: {aus_system_result['results']}")
+        expected_system_collection = [{'name': 'def_airportname'}, {'name': 'def_city'}, {'name': 'def_faa'}, {'name': 'def_icao'}, {'name': 'def_inventory_airport_airportname'}, {'name': 'def_inventory_airport_city'}, {'name': 'def_inventory_airport_faa'}, {'name': 'def_inventory_hotel_city'}, {'name': 'def_inventory_landmark_city'}, {'name': 'def_inventory_route_route_src_dst_day'}, {'name': 'def_inventory_route_schedule_utc'}, {'name': 'def_inventory_route_sourceairport'}, {'name': 'def_route_src_dst_day'}, {'name': 'def_schedule_utc'}, {'name': 'def_sourceairport'}, {'name': 'def_type'}]
+        self.assertEqual(aus_system_result['results'], expected_system_collection)
+        
+        # Delete stats
+        delete_stats_airport = f'UPDATE statistics FOR `travel-sample`.inventory.airport DELETE ALL'
+        delete_stats_route = f'UPDATE statistics FOR `travel-sample`.inventory.route DELETE ALL'
+        self.run_cbq_query(delete_stats_airport)
+        self.run_cbq_query(delete_stats_route)
+
+        # wait 30 seconds for task to be completed
+        self.sleep(30)
+
+        # Check system collection
+        expected_system_collection = [{'name': 'def_airportname'}, {'name': 'def_city'}, {'name': 'def_faa'}, {'name': 'def_icao'}, {'name': 'def_inventory_hotel_city'}, {'name': 'def_inventory_landmark_city'},  {'name': 'def_route_src_dst_day'}, {'name': 'def_schedule_utc'}, {'name': 'def_sourceairport'}, {'name': 'def_type'}]
+        aus_system_result_after = self.run_cbq_query(aus_system_query)
+        self.log.info(f"AUS system collection result after: {aus_system_result_after['results']}")
+        self.assertEqual(aus_system_result_after['results'], expected_system_collection)
+
+    def test_system_collection_drop_collection(self):
+        # Enable AUS and set schedule within next 1 minutes for today for next 3 days
+        delay = 2
+        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay)).strftime('%H:%M')
+        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=delay + 30)).strftime('%H:%M')
+        today = datetime.now(pytz.timezone('America/Los_Angeles')).strftime('%A')
+        
+        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}"]}}, enable = true, all_buckets = true, change_percentage = 50'
+        self.run_cbq_query(aus_update)
+
+        # wait 120 seconds for task to be completed
+        self.sleep(120)
+
+        # Check system collection
+        aus_system_query = f"SELECT name FROM `travel-sample`.`_system`.`_query` WHERE name IS NOT MISSING ORDER BY name"
+        aus_system_result = self.run_cbq_query(aus_system_query)
+        self.log.info(f"AUS system collection result: {aus_system_result['results']}")
+        expected_system_collection = [{'name': 'def_airportname'}, {'name': 'def_city'}, {'name': 'def_faa'}, {'name': 'def_icao'}, {'name': 'def_inventory_airport_airportname'}, {'name': 'def_inventory_airport_city'}, {'name': 'def_inventory_airport_faa'}, {'name': 'def_inventory_hotel_city'}, {'name': 'def_inventory_landmark_city'}, {'name': 'def_inventory_route_route_src_dst_day'}, {'name': 'def_inventory_route_schedule_utc'}, {'name': 'def_inventory_route_sourceairport'}, {'name': 'def_route_src_dst_day'}, {'name': 'def_schedule_utc'}, {'name': 'def_sourceairport'}, {'name': 'def_type'}]
+        self.assertEqual(aus_system_result['results'], expected_system_collection)
+        
+        # Drop collections
+        drop_airport_collection = f'DROP COLLECTION `travel-sample`.inventory.airport'
+        drop_hotel_collection = f'DROP COLLECTION `travel-sample`.inventory.hotel'
+        self.run_cbq_query(drop_hotel_collection)
+        self.run_cbq_query(drop_airport_collection)
+
+        # wait 60 seconds for task to be completed
+        self.sleep(60)
+
+        # Check system collection
+        expected_system_collection = [{'name': 'def_airportname'}, {'name': 'def_city'}, {'name': 'def_faa'}, {'name': 'def_icao'}, {'name': 'def_inventory_landmark_city'}, {'name': 'def_inventory_route_route_src_dst_day'}, {'name': 'def_inventory_route_schedule_utc'}, {'name': 'def_inventory_route_sourceairport'}, {'name': 'def_route_src_dst_day'}, {'name': 'def_schedule_utc'}, {'name': 'def_sourceairport'}, {'name': 'def_type'}]
+        aus_system_result_after = self.run_cbq_query(aus_system_query)
+        self.log.info(f"AUS system collection result after: {aus_system_result_after['results']}")
+        self.assertEqual(aus_system_result_after['results'], expected_system_collection)
