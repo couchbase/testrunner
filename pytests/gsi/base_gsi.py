@@ -3302,7 +3302,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         continue
                     if index_name in ignore_count_index_list or "BackStore" not in stats:
                         continue
-                    if index in bhive_index_list:
+                    if index_name in bhive_index_list:
                         key = "item_count"
                     else:
                         key = "items_count"
