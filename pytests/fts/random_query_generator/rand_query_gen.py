@@ -457,41 +457,44 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def construct_terms_query_string_query(self):
         """
-        Generates disjunction, boolean query string queries
+        Generates disjunction, boolean query string queries.
+        Returns a tuple: (with_keyword_suffix, without_keyword_suffix)
         """
 
         if bool(random.getrandbits(1)):
             # text/str terms
-            fieldname = self.get_random_value(self.fields['str'] +
-                                              self.fields['text'])
-            match_str = eval("self.get_queryable_%s" % fieldname + "()")
-            if ':' or ' ' in match_str:
-                match_str = '\"' + match_str + '\"'
-            fieldname = fieldname + ".keyword"
+            fieldname = self.get_random_value(self.fields['str'] + self.fields['text'])
+            match_str = eval(f"self.get_queryable_{fieldname}()")
+            if ':' in match_str or ' ' in match_str:
+                match_str = f'"{match_str}"'
+
+            with_keyword = f"{fieldname}.keyword:{match_str}"
+            without_keyword = f"{fieldname}:{match_str}"
+
             if bool(random.getrandbits(1)) and not self.smart_queries:
-                return match_str
+                # Return just the match string (used in some fuzzy or free-text modes)
+                return match_str, match_str
             else:
-                return fieldname + ':' + match_str
+                return with_keyword, without_keyword
+
         else:
             # numeric range
             operators = ['>', '>=', '<', '<=']
             fieldname = self.get_random_value(self.fields['num'])
-            val = eval("self.get_queryable_%s" % fieldname + "()")
+            val = eval(f"self.get_queryable_{fieldname}()")
+
             if bool(random.getrandbits(1)):
-                # upper or lower bound specified
-                end_point = fieldname + ':' + \
-                            self.get_random_value(operators) + str(val)
-                return end_point
+                # single range condition
+                query = f"{fieldname}:{self.get_random_value(operators)}{val}"
+                return query, query
             else:
-                # both upper and lower bounds specified
-                # +age:>=10 +age:<20
+                # compound range condition (e.g. +age:>=10 +age:<20)
                 high_val = val + random.randint(2, 10000)
-                range_str = fieldname + ':' + \
-                            self.get_random_value(operators[:1]) + str(val) + \
-                            ' +' + fieldname + ':' + \
-                            self.get_random_value(operators[2:]) + \
-                            str(high_val)
-                return range_str
+                lower = f"{fieldname}:{self.get_random_value(operators[:1])}{val}"
+                upper = f"+{fieldname}:{self.get_random_value(operators[2:])}{high_val}"
+                query = f"{lower} {upper}"
+                return query, query
+
 
     def construct_query_string_query(self):
         """
@@ -501,32 +504,38 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query = {'query': ""}
         es_query = {"query_string": {'query': ""}}
         connectors = [' ', ' +', ' -']
-        match_str = ""
+        match_str_elastic = ""
+        match_str_fts = ""
 
         try:
             # search term
-            term = self.construct_terms_query_string_query()
+            elastic_term,fts_term = self.construct_terms_query_string_query()
+
             connector = self.get_random_value(connectors)
-            match_str += connector + term
+            match_str_elastic += connector + elastic_term
+            match_str_fts += connector + fts_term
 
             if bool(random.getrandbits(1)):
                 # another term
-                term = self.construct_terms_query_string_query()
+                elastic_term,fts_term = self.construct_terms_query_string_query()
                 connector = self.get_random_value(connectors)
-                match_str += connector + term
+                match_str_elastic += connector + elastic_term
+                match_str_fts += connector + fts_term
 
                 # another term
-                term = self.construct_terms_query_string_query()
+                elastic_term,fts_term = self.construct_terms_query_string_query()
                 connector = self.get_random_value(connectors)
-                match_str += connector + term
+                match_str_elastic += connector + elastic_term
+                match_str_fts += connector + fts_term
 
-            fts_query['query'] = match_str.lstrip()
-            es_query['query_string']['query'] = match_str.lstrip()
+            fts_query['query'] = match_str_fts.lstrip()
+            es_query['query_string']['query'] = match_str_elastic.lstrip()
 
             return fts_query, es_query
         except KeyError:
             # if there are no sufficient num or str/text fields passed
             return {}, {}
+
 
     def construct_wildcard_query(self):
         """
