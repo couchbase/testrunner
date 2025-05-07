@@ -227,6 +227,8 @@ class UpgradeTests(NewUpgradeBaseTest):
     """
 
     def load_items_during_rebalance(self,server):
+        if not self.fts_upgrade:
+            return
         self.sleep(15)
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
         while(not self.isRebalanceComplete):

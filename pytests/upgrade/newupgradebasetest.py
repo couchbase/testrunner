@@ -67,6 +67,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.start_version = self.input.param('initial_version', '2.5.1-1083')
         self.run_partition_validation = self.input.param("run_partition_validation", False)
         self.vector_upgrade = self.input.param("vector_upgrade",False)
+        self.fts_upgrade = self.input.param("fts_upgrade",False)
         self.isRebalanceComplete = False
         self.skip_partition_check_inbetween = self.input.param("skip_partition_check_inbetween", True)
         self.vector_flag = self.input.param("vector_search_test", False)
@@ -901,7 +902,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             raise
     
     def load_items_during_rebalance(self,server):
-
+        if not self.fts_upgrade:
+            return
+        
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
         while(not self.isRebalanceComplete):
             if self.vector_upgrade:
