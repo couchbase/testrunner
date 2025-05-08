@@ -2470,8 +2470,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.sleep(120)
                 timeout = 0
                 while timeout <= 360:
-                    index_status = self.index_rest.get_indexer_metadata()['status']
-                    if len(index_status) == 0:
+                    indexer_metadata = self.index_rest.get_indexer_metadata()
+                    if 'status' not in indexer_metadata:
                         break
                     else:
                         timeout = timeout + 1
@@ -2787,8 +2787,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.sleep(120)
                 timeout = 0
                 while timeout <= 360:
-                    index_status = self.index_rest.get_indexer_metadata()['status']
-                    if len(index_status) == 0:
+                    indexer_metadata = self.index_rest.get_indexer_metadata()
+                    if 'status' not in indexer_metadata:
                         break
                     else:
                         timeout = timeout + 1
