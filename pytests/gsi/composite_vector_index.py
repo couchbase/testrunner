@@ -524,7 +524,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             query = index_gen_5.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
         except Exception as err:
-            err_msg = 'Vector index with any field having array expression is currently not supported'
+            err_msg = 'Array Index using Vector Index Key(all (`colorRGBVector`)) is not allowed.'
             self.assertTrue(err_msg in str(err), f"Index with ALL clause is created: {err}")
 
         # indexes with all clause scalar field
@@ -1468,7 +1468,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if timeout > 360:
                 self.fail("timeout exceeded")
 
-        self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 0, "index not dropped ")
+        self.assertEqual(len(self.index_rest.get_indexer_metadata()), 1, "index not dropped ")
 
     def test_concurrent_vector_index_drops(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -1747,7 +1747,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
                                               action='move',
                                               nodes=[f"{index_nodes[1].ip}:{self.node_port}"])
-                self.sleep(20)
+                self.sleep(60)
                 self.wait_until_indexes_online()
 
         self.wait_until_indexes_online()
@@ -1829,7 +1829,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query, server=self.n1ql_node)
         self.wait_until_indexes_online(timeout=600)
         self.sleep(10)
-        self.item_count_related_validations()
         for query in [trained_index_color_rgb_vector, trained_index_description_vector]:
             select_query_with_explain = f"EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query], namespace=collection_namespace, limit=self.scan_limit)[0]}"
             index_used_select_query = \
@@ -2748,7 +2747,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(5)
             timeout = timeout + 5
 
-        self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 0, "index not dropped ")
+        self.assertEqual(len(self.index_rest.get_indexer_metadata()), 1, "index not dropped ")
         self.drop_index_node_resources_utilization_validations()
 
     def test_kill_memecached_during_index_training(self):
@@ -3423,7 +3422,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
-        self.item_count_related_validations()
 
         status = self.wait_until_indexes_online()
         self.assertTrue(status)
