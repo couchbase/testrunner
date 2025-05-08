@@ -1003,6 +1003,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             raise
     
     def trigger_rebalance(self,servers, servers_in,servers_out,servicesNodeOut):
+        start_services_num = 0
         try:
             if self.upgrade_services_in == "same":
                 self.cluster.rebalance(list(servers.values()),
