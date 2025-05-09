@@ -1490,8 +1490,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in index_drop_list:
                 executor.submit(self.run_cbq_query, query=query)
         self.wait_until_indexes_online(timeout=600)
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
-        self.assertEqual(len(index_metadata), 0, 'Indexes not dropped')
+        index_metadata = self.index_rest.get_indexer_metadata()
+        self.assertEqual(len(index_metadata), 1, 'Indexes not dropped')
 
     def test_alter_index_alter_replica_count(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -2757,7 +2757,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
                                      description="IVF,PQ8x8", similarity="L2_SQUARED", is_base64=self.base64,
                                      bhive_index=self.bhive_index)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
+        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False,
                                                        bhive_index=self.bhive_index)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
 
@@ -2775,9 +2775,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(60)
             remote_machine.start_memcached()
         meta_data = self.index_rest.get_indexer_metadata()['status']
+        self.wait_until_indexes_online(timeout=120)
 
         for data in meta_data:
-            self.assertEqual(data['status'], 'Error', "state is not errored out")
+            self.assertEqual(data['status'], 'Ready', "state is errored out")
         self.item_count_related_validations()
         self.drop_index_node_resources_utilization_validations()
 

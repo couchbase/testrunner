@@ -3145,9 +3145,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         # Add select query field for each index
         for index in result['results']:
             # Build the keyspace string
-            bucket = index['bucket_id']
+            if 'bucket_id' not in index:
+                bucket = index['keyspace_id']
+                collection = '_default'
+            else:
+                bucket = index['bucket_id']
+                collection = index.get('keyspace_id', '_default')
             scope = index.get('scope_id', '_default')
-            collection = index.get('keyspace_id', '_default')
             keyspace = f"`{bucket}`.`{scope}`.`{collection}`"
 
             where_clause = ""
