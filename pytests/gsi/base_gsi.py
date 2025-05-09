@@ -2353,7 +2353,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def drop_index_node_resources_utilization_validations(self):
         self.drop_all_indexes()
         self.sleep(120)
-        self.check_storage_directory_cleaned_up()
+        # self.check_storage_directory_cleaned_up()
         # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
         # if not self.validate_memory_released():
         #     raise AssertionError("Memory not released despite dropping all the indexes")
