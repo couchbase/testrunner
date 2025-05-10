@@ -1,0 +1,12 @@
+Do not unnest let variables.
+Do not use alias in having clause.
+Duplicate fields need to be aliased in the select clause.
+Unnest must come after from and before where.
+Unnest must be on array field.
+Unnest can not be used as the keyspace in the FROM clause.
+Avoid duplicate unnest aliases.
+Subquery must always be given an alias unless it is in the where clause.
+Subquery can be used in select, from or where clauses.
+Use alias for duplicate field names in the select clause.
+Only use Array constructors with array functions, and in predicates.
+All fields should be backticked.

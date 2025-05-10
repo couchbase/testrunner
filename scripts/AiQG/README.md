@@ -1,18 +1,18 @@
-# N1QL Query Test Generator
+# N1QL Query Test Generator - LAST UPDATED 05/09/2025
 
-This tool helps generate and test complex N1QL/SQL++ queries for Couchbase using AI-powered query generation. The workflow involves generating queries with AI, saving them to a test file, and then running tests against those queries.
+This tool helps generate and test complex N1QL/SQL++ queries for Couchbase using AI-powered query generation. The workflow involves generating queries with AI, executing them against a Couchbase cluster, and saving the successful queries to a sql file.
 
 ## Overview
 
 The N1QL Query Test Generator consists of:
 
-1. A query generation script (`scripts/AiQG/AiQG.py`) that uses AI to create complex N1QL queries
-2. Sample data templates and prompt files to guide query generation
-3. A test runner (`pytests/tuqquery/tuq_AiQG_runner.py`) that executes and validates the generated queries
+1. A query generation and execution script (`scripts/AiQG/AiQG.py`) that uses AI to create and test complex N1QL queries
+2. Uses sample data templates, prompt files, and a data generator (`resources/AiQG/data/gen.py`) provided to the script to guide query generation
+3. Support for reprompting failed queries with error context
 
-## Workflow
+## Script Workflow
 
-### 1. Generate Queries
+### 1. Generate and Execute Queries
 
 Use the `AiQG.py` script to generate complex N1QL queries:
 ```
@@ -23,26 +23,54 @@ python scripts/AiQG/AiQG.py --generate \
   --username Administrator \
   --password password \
   --bucket default \
-  --save-queries resources/AiQG/sql/sample_queries.sql
+  --output-file-name sample_queries \
+  --output-dir resources/AiQG/sql
 ```
 
 #### Parameters:
 
-- `--generate`: Use AI to generate queries
-- `--openai-key`: Your OpenAI API key
-- `--schema-file`: File containing the database schema (collections and fields)
-- `--prompts-file`: File containing query generation prompts
-- `--username`: Couchbase username
-- `--password`: Couchbase password
-- `--bucket`: Couchbase bucket name
-- `--save-queries`: Output file to save generated queries
-- `--seed`: (Optional) Random seed for reproducible query generation
+- `--generate`: Generate queries using LangChain and OpenAI
+- `--reprompt-file`: Path to file containing failed queries to reprompt
+- `--sql-file`: Path to the SQL file containing queries we wish to execute if we are not using the --generate or reprompt-file options
+- `--openai-key`: OpenAI API key (required if --generate or --reprompt-file is used)
+- `--schema-file`: Schema template file (required if --generate or --reprompt-file is used)
+- `--prompts-file`: Text file containing query generation prompts (required if --generate is used)
+- `--query-rules`: Optional text file containing additional query rules for generation
+- `--seed`: Random seed for query generation (default: 42) 
+- `--ip`: Couchbase server IP address (default: 127.0.0.1)
+- `--port`: Couchbase server port (default: 8091)
+- `--username`: Couchbase username (default: Administrator)
+- `--password`: Couchbase password (default: password)
+- `--bucket`: Couchbase bucket name (default: default)
+- `--query-context`: Query context (bucket.scope) (default: default._default)
+- `--output-file-name`: Output file prefix for the sql files i.e (output_file_name)_successful_queries_42.sql (optional)
+- `--output-dir`: Output directory for generated query files (optional)
 
-### 2. Review Generated Queries
+### 2. Generate Queries from prompt file
 
-The script will save generated queries to the specified output file (e.g., `resources/AiQG/sql/sample_queries.sql`). Review these queries to ensure they meet your testing requirements.
+The script will generate queries based on a prompt file and execute those queries to make sure they are valid. It will then generate two files, one for successful queries and one for failed queries. The script will also dump a list of if each query was successful or not to the console, with execution times, result counts, and error messages if any.
 
-### 3. Create Test Configuration
+### 3. Review Generated Queries
+
+The script will save generated queries to the specified output file (e.g., `resources/AiQG/sql/sample_queries_successful_queries_42.sql`). Review these queries to ensure they meet your testing requirements. If an output file is not provided, the script will save the queries to a file named after the prompt file (e.g., `resources/AiQG/sql/samplepromptfile_successful_queries_42.sql`). Review the failed queries to ensure there are no bugs present.
+
+### 4. Reprompt Failed Queries
+
+The script has an option to reprompt failed queries to try to fix them. You will pass in the old failed queries file, it will analyze the errors and regenerate new queries based on those errors to try to fix them. It will then append successful queries to the previous successful queries file and genearte a new failed queries file.
+
+```
+python scripts/AiQG/AiQG.py --reprompt-file resources/AiQG/sql/samplepromptfile_failed_queries_42.txt \
+  --openai-key YOUR_OPENAI_API_KEY \
+  --schema-file scripts/AiQG/sampledata.txt \
+  --username Administrator \
+  --password password \
+  --bucket default \
+  --output-file-name sample_queries \
+  --output-dir resources/AiQG/sql
+```
+## Testing Workflow with testrunner
+
+### 1. Generate conf file with the queries obtained from AiQG.py
 
 Create or update a test configuration file (e.g., `conf/tuq/py-tuq-aiqg.conf`) to include test cases for each query:
 
@@ -53,7 +81,7 @@ tuqquery.tuq_AiQG_runner.QueryAiQGTests:
     # Add more test cases as needed
 ```
 
-### 4. Run Tests
+### 2. Run Tests
 
 Execute the tests using the test runner:
 
@@ -72,6 +100,10 @@ The script uses OpenAI's models to generate complex N1QL queries based on:
 ### Sample Data Template
 
 The sample data template (`scripts/AiQG/sampledata.txt`) defines the collections and their fields, along with sample documents. This helps the AI understand the database structure.
+
+### Data Generator
+
+The data generator (`resources/AiQG/data/gen.py`) is used to generate data that we use in our testing. It is provided so that the script can generate queries that are valid and can return results based on the actual values used in our testing.
 
 ### Prompt File
 

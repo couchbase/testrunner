@@ -4,7 +4,7 @@ import os
 import time
 import json
 from typing import List, Dict, Any, Tuple
-from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.cluster import Cluster, ClusterOptions, QueryOptions
 from couchbase.auth import PasswordAuthenticator
 from couchbase.exceptions import CouchbaseException
 import re
@@ -12,16 +12,6 @@ import re
 # LangChain imports
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.chat_models import init_chat_model
-
-def load_schema_template(file_path: str) -> str:
-    """Load a sample data template from a file."""
-    try:
-        with open(file_path, 'r') as f:
-            schema_content = f.read()
-            return schema_content
-    except Exception as e:
-        print(f"Error loading schema template: {str(e)}")
-        return {}
 
 def connect_to_couchbase(ip: str, port: int, username: str, password: str, bucket_name: str) -> Tuple[Cluster, Any]:
     """Connect to Couchbase and return the cluster and bucket objects."""
@@ -36,7 +26,38 @@ def connect_to_couchbase(ip: str, port: int, username: str, password: str, bucke
 
     return cluster, bucket
 
-def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_file: str, seed: int ) -> List[str]:
+def load_schema_template(file_path: str) -> str:
+    """Load a sample data template from a file."""
+    try:
+        with open(file_path, 'r') as f:
+            schema_content = f.read()
+            return schema_content
+    except Exception as e:
+        print(f"Error loading schema template: {str(e)}")
+        return {}
+
+def load_data_generation() -> str:
+    """Load data generation context from file."""
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        gen_path = os.path.join(script_dir, '..', '..', 'resources', 'AiQG', 'data', 'gen.py')
+        with open(gen_path, 'r') as f:
+            data_gen_content = f.read()
+        return data_gen_content
+    except Exception as e:
+        print(f"Error loading data generation file: {str(e)}")
+        return {}
+
+def load_query_rules(query_rules_file: str) -> str:
+    """Load additional query rules from file."""
+    try:
+        with open(query_rules_file, 'r') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error loading rules file: {str(e)}")
+        return {}
+
+def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_file: str, seed: int, query_rules_file: str = None) -> List[str]:
     """Generate SQL++ queries using LangChain and OpenAI."""
     # Set the OpenAI API key
     os.environ["OPENAI_API_KEY"] = api_key
@@ -55,24 +76,22 @@ def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_
         print(f"Error loading prompts file: {str(e)}")
         return []
 
+    # Load data generation context and query rules
+    data_gen_content = load_data_generation()
+    additional_query_rules = load_query_rules(query_rules_file) if query_rules_file else ""
+    
+    if not data_gen_content:
+        return [], seed
+    
     all_queries = []
-
-    additional_query_rules = '''Do not unnest let variables.
-    Do not use alias in having clause.
-    Duplicate fields need to be aliased in the select clause.
-    Unnest must come after from and before where.
-    Unnest must be on array field.
-    Avoid duplicate unnest aliases.
-    Subquery must always be given an alias unless it is in the where clause.
-    Subquery can be used in select, from or where clauses.
-    Use alias for duplicate field names in the select clause.'''
 
     messages = [
         SystemMessage("You are a Couchbase SQL++/N1QL expert. You are capable of writing complex SQL++/N1QL queries to fetch data from Couchbase."),
         HumanMessage(f"Please use this JSON template to write the Couchbase SQL++/N1QL queries: {schema_template}"),
+        HumanMessage(f"Here is how the test data is generated: {data_gen_content}"),
         HumanMessage(prompt_content),
         HumanMessage(additional_query_rules),
-        HumanMessage("Generate the queries in a single line ending with semicolon and no extra text, no bullet points, no quotes, no title/summary. No query numbers.")
+        HumanMessage("Generate one query per single line ending with semicolon and no extra text, no bullet points, no quotes, no title/summary. No query numbers.")
     ]
 
     try:
@@ -110,7 +129,7 @@ def generate_queries_with_langchain(api_key: str, schema_template: str, prompts_
 
     return all_queries, seed  # Limit to the requested number of queries
 
-def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: str, seed: int, cluster: Cluster, query_bucket: str) -> List[str]:
+def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: str, seed: int, cluster: Cluster, query_bucket: str, query_rules_file: str = None) -> List[str]:
     """Reprompt OpenAI to fix failed queries using error messages."""
     os.environ["OPENAI_API_KEY"] = api_key
 
@@ -120,6 +139,13 @@ def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: s
         seed = 42
     model = init_chat_model("gpt-4", model_provider="openai", **{"seed": seed})
     fixed_queries = []
+
+    # Load data generation context and query rules
+    data_gen_content = load_data_generation()
+    additional_query_rules = load_query_rules(query_rules_file) if query_rules_file else ""
+
+    if not data_gen_content:
+        return [], seed
 
     try:
         with open(reprompt_file, 'r') as f:
@@ -133,9 +159,15 @@ def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: s
                 error_line = lines[1].replace('-- Error: ', '')
                 query = lines[2]
 
+                # Skip if timeout error
+                if 'LCB_ERR_TIMEOUT' in error_line:
+                    print(f"Skipping query due to timeout error: {query}")
+                    continue
+
                 # Parse error details
                 error_code = None
                 error_msg = None
+                additional_info = None
                 
                 if 'first_error_code' in error_line:
                     # Extract error code and message from the error context
@@ -143,13 +175,14 @@ def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: s
                     if error_match:
                         error_code = error_match.group(1)
                         try:
-                            finderr_query = f"select e.reason, e.user_action from finderr({error_code}) e"
-                            # Execute the query using the scope
-                            query_result = bucket.query(finderr_query)
-                            # Materialize the results to ensure query execution completes
-                            rows = [row for row in query_result]
-                            additional_info = rows[0]['user_action']
-                            print(f"Additional info: {additional_info}")
+                            if error_code != '0':
+                                finderr_query = f"select e.reason, e.user_action from finderr({error_code}) e"
+                                # Execute the query using the scope
+                                query_result = bucket.query(finderr_query)
+                                # Materialize the results to ensure query execution completes
+                                rows = [row for row in query_result]
+                                additional_info = rows[0]['user_action']
+                                print(f"Additional info: {additional_info}")
                         except CouchbaseException as e:
                             raise e
                         except Exception as e:
@@ -165,6 +198,8 @@ def reprompt_with_langchain(api_key: str, reprompt_file: str, schema_template: s
                 messages = [
                     SystemMessage("You are a Couchbase SQL++/N1QL expert. Fix the following failed query based on the error message."),
                     HumanMessage(f"Schema template: {schema_template}"),
+                    HumanMessage(f"Here is how the test data is generated: {data_gen_content}"),
+                    HumanMessage(additional_query_rules),
                     HumanMessage(f"Failed query: {query}"),
                     HumanMessage(f"Error code: {error_code}"),
                     HumanMessage(f"Error message: {error_msg}"),
@@ -209,16 +244,14 @@ def execute_queries(cluster: Cluster, queries: List[str], query_context: str = N
         }
 
         try:
-            start_time = time.time()
             # Execute the query using the scope
-            query_result = scope.query(query)
+            query_result = scope.query(query, QueryOptions(metrics=True))
             # Materialize the results to ensure query execution completes
             rows = [row for row in query_result]
-            end_time = time.time()
 
             result["status"] = "SUCCESS"
-            result["execution_time"] = end_time - start_time
-            result["row_count"] = len(rows)
+            result["execution_time"] = query_result.metadata().metrics().execution_time()
+            result["result_count"] = query_result.metadata().metrics().result_count()
         except CouchbaseException as e:
             result["error"] = str(e)
         except Exception as e:
@@ -228,7 +261,7 @@ def execute_queries(cluster: Cluster, queries: List[str], query_context: str = N
 
     return results
 
-def generate_report(results: List[Dict[str, Any]], output_file: str = None, prompts_file: str = None, seed: int = None, reprompt: str = None) -> None:
+def generate_report(results: List[Dict[str, Any]], output_file: str = None, prompts_file: str = None, seed: int = None, reprompt: str = None, output_dir: str = None) -> None:
     """Generate a report of query execution results."""
     success_count = sum(1 for r in results if r["status"] == "SUCCESS")
     total_count = len(results)
@@ -238,6 +271,13 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
         print(report)
         return
 
+    # Use output_dir if provided, otherwise use current directory
+    if output_dir:
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+    else:
+        output_dir = os.path.dirname(os.path.abspath(__file__))
+
     report = "Detailed Results:\n----------------"
 
     # Create files for successful and failed queries based on prompt file name
@@ -245,19 +285,22 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
         prompt_base = os.path.splitext(prompts_file)[0]
         prompt_base = prompt_base.split('/')[-1]
         if output_file:
-            successful_queries = f"{output_file}_successful_{seed}.sql"
+            successful_queries = os.path.join(output_dir, f"{output_file}_successful_{seed}.sql")
         else:
-            successful_queries = f"{prompt_base}_successful_queries_{seed}.sql"
+            successful_queries = os.path.join(output_dir, f"{prompt_base}_successful_queries_{seed}.sql")
         if reprompt:
             if output_file:
-                failed_queries = f"{output_file}_failed_{seed}.txt"
+                failed_queries = os.path.join(output_dir, f"{output_file}_failed_{seed}.txt")
             else:
-                failed_queries = f"{prompt_base}_reprompt_queries_failed_{seed}.txt"
+                failed_queries = os.path.join(output_dir, f"{prompt_base}_reprompt_queries_failed_{seed}.txt")
         else:
-            failed_queries = f"{prompt_base}_reprompt_queries_{seed}.txt"
+            if output_file:
+                failed_queries = os.path.join(output_dir, f"{output_file}_failed_{seed}.txt")
+            else:
+                failed_queries = os.path.join(output_dir, f"{prompt_base}_reprompt_queries_{seed}.txt")
     else:
-        successful_queries = "successful_queries.sql" if not output_file else f"{output_file}_successful.sql"
-        failed_queries = "failed_queries.txt" if not output_file else f"{output_file}_failed.txt"
+        successful_queries = os.path.join(output_dir, "successful_queries.sql" if not output_file else f"{output_file}_successful.sql")
+        failed_queries = os.path.join(output_dir, "failed_queries.txt" if not output_file else f"{output_file}_failed.txt")
 
     # Open files in append mode to add to existing files or create new ones
     with open(successful_queries, 'a+') as sf, open(failed_queries, 'a+') as ff:
@@ -267,8 +310,12 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
             report += f"Query: {result['query']}\n"
 
             if result["status"] == "SUCCESS":
-                report += f"Execution Time: {result['execution_time']:.4f} seconds\n"
-                report += f"Rows Returned: {result.get('row_count', 'N/A')}\n"
+                # Convert timedelta to seconds
+                execution_time_seconds = result['execution_time'].total_seconds()
+                report += f"Execution Time: {execution_time_seconds} seconds\n"
+                # Convert UnsignedInt64 to integer for result count
+                result_count = int(result.get('result_count', 'N/A'))
+                report += f"Rows Returned: {result_count}\n"
                 # Format query to remove new lines and extra spaces
                 formatted_query = ' '.join(result['query'].split())
                 # Write successful query to stable queries file
@@ -293,9 +340,10 @@ def generate_report(results: List[Dict[str, Any]], output_file: str = None, prom
     print(report)
 
     if output_file:
-        with open(output_file, 'w') as f:
+        output_path = os.path.join(output_dir, output_file)
+        with open(output_path, 'w') as f:
             f.write(report)
-        print(f"Report saved to {output_file}")
+        print(f"Report saved to {output_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Generate and execute SQL++ queries against Couchbase")
@@ -310,19 +358,21 @@ def main():
     parser.add_argument("--openai-key", help="OpenAI API key (required if --generate or --reprompt-file is used)")
     parser.add_argument("--schema-file", help="schema template file (required if --generate or --reprompt-file is used)")
     parser.add_argument("--prompts-file", help="textfile containing query generation prompts (required if --generate is used)")
+    parser.add_argument("--query-rules", help="Optional text file containing additional query rules")
     parser.add_argument("--seed", type=int, help="Random seed for query generation (optional)")
 
     # Couchbase connection options
     parser.add_argument("--ip", default="127.0.0.1", help="Couchbase server IP address")
     parser.add_argument("--port", type=int, default=8091, help="Couchbase server port")
-    parser.add_argument("--username", required=True, help="Couchbase username")
-    parser.add_argument("--password", required=True, help="Couchbase password")
-    parser.add_argument("--bucket", required=True, help="Couchbase bucket name")
+    parser.add_argument("--username", default="Administrator", required=True, help="Couchbase username")
+    parser.add_argument("--password", default="password", required=True, help="Couchbase password")
+    parser.add_argument("--bucket", default="default", required=True, help="Couchbase bucket name")
     parser.add_argument("--query-context", default="default._default", 
                         help="Query context (bucket.scope)")
 
     # Output options
-    parser.add_argument("--output", help="Output file for the report (optional)")
+    parser.add_argument("--output-file-name", help="Output file prefix for the sql files i.e (output_file_name)_successful_queries_42.sql (optional)")
+    parser.add_argument("--output-dir", help="Output directory for generated query files (optional)")
 
     args = parser.parse_args()
 
@@ -342,6 +392,9 @@ def main():
             return
         if not os.path.exists(args.prompts_file):
             print(f"Error: Prompts file '{args.prompts_file}' not found")
+            return
+        if args.query_rules and not os.path.exists(args.query_rules):
+            print(f"Error: Query rules file '{args.query_rules}' not found")
             return
     elif args.reprompt_file:
         if not args.openai_key:
@@ -373,7 +426,8 @@ def main():
                 args.openai_key,
                 schema_template,
                 args.prompts_file,
-                seed=args.seed
+                seed=args.seed,
+                query_rules_file=args.query_rules
             )
 
             if not queries:
@@ -393,14 +447,15 @@ def main():
                 schema_template,
                 seed=args.seed,
                 cluster=cluster,
-                query_bucket=args.bucket
+                query_bucket=args.bucket,
+                query_rules_file=args.query_rules
             )
 
             if not queries:
-                print("No queries were fixed. Exiting.")
+                print("No queries were regenerated. Exiting.")
                 return
 
-            print(f"Fixed {len(queries)} queries.")
+            print(f"Regenerated {len(queries)} queries.")
         else:
             # Parse SQL file
             with open(args.sql_file, 'r') as f:
@@ -423,7 +478,7 @@ def main():
             file_name = None
 
         # Generate report
-        generate_report(results, output_file=args.output, prompts_file=file_name, seed=seed, reprompt=args.reprompt_file)
+        generate_report(results, output_file=args.output_file_name, prompts_file=file_name, seed=seed, reprompt=args.reprompt_file, output_dir=args.output_dir)
 
     except Exception as e:
         print(f"Error: {str(e)}")
