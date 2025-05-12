@@ -4716,3 +4716,30 @@ class QuerySanityTests(QueryTests):
         result = self.run_cbq_query(query)
         expected_result = [{"id": 100, "c1_cnt": 40}]
         self.assertEqual(result['results'], expected_result)
+
+    # MB-66660
+    def test_prepared_cte(self):
+        self.fail_if_no_buckets()
+
+        # prepare the query
+        prepare = '''
+            PREPARE p66660 FROM
+            WITH w1 AS ( [{"a":"f1", "b":10}]),
+                 w2 AS (SELECT RAW OBJECT v.a:v.b FOR v IN (SELECT x.* FROM w1 AS x) END)
+            SELECT w2
+        '''
+        self.run_cbq_query(prepare)
+
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+
+        # execute the query
+        result_node1 = self.run_cbq_query('execute p66660', server=node1)
+        result_node2 = self.run_cbq_query('execute p66660', server=node2)
+        self.log.info(result_node1['results'])
+        self.log.info(result_node2['results'])
+        expected_result = [
+            {"w2": [{"f1": 10}]}
+        ]
+        self.assertEqual(result_node1['results'], expected_result)
+        self.assertEqual(result_node2['results'], expected_result)
