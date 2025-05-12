@@ -578,18 +578,22 @@ class BaseSecondaryIndexingTests(QueryTests):
         partial_index_list = []
         for index in index_metadata:
             if "where" in index:
-                partial_index_list.append(index['indexName'])
+                partial_index_list.append(index['index'])
         return partial_index_list
 
     def validate_shard_seggregation(self, shard_index_map):
-        index_categories = ['scalar', 'vector', 'bhive']
+        bhive_indexes = self.get_all_bhive_index_names()
+        composite_indexes = self.get_all_composite_index_names()
         for shard, indices in shard_index_map.items():
             categories_found = set()
 
             for index in indices:
-                for category in index_categories:
-                    if category in index:
-                        categories_found.add(category)
+                if index in bhive_indexes:
+                    categories_found.add('bhive')
+                elif index in composite_indexes:
+                    categories_found.add('vector')
+                else:
+                    categories_found.add('scalar')
 
             # To check if exactly more than one category is found for this shard
             self.assertEqual(len(categories_found), 1, f"More than category of index found for the shard specific shard {indices}. The shard mapping to index is {shard_index_map}")
@@ -3169,10 +3173,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                 count = 0
 
             # Add only name and count to results
-            simplified_results.append({
-                "name": f"default:{bucket}.{scope}.{collection}.{index['name']}",
-                "count": count
-            })
+            if 'bucket_id' not in index:
+                simplified_results.append({
+                    "name": f"{bucket}.{index['name']}",
+                    "count": count
+                })
+            else:
+                simplified_results.append({
+                    "name": f"default:{bucket}.{scope}.{collection}.{index['name']}",
+                    "count": count
+                })
 
         return simplified_results
 
@@ -3258,6 +3268,18 @@ class BaseSecondaryIndexingTests(QueryTests):
             if 'definition' in index and ('VECTOR' in index['definition'][:14]):
                 bhive_index.append(index['indexName'])
         return bhive_index
+
+    def get_all_composite_index_names(self):
+        """Returns a list of all composite indexes in the cluster
+        """
+        composite_index = []
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains composite indexing syntax like dimension
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
+            if 'definition' in index and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'distance' in index['definition']):
+                composite_index.append(index['indexName'])
+        return composite_index
 
     def get_storage_stats_map(self, node):
         """

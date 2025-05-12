@@ -3790,54 +3790,43 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         desc_vec2 = list(self.encoder.encode(desc_2))
 
         scan_desc_vec_1 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
-        composite_vector_index = QueryDefinition("composite_vector_index",
-                                          index_fields=['rating', 'descriptionVector Vector',
-                                                        'category'],
-                                          dimension=384,
-                                          description=f"IVF,{self.quantization_algo_description_vector}",
-                                          similarity="COSINE",
-                                          scan_nprobes=self.scan_nprobes,
-                                          limit=self.scan_limit, is_base64=self.base64,
-                                          query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                              "description, descriptionVector",
-                                              "rating = 2 and "
-                                              "category in ['Convertible', "
-                                              "'Luxury Car', 'Supercar']",
-                                              scan_desc_vec_1))
+        composite_vector_index = QueryDefinition(index_name='composite_index',
+                            index_fields=[f'descriptionVector VECTOR'],
+                            dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                            train_list=self.trainlist, limit=self.scan_limit,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vec2},"
+                                                                              f" {scan_desc_vec_1}",
+                                                                              scan_desc_vec_1))
 
-        bhive_index = QueryDefinition("bhive_index",
-                                              index_fields=['rating', 'descriptionVector Vector',
-                                                            'category'],
-                                              dimension=384,
-                                              description=f"IVF,{self.quantization_algo_description_vector}",
-                                              similarity="COSINE",
-                                              scan_nprobes=self.scan_nprobes,
-                                              limit=self.scan_limit, is_base64=self.base64,
-                                              query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                  "description, descriptionVector",
-                                                  "rating = 2 and "
-                                                  "category in ['Convertible', "
-                                                  "'Luxury Car', 'Supercar']",
-                                                  scan_desc_vec_1), bhive_index=True)
+        bhive_index = QueryDefinition(index_name='bhive_index',
+                            index_fields=[f'descriptionVector VECTOR'],
+                            dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                            train_list=self.trainlist, limit=self.scan_limit,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vec2},"
+                                                                              f" {scan_desc_vec_1}",
+                                                                              scan_desc_vec_1))
 
         select_queries = []
-        for idx in [composite_vector_index, bhive_index]:
-            create_query = idx.generate_index_create_query(namespace=collection_namespace)
+        for idx in [bhive_index, composite_vector_index]:
+            create_query = idx.generate_index_create_query(namespace=collection_namespace, bhive_index=self.bhive_index)
             self.run_cbq_query(query=create_query, server=self.n1ql_node)
             select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
                                                                 namespace=collection_namespace)[0]
             select_queries.append(select_query)
+            self.bhive_index = not self.bhive_index
 
         self.item_count_related_validations()
-        for query in [composite_vector_index, bhive_index]:
-            select_query_with_explain = f"""EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query],
-                                                                                          namespace=collection_namespace,
-                                                                                          limit=self.scan_limit)[0]}"""
-            index_used_select_query = \
-                self.run_cbq_query(query=select_query_with_explain, server=self.n1ql_node)['results'][0]['plan']['~children'][0]['~children'][
+        for query in select_queries:
+            select_query_with_explain = f"""EXPLAIN {query}"""
+            res = \
+                self.run_cbq_query(query=select_query_with_explain, server=self.n1ql_node)['results']
+            index_used_select_query = res[0]['plan']['~children'][0]['~children'][
                     0][
                     'index']
-            self.log.info(index_used_select_query)
+            self.log.info(f"Result of explain is {res}")
+            self.log.info(f"index used is {index_used_select_query}")
             self.assertEqual(index_used_select_query, bhive_index.index_name, 'bhive index was not the most preferred index')
         self.drop_index_node_resources_utilization_validations()
 
@@ -3983,7 +3972,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
 
         for idx in [idx_1, idx_2]:
-            create_query = idx.generate_index_create_query(namespace=collection_namespace)
+            create_query = idx.generate_index_create_query(namespace=collection_namespace, bhive_index=self.bhive_index)
             self.run_cbq_query(query=create_query, server=self.n1ql_node)
             select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
                                                                 namespace=collection_namespace)[0]
