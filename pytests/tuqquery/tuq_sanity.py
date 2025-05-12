@@ -4563,8 +4563,35 @@ class QuerySanityTests(QueryTests):
         UPSERT INTO test_join_memory_quota VALUES ("k01", { "a1": ARRAY { "id": TO_STR(d1), "type": RPAD("a",100,"b") } FOR d1 IN ARRAY_RANGE(1,5000) END })
         '''
         self.run_cbq_query(upsert_query, query_context='default._default')
-        
+
         # run query with memory quota 1000
         query = 'SELECT b.* FROM test_join_memory_quota AS a USE KEYS "k01" UNNEST a1 AS b JOIN test_join_memory_quota AS c ON KEYS b.id'
         result = self.run_cbq_query(query, query_params={'memory_quota': 1000}, query_context='default._default')
         self.assertEqual(result['status'], 'success')
+
+    # MB-66660
+    def test_prepared_cte(self):
+        self.fail_if_no_buckets()
+
+        # prepare the query
+        prepare = '''
+            PREPARE p66660 FROM
+            WITH w1 AS ( [{"a":"f1", "b":10}]),
+                 w2 AS (SELECT RAW OBJECT v.a:v.b FOR v IN (SELECT x.* FROM w1 AS x) END)
+            SELECT w2
+        '''
+        self.run_cbq_query(prepare)
+
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+
+        # execute the query
+        result_node1 = self.run_cbq_query('execute p66660', server=node1)
+        result_node2 = self.run_cbq_query('execute p66660', server=node2)
+        self.log.info(result_node1['results'])
+        self.log.info(result_node2['results'])
+        expected_result = [
+            {"w2": [{"f1": 10}]}
+        ]
+        self.assertEqual(result_node1['results'], expected_result)
+        self.assertEqual(result_node2['results'], expected_result)
