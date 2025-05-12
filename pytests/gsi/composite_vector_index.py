@@ -343,7 +343,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.log.info(f"Error creating index after cleaning up system failure: {e}")
                 raise e
             for query in select_queries:
-                self.run_cbq_query(query=create_queries[-1])
                 if "DISTINCT" in query or "ANN_DISTANCE" not in query:
                     continue
                 # TODO uncomment after limit logic is fixed.
@@ -558,12 +557,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             query = f"BUILD INDEX ON {collection_namespace}({idx}) USING GSI "
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.sleep(5)
-        
+
         self.item_count_related_validations()
 
         meta_data = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(meta_data), 2, f'indexes are not built metadata {meta_data}')
-        
+
         self.drop_index_node_resources_utilization_validations()
 
     def test_build_idx_less_than_required_centroids(self):
@@ -801,7 +800,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-        
+
         self.wait_until_indexes_online(timeout=600)
         self.item_count_related_validations()
 
@@ -892,7 +891,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        
+
         self.item_count_related_validations()
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -1520,7 +1519,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        
+
         self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
@@ -1594,7 +1593,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        
+
         self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
@@ -1654,7 +1653,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        
+
         self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
@@ -1730,7 +1729,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             namespace_index_map[namespace] = definitions
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
-        
+
         self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
@@ -1972,7 +1971,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(30)
 
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
-        
+
         self.item_count_related_validations()
 
         if self.memory_fill:
@@ -2020,7 +2019,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-        
+
         self.item_count_related_validations()
 
         for select_query in select_queries:
@@ -2075,7 +2074,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                  f"rollback of indexes havent happened {stats}")
             else:
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
-        
+
 
 
 
@@ -2109,10 +2108,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-        
+
         self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
-        
+
 
         for select_query in select_queries:
             if "ANN_DISTANCE" not in select_query:
@@ -2188,7 +2187,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
                                                  query_node=self.n1ql_node)
-        
+
         self.item_count_related_validations()
 
         self.log.info("Stopping persistence on NodeA & NodeB")
@@ -2290,7 +2289,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        
+
         self.item_count_related_validations()
         # deleting recovery files
         storage_dir = self.index_rest.get_indexer_internal_stats()['indexer.storage_dir']
@@ -2356,7 +2355,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-        
+
         self.item_count_related_validations()
 
 
