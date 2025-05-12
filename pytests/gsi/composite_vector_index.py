@@ -218,6 +218,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       namespace=namespace)
                 self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
                 self.wait_until_indexes_online()
+                self.sleep(60)
+                self.item_count_related_validations()
 
                 for query in select_queries:
                     # self.run_cbq_query(query=create)
@@ -258,6 +260,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 #                         f"accuracy for query {query} is less than threshold 70")
 
         self.rest.delete_bucket(bucket='metadata_bucket')
+        self.drop_index_node_resources_utilization_validations()
 
     def test_bhive_with_system_failures(self):
         try:
@@ -2135,7 +2138,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+            self.update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
