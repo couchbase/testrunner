@@ -4763,3 +4763,20 @@ class QuerySanityTests(QueryTests):
         ]
         self.assertEqual(result_node1['results'], expected_result)
         self.assertEqual(result_node2['results'], expected_result)
+
+    # MB-66691
+    def test_join_memory_quota(self):
+        self.fail_if_no_buckets()
+        # create collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_join_memory_quota IF NOT EXISTS')
+
+        # insert data into collection
+        upsert_query = '''
+        UPSERT INTO test_join_memory_quota VALUES ("k01", { "a1": ARRAY { "id": TO_STR(d1), "type": RPAD("a",100,"b") } FOR d1 IN ARRAY_RANGE(1,5000) END })
+        '''
+        self.run_cbq_query(upsert_query, query_context='default._default')
+        
+        # run query with memory quota 1000
+        query = 'SELECT b.* FROM test_join_memory_quota AS a USE KEYS "k01" UNNEST a1 AS b JOIN test_join_memory_quota AS c ON KEYS b.id'
+        result = self.run_cbq_query(query, query_params={'memory_quota': 1000}, query_context='default._default')
+        self.assertEqual(result['status'], 'success')
