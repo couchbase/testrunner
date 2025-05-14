@@ -2415,11 +2415,27 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             node_rest = RestConnection(node)
             self.log.info(f"nodes are {node_rest.get_complete_version()==self.upgrade_to.split('-')[0][:5]}")
 
-    def post_upgrade_validate_vector_index(self, cluster_profile=None, services=None, index_list_before=[]):
+    def post_upgrade_validate_vector_index(self, cluster_profile=None, services=None, index_list_before=[], existing_bucket=None):
         if services is None:
             services = ["index"]
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         index_node = self.get_nodes_from_services_map(service_type="index")
+
+        if existing_bucket is not None:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+            buckets = self.rest.get_buckets()
+            bucket_list = []
+            for bucket in buckets:
+                self.log.info(f"bucket is {bucket.name}")
+                if bucket.name != existing_bucket.name:
+                    bucket_list.append(bucket)
+            namespaces = []
+            for namespace in self.namespaces:
+                for bucket in bucket_list:
+                    self.log.info(f"namespace is {namespace.split(':')[1].split('.')[0]} and bucket is {bucket.name}")
+                    if bucket.name == namespace.split(':')[1].split('.')[0]:
+                        namespaces.append(namespace)
+            self.namespaces = namespaces
 
         #the below setting will be reversed post the resolving of MB-63697
         index_rest = RestConnection(index_node)
@@ -2548,7 +2564,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
-        self.item_count_related_validations()
         self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
                                            map_after_rebalance=map_after_rebalance,
                                            stats_map_before_rebalance=stats_before_rebalance,
@@ -2632,6 +2647,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         cluster_rebalance = self.cluster.async_rebalance([community_nodes[0]], community_nodes[1:], [], services=master_services*(len(community_nodes)-1))
         cluster_rebalance.result()
         self.sleep(30)
+
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -2653,6 +2669,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future = executor_main.submit(self.perform_continuous_kv_mutations, event)
                     scan_results_check = False
+                query_list = []
                 l1 = [
                     "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44price` ON default:test_bucket_hotel.test_scope_1.test_collection_1(price) USING GSI  WITH {'defer_build': False}",
                     'CREATE PRIMARY INDEX `#primary_Q65JY7lol` ON default:test_bucket_hotel.test_scope_1.test_collection_1 USING GSI',
@@ -2673,29 +2690,33 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_overall` ON default:test_bucket_hotel._default._default(price, All ARRAY v.ratings.Overall FOR v IN reviews END) USING GSI  WITH {'defer_build': False}",
                     "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_rooms` ON default:test_bucket_hotel._default._default(price, All ARRAY v.ratings.Rooms FOR v IN reviews END) USING GSI  WITH {'defer_build': False}",
                     "CREATE INDEX `hotel88983c146f0e4c55a9734e20cb7d3b44array_index_checkin` ON default:test_bucket_hotel._default._default(country,DISTINCT ARRAY `r`.`ratings`.`Check in / front desk` FOR r in `reviews` END,array_count(`public_likes`),array_count(`reviews`) DESC,`type`,phone,price,email,address,name,url) USING GSI  WITH {'defer_build': False}"]
-                for query_list in [l1, l2]:
-                    self.gsi_util_obj.create_gsi_indexes(create_queries=query_list, query_node=self.query_node)
+
+
+                for queries in [l1, l2]:
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=queries, query_node=self.query_node)
                 self.wait_until_indexes_online()
-                select_queries = ['SELECT name FROM default:test_bucket_hotel._default._default WHERE name like "%Dil%"',
-                                  'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE avg_rating > 3 AND free_breakfast = true',
-                                  'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE avg_rating > 3 AND country like "%F%"',
-                                  'SELECT suffix FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE suffix is not NULL',
-                                  'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE name like "%Dil%"',
-                                  'SELECT price FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE price > 0',
-                                  "SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE ANY r IN reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL ",
-                                  'SELECT name FROM default:test_bucket_hotel._default._default WHERE ANY v IN reviews SATISFIES v.ratings.`Rooms` > 3  END and price > 1000 ',
-                                  "SELECT name FROM default:test_bucket_hotel._default._default WHERE ANY r IN reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL ",
-                                  'SELECT price FROM default:test_bucket_hotel._default._default WHERE price > 0',
-                                  "SELECT country, avg(price) as AvgPrice, min(price) as MinPrice, max(price) as MaxPrice FROM default:test_bucket_hotel._default._default WHERE free_breakfast=True and free_parking=True and price is not null and array_count(public_likes)>5 and `type`='Hotel' group by country",
-                                  'SELECT suffix FROM default:test_bucket_hotel._default._default WHERE suffix is not NULL',
-                                  'SELECT name FROM default:test_bucket_hotel._default._default WHERE avg_rating > 3 AND country like "%F%"',
-                                  "SELECT country, avg(price) as AvgPrice, min(price) as MinPrice, max(price) as MaxPrice FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE free_breakfast=True and free_parking=True and price is not null and array_count(public_likes)>5 and `type`='Hotel' group by country",
-                                  'SELECT address FROM default:test_bucket_hotel._default._default WHERE country is not null and `type` is not null and (any r in reviews satisfies r.ratings.`Check in / front desk` is not null end) ',
-                                  'SELECT address FROM default:test_bucket_hotel._default._default WHERE ANY v IN reviews SATISFIES v.ratings.`Overall` > 3  END and price < 1000 ',
-                                  'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE ANY v IN reviews SATISFIES v.ratings.`Rooms` > 3  END and price > 1000 ',
-                                  'SELECT address FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE ANY v IN reviews SATISFIES v.ratings.`Overall` > 3  END and price < 1000 ',
-                                  'SELECT address FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE country is not null and `type` is not null and (any r in reviews satisfies r.ratings.`Check in / front desk` is not null end) ',
-                                  'SELECT name FROM default:test_bucket_hotel._default._default WHERE avg_rating > 3 AND free_breakfast = true']
+                select_queries = [
+                    'SELECT name FROM default:test_bucket_hotel._default._default WHERE name like "%Dil%"',
+                                          'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE avg_rating > 3 AND free_breakfast = true',
+                                          'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE avg_rating > 3 AND country like "%F%"',
+                                          'SELECT suffix FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE suffix is not NULL',
+                                          'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE name like "%Dil%"',
+                                          'SELECT price FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE price > 0',
+                                          "SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE ANY r IN reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL ",
+                                          'SELECT name FROM default:test_bucket_hotel._default._default WHERE ANY v IN reviews SATISFIES v.ratings.`Rooms` > 3  END and price > 1000 ',
+                                          "SELECT name FROM default:test_bucket_hotel._default._default WHERE ANY r IN reviews SATISFIES r.author LIKE 'M%' AND r.ratings.Cleanliness = 3 END AND free_parking = TRUE AND country IS NOT NULL ",
+                                          'SELECT price FROM default:test_bucket_hotel._default._default WHERE price > 0',
+                                          "SELECT country, avg(price) as AvgPrice, min(price) as MinPrice, max(price) as MaxPrice FROM default:test_bucket_hotel._default._default WHERE free_breakfast=True and free_parking=True and price is not null and array_count(public_likes)>5 and `type`='Hotel' group by country",
+                                          'SELECT suffix FROM default:test_bucket_hotel._default._default WHERE suffix is not NULL',
+                                          'SELECT name FROM default:test_bucket_hotel._default._default WHERE avg_rating > 3 AND country like "%F%"',
+                                          "SELECT country, avg(price) as AvgPrice, min(price) as MinPrice, max(price) as MaxPrice FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE free_breakfast=True and free_parking=True and price is not null and array_count(public_likes)>5 and `type`='Hotel' group by country",
+                                          'SELECT address FROM default:test_bucket_hotel._default._default WHERE country is not null and `type` is not null and (any r in reviews satisfies r.ratings.`Check in / front desk` is not null end) ',
+                                          'SELECT address FROM default:test_bucket_hotel._default._default WHERE ANY v IN reviews SATISFIES v.ratings.`Overall` > 3  END and price < 1000 ',
+                                          'SELECT name FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE ANY v IN reviews SATISFIES v.ratings.`Rooms` > 3  END and price > 1000 ',
+                                          'SELECT address FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE ANY v IN reviews SATISFIES v.ratings.`Overall` > 3  END and price < 1000 ',
+                                          'SELECT address FROM default:test_bucket_hotel.test_scope_1.test_collection_1 WHERE country is not null and `type` is not null and (any r in reviews satisfies r.ratings.`Check in / front desk` is not null end) ',
+                                          'SELECT name FROM default:test_bucket_hotel._default._default WHERE avg_rating > 3 AND free_breakfast = true']
+
                 index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
                 self.upgrade_ce_to_ee(select_queries=select_queries, scan_results_check=scan_results_check)
                 self.update_master_node()
@@ -2732,8 +2753,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if not self.check_gsi_logs_for_shard_transfer():
                     raise Exception("Shard based rebalance not triggered")
 
-                if self.upgrade_to >= "7.7.0":
-                    self.post_upgrade_validate_vector_index(existing_bucket_name=existing_bucket, services=services_in)
+                if self.upgrade_to >= "8.0":
+                    scalar_indexes = self.get_all_indexes_in_the_cluster()
+                    self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
 
             finally:
                 event.set()

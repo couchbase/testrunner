@@ -2137,7 +2137,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
-            self.update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
@@ -3070,7 +3070,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=upsert_query)
 
             self.item_count_related_validations()
-
             # Fetch no of docs which will be mutated to validate the stats count
             select_query = f"select count(*) from {collection_namespace} where rating = 0"
             result = self.run_cbq_query(query=select_query)
