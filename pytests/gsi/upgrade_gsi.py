@@ -1426,7 +1426,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future = executor_main.submit(self.perform_continuous_kv_mutations, event)
                     scan_results_check = False
-                select_queries = self.create_index_in_batches(replica_count=1, scalar=scalar)
+                select_queries = self.create_index_in_batches(replica_count=1, scalar=scalar, dataset=self.json_template)
                 hotel_data_set_index_fields = ['price', 'free_breakfast,avg_rating', 'city,avg_rating,country', 'name']
                 self.wait_until_indexes_online()
                 if self.upgrade_to >= "8.0":
@@ -2548,6 +2548,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
+        self.item_count_related_validations()
         self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
                                            map_after_rebalance=map_after_rebalance,
                                            stats_map_before_rebalance=stats_before_rebalance,
