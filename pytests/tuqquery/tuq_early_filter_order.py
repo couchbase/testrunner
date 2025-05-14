@@ -33,6 +33,59 @@ class QueryEarlyFilterTests(QueryTests):
         self.log.info("==============  QueryEarlyFilterTests suite_tearDown has started ==============")
         self.log.info("==============  QueryEarlyFilterTests suite_tearDown has completed ==============")
         super(QueryEarlyFilterTests, self).suite_tearDown()
+    
+    def test_MB_66614(self):
+        upsert_query = """UPSERT INTO default (KEY k, VALUE v)
+                         SELECT "k"||SUBSTR("00000"||TO_STR(d),-5) AS k ,
+                                {"c1":d,"c2":d,"c3":1, "aa": ARRAY { "aac1": v1, "aaa": ARRAY {"aaac1":v2, "xx":RPAD("a",10,"b")}
+                                                                                     FOR v2 IN ARRAY_RANGE(0,25)
+                                                                                     END
+                                                                 }
+                                                           FOR v1 IN ARRAY_RANGE(0,25)
+                                                           END
+                                } AS v
+                         FROM ARRAY_RANGE(0,10000) AS d"""
+
+        try:
+            # Insert the data
+            self.run_cbq_query(upsert_query)
+
+            # Create index
+            index_query = "CREATE INDEX ix66614 ON default(c1)"
+            self.run_cbq_query(index_query)
+
+            # Run test query and explain
+            test_query = """SELECT DISTINCT RAW d.c3
+                           FROM default AS d
+                           UNNEST d.aa AS u1
+                           UNNEST u1.aaa AS u2
+                           WHERE d.c1 >= 0
+                                 AND u2.aaac1 = 1 AND u1.aac1 = 2"""
+
+            test_query_2 = """SELECT DISTINCT RAW d.c3
+                             FROM default AS d
+                             UNNEST d.aa AS u1
+                             UNNEST u1.aaa AS u2
+                             LET xx = d.`c2`i
+                             WHERE d.c1 >= 0
+                                   AND u2.aaac1 = 1 AND u1.aac1 = 2"""
+
+            explain_query = "EXPLAIN " + test_query
+            explain_results = self.run_cbq_query(explain_query)
+
+            # Verify early projection in explain plan
+            self.assertTrue("early_projection" in str(explain_results), 
+                          "Expected early_projection in explain plan but not found")
+
+            # Run queries and compare execution times
+            results = self.run_cbq_query(test_query,query_params={'timeout': '5s'})
+            results2 = self.run_cbq_query(test_query_2,query_params={'timeout': '5s'})
+            #We want to make sure these two queries are taking the same amount of time with a margin for latency
+            self.assertTrue(abs(float(results['metrics']['executionTime'].split('s')[0]) - float(results2['metrics']['executionTime'].split('s')[0])) <= 1.5)
+
+        finally:
+            # Cleanup
+            self.run_cbq_query("DROP INDEX default.ix66614")
 
     def test_early_filter(self):
         index = "Create index idx1 on default(job_title,join_day,join_mo)"
