@@ -4595,3 +4595,26 @@ class QuerySanityTests(QueryTests):
         ]
         self.assertEqual(result_node1['results'], expected_result)
         self.assertEqual(result_node2['results'], expected_result)
+
+    def test_prepared_nested_subquery(self):
+        self.fail_if_no_buckets()
+
+        # prepare query
+        prepare_query = 'PREPARE p66660b FROM SELECT a, (SELECT RAW (SELECT RAW a) ) AS b FROM [1,2,3] a'      
+        self.run_cbq_query(prepare_query)
+
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+
+        expected_result = [
+            {"a": 1, "b": [[1]]},
+            {"a": 2, "b": [[2]]},
+            {"a": 3, "b": [[3]]}
+        ]
+        # execute query
+        result_node1 = self.run_cbq_query('EXECUTE p66660b', server=node1)
+        result_node2 = self.run_cbq_query('EXECUTE p66660b', server=node2)  
+        self.log.info(f"result_node1: {result_node1['results']}")
+        self.log.info(f"result_node2: {result_node2['results']}")
+        self.assertEqual(result_node1['results'], expected_result)
+        self.assertEqual(result_node2['results'], expected_result)
