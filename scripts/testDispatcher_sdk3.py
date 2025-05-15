@@ -278,6 +278,8 @@ def extract_individual_tests_from_query_result(col_rel_version,
 
         # Update dict with required values
         sub_comp_dict_to_update["subcomponent"] = data_from_db_doc['subcomponent']
+        if "parameters" in data_from_db_doc:
+            sub_comp_dict_to_update["parameters"] = data_from_db_doc['parameters']
         sub_comp_dict_to_update["mixed_build_config"] = urllib.parse.quote(
             flatten_param_to_str(mixed_build_config))
 
