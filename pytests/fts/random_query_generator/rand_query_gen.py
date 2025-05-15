@@ -502,14 +502,13 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             if ':' in match_str or ' ' in match_str:
                 match_str = f'"{match_str}"'
 
-            with_keyword = f"{fieldname}.keyword:{match_str}"
-            without_keyword = f"{fieldname}:{match_str}"
+            term_string_query = f"{fieldname}:{match_str}"
 
             if bool(random.getrandbits(1)) and not self.smart_queries:
                 # Return just the match string (used in some fuzzy or free-text modes)
-                return match_str, match_str
+                return match_str
             else:
-                return with_keyword, without_keyword
+                return term_string_query
 
         else:
             # numeric range
@@ -520,14 +519,14 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             if bool(random.getrandbits(1)):
                 # single range condition
                 query = f"{fieldname}:{self.get_random_value(operators)}{val}"
-                return query, query
+                return query
             else:
                 # compound range condition (e.g. +age:>=10 +age:<20)
                 high_val = val + random.randint(2, 10000)
                 lower = f"{fieldname}:{self.get_random_value(operators[:1])}{val}"
                 upper = f"+{fieldname}:{self.get_random_value(operators[2:])}{high_val}"
                 query = f"{lower} {upper}"
-                return query, query
+                return query
 
 
     def construct_query_string_query(self):
@@ -538,32 +537,27 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query = {'query': ""}
         es_query = {"query_string": {'query': ""}}
         connectors = [' ', ' +', ' -']
-        match_str_elastic = ""
-        match_str_fts = ""
 
         try:
             # search term
-            elastic_term,fts_term = self.construct_terms_query_string_query()
+            term = self.construct_terms_query_string_query()
 
             connector = self.get_random_value(connectors)
-            match_str_elastic += connector + elastic_term
-            match_str_fts += connector + fts_term
+            
+            match_str = connector + term
 
-            if bool(random.getrandbits(1)):
-                # another term
-                elastic_term,fts_term = self.construct_terms_query_string_query()
-                connector = self.get_random_value(connectors)
-                match_str_elastic += connector + elastic_term
-                match_str_fts += connector + fts_term
+            # another term
+            term = self.construct_terms_query_string_query()
+            connector = self.get_random_value(connectors)
+            match_str += connector + term
 
-                # another term
-                elastic_term,fts_term = self.construct_terms_query_string_query()
-                connector = self.get_random_value(connectors)
-                match_str_elastic += connector + elastic_term
-                match_str_fts += connector + fts_term
+            # another term
+            term = self.construct_terms_query_string_query()
+            connector = self.get_random_value(connectors)
+            match_str += connector + term
 
-            fts_query['query'] = match_str_fts.lstrip()
-            es_query['query_string']['query'] = match_str_elastic.lstrip()
+            fts_query['query'] = match_str.lstrip()
+            es_query['query_string']['query'] = match_str.lstrip()
 
             return fts_query, es_query
         except KeyError:
