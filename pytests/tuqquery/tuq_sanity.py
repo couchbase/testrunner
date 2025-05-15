@@ -4750,16 +4750,43 @@ class QuerySanityTests(QueryTests):
         # create collection
         self.run_cbq_query('CREATE COLLECTION default._default.test_join_memory_quota IF NOT EXISTS')
 
-        # insert data into collection
-        upsert_query = '''
-        UPSERT INTO test_join_memory_quota VALUES ("k01", { "a1": ARRAY { "id": TO_STR(d1), "type": RPAD("a",100,"b") } FOR d1 IN ARRAY_RANGE(1,5000) END })
-        '''
-        self.run_cbq_query(upsert_query, query_context='default._default')
-        
-        # run query with memory quota 1000
-        query = 'SELECT b.* FROM test_join_memory_quota AS a USE KEYS "k01" UNNEST a1 AS b JOIN test_join_memory_quota AS c ON KEYS b.id'
-        result = self.run_cbq_query(query, query_params={'memory_quota': 1000}, query_context='default._default')
-        self.assertEqual(result['status'], 'success')
+        with self.subTest("Test case 1: join with memory quota 1000"):
+            # insert data into collection
+            upsert_query = '''
+            UPSERT INTO test_join_memory_quota VALUES ("k01", { "a1": ARRAY { "id": TO_STR(d1), "type": RPAD("a",100,"b") } FOR d1 IN ARRAY_RANGE(1,5000) END })
+            '''
+            self.run_cbq_query(upsert_query, query_context='default._default')
+
+            # run query with memory quota 1000
+            query = 'SELECT b.* FROM test_join_memory_quota AS a USE KEYS "k01" UNNEST a1 AS b JOIN test_join_memory_quota AS c ON KEYS b.id'
+            self.log.info("Test case 1: join with memory quota 1000")
+            result = self.run_cbq_query(query, query_params={'memory_quota': 1000}, query_context='default._default')
+            self.log.info(f"Memory used: {result['metrics']['usedMemory']}")
+            self.assertEqual(result['status'], 'success')
+
+        with self.subTest("Test case 2: join with memory quota 1000 and cbo disabled"):
+            # DELETE documents from collection
+            self.run_cbq_query('DELETE FROM test_join_memory_quota', query_context='default._default')
+
+            # create index on collection
+            self.run_cbq_query('CREATE INDEX ix111 IF NOT EXISTS ON test_join_memory_quota(purchaseId)', query_context='default._default')
+
+            # insert data into collection
+            upsert_query1 = '''
+            UPSERT INTO test_join_memory_quota values("kkk01",{ "customerId": "customer905", "lineItems": [ { "count": 3, "product": "product233" }, { "count": 1, "product": "product344" }, { "count": 4, "product": "product669" }, { "count": 3, "product": "product204" }, { "count": 5, "product": "product847" } ], "purchaseId": "purchase6555", "purchasedAt": "2013-12-07T15:52:41Z", "test_id": "ansijoin", "type": "purchase" })
+            '''
+            upsert_query2 = '''
+            UPSERT into test_join_memory_quota values("customer905_ansijoin",{"id":"customer905_ansijoin"})
+            '''
+            self.run_cbq_query(upsert_query1, query_context='default._default')
+            self.run_cbq_query(upsert_query2, query_context='default._default')
+
+            # run query with memory quota 1000 and cbo disabled
+            query = 'SELECT c.firstName, c.lastName, c.customerId, p.purchaseId FROM test_join_memory_quota p JOIN test_join_memory_quota c ON meta(c).id = p.customerId || "_" || p.test_id WHERE p.purchaseId LIKE "purchase6555%" ORDER BY p.purchaseId'
+            self.log.info("Test case 2: join with memory quota 1000 and cbo disabled")
+            result = self.run_cbq_query(query, query_params={'memory_quota': 1000, 'use_cbo': False}, query_context='default._default')
+            self.log.info(f"Memory used: {result['metrics']['usedMemory']}")
+            self.assertEqual(result['status'], 'success')
 
     def test_prepared_nested_subquery(self):
         self.fail_if_no_buckets()
