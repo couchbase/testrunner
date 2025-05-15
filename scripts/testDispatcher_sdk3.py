@@ -263,7 +263,7 @@ def extract_individual_tests_from_query_result(col_rel_version,
             if RELEASE_VERSION > float(data_from_db_doc['maxVersion']) \
                     or (col_rel_version
                         and col_rel_version > float(
-                        data_from_db_doc['maxVersion'])):
+                            data_from_db_doc['maxVersion'])):
                 # Return empty list since feature not supported in this version
                 print(f"{unsupported_feature_msg}:{data_from_db_doc['subcomponent']}")
                 return False
@@ -278,6 +278,8 @@ def extract_individual_tests_from_query_result(col_rel_version,
 
         # Update dict with required values
         sub_comp_dict_to_update["subcomponent"] = data_from_db_doc['subcomponent']
+        if "parameters" in data_from_db_doc:
+            sub_comp_dict_to_update["parameters"] = data_from_db_doc['parameters']
         sub_comp_dict_to_update["mixed_build_config"] = urllib.parse.quote(
             flatten_param_to_str(mixed_build_config))
 
@@ -394,10 +396,17 @@ def extract_individual_tests_from_query_result(col_rel_version,
     unsupported_feature_msg = f"Not supported in {options.version} - {component}:"
     if "subcomponents" in data:
         # Config entry has multiple subcomponents to evaluate
+        user_input_sub_components = options.subcomponent.split(',')
         for inner_json_dict in data['subcomponents']:
             # Create a new copy to append multiple subcomponents
             sub_comp_dict = deepcopy(common_sub_comp_dict)
             if sub_component_is_supported_in_this_release(inner_json_dict):
+                # Check to consider only user input sub-components
+                # Eg: if user input is 'aws_upgrade_1', then only consider
+                # that alone leaving out other sub-components from the list
+                if user_input_sub_components[0] != 'None' \
+                        and inner_json_dict["subcomponent"] not in user_input_sub_components:
+                    continue
                 populate_required_dispatcher_data(inner_json_dict, sub_comp_dict)
                 # Append to list for returning back
                 test_jobs_list.append(sub_comp_dict)
@@ -756,7 +765,6 @@ def main():
             pool_to_use = options.poolId[0]
 
             for pool_id in options.poolId:
-
                 if options.serverType in CLOUD_SERVER_TYPES:
                     haveTestToLaunch = True
                     break
