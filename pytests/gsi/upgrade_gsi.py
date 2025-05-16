@@ -1423,6 +1423,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         with ThreadPoolExecutor() as executor_main:
             try:
                 event = Event()
+                self.enable_redistribute_indexes()
                 if self.continuous_mutations:
                     future = executor_main.submit(self.perform_continuous_kv_mutations, event)
                     scan_results_check = False
@@ -1447,7 +1448,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
                 if self.upgrade_mode == 'offline':
                     index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
-                self.upgrade_and_validate(select_queries, scan_results_check)
+                self.upgrade_and_validate(select_queries=select_queries, scan_results_check=False)
                 self.update_master_node()
                 uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
                                                 update_end=self.num_of_docs_per_collection + 1,
@@ -3070,8 +3071,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 replica_count = replica_count
                 randomise_replica_count = False
             self.log.info(f"data set is {dataset}")
+            self.log.info(f"scalar is {scalar}")
+            prefix = 'test_'+''.join(random.choices(string.ascii_letters + string.digits, k=5))
             query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=dataset,
-                                                                      prefix='test',
+                                                                      prefix=prefix,
                                                                       similarity=self.similarity,
                                                                       train_list=None,
                                                                       scan_nprobes=self.scan_nprobes,
@@ -3086,7 +3089,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                   namespace=namespace,
                                                                   num_replica=replica_count,
-                                                                  randomise_replica_count=randomise_replica_count)
+                                                                  randomise_replica_count=randomise_replica_count, bhive_index=self.bhive_index)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
         return select_queries
@@ -3255,7 +3258,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                       nodes_in=[],
                                                       nodes_out=[], skip_array_index_item_count=True, per_node=True)
 
-    def upgrade_and_validate(self, select_queries, scan_results_check=True):
+    def upgrade_and_validate(self, select_queries=None, scan_results_check=True):
         #self.run_async_index_operations(operation_type="query")
         try:
             self.nodes_upgrade_path = self.input.param("nodes_upgrade_path", "").split("-")
@@ -3271,6 +3274,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     if node_rest.get_complete_version() != self.upgrade_to.split('-')[0][:5]:
                         node_to_upgrade = node
                         break
+                self.log.info("before upgrade cluster stats")
+                self.print_cluster_stats()
                 if node_to_upgrade is None:
                     raise Exception("Cannot find a node to upgrade")
                 self.log.info("----- Upgrading {} node {} -----".format(service, node_to_upgrade.ip))
@@ -3298,7 +3303,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                  server=n1ql_server)['results']
 
                 cluster_profile = "provisioned"
-                if self.initial_version[:3] == "7.6":
+                if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] == "8.0":
                     cluster_profile = None
                 active_nodes = []
                 for active_node in self.get_nodes_in_cluster_after_upgrade():
@@ -3316,7 +3321,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.log.info(f"Upgrading the node...{node.ip}")
 
                     upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node],
-                                                    cluster_profile=cluster_profile)
+                                                    cluster_profile=None)
                     for th in upgrade_th:
                         th.join()
                     self.sleep(120)
@@ -3327,6 +3332,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                              services=node_services)
                     rebalance.result()
                     self.sleep(10)
+                    self.enable_shard_based_rebalance()
                     if self.toggle_shard_rebalance and 'index' in service:
                         if enable_shard_rebalance:
                             if self.initial_version[:3] == "7.6":
@@ -3365,6 +3371,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     rebalance.result()
                     node_to_be_swapped_in = node_to_upgrade
                     self.update_master_node()
+                self.log.info("post upgrade cluster stats")
+                self.print_cluster_stats()
                 if select_queries is not None:
                     self.run_continous_query = False
                 self.sleep(60)

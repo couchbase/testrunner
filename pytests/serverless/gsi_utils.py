@@ -1783,7 +1783,11 @@ class GSIUtils(object):
                                                                               persist_full_vector=persist_full_vector,
                                                                               quantization_algo_description_vector=quantization_algo_description_vector)
         elif dataset == 'Cars':
-            if bhive_index:
+            self.log.info(f"scalar is {scalar}")
+            if scalar:
+                definition_list = self.generate_car_data_index_definition_scalar(index_name_prefix=prefix,
+                                                                            skip_primary=skip_primary)
+            elif bhive_index:
                 definition_list = self.generate_car_vector_loader_index_definition_bhive(index_name_prefix=prefix,
                                                                                          skip_primary=skip_primary,
                                                                                          similarity=similarity,
@@ -1794,9 +1798,6 @@ class GSIUtils(object):
                                                                                          xattr_indexes=xattr_indexes,
                                                                                          quantization_algo_color_vector=quantization_algo_color_vector,
                                                                                          quantization_algo_description_vector=quantization_algo_description_vector)
-            elif scalar:
-                definition_list = self.generate_car_data_index_definition_scalar(index_name_prefix=prefix,
-                                                                            skip_primary=skip_primary)
             else:
                 definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
                                                                                    skip_primary=skip_primary,
