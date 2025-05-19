@@ -72,7 +72,7 @@ def validate_columnar_install(params):
             node.install_success = True
             if not pools_status["isEnterprise"]:
                 node.install_success = False
-            if pools_status["configProfile"] != "columnar":
+            if pools_status["configProfile"] not in ["columnar", "analytics"]:
                 node.install_success = False
             # Cleanup next few lines post resolution of MB-60871
             if "7.6.100" not in pools_status["implementationVersion"] and version not in pools_status["implementationVersion"]:

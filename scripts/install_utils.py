@@ -220,6 +220,8 @@ class NodeHelper:
             # Explicitly set the profile mode value (if provided by user)
             c_profile = self.profile or params["cluster_profile"]
             if c_profile in ["default", "serverless", "provisioned", "columnar"]:
+                if c_profile == "columnar":
+                    c_profile = "analytics"
                 cmd = install_constants.CREATE_PROFILE_FILE[key] \
                       % c_profile
                 self.shell.execute_command(cmd)
@@ -466,7 +468,7 @@ class NodeHelper:
 
     def init_cb(self):
         # Skip init for columnar profile
-        if self.profile == "columnar":
+        if self.profile in ["columnar", "analytics"]:
             return
         self.wait_for_couchbase_reachable()
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
