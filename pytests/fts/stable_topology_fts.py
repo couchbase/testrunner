@@ -47,8 +47,73 @@ class StableTopFTS(FTSBaseTest):
         self.idx = None
         if TestInputSingleton.input.param("idx", None):
             self.idx = eval(TestInputSingleton.input.param("idx", None))
+        
+        self.read_from_replica = TestInputSingleton.input.param("read_from_replica", False)
+        self.parition_selection = TestInputSingleton.input.param("parition_selection", "")
 
+        self.fts_nodes = None
+        self.fts_target_node = None
+        self.index_src=None
+        self.validation_data = None
 
+    def read_from_replica_setup(self):
+        #skips the validation check for random / random balanced queries
+        if TestInputSingleton.input.param("skip_replica_validation", False):
+            return
+
+        #selecting the fts target node (random)
+        self.fts_target_node = random.choice(self._cb_cluster.get_fts_nodes())
+        self.fts_nodes = self._cb_cluster.get_fts_nodes()
+
+        #store the active and replica stat for all indices present in the cluster. This should be executed post index creation
+        self.rfr_stats = {}
+        for index in self._cb_cluster.get_indexes():
+            index_name = index.name
+            index_src = index._source_name
+
+            #cfg inspection
+            _,payload = RestConnection(self.fts_target_node).get_cfg_stats()
+            node_map = {}
+
+            for k,v in payload['nodeDefsKnown'].items():
+                if k == "nodeDefs":
+                    for a,b in v.items():
+                        node_map[a] = b['hostPort'].split(':')[0]
+
+            partition_map = {}
+            for i,j in node_map.items():
+                partition_map[j] = 0
+
+            rep_partition_map = {}
+            for i,j in node_map.items():
+                rep_partition_map[j] = 0
+
+            for k,v in payload['planPIndexes'].items():
+                if k == "planPIndexes":
+                    for a,b in v.items():
+                        try:
+                            key = a.split('.')[2]
+                        except:
+                            key = a
+                        
+                        if index_name in key:
+                            for m,n in b.items():
+                                if m == 'nodes':
+                                    for i,j in n.items():
+                                        if j['priority'] == 0:
+                                            partition_map[node_map[i]] += 1
+                                        else:
+                                            rep_partition_map[node_map[i]] += 1
+            
+            if TestInputSingleton.input.param("check_default_mode", False):
+                self.validation_data = [self.num_index_partitions // len(self.fts_nodes), self.num_index_partitions - (self.num_index_partitions // len(self.fts_nodes))]
+            else:
+                local_target = partition_map[self.fts_target_node.ip] + rep_partition_map[self.fts_target_node.ip]
+
+                total_partitions = self.num_index_partitions
+                partition_rem = total_partitions - local_target
+
+                self.validation_data = [local_target, partition_rem]
 
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
@@ -160,6 +225,35 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
             self.log.info("Matches: %s" % matches)
 
+    def run_default_index_query_rfr(self, query=None, expected_hits=None, expected_no_of_results=None):
+        self.create_simple_default_index()
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+        zero_results_ok = True
+        if not expected_hits:
+            expected_hits = int(self._input.param("expected_hits", 0))
+            if expected_hits:
+                zero_results_ok = False
+        if not query:
+            query = eval(self._input.param("query", str(self.sample_query)))
+            if isinstance(query, str):
+                query = json.loads(query)
+            zero_results_ok = True
+        if expected_no_of_results is None:
+            expected_no_of_results = self._input.param("expected_no_of_results", None)
+
+        for index in self._cb_cluster.get_indexes():
+            hits, matches, _, _ = index.execute_query(query,
+                                                      zero_results_ok=zero_results_ok,
+                                                      expected_hits=expected_hits,
+                                                      expected_no_of_results=expected_no_of_results,
+                                                      variable_node=self.fts_target_node,
+                                                      bucket_name=index._source_name,
+                                                      validation_data=self.validation_data,
+                                                      fts_nodes=self.fts_nodes)
+            self.log.info("Hits: %s" % hits)
+            self.log.info("Matches: %s" % matches)
+
     def test_query_type(self):
         """
         uses RQG
@@ -183,6 +277,34 @@ class StableTopFTS(FTSBaseTest):
         else:
             n1ql_executor = None
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
+    
+    def test_query_type_rfr(self):
+        """
+        uses RQG
+        """
+        self.load_data()
+
+        collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index", collection_index=collection_index, _type=type,
+            scope=index_scope, collections=index_collections)
+        self.wait_for_indexing_complete()
+        if self._update or self._delete:
+            self.async_perform_update_delete(self.upd_del_fields)
+            if self._update:
+                self.sleep(60, "Waiting for updates to get indexed...")
+            self.wait_for_indexing_complete()
+        
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+        
+        self.generate_random_queries(index, self.num_queries, self.query_types)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor, fts_nodes=self.fts_nodes, fts_target_node=self.fts_target_node,validation_data=self.validation_data)
 
     def test_basic_synonym_search(self):
 
@@ -3612,6 +3734,45 @@ class StableTopFTS(FTSBaseTest):
                 if search_before_results_ids[i] != all_results_ids[partial_start_index-partial_size+i]:
                     self.fail("test is failed")
 
+    def test_search_before_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+        full_size = len(self.test_data)
+        partial_size = TestInputSingleton.input.param("partial_size", 1)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_mode = eval(TestInputSingleton.input.param("sort_mode", '[_id]'))
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        cluster = index.get_cluster()
+        all_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection},"highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+        search_before_param = all_matches[partial_start_index]['sort']
+
+        for i in range(0, len(search_before_param)):
+            if search_before_param[i] == "_score":
+                search_before_param[i] = str(all_matches[partial_start_index]['score'])
+
+        search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_before": search_before_param}
+        _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+
+        all_results_ids = []
+        search_before_results_ids = []
+
+        for match in all_matches:
+            all_results_ids.append(match['id'])
+
+        for match in search_before_matches:
+            search_before_results_ids.append(match['id'])
+
+        for i in range(0, partial_size-1):
+            if i in range(0, len(search_before_results_ids) - 1):
+                if search_before_results_ids[i] != all_results_ids[partial_start_index-partial_size+i]:
+                    self.fail("test is failed")
+
     def test_search_after(self):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self._load_search_before_search_after_test_data(bucket.name, self.test_data)
@@ -3624,7 +3785,10 @@ class StableTopFTS(FTSBaseTest):
 
         cluster = index.get_cluster()
 
-        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        all_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
         all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query)
 
         search_before_param = all_matches[partial_start_index]['sort']
@@ -3633,8 +3797,48 @@ class StableTopFTS(FTSBaseTest):
             if search_before_param[i] == "_score":
                 search_before_param[i] = str(all_matches[partial_start_index]['score'])
 
-        search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_after": search_before_param}
+        search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_after": search_before_param}
         _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query)
+        all_results_ids = []
+        search_before_results_ids = []
+
+        for match in all_matches:
+            all_results_ids.append(match['id'])
+
+        for match in search_before_matches:
+            search_before_results_ids.append(match['id'])
+
+        for i in range(0, partial_size-1):
+            if i in range(0, len(search_before_results_ids)-1):
+                if search_before_results_ids[i] != all_results_ids[partial_start_index+1+i]:
+                    self.fail("test is failed")
+
+    def test_search_after_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+        full_size = len(self.test_data)
+        partial_size = TestInputSingleton.input.param("partial_size", 1)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_mode = eval(TestInputSingleton.input.param("sort_mode", '[_id]'))
+
+        cluster = index.get_cluster()
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        all_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+
+        search_before_param = all_matches[partial_start_index]['sort']
+
+        for i in range(0, len(search_before_param)):
+            if search_before_param[i] == "_score":
+                search_before_param[i] = str(all_matches[partial_start_index]['score'])
+
+        search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_after": search_before_param}
+        _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
         all_results_ids = []
         search_before_results_ids = []
 
@@ -3695,6 +3899,55 @@ class StableTopFTS(FTSBaseTest):
                         fails.append(str(sort_mode))
         self.assertEqual(len(fails), 0, "Tests for the following sort modes are failed: "+str(fails))
 
+    def test_search_before_multi_fields_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        full_size = len(self.test_data)
+        partial_size = TestInputSingleton.input.param("partial_size", 1)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_modes = ['str', 'num', 'bool', 'array', '_id', '_score']
+        sort_mode = []
+        fails = []
+
+        cluster = index.get_cluster()
+        for i in range(0, len(sort_modes)):
+            for j in range(0, len(sort_modes)):
+                sort_mode.clear()
+                if sort_modes[i] == sort_modes[j]:
+                    pass
+                sort_mode.append(sort_modes[i])
+                sort_mode.append(sort_modes[j])
+                all_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+                all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+                search_before_param = all_matches[partial_start_index]['sort']
+
+                for i in range(0, len(search_before_param)):
+                    if search_before_param[i] == "_score":
+                        search_before_param[i] = str(all_matches[partial_start_index]['score'])
+
+                search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_before": search_before_param}
+                _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+
+                all_results_ids = []
+                search_before_results_ids = []
+
+                for match in all_matches:
+                    all_results_ids.append(match['id'])
+
+                for match in search_before_matches:
+                    search_before_results_ids.append(match['id'])
+
+                for i in range(0, partial_size-1):
+                    if search_before_results_ids[i] != all_results_ids[full_size-partial_start_index-partial_size+i]:
+                        fails.append(str(sort_mode))
+        self.assertEqual(len(fails), 0, "Tests for the following sort modes are failed: "+str(fails))
+
     def test_search_after_multi_fields(self):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self._load_search_before_search_after_test_data(bucket.name, self.test_data)
@@ -3740,6 +3993,55 @@ class StableTopFTS(FTSBaseTest):
                     if search_before_results_ids[i] != all_results_ids[partial_start_index+1+i]:
                         fails.append(str(sort_mode))
         self.assertEqual(len(fails), 0, "Tests for the following sort modes are failed: "+str(fails))
+    
+    def test_search_after_multi_fields_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        full_size = len(self.test_data)
+        partial_size = TestInputSingleton.input.param("partial_size", 1)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_modes = ['str', 'num', 'bool', 'array', '_id', '_score']
+        sort_mode = []
+        fails = []
+
+        cluster = index.get_cluster()
+        for i in range(0, len(sort_modes)):
+            for j in range(0, len(sort_modes)):
+                sort_mode.clear()
+                if sort_modes[i] == sort_modes[j]:
+                    pass
+                sort_mode.append(sort_modes[i])
+                sort_mode.append(sort_modes[j])
+                all_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": full_size, "sort": sort_mode}
+                all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+                search_before_param = all_matches[partial_start_index]['sort']
+
+                for i in range(0, len(search_before_param)):
+                    if search_before_param[i] == "_score":
+                        search_before_param[i] = str(all_matches[partial_start_index]['score'])
+
+                search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": partial_size, "sort": sort_mode, "search_after": search_before_param}
+                _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+
+                all_results_ids = []
+                search_before_results_ids = []
+
+                for match in all_matches:
+                    all_results_ids.append(match['id'])
+
+                for match in search_before_matches:
+                    search_before_results_ids.append(match['id'])
+
+                for i in range(0, partial_size-1):
+                    if search_before_results_ids[i] != all_results_ids[partial_start_index+1+i]:
+                        fails.append(str(sort_mode))
+        self.assertEqual(len(fails), 0, "Tests for the following sort modes are failed: "+str(fails))
 
     def test_search_before_search_after_negative(self):
         expected_error = "cannot use search after and search before together"
@@ -3756,12 +4058,31 @@ class StableTopFTS(FTSBaseTest):
             self.assertTrue(str(response['error']).index(expected_error) > 0, "Cannot find expected error message.")
         else:
             self.fail("Incorrect query was executed successfully.")
+    
+    def test_search_before_search_after_negative_rfr(self):
+        expected_error = "cannot use search after and search before together"
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        cluster = index.get_cluster()
+        search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"query": "filler:filler"},"size": 2, "search_before": ["doc_2"], "search_after": ["doc_4"], "sort": ["_id"]}
+
+        response = cluster.run_fts_query_generalized(index.name, search_before_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+        if 'error' in response.keys():
+            self.assertTrue(str(response['error']).index(expected_error) > 0, "Cannot find expected error message.")
+        else:
+            self.fail("Incorrect query was executed successfully.")
 
     query_result = None
 
     def run_fts_query_wrapper(self, index, fts_query):
         cluster = index.get_cluster()
-        _, self.query_result,_,_ = cluster.run_fts_query(index.name, fts_query)
+        _, self.query_result,_,_ = cluster.run_fts_query(index.name, fts_query,fts_nodes=self.fts_nodes,validation_data=self.validation_data,variable_node=self.fts_target_node,bucket_name=index._source_name)
 
 
     def test_concurrent_search_before_query_index_build(self):
@@ -3774,6 +4095,40 @@ class StableTopFTS(FTSBaseTest):
 
         search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": 2, "sort": ["str"], "search_before": ["str_4"]}
         _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query)
+
+        data_filler_thread = threading.Thread(target=self._load_search_before_search_after_additional_data, args=(bucket.name, 1000 , 20))
+        query_executor_thread = threading.Thread(target=self.run_fts_query_wrapper, args=(index, search_before_fts_query))
+        data_filler_thread.daemon = True
+        data_filler_thread.start()
+        self.sleep(10)
+        query_executor_thread.daemon = True
+        query_executor_thread.start()
+
+        data_filler_thread.join()
+        query_executor_thread.join()
+        self.log.info("idle results ::"+str(search_before_matches)+"::")
+        self.log.info("busy results ::"+str(self.query_result)+"::")
+        idle_ids = []
+        busy_ids = []
+        for match in search_before_matches:
+            idle_ids.append(match['id'])
+        for match in self.query_result:
+            busy_ids.append(match['id'])
+        self.assertEqual(idle_ids, busy_ids, "Results for idle and busy index states are different.")
+
+    def test_concurrent_search_before_query_index_build_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+
+        cluster = index.get_cluster()
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        search_before_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": 2, "sort": ["str"], "search_before": ["str_4"]}
+        _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
 
         data_filler_thread = threading.Thread(target=self._load_search_before_search_after_additional_data, args=(bucket.name, 1000 , 20))
         query_executor_thread = threading.Thread(target=self.run_fts_query_wrapper, args=(index, search_before_fts_query))
@@ -3824,6 +4179,38 @@ class StableTopFTS(FTSBaseTest):
             busy_ids.append(match['id'])
         self.assertEqual(idle_ids, busy_ids, "Results for idle and busy index states are different.")
 
+    def test_concurrent_search_after_query_index_build_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        self.wait_for_indexing_complete(len(self.test_data))
+
+        cluster = index.get_cluster()
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        search_after_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": 2, "sort": ["str"], "search_after": ["str_2"]}
+        _, search_after_matches, _, _ = cluster.run_fts_query(index.name, search_after_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
+
+        data_filler_thread = threading.Thread(target=self._load_search_before_search_after_additional_data, args=(bucket.name, 1000 , 20))
+        query_executor_thread = threading.Thread(target=self.run_fts_query_wrapper, args=(index, search_after_fts_query))
+        data_filler_thread.daemon = True
+        data_filler_thread.start()
+        self.sleep(10)
+        query_executor_thread.daemon = True
+        query_executor_thread.start()
+
+        data_filler_thread.join()
+        query_executor_thread.join()
+        idle_ids = []
+        busy_ids = []
+        for match in search_after_matches:
+            idle_ids.append(match['id'])
+        for match in self.query_result:
+            busy_ids.append(match['id'])
+        self.assertEqual(idle_ids, busy_ids, "Results for idle and busy index states are different.")
+
     def test_search_before_after_n1ql_function(self):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self._load_search_before_search_after_test_data(bucket.name, self.test_data)
@@ -3835,6 +4222,30 @@ class StableTopFTS(FTSBaseTest):
 
         search_before_after_fts_query = {"explain": False, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": 2, "sort": ["_id"], direction: ["doc_2"]}
         _, fts_matches, _, _ = cluster.run_fts_query(index.name, search_before_after_fts_query)
+        n1ql_query = 'select meta().id from '+bucket.name+' where search('+bucket.name+', {"explain": false, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"}, "size": 2, "sort": ["_id"], "'+direction+'": ["doc_2"]})'
+        n1ql_results = self._cb_cluster.run_n1ql_query(query=n1ql_query)['results']
+        fts_ids = []
+        n1ql_ids = []
+        for match in fts_matches:
+            fts_ids.append(match['id'])
+        for match in n1ql_results:
+            n1ql_ids.append(match['id'])
+        self.assertEqual(fts_ids, n1ql_ids, "Results for fts and n1ql queries are different.")
+    
+    def test_search_before_after_n1ql_function_rfr(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self._load_search_before_search_after_test_data(bucket.name, self.test_data)
+        index = self.create_index(bucket, "idx1")
+        direction = TestInputSingleton.input.param("direction", "search_before")
+        self.wait_for_indexing_complete(len(self.test_data))
+
+        cluster = index.get_cluster()
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        search_before_after_fts_query = {"explain": False, "fields": ["*"], "ctl": {"partition_selection": self.parition_selection}, "highlight": {}, "query": {"match": "filler", "field": "filler"},"size": 2, "sort": ["_id"], direction: ["doc_2"]}
+        _, fts_matches, _, _ = cluster.run_fts_query(index.name, search_before_after_fts_query,variable_node=self.fts_target_node,bucket_name=index._source_name,validation_data=self.validation_data,fts_nodes=self.fts_nodes)
         n1ql_query = 'select meta().id from '+bucket.name+' where search('+bucket.name+', {"explain": false, "fields": ["*"], "highlight": {}, "query": {"match": "filler", "field": "filler"}, "size": 2, "sort": ["_id"], "'+direction+'": ["doc_2"]})'
         n1ql_results = self._cb_cluster.run_n1ql_query(query=n1ql_query)['results']
         fts_ids = []

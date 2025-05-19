@@ -1532,6 +1532,9 @@ class FTSIndex:
                                   consistency_vectors={},
                                   score='',
                                   knn=None, vector_search=False):
+        read_from_replica = TestInputSingleton.input.param("read_from_replica",False)
+        parition_selection = TestInputSingleton.input.param("parition_selection","")
+
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         max_limit_matches = TestInputSingleton.input.param("query_limit_matches", None)
         query_json = copy.deepcopy(QUERY.JSON)
@@ -1574,6 +1577,8 @@ class FTSIndex:
             del query_json['ctl']['consistency']['vectors']
         elif consistency_vectors != {}:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
+        if read_from_replica:
+            query_json['ctl']['partition_selection'] = parition_selection
         if score != '':
             query_json['score'] = "none"
         if knn is not None:
@@ -1649,7 +1654,9 @@ class FTSIndex:
                       highlight_style=None, highlight_fields=None, consistency_level='',
                       consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
                       node=None, knn=None, fields=None,
-                      raise_on_error=False, variable_node=None):
+                      raise_on_error=False, variable_node=None,bucket_name=None,validation_data=None,fts_nodes=None):
+        
+        
 
         vector_search = False
         if self.is_vector_query(query):
@@ -1684,7 +1691,8 @@ class FTSIndex:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope,
-                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest, variable_node = variable_node)
+                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest, variable_node = variable_node,
+                                             fts_nodes=fts_nodes,validation_data=validation_data)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2961,7 +2969,7 @@ class CouchbaseCluster:
         self.__indexes.clear()
 
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
-                      rest=None,variable_node = None):
+                      rest=None,variable_node = None,validation_data = None,fts_nodes = None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2979,9 +2987,37 @@ class CouchbaseCluster:
             self.__log.info("Running query %s on node as %s : %s:%s"
                             % (json.dumps(query_dict, ensure_ascii=False),
                                node.ip, rest.username, node.fts_port))
+        if validation_data:
+            prev_map = {}
+            for i in fts_nodes:
+                prev_map[i.ip] = {}
+                prev_map[i.ip]['active'] = 0
+                prev_map[i.ip]['replica'] = 0
+
+            for i in fts_nodes:
+                _,prev_map[i.ip]['active'] = RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_actives",node=i)
+                _,prev_map[i.ip]['replica'] = RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_replicas",node=i)
 
         total_hits, hit_list, time_taken, status = \
-            rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name)
+            rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name,node=variable_node)
+        
+
+        if validation_data:
+            target_node_stat = 0 
+            rem_nodes_stat = 0
+
+            for i in fts_nodes:
+                if i.ip == variable_node.ip:
+                    target_node_stat = RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+                    target_node_stat += RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_replicas",node=i)[1] - prev_map[i.ip]['replica']
+                else:
+                    rem_nodes_stat += RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+
+            if target_node_stat == validation_data[0] and rem_nodes_stat == validation_data[1]:
+                self.__log.info(f"Validation data matches: {target_node_stat} == {validation_data[0]}, {rem_nodes_stat} == {validation_data[1]}")
+            else:
+                self.__log.error(f"Validation data mismatch: {target_node_stat} != {validation_data[0]}, {rem_nodes_stat} != {validation_data[1]}")
+
         return total_hits, hit_list, time_taken, status
 
     def run_fts_query_generalized(self, index_name, query_dict, node=None, timeout=70):
@@ -3540,7 +3576,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None, variable_node = None):
+                                    use_collections=False, dataset=None, variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3553,7 +3589,10 @@ class CouchbaseCluster:
                                                             use_collections=use_collections,
                                                             dataset=dataset,
                                                             reduce_query_logging=self.reduce_query_logging,
-                                                            variable_node = variable_node)
+                                                            variable_node = variable_node,
+                                                            fts_nodes=fts_nodes,
+                                                            fts_target_node=fts_target_node,
+                                                            validation_data=validation_data)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -6308,7 +6347,7 @@ class FTSBaseTest(unittest.TestCase):
                 self.delete_gen.op_type = OPS.DELETE
                 self.delete_gen.encoding = "utf-8"
                 self.delete_gen.start = int((self.create_gen.end)
-                                            * (float)(100 - self._perc_del) / 100)
+                                              * (float)(100 - self._perc_del) / 100)
                 self.delete_gen.end = self.create_gen.end
                 self.delete_gen.delete()
             else:
@@ -6897,10 +6936,9 @@ class FTSBaseTest(unittest.TestCase):
                     self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
                 else:
                     self.log.info("SUCCESS. Document Hits match")
-            
 
     def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,
-                              dataset=None):
+                              dataset=None,fts_nodes=None, fts_target_node=None,validation_data=None):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -6916,7 +6954,10 @@ class FTSBaseTest(unittest.TestCase):
                 query_index=count,
                 n1ql_executor=n1ql_executor,
                 use_collections=use_collections,
-                dataset=dataset))
+                dataset=dataset,
+                fts_nodes=fts_nodes,
+                fts_target_node=fts_target_node,
+                validation_data=validation_data))
 
         num_queries = len(tasks)
 
@@ -6934,6 +6975,7 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
+            
 
     def grab_fts_diag(self):
         """

@@ -1744,7 +1744,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None):
+                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1763,6 +1763,9 @@ class ESRunQueryCompare(Task):
         self.dataset = dataset
         self.reduce_query_logging = reduce_query_logging
         self.variable_node = variable_node
+        self.fts_nodes = fts_nodes
+        self.fts_target_node = fts_target_node
+        self.validation_data = validation_data
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1799,6 +1802,7 @@ class ESRunQueryCompare(Task):
     def execute(self, task_manager):
         self.es_compare = True
         should_verify_n1ql = True
+    
         try:
             if not self.reduce_query_logging:
                 self.log.info("---------------------------------------"
@@ -1814,8 +1818,44 @@ class ESRunQueryCompare(Task):
                 search_vector = encoder.encode(vector_query)
                 self.fts_query["vector"] = search_vector.tolist()
             try:
+                if self.validation_data:
+                    #init
+                    prev_map = {}
+                    for i in self.fts_nodes:
+                        prev_map[i.ip] = {}
+                        prev_map[i.ip]['active'] = 0
+                        prev_map[i.ip]['replica'] = 0
+
+                    #get stats
+                    for i in self.fts_nodes:
+                        _,prev_map[i.ip]['active'] = RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)
+                        _,prev_map[i.ip]['replica'] = RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_replicas",node=i)
+
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
                     self.run_fts_query(self.fts_query, self.score)
+
+                #read from replica validation
+                if self.validation_data:
+                    target_node_stat = 0 
+                    rem_nodes_stat = 0
+                    for i in self.fts_nodes:
+                        if i.ip == self.fts_target_node.ip:
+                            target_node_stat = RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+                            target_node_stat += RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_replicas",node=i)[1] - prev_map[i.ip]['replica']
+                        else:
+                            rem_nodes_stat += RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+                    
+
+                    self.log.info(f"Target_node_stat : {target_node_stat} || rem_nodes_stat : {rem_nodes_stat}")
+                    self.log.info(f"Validation_data : {self.validation_data}")
+
+                    if target_node_stat == self.validation_data[0] and rem_nodes_stat == self.validation_data[1]:
+                        self.log.info(f"Validation data matches: {target_node_stat} == {self.validation_data[0]}, {rem_nodes_stat} == {self.validation_data[1]}")
+                    else:
+                        self.log.error(f"Validation data mismatch: {target_node_stat} != {self.validation_data[0]}, {rem_nodes_stat} != {self.validation_data[1]}")
+                        self.passed = False
+
+
                 if "vector" in str(self.fts_query):
                     self.log.info(fts_doc_ids)
                 if not self.reduce_query_logging:
@@ -2024,7 +2064,9 @@ class ESRunQueryCompare(Task):
             self.set_exception(e)
             self.state = FINISHED
     def run_fts_query(self, query, score=''):
-        return self.fts_index.execute_query(query, score=score,variable_node=self.variable_node)
+        if self.fts_target_node:
+            self.variable_node = self.fts_target_node
+        return self.fts_index.execute_query(query, score=score,variable_node=self.variable_node,fts_nodes=self.fts_nodes,validation_data=self.validation_data)
 
     def run_es_query(self, query,dataset=None):
         return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset)

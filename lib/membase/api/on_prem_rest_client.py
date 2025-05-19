@@ -2975,7 +2975,7 @@ class RestConnection(object):
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
 
-    def get_fts_stats(self, index_name=None, bucket_name=None, stat_name=None):
+    def get_fts_stats(self, index_name=None, bucket_name=None, stat_name=None, node=None):
         """
         List of fts stats available as of 03/16/2017 -
         default:default_idx3:avg_queries_latency: 0,
@@ -3016,7 +3016,14 @@ class RestConnection(object):
         :param stat_name: any of the above
         :return:
         """
-        api = "{0}{1}".format(self.fts_baseUrl, 'api/nsstats')
+
+        if node is None:
+            api = "{0}{1}".format(self.fts_baseUrl, 'api/nsstats')
+        else:
+            protocol = self.fts_baseUrl.split('://')[0]
+            port = self.fts_baseUrl.split(':')[2]
+            api = f"{protocol}://{node.ip}:{port}/api/nsstats"
+
         attempts = 0
         while attempts < 5:
             status, content, header = self._http_request(api)
@@ -3033,7 +3040,8 @@ class RestConnection(object):
             log.info("Stat {0} not available yet".format(stat_name))
             time.sleep(1)
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
-                  format(stat_name, index_name, bucket_name))
+                  format(stat_name, index_name, bucket_name)) 
+             
     def get_specific_nsstats(self, node, creds):
         try:
             endpoint = f"https://{node}:18094/api/nsstats"
@@ -4060,9 +4068,11 @@ class RestConnection(object):
             verb='POST')
         return status
 
-    def run_fts_query(self, index_name, query_json, timeout=100, bucket="_default", scope="_default"):
+    def run_fts_query(self, index_name, query_json, timeout=100, bucket="_default", scope="_default",node=None):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        if node:
+            api = "http://{0}:8094/api/index/{1}/query".format(node.ip,index_name)
         if self.is_elixir:
             if scope is None:
                 scope = "_default"
