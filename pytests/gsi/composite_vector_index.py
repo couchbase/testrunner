@@ -54,8 +54,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.bhive_recovery_log_string = self.input.param("bhive_recovery_log_string", "bhiveSlice::doRecovery")
         self.num_indexes_batch = self.input.param("num_indexes_batch", 3)
         self.shard_based_rebalance = self.input.param("file_based_rebalance", False)
-        # set rerank factor to 0
-        self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
 
         self.log.info("==============  CompositeVectorIndex setup has ended ==============")
 
@@ -265,7 +263,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_bhive_with_system_failures(self):
         try:
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
-            self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
             self.set_persisted_snapshot_interval(interval=120 * 1000)
             query_stats_map = {}
             if self.xattr_indexes:
@@ -377,8 +374,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_bhive_scan_inline_filtering_num_rows_filtered_num_rows_scanned(self):
         try:
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
-            #TODO remove once rerank factor issue is fixed
-            self.index_rest.set_index_settings({"indexer.scan.vector.rerank_factor": 0})
             query_stats_map = {}
             if self.xattr_indexes:
                 for namespace in self.namespaces:
