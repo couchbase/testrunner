@@ -52,7 +52,7 @@ def do_install_task(task, node):
 def validate_columnar_install(params):
     cluster_nodes = []
     for node in install_utils.NodeHelpers:
-        if not (params["columnar"] or node.profile == "columnar"):
+        if not (params["columnar"] or node.profile in ["columnar", "analytics"]):
             # Continue if this node is not columnar profile
             continue
 
@@ -72,7 +72,7 @@ def validate_columnar_install(params):
             node.install_success = True
             if not pools_status["isEnterprise"]:
                 node.install_success = False
-            if pools_status["configProfile"] != "columnar":
+            if pools_status["configProfile"] not in ["columnar", "analytics"]:
                 node.install_success = False
             # Cleanup next few lines post resolution of MB-60871
             if "7.6.100" not in pools_status["implementationVersion"] and version not in pools_status["implementationVersion"]:
@@ -102,7 +102,7 @@ def validate_columnar_install(params):
 def validate_install(params):
     cluster_nodes = {}
     for node in install_utils.NodeHelpers:
-        if node.profile == "columnar" or params["columnar"]:
+        if node.profile in ["columnar", "analytics"] or params["columnar"]:
             # Continue if this node is columnar profile
             continue
         version = node.cb_version or params["version"]

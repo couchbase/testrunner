@@ -170,7 +170,7 @@ def main():
             version_config["default"] = ini_servers
             for profile_name, servers in version_config.items():
                 cb_version = options.cb_version
-                if profile_name == "columnar":
+                if profile_name in ["columnar", "analytics"]:
                     cb_version = options.columnar_version
                 for server in servers:
                     config.set(server[1], "profile", profile_name)

@@ -82,7 +82,7 @@ CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
-CB_COLUMNAR =  "couchbase-columnar-enterprise"
+CB_ENTERPRISE_ANALYTICS =  "enterprise-analytics"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
 CB_DOWNLOAD_SERVER = "172.23.126.166"
 
@@ -122,13 +122,14 @@ CMDS = {
             UNMOUNT_NFS_CMD +
             "service ntp restart ; "
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
-            "dpkg --purge $(dpkg -l | grep couchbase | awk '{print $2}'"
+            "dpkg --purge $(dpkg -l | grep -e couchbase -e enterprise-analytics | awk '{print $2}'"
             " | xargs echo); sleep 10; "
             "rm /var/lib/dpkg/info/couchbase-server*; sleep 10;"
+            "rm /var/lib/dpkg/info/enterprise-analytics*; sleep 10;"
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
             " > /dev/null && echo 1 || echo 0; "
-            "dpkg -P couchbase-server; "
+            "dpkg -P couchbase-server; dpkg -P enterprise-analytics; "
             "rm -rf /var/lib/dpkg/info/couchbase-server*;"
             "dpkg --configure -a; apt-get update; "
             "journalctl --vacuum-size=100M; journalctl --vacuum-time=10d; "
