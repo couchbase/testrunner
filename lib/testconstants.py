@@ -19,6 +19,7 @@ COLUMNAR_VERSION_NAME = {
     "goldfish": ["1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5"],
     "ionic": ["1.1.0"],
     "doric": ["1.2.0"],
+    "phoenix": ["2.0.0"]
 }
 
 CB_RELEASE_BUILDS = {"0.0.0": "0000",
@@ -166,7 +167,7 @@ COUCHBASE_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DO
 CB_LATESTBUILDS_REPO = "http://{0}/builds/latestbuilds/"
 #CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
 CB_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
-CB_COLUMNAR_REPO = "http://{0}/builds/latestbuilds/couchbase-columnar/".format(CB_DOWNLOAD_SERVER)
+CB_ENTERPRISE_ANALYTICS_REPO = "http://{0}/builds/latestbuilds/enterprise-analytics/".format(CB_DOWNLOAD_SERVER)
 CB_FQDN_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER_FQDN)
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 CB_RELEASE_REPO = "http://{0}/builds/releases/".format(CB_DOWNLOAD_SERVER)
