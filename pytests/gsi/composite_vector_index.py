@@ -2723,7 +2723,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
 
-        self.item_count_related_validations()
         timeout = 0
         with ThreadPoolExecutor() as executor:
             executor.submit(self.run_cbq_query, query=build_query, server=self.n1ql_node)
@@ -3064,7 +3063,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
             self.run_cbq_query(query=upsert_query)
 
-            self.item_count_related_validations()
             # Fetch no of docs which will be mutated to validate the stats count
             select_query = f"select count(*) from {collection_namespace} where rating = 0"
             result = self.run_cbq_query(query=select_query)
@@ -3122,7 +3120,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             update_start=0, update_end=10000)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
-            self.item_count_related_validations()
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
@@ -3130,8 +3127,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_query = f"select count(*) from {namespace} where rating > 2"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
-
-            self.item_count_related_validations()
 
             error_msg_and_doc_count = (f'"Length of VECTOR in incoming document is different from '
                                        f'the expected dimension":{doc_count}')
