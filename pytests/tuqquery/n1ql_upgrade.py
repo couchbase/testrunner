@@ -1735,7 +1735,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             "system:buckets",
             "system:completed_requests",
             "system:completed_requests_history",
-            "system:database_info"
+            "system:database_info",
             "system:datastores",
             "system:dictionary",
             "system:dictionary_cache",
@@ -1851,6 +1851,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if phase == "pre-upgrade":
             self.run_cbq_query(f"DROP SEQUENCE `default`.`_default`.{sequence_name} IF EXISTS")
             self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name}")
+        elif phase in ["post-upgrade", "mixed-mode"]:
+            self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name} IF NOT EXISTS")
         result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
         self.assertEqual(result['results'], expected_default)
 
