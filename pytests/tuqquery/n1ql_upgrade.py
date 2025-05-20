@@ -677,7 +677,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.assertEqual(results['status'], "success")
         test_results = self.run_cbq_query(test_query)
         self.assertEqual(test_results['status'], "success")
-        query = "REVOKE Query_Select on `default` TO testgrant"
+        query = "REVOKE Query_Select on `default` FROM testgrant"
         results = self.run_cbq_query(query)
         self.assertEqual(results['status'], "success")
         try:
