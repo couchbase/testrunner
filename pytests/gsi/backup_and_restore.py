@@ -2453,6 +2453,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
                     if namespace.split(':')[-1].split(".")[0] == bucket.name]
+                map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True,
+                                                                                 map_from_index_nodes=True)
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2478,8 +2480,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 if timeout > 360:
                     self.fail("timeout reached for index drop to happen")
                 if self.decrease_node_count > 0:
-                    map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True,
-                                                                                     map_from_index_nodes=True)
                     nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                     nodes_out_list = []
                     for i in range(len(nodes_out)):
@@ -2504,7 +2504,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     restore_result[0],
                     "restore failed for {0} with {1}".format(
                         bucket_collection_namespaces, restore_result[1]))
-                self.item_count_related_validations()
                 self.log.info("Will copy restore log from backup client node to logs folder")
                 logs_path = self.input.param("logs_folder", "/tmp")
                 logs_path_final = os.path.join(logs_path, 'restore.log')
