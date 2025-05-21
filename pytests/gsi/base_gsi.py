@@ -3393,9 +3393,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
         for index in result['results']:
             try:
-                bucket = index['bucket_id']
-                scope = index.get('scope_id', '_default')
-                collection = index.get('keyspace_id', '_default')
+                if 'bucket_id' not in index:
+                    bucket = index['keyspace_id']
+                    collection = '_default'
+                else:
+                    bucket = index['bucket_id']
+                    collection = index.get('keyspace_id', '_default')
+                    scope = index.get('scope_id', '_default')
                 index_name = index['name']
                 if bucket == '_system':
                     continue

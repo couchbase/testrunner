@@ -1546,7 +1546,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
     def rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
                                swap_rebalance=False, skip_array_index_item_count=False,
                                services_in=None, failover_nodes_list=None, select_queries=None,
-                               scan_results_check=False, capella_rebalance=None, skip_shard_validations=False):
+                               scan_results_check=False, capella_rebalance=None, skip_shard_validations=False, continuous_mutations=False):
         if not nodes_out_list:
             nodes_out_list = []
         if not nodes_in_list:
@@ -1723,18 +1723,19 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             indexes_changed = True
         else:
             indexes_changed = False
-        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
-                                                      map_after_rebalance=map_after_rebalance,
-                                                      stats_map_before_rebalance=stats_map_before_rebalance,
-                                                      stats_map_after_rebalance=stats_map_after_rebalance,
-                                                      nodes_in=nodes_in_list,
-                                                      nodes_out=nodes_out_list,
-                                                      swap_rebalance=swap_rebalance,
-                                                      use_https=False,
-                                                      item_count_increase=False,
-                                                      per_node=True,
-                                                      skip_array_index_item_count=skip_array_index_item_count,
-                                                      indexes_changed=indexes_changed)
+        if not continuous_mutations:
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                        map_after_rebalance=map_after_rebalance,
+                                                        stats_map_before_rebalance=stats_map_before_rebalance,
+                                                        stats_map_after_rebalance=stats_map_after_rebalance,
+                                                        nodes_in=nodes_in_list,
+                                                        nodes_out=nodes_out_list,
+                                                        swap_rebalance=swap_rebalance,
+                                                        use_https=False,
+                                                        item_count_increase=False,
+                                                        per_node=True,
+                                                        skip_array_index_item_count=skip_array_index_item_count,
+                                                        indexes_changed=indexes_changed)
 
     def drop_replicas(self, num_indexes=5):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

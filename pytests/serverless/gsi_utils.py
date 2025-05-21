@@ -329,7 +329,7 @@ class GSIUtils(object):
                                                    persist_full_vector=True):
         definitions_list = []
 
-        query_vec = f"ANN(embedding, embVector,  '{similarity}', {scan_nprobes})"
+        query_vec = f"ANN_DISTANCE(embedding, embVector,  '{similarity}', {scan_nprobes})"
         if not index_name_prefix:
             index_name_prefix = "shoe_idx_" + str(uuid.uuid4()).replace("-", "")[5]
         # Primary Query

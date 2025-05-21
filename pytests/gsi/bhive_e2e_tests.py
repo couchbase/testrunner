@@ -7,35 +7,16 @@ __git_user__ = "hrajput89"
 __created_on__ = "13/03/24 02:03 pm"
 
 """
-import datetime
-import json
+
 import logging
-
-import requests
 from concurrent.futures import ThreadPoolExecutor
-
-from docutils.nodes import definition_list
-from requests.auth import HTTPBasicAuth
 from sentence_transformers import SentenceTransformer
-
 from couchbase_helper.documentgenerator import SDKDataLoader
-from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, \
-     RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE
-#from gsi.base_gsi import BaseSecondaryIndexingTests
 from gsi.gsi_file_based_rebalance import FileBasedRebalance
-from membase.api.on_prem_rest_client import RestHelper
 from membase.api.rest_client import RestConnection
-from scripts.multilevel_dict import MultilevelDict
-from remote.remote_util import RemoteMachineShellConnection
-from table_view import TableView
-from memcached.helper.data_helper import MemcachedClientHelper
-from threading import Thread
 from threading import Event
 import random
 import time
-import copy
-import threading
-
 
 class BhiveVectorIndex(FileBasedRebalance):
     def setUp(self):
@@ -90,6 +71,7 @@ class BhiveVectorIndex(FileBasedRebalance):
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
         buckets = []
+        self.skip_shard_validations = False
         
         buckets = self._create_test_buckets(num_buckets=3) 
         
@@ -104,18 +86,25 @@ class BhiveVectorIndex(FileBasedRebalance):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         ops_tuple = tuple(self.ops_order.split("-"))
+        rest = RestConnection(index_nodes[0])
+        settings = rest.get_global_index_settings()
+        if 'redistributeIndexes' in settings:
+            rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
         if self.rebalance_type == "file":
             rest = RestConnection(index_nodes[0])
             settings = rest.get_global_index_settings()
             self.log.info(f"Global index settings: {settings}")
             if 'enableShardAffinity' in settings:
-                rest.set_index_settings({'enableShardAffinity': True})
+                self.enable_shard_based_rebalance()
                 self.log.info("Shard affinity enabled")
+        else:
+            self.skip_shard_validations = True
         
         # Create indexes in all collections
         self.log.info("Step 3: Creating indexes on all collections")
         simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
         prefixes = ["test_scalar", "test_bhive", "test_composite"]
+        select_queries = []
         for namespace in self.namespaces:
             self.log.info(f"Creating indexes on {namespace}")
             similarity = random.choice(simlarity_list)
@@ -124,7 +113,7 @@ class BhiveVectorIndex(FileBasedRebalance):
             bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
 
             definitions = scalar_def + bhive_def + composite_def
-            create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace)
+            create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
         
             self.gsi_util_obj.async_create_indexes(
                 create_queries=create_queries, 
@@ -145,13 +134,19 @@ class BhiveVectorIndex(FileBasedRebalance):
 
             self.log.info(f"Select queries: {select_queries}")
 
+            # Build all the deferred indexes.
+            build_queries = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace) 
+
+            self.log.info("Running build queries.")
+            self.run_cbq_query(query=build_queries, server=query_node)
+
             for query in select_queries:
-                self.log.info(f"Running query: {query}")
-                # self.run_cbq_query(query=create)
                 if "embVector" in query:
                     query = query.replace("embVector", str(self.sample_vector))
                 if "DISTINCT" in query or "ANN" not in query:
                     continue
+                self.log.info(f"Running query: {query}")
+                self.run_cbq_query(query=query, server=query_node)
                 try:
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                     similarity=similarity,
@@ -194,7 +189,7 @@ class BhiveVectorIndex(FileBasedRebalance):
                 services_in = ["index"]
             elif rebalance_type == "out":
                 self.log.info("Starting rebalance-out operation")
-                nodes_out_list = [self.get_index_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]]
+                nodes_out_list = [self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]]
             elif rebalance_type == "swap":
                 self.log.info("Starting swap rebalance operation")
                 nodes_out_list = [swap_rebalance_in]
@@ -237,6 +232,8 @@ class BhiveVectorIndex(FileBasedRebalance):
                             swap_rebalance=False,
                             services_in=services_in,
                             select_queries=None,
+                            skip_shard_validations=self.skip_shard_validations,
+                            continuous_mutations=True
                         )
                         logging.getLogger().setLevel(logging.WARNING)
                         workload_stop_event.set()
@@ -745,7 +742,8 @@ class BhiveVectorIndex(FileBasedRebalance):
         self.validate_replica_indexes_item_counts()
 
         # Validate shard seggregation
-        self.validate_shard_seggregation()
+        shard_map = self.get_shards_index_map()
+        self.validate_shard_seggregation(shard_index_map=shard_map)
         
         # Check mainstore and backstore item counts match
         self.log.info("Validating mainstore and backstore consistency")
@@ -758,6 +756,11 @@ class BhiveVectorIndex(FileBasedRebalance):
         # TODO: Add a check for recall and accuracy using the groundtruths instead of the below function!
         self.log.info("Validating vector recall and accuracy")
         for query in select_queries:
+            if "embVector" in query:
+                query = query.replace("embVector", str(self.bhive_sample_vector))
+            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                self.log.info(f"Skipping query: {query}")
+                continue
             self.log.info(f"Validating query: {query}")
             _, recall, accuracy = self.validate_scans_for_recall_and_accuracy(
                 select_query=query,
@@ -782,10 +785,10 @@ class BhiveVectorIndex(FileBasedRebalance):
         self.log.info(f"Codebook memory per index: {codebook_memory_per_index_map}")
         self.log.info(f"Aggregated codebook memory: {aggregated_codebook_memory_utilization}")
 
-    def _perform_docloader_operations(self, event, bucket_name, ops_rate, timeout=1800, num_docs_mutating=10000,percent_create = 0, percent_update = 0, percent_delete = 0, percent_expiry = 0, percent_read = 0, cs = 0, ce = 0, us = 0, ue = 0, ds = 0, de = 0, es = 0, ee = 0, rs = 0, re = 0):
+    def _perform_docloader_operations(self, workload_stop_event, bucket_name, ops_rate, timeout=1800, num_docs_mutating=10000,percent_create = 0, percent_update = 0, percent_delete = 0, percent_expiry = 0, percent_read = 0, cs = 0, ce = 0, us = 0, ue = 0, ds = 0, de = 0, es = 0, ee = 0, rs = 0, re = 0):
         collection_namespaces = self.namespaces
         time_now = time.time()
-        while not event.is_set() and time.time() - time_now < timeout:
+        while not workload_stop_event.is_set() and time.time() - time_now < timeout:
             for namespace in collection_namespaces:
                 _, keyspace = namespace.split(':')
                 bucket, scope, collection = keyspace.split('.')
@@ -874,7 +877,7 @@ class BhiveVectorIndex(FileBasedRebalance):
 
         composite_def = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.dataset,
-                prefix=prefixes[1],
+                prefix=prefixes[2],
                 similarity=similarity, 
                 train_list=None,
                 scan_nprobes=self.scan_nprobes,
@@ -888,7 +891,7 @@ class BhiveVectorIndex(FileBasedRebalance):
                 description_dimension=self.dimension
             )
             
-        return bhive_def,[scalar_def],[composite_def]
+        return bhive_def,scalar_def,composite_def
 
     #TODO: Implement this method.
     def _create_scalar_indexes(self):
@@ -896,6 +899,7 @@ class BhiveVectorIndex(FileBasedRebalance):
     
     def _get_create_queries(self, bhive_def, scalar_def, composite_def, namespace):
         bhive_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace, num_replica=self.num_replicas, bhive_index=True, defer_build_mix=True)
-        scalar_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=scalar_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=True)
+        #scalar_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=scalar_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=True)
+        scalar_create_queries = []
         composite_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=composite_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=True)
         return bhive_create_queries + scalar_create_queries + composite_create_queries

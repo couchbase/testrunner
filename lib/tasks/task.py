@@ -6683,7 +6683,7 @@ class MagmaDocLoader(Task):
                   f"-docSize {self.sdk_docloader.doc_size}  -valueType {self.sdk_docloader.json_template} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
                   f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
-                  f"-baseVectorsFilePath /data/bigann"
+                  f"-baseVectorsFilePath /mnt/nfsdata/bigann"
 
         else:
             command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
