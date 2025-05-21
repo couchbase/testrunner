@@ -3143,7 +3143,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         Returns a list of dictionaries containing index name and actual count from executing query
         """
         query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition` FROM system:indexes"
-        result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
 
         simplified_results = []
         # Add select query field for each index
