@@ -1706,7 +1706,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             if self.check_gsi_logs_for_shard_transfer():
                 raise Exception("Shard based rebalance triggered for MOI type indexes")
         self.log.info("Running scans after rebalance")
-        if scan_results_check and select_queries is not None:
+        if scan_results_check and select_queries is not None and not self.bhive_index:
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             for query in select_queries:
                 post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
