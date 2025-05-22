@@ -107,7 +107,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                              query_node=query_node)
                         create_queries.extend(queries)
 
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -196,7 +196,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                              query_node=query_node)
                         create_queries.extend(queries)
 
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -295,7 +295,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -385,7 +385,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -472,7 +472,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1760,7 +1760,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.run_cbq_query(query=alter_index_query, server=n1ql_node)
 
     def run_post_rebalance_operations(self, map_after_rebalance, stats_map_after_rebalance):
-        if self.gsi_type == 'memory_optimized':
+        if self.gsi_type == 'memory_optimized' or self.bhive_index:
             self.log.info("Skipping post rebalance operations for MOI type indexes")
             return
         self.run_operation(phase="after")

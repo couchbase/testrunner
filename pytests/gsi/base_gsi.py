@@ -446,9 +446,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         else:
             unzip_cmd = f"unzip -o {filename}"
         remote_client.execute_command(command=unzip_cmd)
-        restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
-                      f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
-                      f"-auto-create-buckets "
+        if self.use_https:
+            restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
+                          f"--cluster couchbases://127.0.0.1 --username {self.username} --password {self.password} " \
+                          f"-auto-create-buckets --no-ssl-verify "
+        else:
+            restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
+                          f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
+                          f"-auto-create-buckets "
         restore_out = remote_client.execute_command(restore_cmd)
         self.log.debug(restore_out)
 
