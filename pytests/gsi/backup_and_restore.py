@@ -2527,6 +2527,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
                 self._build_indexes(indexes_after_restore)
+                self.sleep(10)
                 self.wait_until_indexes_online()
                 self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
 
