@@ -578,7 +578,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         partial_index_list = []
         for index in index_metadata:
             if "where" in index:
-                partial_index_list.append(index['index'])
+                partial_index_list.append(index['indexName'])
         return partial_index_list
 
     def validate_shard_seggregation(self, shard_index_map):
