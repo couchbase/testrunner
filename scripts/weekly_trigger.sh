@@ -124,14 +124,14 @@ echo "### Triggering Upgrade jobs ###"
 echo "### Triggering Alternate Address jobs ###"
 wget  "http://qa.sc.couchbase.com/job/centos-nserv_alternate-address-feature/buildWithParameters?token=trigger_all&version_number=$version_number&url=$url&branch=$branch" -O trigger.log
 
-echo "### Triggering Jepsen weekly ###"
-wget "http://qa.sc.couchbase.com/job/jepsen-durability-trigger-new/buildWithParameters?token=jepsen-trigger-new&version_number=$version_number&test_suite=weekly&build_type=official" -O trigger.log
+#echo "### Triggering Jepsen weekly ###"
+#wget "http://qa.sc.couchbase.com/job/jepsen-durability-trigger-new/buildWithParameters?token=jepsen-trigger-new&version_number=$version_number&test_suite=weekly&build_type=official" -O trigger.log
 
-echo "### Triggering Nutshell job ###"
-wget "http://qa.sc.couchbase.com/job/centos-nutshell/buildWithParameters?token=trigger&version_number=$version_number" -O trigger.log
+#echo "### Triggering Nutshell job ###"
+#wget "http://qa.sc.couchbase.com/job/centos-nutshell/buildWithParameters?token=trigger&version_number=$version_number" -O trigger.log
 
-echo "### Triggering Forestdb jobs  ###"
-wget  "http://qa.sc.couchbase.com/job/cen006-p0-forestdb-sanity/buildWithParameters?token=trigger&version_number=$version_number&url=$url&branch=$branch" -O trigger.log
+#echo "### Triggering Forestdb jobs  ###"
+#wget  "http://qa.sc.couchbase.com/job/cen006-p0-forestdb-sanity/buildWithParameters?token=trigger&version_number=$version_number&url=$url&branch=$branch" -O trigger.log
 
 
 #echo "### Triggering 2i Upgrade weekly jobs ###"
@@ -152,7 +152,7 @@ sleep 60
 # LCB situational tests
 # wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "https://sdk.jenkins.couchbase.com/view/Situational/job/c-cpp/job/lcb/job/centos-lcb-sdk-server-situational-tests/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 # .NET situational tests
-wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/.NET/job/sdk-net-situational-release/job/dotnet-situational-all//buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
+#wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/.NET/job/sdk-net-situational-release/job/dotnet-situational-all//buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 # Go situational tests
 # wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/GO/job/sdk-go-situational-release/job/go-sdk-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 
