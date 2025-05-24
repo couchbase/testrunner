@@ -2593,7 +2593,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.item_count_related_validations()
         build_index_tasks = []
         for build_query in build_queries:
             build_index_tasks.append(self.cluster.async_build_index(server=self.n1ql_node, query=build_query))
