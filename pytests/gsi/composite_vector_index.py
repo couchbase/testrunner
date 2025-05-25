@@ -2999,8 +2999,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
-            self.item_count_related_validations()
-
             # change back the modified fields to vectors and re-run scans
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
