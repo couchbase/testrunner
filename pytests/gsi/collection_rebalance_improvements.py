@@ -178,7 +178,7 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                     f'namespace : {list(namespaces)} index_names_list : {index_names_list}  index meta data : {metadata_out}')
 
     def validate_scans_post_rebalance(self, select_queries_list, node, batches=1, query_node=None):
-        
+
         self.log.info('Running scans post rebalance')
         for batch in range(batches):
             tasks = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries_list,
@@ -188,14 +188,13 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
 
+        no_index_scan_count = 0
         index_rest_out = RestConnection(node)
         stat_data_out = index_rest_out.get_index_stats()
-        num_scans = {key: value for key, value in stat_data_out.items() if key.lower().endswith('num_requests')}
-        no_index_scan_count = 0
-        for index, num_requests in num_scans.items():
-            if num_requests > 0:
-                self.log.info(f'index : {index} num scans : {num_requests}')
-                no_index_scan_count += 1
+        for keyspace in list(stat_data_out.keys()):
+            for index_name, index_stats in stat_data_out[keyspace].items():
+                if stat_data_out[keyspace][index_name]["num_requests"] > 0:
+                    no_index_scan_count += 1
         if no_index_scan_count == 0:
             self.fail(f'Node {node} is not serving scans post rebalanced')
 
