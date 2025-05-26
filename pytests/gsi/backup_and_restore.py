@@ -153,7 +153,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.assertEqual(
                     idx_after_restore['status'], "Created", msg=msg)
 
-                self.assertEqual(self.num_index_replica,
+                self.assertEqual(idx_before_backup['numReplica'],
                                  idx_after_restore['numReplica'], msg=msg)
 
                 self.assertEqual(idx_before_backup['numPartition'],

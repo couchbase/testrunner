@@ -3226,9 +3226,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_map = self.get_item_counts_from_index_stats()
         self.log.info(f"kv_map : {kv_map}")
         self.log.info(f"index_map : {index_map}")
+        array_indexes = self.get_all_array_index_names()
+        self.log.info(f"array_indexes : {array_indexes}")
         error_obj = []
         for kv_dict in kv_map:
             index_name_in_kv_dict, index_count_in_kv_dict = kv_dict['name'], kv_dict['count']
+            index_name_only = index_name_in_kv_dict.split('.')[-1]
+            if index_name_only in array_indexes:
+                continue
             for index_dict in index_map:
                 if index_name_in_kv_dict == index_dict ['name']:
                     _, index_count_in_index_dict = index_dict['name'], index_dict['count']
@@ -3248,8 +3253,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains array indexing syntax like ALL or DISTINCT
-            if 'definition' in index and ('ALL' in index['definition'] or 'DISTINCT' in index['definition']):
-                array_indexes.append(index['indexName'])
+            defn_lower = index['definition'].lower()
+            if 'all' in defn_lower or 'distinct' in defn_lower:
+                array_indexes.append(index['name'])
         return array_indexes
 
     def get_all_primary_index_names(self):
