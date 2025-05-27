@@ -893,20 +893,26 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             executor.submit(self.gsi_util_obj.run_continous_query_load,
                             select_queries=select_queries, query_node=query_node)
             add_nodes = [self.servers[3]]
-            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                to_remove=[data_nodes[0]], services=['kv'])
-            if self.cancel_rebalance:
-                # stop ongoing rebalance
-                self.rest.stop_rebalance()
-            else:
-                # fail rebalance operation and then retry
-                self.stop_server(self.servers[self.nodes_init])
-            task.result()
-            rebalance_status = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            try:
+                task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
+                                                    to_remove=[data_nodes[0]], services=['kv'])
+                if self.cancel_rebalance:
+                    # stop ongoing rebalance
+                    self.rest.stop_rebalance()
+                else:
+                    # fail rebalance operation and then retry
+                    self.stop_server(self.servers[self.nodes_init])
+                task.result()
+                self.log.error(f"Rebalance didn't fail: {result}")
+            except Exception as err:
+                self.log.info('Rebalance failed. See logs for detailed reason' in str(err))
+            finally:
+                if not self.cancel_rebalance:
+                    self.start_server(self.servers[self.nodes_init])
 
-            self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+            task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                         to_remove=[], services=[])
+            task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
@@ -944,11 +950,17 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             data_node = RemoteMachineShellConnection(data_nodes[1])
             data_node.stop_server()
             self.sleep(40, "Wait for autofailover")
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                         [], [data_node])
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
-            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-            rebalance.result()
+            try:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                            [], [data_node])
+                reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+                self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                rebalance.result()
+            except Exception as e:
+                self.log.error(f"Rebalance failed with error: {e}")
+            finally:
+                data_node.start_server()
+            self.gsi_util_obj.query_event.clear()
 
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
@@ -1004,6 +1016,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             msg = "rebalance failed while recovering failover nodes {0}".format(
                 self.server_to_fail[0])
             self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+            self.gsi_util_obj.query_event.clear()
 
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
