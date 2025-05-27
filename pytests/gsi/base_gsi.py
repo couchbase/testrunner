@@ -2141,6 +2141,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             nodes = [node.strip("' ") for node in nodes.split(',')]
             index_map[index_name.strip('`')] = nodes
 
+        self.log.info(f"index map is {index_map}")
         for idx in indexer_metadata:
             if idx['scope'] == '_system':
                 continue
@@ -2148,6 +2149,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             if idx_name not in index_map:
                 continue
             host = idx['hosts'][0]
+            self.log.info("==================================================")
+            self.log.info(f"index is {idx_name}")
+            self.log.info(f"host is {host} map is {index_map[idx_name]}")
+            self.log.info(f"{host in index_map[idx_name]}")
+            self.log.info("==================================================")
             self.assertTrue(host in index_map[idx_name], "Index is not hosted on specified Node")
 
 

@@ -1826,11 +1826,17 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                 self.log.info("Running scans before rebalance")
                 query_result = {}
+                explain_query_result = {}
                 if scan_results_check and select_queries is not None:
                     n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
                     for query in select_queries:
                         query_result[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
                                                                  server=n1ql_server)['results']
+                        explain_query_result[query] = \
+                        self.run_cbq_query(query="EXPLAIN " + query, scan_consistency='request_plus',
+                                           server=n1ql_server)['results']
+
+                    self.log.info(f'Explain query results before upgrade are : {explain_query_result}')
 
                 cluster_profile = "provisioned"
                 if self.initial_version[:3] == "7.6":
@@ -1918,12 +1924,17 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         self.validate_shard_affinity(node_in=swapped_in_node)
                         self.validate_alternate_shard_ids_presence(node_in=swapped_in_node)
                         self.sleep(30)
+                    self.wait_until_indexes_online()
+                    self.sleep(360, "Sleeping for indexes to build")
                     shard_list_after = self.fetch_shard_id_list()
                     if scan_results_check and select_queries is not None:
                         n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
                         for query in select_queries:
                             post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
                                                                        server=n1ql_server)['results']
+                            explain_post_rebalance_result = self.run_cbq_query(query='EXPLAIN ' + query, scan_consistency='request_plus',
+                                               server=n1ql_server)['results']
+                            self.log.info(f'Explain result for query {query} is {explain_post_rebalance_result}')
                             diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
                             if diffs:
                                 self.log.error(
@@ -1942,6 +1953,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                 raise Exception(
                                     "No new alternate shard IDs have been created during this rebalance. Possible bug")
                     self.sleep(20)
+                    node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+                    index_rest = RestConnection(node)
+                    index_Status = index_rest.get_index_status()
+                    self.log.info(f"index status before item count check is {index_Status}")
                     map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                     
                     self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,

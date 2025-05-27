@@ -1111,33 +1111,19 @@ class N1QLHelper():
                     self.log.info("swap rebalanced in node is not distributed any indexes")
                     raise Exception("swap rebalanced in node is not distributed any indexes")
 
-        # verify that items_count before and after rebalance are same
-        if not indexes_changed:
-            self.validate_item_count_data_size(map_before_rebalance=map_before_rebalance, map_after_rebalance=map_after_rebalance,
-                                              stats_map_before_rebalance=stats_map_before_rebalance,
-                                              stats_map_after_rebalance=stats_map_after_rebalance,
-                                              item_count_increase=item_count_increase,
-                                              per_node=per_node, skip_array_index_item_count=skip_array_index_item_count)
 
-            # verify that index status before and after rebalance are same
-            index_state_before_rebalance = {}
-            index_state_after_rebalance = {}
-            for bucket in map_before_rebalance:
-                for index in map_before_rebalance[bucket]:
-                    index_state_before_rebalance[index] = map_before_rebalance[bucket][index]["status"]
-            for bucket in map_after_rebalance:
-                for index in map_after_rebalance[bucket]:
-                    index_state_after_rebalance[index] = map_after_rebalance[bucket][index]["status"]
-            self.log.info("index status of indexes rebalance {0}".format(index_state_before_rebalance))
-            self.log.info("index status of indexes rebalance {0}".format(index_state_after_rebalance))
-            diffs = DeepDiff(index_state_before_rebalance, index_state_after_rebalance, ignore_order=True)
-            if diffs:
-                self.log.info(diffs)
-                raise Exception("index status mismatch")
+        # verify that index status before and after rebalance are same
+        index_state_before_rebalance = {}
+        index_state_after_rebalance = {}
+        for bucket in map_before_rebalance:
+            for index in map_before_rebalance[bucket]:
+                index_state_before_rebalance[index] = map_before_rebalance[bucket][index]["status"]
+        for bucket in map_after_rebalance:
+            for index in map_after_rebalance[bucket]:
+                index_state_after_rebalance[index] = map_after_rebalance[bucket][index]["status"]
+        self.log.info("index status of indexes rebalance {0}".format(index_state_before_rebalance))
+        self.log.info("index status of indexes rebalance {0}".format(index_state_after_rebalance))
 
-            # Rebalance is not guaranteed to achieve a balanced cluster.
-            # The indexes will be distributed in a manner to satisfy the resource requirements of each index.
-            # Hence printing the index distribution just for logging/debugging purposes
         index_distribution_map_before_rebalance = {}
         index_distribution_map_after_rebalance = {}
         for node in host_names_before_rebalance:
@@ -1150,6 +1136,23 @@ class N1QLHelper():
         self.log.info("Distribution of indexes after rebalance")
         for k, v in index_distribution_map_after_rebalance.items():
             print(k, v)
+        # verify that items_count before and after rebalance are same
+        if not indexes_changed:
+            self.validate_item_count_data_size(map_before_rebalance=map_before_rebalance, map_after_rebalance=map_after_rebalance,
+                                              stats_map_before_rebalance=stats_map_before_rebalance,
+                                              stats_map_after_rebalance=stats_map_after_rebalance,
+                                              item_count_increase=item_count_increase,
+                                              per_node=per_node, skip_array_index_item_count=skip_array_index_item_count)
+
+            diffs = DeepDiff(index_state_before_rebalance, index_state_after_rebalance, ignore_order=True)
+            if diffs:
+                self.log.info(diffs)
+                raise Exception("index status mismatch")
+
+            # Rebalance is not guaranteed to achieve a balanced cluster.
+            # The indexes will be distributed in a manner to satisfy the resource requirements of each index.
+            # Hence printing the index distribution just for logging/debugging purposes
+
 
     def validate_item_count_data_size(self, map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
                                      stats_map_after_rebalance, item_count_increase=False, per_node=False,

@@ -8,7 +8,6 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.query_tests_helper import QueryHelperTests
 from .base_gsi import BaseSecondaryIndexingTests, log
-
 from threading import Event
 from deepdiff import DeepDiff
 
@@ -79,21 +78,24 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 create_queries = []
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i + 1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(
+                            index_name_prefix=prefix)
+
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
-                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
@@ -156,21 +158,24 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 create_queries = []
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i + 1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(
+                            index_name_prefix=prefix)
+
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                                           namespace=namespace,
-                                                                          deploy_node_info=deploy_nodes,
                                                                           num_replica=replica_count,
-                                                                          randomise_replica_count=True)
+                                                                          randomise_replica_count=True,
+                                                                          deploy_node_info=deploy_nodes)
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
@@ -244,14 +249,17 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
+
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
+
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -322,14 +330,17 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i + 1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(
+                            index_name_prefix=prefix)
+
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -398,14 +409,17 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i + 1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(
+                            index_name_prefix=prefix)
+
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -504,14 +518,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 create_queries = []
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i + 1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -577,14 +592,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         create_queries = []
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for _ in range(3):
+        for i in range(3):
             replica_count = 0
             deploy_nodes = None
             if self.use_nodes_clause:
                 nodes_list = random.sample(index_nodes, k=replica_count + 1)
                 deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
             for namespace in self.namespaces:
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -629,14 +645,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         create_queries = []
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for _ in range(self.initial_index_batches):
+        for i in range(self.initial_index_batches):
             replica_count = random.randint(1, 2)
             deploy_nodes = None
             if self.use_nodes_clause:
                 nodes_list = random.sample(index_nodes, k=replica_count + 1)
                 deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
             for namespace in self.namespaces:
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -740,7 +757,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     nodes_list = random.sample(index_nodes, k=replica_count + 1)
                     deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                 for namespace in self.namespaces:
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                    prefix = 'test_' + ''.join(namespace.split(':')[1].split('.'))
+                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                     select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                namespace=namespace))
                     queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
