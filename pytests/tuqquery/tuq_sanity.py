@@ -4810,3 +4810,50 @@ class QuerySanityTests(QueryTests):
         self.log.info(f"result_node2: {result_node2['results']}")
         self.assertEqual(result_node1['results'], expected_result)
         self.assertEqual(result_node2['results'], expected_result)
+
+    def test_prepared_ismissing_correlated(self):
+        """
+        MB-64086: Ensure that prepared statements with correlated subqueries are correctly marked as correlated on all nodes.
+        """
+        self.fail_if_no_buckets()
+        # Create a collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_ismissing_correlated IF NOT EXISTS')
+
+        # Insert data into the collection
+        upsert_query = 'UPSERT INTO default._default.test_prepared_ismissing_correlated VALUES ("k01", {"sdate": "2024-10-31"})'
+        self.run_cbq_query(upsert_query)
+
+        # Create indexes on the collection
+        self.run_cbq_query('CREATE INDEX ix20 IF NOT EXISTS ON test_prepared_ismissing_correlated(sdate DESC, edate, pid)', query_context='default._default')
+        self.run_cbq_query('CREATE INDEX ix21 IF NOT EXISTS ON test_prepared_ismissing_correlated( ALL ARRAY (ALL ARRAY FLATTEN_KEYS(ee.id, ee.flags) FOR ee IN e.aa1 END) FOR e IN a1 END, c1,c2,c3,c4)', query_context='default._default')
+
+        # Clean system:prepareds
+        self.run_cbq_query('DELETE FROM system:prepareds')
+
+        # Prepare a statement with a correlated subquery
+        prepare_query = '''
+        PREPARE p64086 FROM
+        SELECT ees
+        FROM test_prepared_ismissing_correlated d
+        LET ees = ( SELECT d1.c3, ee.flags, d1.c2
+                    FROM test_prepared_ismissing_correlated d1
+                    UNNEST d1.a1 AS e
+                    UNNEST e.aa1 AS ee
+                    WHERE ee.id = META(d).id AND d1.c1 NOT IN [1,2,3]
+                        AND d1.c2 IS NOT MISSING AND d1.c4 <= 5)
+        WHERE d.sdate = "2024-10-31"
+        '''
+        self.run_cbq_query(prepare_query, query_context='default._default')
+
+        # Query system:prepareds to check for correlated marker in bindings
+        system_query = '''
+        SELECT p.node, META().plan.`~child`.`~children`[0].`~children`[1].`~child`.`~children`[1].bindings
+        FROM system:prepareds AS p WHERE p.name like "%64086%"
+        '''
+        result = self.run_cbq_query(system_query)
+        self.log.info(f"system:prepareds result: {result['results']}")
+        self.assertTrue(len(result['results']) > 0, "No prepared statement found in system:prepareds")
+        for row in result['results']:
+            bindings = row['bindings']
+            self.assertTrue('correlated' in str(bindings[0]['expr']),
+                            f"Correlated marker missing in bindings for node {row['node']}: {bindings}")
