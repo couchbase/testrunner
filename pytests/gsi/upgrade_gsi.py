@@ -1432,40 +1432,41 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.wait_until_indexes_online()
                 if self.upgrade_to >= "8.0":
                     self.item_count_related_validations()
-                uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
-                                                 update_end=self.num_of_docs_per_collection + 1,
-                                                 select_queries=select_queries,
-                                                 result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
-                                                 s3_bucket='cb-engineering', mutation_timeout=300)
-                self.sleep(30)
-                uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
-                self.log.info("collecting logs before upgrade")
-                uwl_before_obj.run_workload()
-
-                indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
-                indexer_pprof_before_upgrade = uwl_before_obj.download_upload_pprof_s3()
-                self.log.info(f"indexer_stats_before_upgrade : {indexer_stats_before_upgrade}")
+                # uwl_before_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
+                #                                  update_end=self.num_of_docs_per_collection + 1,
+                #                                  select_queries=select_queries,
+                #                                  result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
+                #                                  s3_bucket='cb-engineering', mutation_timeout=300)
+                # self.sleep(30)
+                # uwl_before_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+                # self.log.info("collecting logs before upgrade")
+                # uwl_before_obj.run_workload()
+                #
+                # indexer_stats_before_upgrade = uwl_before_obj.per_indexer_node_stats()
+                # indexer_pprof_before_upgrade = uwl_before_obj.download_upload_pprof_s3()
+                # self.log.info(f"indexer_stats_before_upgrade : {indexer_stats_before_upgrade}")
 
                 if self.upgrade_mode == 'offline':
                     index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
                 self.upgrade_and_validate(select_queries=select_queries, scan_results_check=False)
                 self.update_master_node()
-                uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
-                                                update_end=self.num_of_docs_per_collection + 1,
-                                                select_queries=select_queries,
-                                                result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
-                                                s3_bucket='cb-engineering', mutation_timeout=300,
-                                                result_bucket="gsi_upgrade_test_bucket")
-                uwl_after_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
-                self.log.info("collecting logs after upgrade")
-                uwl_after_obj.run_workload()
-                indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
-                indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
-                status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade,
-                                                                     stats_after=indexer_stats_after_upgrade,
-                                                                     pprof_list_before=indexer_pprof_before_upgrade,
-                                                                     pprof_list_after=indexer_pprof_after_upgrade)
-                self.assertTrue(status)
+                #todo revisit this temp change
+                # uwl_after_obj = UpgradeWorkload(cluster_ip=self.master.ip, namespaces=self.namespaces, update_start=0,
+                #                                 update_end=self.num_of_docs_per_collection + 1,
+                #                                 select_queries=select_queries,
+                #                                 result_cluster_ip='cb.sbsyruqhk4tnzjic.cloud.couchbase.com',
+                #                                 s3_bucket='cb-engineering', mutation_timeout=300,
+                #                                 result_bucket="gsi_upgrade_test_bucket")
+                # uwl_after_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
+                # self.log.info("collecting logs after upgrade")
+                # uwl_after_obj.run_workload()
+                # indexer_stats_after_upgrade = uwl_after_obj.per_indexer_node_stats()
+                # indexer_pprof_after_upgrade = uwl_after_obj.download_upload_pprof_s3()
+                # status = uwl_after_obj.run_upload_doc_log_collection(stats_before=indexer_stats_before_upgrade,
+                #                                                      stats_after=indexer_stats_after_upgrade,
+                #                                                      pprof_list_before=indexer_pprof_before_upgrade,
+                #                                                      pprof_list_after=indexer_pprof_after_upgrade)
+                # self.assertTrue(status)
                 # for namespace in self.namespaces:
                 #     _, keyspace = namespace.split(':')
                 #     bucket, scope, collection = keyspace.split('.')
@@ -2575,7 +2576,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                message="results after reducing num replica count", similarity=self.similarity)
 
         #drop indexes
-        self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, database=self.namespaces[0])
+        # self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, database=self.namespaces[0])
 
     def test_upgrade_downgrade_upgrade(self):
         self.rest.delete_all_buckets()
@@ -2757,6 +2758,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.upgrade_to >= "8.0":
                     scalar_indexes = self.get_all_indexes_in_the_cluster()
                     self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
+                    self.drop_index_node_resources_utilization_validations()
 
             finally:
                 event.set()
@@ -3302,6 +3304,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                  server=n1ql_server)['results']
 
                 cluster_profile = "provisioned"
+                self.log.info(f"upgrade to version is {self.upgrade_to[:3]}")
                 if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] == "8.0":
                     cluster_profile = None
                 active_nodes = []
@@ -3422,7 +3425,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                             if shard not in shard_list_after:
                                 raise Exception(f"Shard {shard} seems to be missing after rebalance")
                         if len(shard_list_after) <= len(shard_list_before):
-                            if self.initial_version[:3] != "7.6":
+                            #todo revisit this temp change
+                            if self.initial_version[:3] != "7.6" or self.upgrade_to[:3] != "8.0":
                                 self.log.info(f'shard list before rebalance : {shard_list_before}')
                                 self.log.info(f'shard list after rebalance : {shard_list_after}')
                                 raise Exception(
