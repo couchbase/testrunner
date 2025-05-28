@@ -596,6 +596,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             for query in [bhive_query_1, bhive_query_2]:
                 self.run_cbq_query(query=query, server=self.n1ql_node)
 
+
+
         no_of_shards_within_soft_limit = self.fetch_shard_id_list()
         #to verify shards are within soft limit
         shard_partition_map = self.fetch_shard_partition_map()
@@ -671,6 +673,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        self.update_master_node()
+        self.sleep(10)
 
 
         #validating shard segregation post rebalance
@@ -682,7 +686,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         self.assertEqual(len(shard_list_post_rebalance), len(shard_list_before_rebalance), f"shard list before rebalance {shard_list_before_rebalance}, shard list after rebalance {shard_list_post_rebalance}")
 
         if self.rebalance_type == "rebalance_out":
-            self.create_index_post_initial_index_creation()
+            self.create_index_post_initial_index_creation(collection_namespace=collection_namespace)
             self.wait_until_indexes_online(defer_build=self.defer_build)
 
             # validating shard segregation post creating new indexes post rebalance

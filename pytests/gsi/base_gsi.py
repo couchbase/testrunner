@@ -581,11 +581,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         return index_code_book_memory_map, sum(index_code_book_memory_map.values())
 
     def get_partial_indexes_name_list(self):
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
         partial_index_list = []
         for index in index_metadata:
             if "where" in index:
-                partial_index_list.append(index['indexName'])
+                partial_index_list.append(index['name'])
         return partial_index_list
 
     def validate_shard_seggregation(self, shard_index_map):
@@ -2963,7 +2965,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         max_shard_count = settings['indexer.plasma.shardLimitPerTenant']
         flush_buffer_quota = settings['indexer.plasma.flushBufferQuota']
         mem_quota = self.get_indexer_mem_quota()
-        shard_limit = math.floor(mem_quota * 0.9 * flush_buffer_quota / 100)
+        shard_limit = int(mem_quota * 0.9 * flush_buffer_quota / 100)
         if shard_limit % 2 != 0:
             shard_limit += 1
         return min(max_shard_count, shard_limit)
@@ -3258,7 +3260,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         """Returns a list of all array indexes in the cluster
         """
         array_indexes = []
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains array indexing syntax like ALL or DISTINCT
             defn_lower = index['definition'].lower()
@@ -3270,7 +3274,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         """Returns a list of all primary indexes in the cluster
         """
         primary_index = []
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains primary indexing syntax like PRIMARY
             if 'definition' in index and ('isPrimary' in index):
@@ -3281,7 +3287,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         """Returns a list of all bhive indexes in the cluster
         """
         bhive_index = []
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains bhive indexing syntax like VECTOR
             # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
@@ -3293,7 +3301,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         """Returns a list of all composite indexes in the cluster
         """
         composite_index = []
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains composite indexing syntax like dimension
             # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
