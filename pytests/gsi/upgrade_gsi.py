@@ -1499,7 +1499,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.upgrade_to >= "8.0":
                     index_list_before = self.get_all_indexes_in_the_cluster()
                     self.post_upgrade_validate_vector_index(index_list_before=index_list_before,
-                                                            cluster_profile="provsioned")
+                                                            cluster_profile=None)
                 self.drop_index_node_resources_utilization_validations()
 
                 # Will uncomment the below code post MB-59107
@@ -2517,7 +2517,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.sleep(30)
         else:
             upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=rebalance_nodes,
-                                            cluster_profile=cluster_profile)
+                                            cluster_profile=None)
             for th in upgrade_th:
                 th.join()
             self.sleep(120)
@@ -2943,11 +2943,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         if self.initial_version[:3] >= "7.6":
             shard_index_map_before_upgrade = self.get_shards_index_map()
 
-        # Todo: Yash to fix below line of code
         self.upgrade_and_validate(scan_results_check=False, select_queries=[])
         if self.upgrade_mode == 'offline':
             cluster_profile = "provisioned"
-            if self.initial_version[:3] == "7.6":
+            if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] == "8.0":
                 cluster_profile = None
             nodes_to_be_swapped_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
 
@@ -3123,7 +3122,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                              server=n1ql_server)['results']
 
             cluster_profile = None
-            if not downgrade and self.initial_version[:3] != "7.6":
+            if not downgrade and self.initial_version[:3] != "7.6" or self.upgrade_to[:3] == "8.0":
                 cluster_profile = "provisioned"
             active_nodes = []
             for active_node in self.servers[:self.nodes_init]:
@@ -3321,7 +3320,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.log.info(f"Upgrading the node...{node.ip}")
 
                     upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node],
-                                                    cluster_profile=None)
+                                                    cluster_profile=cluster_profile)
                     for th in upgrade_th:
                         th.join()
                     self.sleep(120)
