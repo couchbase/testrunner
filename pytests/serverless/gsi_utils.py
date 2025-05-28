@@ -669,7 +669,7 @@ class GSIUtils(object):
             prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL"),
+                                query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL order by suffix"),
                                 is_primary=True))
 
         # GSI index on multiple fields
@@ -678,7 +678,8 @@ class GSIUtils(object):
                             index_fields=['free_breakfast', 'avg_rating'],
                             query_template=RANGE_SCAN_TEMPLATE.format("name",
                                                                       'avg_rating > 3 AND '
-                                                                      'free_breakfast = true')))
+                                                                      'free_breakfast = true '
+                                                                      'order by name')))
 
         # GSI index on multiple fields
         definitions_list.append(
@@ -691,7 +692,7 @@ class GSIUtils(object):
                                 "free_breakfast=True and free_parking=True and "
                                 "price is not null and "
                                 "array_count(public_likes)>5 and "
-                                "`type`='Hotel' group by country")))
+                                "`type`='Hotel' group by country order by country")))
 
         # # GSI index with Flatten Keys
         definitions_list.append(
@@ -702,7 +703,7 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("name",
                                                                       "ANY r IN reviews SATISFIES r.author LIKE 'M%%' "
                                                                       "AND r.ratings.Cleanliness = 3 END AND "
-                                                                      "free_parking = TRUE AND country IS NOT NULL ")))
+                                                                      "free_parking = TRUE AND country IS NOT NULL order by name")))
 
         # # GSI index with missing keys
         definitions_list.append(
@@ -711,12 +712,12 @@ class GSIUtils(object):
                             missing_indexes=True, missing_field_desc=True,
                             query_template=RANGE_SCAN_TEMPLATE.format("name",
                                                                       'avg_rating > 3 AND '
-                                                                      'country like "%%F%%"')))
+                                                                      'country like "%%F%%" order by country')))
 
         # Paritioned Index
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("name", 'name like "%%Dil%%"'),
+                            query_template=RANGE_SCAN_TEMPLATE.format("name", 'name like "%%Dil%%" order by name'),
                             partition_by_fields=['name'], capella_run=True))
 
         # Array Index
@@ -724,7 +725,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'array_index_overall',
                             index_fields=['price, All ARRAY v.ratings.Overall FOR v IN reviews END'],
                             query_template=RANGE_SCAN_TEMPLATE.format("address", 'ANY v IN reviews SATISFIES v.ratings.'
-                                                                                 '`Overall` > 3  END and price < 1000 ')))
+                                                                                 '`Overall` > 3  END and price < 1000 order by address')))
 
         # Array Index
         definitions_list.append(
@@ -732,7 +733,7 @@ class GSIUtils(object):
                             index_fields=['price, All ARRAY v.ratings.Rooms FOR v IN reviews END'],
                             query_template=RANGE_SCAN_TEMPLATE.format("name",
                                                                       'ANY v IN reviews SATISFIES v.ratings.'
-                                                                      '`Rooms` > 3  END and price > 1000 ')))
+                                                                      '`Rooms` > 3  END and price > 1000 order by name')))
 
         # Array Index
         definitions_list.append(
@@ -745,7 +746,7 @@ class GSIUtils(object):
                                                                       'country is not null and `type` is not null '
                                                                       'and (any r in reviews satisfies '
                                                                       'r.ratings.`Check in / front desk` '
-                                                                      'is not null end) ')))
+                                                                      'is not null end) order by country')))
 
         self.batch_size = len(definitions_list)
         return definitions_list
@@ -802,7 +803,7 @@ class GSIUtils(object):
                                 "free_breakfast=True and free_parking=True and "
                                 "price is not null and "
                                 "array_count(public_likes)>5 and "
-                                "`type`='Hotel' group by country")))
+                                "`type`='Hotel' group by country order by country")))
 
         # GSI index with include missing keys
         definitions_list.append(
