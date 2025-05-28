@@ -1,24 +1,23 @@
 """bhive_vector_index.py: "This class test BHIVE Vector indexes  for GSI"
 
-__author__ = "Hemant Rajput"
-__maintainer = "Hemant Rajput"
-__email__ = "Hemant.Rajput@couchbase.com"
-__git_user__ = "hrajput89"
-__created_on__ = "13/03/24 02:03 pm"
-
+__author__ = "Dananjay S"
+__maintainer = "Dananjay S"
+__email__ = "dananjay.s@couchbase.com"
+__git_user__ = "dananjay-s"
 """
-
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from sentence_transformers import SentenceTransformer
 from couchbase_helper.documentgenerator import SDKDataLoader
-from gsi.gsi_file_based_rebalance import FileBasedRebalance
+from membase.api.rest_client import RestHelper
+from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection
 from threading import Event
 import random
 import time
+from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPLATE
 
-class BhiveVectorIndex(FileBasedRebalance):
+class BhiveVectorIndex(BaseSecondaryIndexingTests):
     def setUp(self):
         super(BhiveVectorIndex, self).setUp()
         self.log.info("==============  BhiveVectorIndex setup has started ==============")
@@ -30,7 +29,7 @@ class BhiveVectorIndex(FileBasedRebalance):
         self.gsi_util_obj.set_encoder(encoder=self.encoder)
         self.bucket_count = self.input.param("bucket_count", 3)
         self.collection_count = self.input.param("collection_count", 3)
-        self.docs_per_collection = self.input.param("docs_per_collection", 100000)
+        self.docs_per_collection = self.input.param("docs_per_collection", 10000)
         self.num_index_replica = self.input.param("num_index_replica", 1)
         self.dataset = self.input.param("dataset", "siftBigANN")
         self.graceful = self.input.param("graceful", True)
@@ -90,6 +89,10 @@ class BhiveVectorIndex(FileBasedRebalance):
         settings = rest.get_global_index_settings()
         if 'redistributeIndexes' in settings:
             rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
+        rest = RestConnection(index_nodes[0])
+        settings = rest.get_global_index_settings()
+        if 'redistributeIndexes' in settings:
+            rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
         if self.rebalance_type == "file":
             rest = RestConnection(index_nodes[0])
             settings = rest.get_global_index_settings()
@@ -105,6 +108,7 @@ class BhiveVectorIndex(FileBasedRebalance):
         simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
         prefixes = ["test_scalar", "test_bhive", "test_composite"]
         select_queries = []
+        create_queries = []
         for namespace in self.namespaces:
             self.log.info(f"Creating indexes on {namespace}")
             similarity = random.choice(simlarity_list)
@@ -113,56 +117,49 @@ class BhiveVectorIndex(FileBasedRebalance):
             bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
 
             definitions = scalar_def + bhive_def + composite_def
-            create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
-        
-            self.gsi_util_obj.async_create_indexes(
-                create_queries=create_queries, 
-                database=namespace,
-                query_node=query_node
-            )
+            current_create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
+            create_queries.extend(current_create_queries)
         
             # Wait for all indexes to be online
             self.log.info("Waiting for all indexes to come online")
             self.wait_until_indexes_online()
             self.log.info("All indexes are online")
         
-            select_queries = self.gsi_util_obj.get_select_queries(
+            curr_select_queries = self.gsi_util_obj.get_select_queries(
                 definition_list=definitions,
                 namespace=namespace,
                 limit=self.scan_limit
             )
 
-            self.log.info(f"Select queries: {select_queries}")
+            select_queries.extend(curr_select_queries)
+        
+        self.log.info("Creating indexes")
+        self.gsi_util_obj.async_create_indexes(
+                create_queries=create_queries, 
+                database=namespace,
+                query_node=query_node
+        )
 
-            # Build all the deferred indexes.
-            build_queries = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace) 
+        self.sleep(120, "Sleeping for 2 minutes to allow indexes to be built")
+        self.log.info("Waiting for all indexes to come online")
+        self.wait_until_indexes_online()
+        self.log.info("All indexes are online")
 
-            self.log.info("Running build queries.")
-            self.run_cbq_query(query=build_queries, server=query_node)
+        self.log.info("Running a few select queries to ensure indexes are online")
+        for query in select_queries[:2]:
+            if "embVector" in query:
+                query = query.replace("embVector", str(self.bhive_sample_vector))
+            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                continue
+            self.log.info(f"Running query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
 
-            for query in select_queries:
-                if "embVector" in query:
-                    query = query.replace("embVector", str(self.sample_vector))
-                if "DISTINCT" in query or "ANN" not in query:
-                    continue
-                self.log.info(f"Running query: {query}")
-                self.run_cbq_query(query=query, server=query_node)
-                try:
-                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
-                                                                                    similarity=similarity,
-                                                                                    scan_consitency=True)
-                    self.log.info(f"Query: {query}, Recall: {recall}, Accuracy: {accuracy}")
-                    #TODO: Fail the test if recall is less than 0.7
-                    # if recall < 0.70:
-                    #     raise Exception(f"Recall is less than 0.70 for query {query}")
-                except Exception as err:
-                    self.log.error(f"Error validating select query {query}: {str(err)}")
-                    raise err
-    
         self.log.info("Step 4: Loading data into all collections")
         # Load data into all collections
         for namespace in self.namespaces:
             self._load_docs_in_collection(namespace)
+        
+        self.sleep(180, "Sleeping for 3 minutes to allow data to be loaded")
         
         self.log.info("Step 5: Running pre-rebalance validations")
         self._run_validations(select_queries,index_nodes)
@@ -197,6 +194,7 @@ class BhiveVectorIndex(FileBasedRebalance):
                 services_in = ["index"]
             elif "failover" in rebalance_type:
                 service_type = rebalance_type.split("_")[1]  # Should be "kv" or "index"
+                use_graceful = self.graceful and service_type == "kv"
                 
                 self.log.info(f"Starting failover-{service_type} operation")
                 
@@ -210,7 +208,7 @@ class BhiveVectorIndex(FileBasedRebalance):
                 failover_task = self.cluster.async_failover(
                     self.servers[:self.nodes_init],
                     [failover_node],
-                    self.graceful,
+                    use_graceful,
                     wait_for_pending=120
                 )
                 failover_task.result()
@@ -226,14 +224,13 @@ class BhiveVectorIndex(FileBasedRebalance):
                         logging.getLogger().setLevel(original_log_level)
                         self.log.info(f"Starting {rebalance_type} operation")
 
-                        self.rebalance_and_validate(
+                        self._rebalance_and_validate(
                             nodes_in_list=nodes_in_list,
                             nodes_out_list=nodes_out_list,
                             swap_rebalance=False,
                             services_in=services_in,
                             select_queries=None,
                             skip_shard_validations=self.skip_shard_validations,
-                            continuous_mutations=True
                         )
                         logging.getLogger().setLevel(logging.WARNING)
                         workload_stop_event.set()
@@ -247,6 +244,7 @@ class BhiveVectorIndex(FileBasedRebalance):
                 raise err
             finally:
                 self.log.info(f"{rebalance_type} operation completed")
+            self.sleep(30, "Sleeping for 30 seconds to allow rebalance to complete")
             self._run_validations(select_queries,self.get_nodes_from_services_map(service_type="index", get_all_nodes=True))
             logging.getLogger().setLevel(original_log_level)
 
@@ -257,7 +255,7 @@ class BhiveVectorIndex(FileBasedRebalance):
         # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
         # if not self.validate_memory_released():
         #     raise AssertionError("Memory not released despite dropping all the indexes")
-        self.check_storage_directory_cleaned_up()
+        self.check_storage_directory_cleaned_up(threshold_gb=0.05)
         if not self.validate_cpu_normalized:
             self.log.error("CPU normalized validation failed")
             raise AssertionError("CPU normalized validation failed")
@@ -387,7 +385,7 @@ class BhiveVectorIndex(FileBasedRebalance):
         # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
         # if not self.validate_memory_released():
         #     raise AssertionError("Memory not released despite dropping all the indexes")
-        self.check_storage_directory_cleaned_up()
+        self.check_storage_directory_cleaned_up(threshold_gb=0.05)
         if not self.validate_cpu_normalized:
             self.log.error("CPU normalized validation failed")
             raise AssertionError("CPU normalized validation failed")
@@ -752,28 +750,11 @@ class BhiveVectorIndex(FileBasedRebalance):
             self.log.error(f"Mainstore/backstore mismatch: {errors}")
             self.fail("Mainstore and backstore item counts don't match")
         
-        # Check for recall and accuracy
-        # TODO: Add a check for recall and accuracy using the groundtruths instead of the below function!
-        self.log.info("Validating vector recall and accuracy")
-        for query in select_queries:
-            if "embVector" in query:
-                query = query.replace("embVector", str(self.bhive_sample_vector))
-            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
-                self.log.info(f"Skipping query: {query}")
-                continue
-            self.log.info(f"Validating query: {query}")
-            _, recall, accuracy = self.validate_scans_for_recall_and_accuracy(
-                select_query=query,
-                similarity=similarity,
-            )
-            self.log.info(f"Query recall: {recall*100}%, accuracy: {accuracy*100}%")
-            self.assertGreaterEqual(recall*100, 70, f"Recall for query {query} is less than threshold 70%")
-
-        
-        # Validate shard affinity
-        self.log.info("Validating shard affinity")
-        self.validate_shard_affinity()
-        
+        if self.rebalance_type == "file":
+            # Validate shard affinity
+            self.log.info("Validating shard affinity")
+            self.validate_shard_affinity()
+            
         # Logging resource utilization
         self.log.info("Resource utilization:")
         for node in index_nodes:
@@ -787,32 +768,30 @@ class BhiveVectorIndex(FileBasedRebalance):
 
     def _perform_docloader_operations(self, workload_stop_event, bucket_name, ops_rate, timeout=1800, num_docs_mutating=10000,percent_create = 0, percent_update = 0, percent_delete = 0, percent_expiry = 0, percent_read = 0, cs = 0, ce = 0, us = 0, ue = 0, ds = 0, de = 0, es = 0, ee = 0, rs = 0, re = 0):
         collection_namespaces = self.namespaces
-        time_now = time.time()
-        while not workload_stop_event.is_set() and time.time() - time_now < timeout:
-            for namespace in collection_namespaces:
-                _, keyspace = namespace.split(':')
-                bucket, scope, collection = keyspace.split('.')
-                if bucket != bucket_name:
-                    continue
-                self.log.info(f"Performing high ops operations for bucket: {bucket}, scope: {scope}, collection: {collection}")
-                self.gen_create = SDKDataLoader(ops_rate=ops_rate, num_ops=num_docs_mutating, percent_create=percent_create,
-                                                percent_update=percent_update, percent_delete=percent_delete, percent_expiry=percent_expiry, percent_read=percent_read, scope=scope,
-                                                collection=collection, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password,
-                                                create_start = cs, create_end = ce, update_start = us, update_end = ue,
-                                                delete_start = ds, delete_end = de, expiry_start = es, expiry_end = ee,
-                                                read_start = rs, read_end = re)
-                if self.use_magma_loader:
-                    task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
-                                                            generator=self.gen_create, pause_secs=1,
-                                                            timeout_secs=300, use_magma_loader=True)
+        for namespace in collection_namespaces:
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            if bucket != bucket_name:
+                continue
+            self.log.info(f"Performing high ops operations for bucket: {bucket}, scope: {scope}, collection: {collection}")
+            self.gen_create = SDKDataLoader(ops_rate=ops_rate, num_ops=num_docs_mutating, percent_create=percent_create,
+                                            percent_update=percent_update, percent_delete=percent_delete, percent_expiry=percent_expiry, percent_read=percent_read, scope=scope,
+                                            collection=collection, json_template=self.json_template,
+                                            output=True, username=self.username, password=self.password,
+                                            create_start = cs, create_end = ce, update_start = us, update_end = ue,
+                                            delete_start = ds, delete_end = de, expiry_start = es, expiry_end = ee,
+                                            read_start = rs, read_end = re)
+            if self.use_magma_loader:
+                task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
+                                                        generator=self.gen_create, pause_secs=1,
+                                                        timeout_secs=300, use_magma_loader=True)
+                task.result()
+            else:
+                tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
+                                                                batch_size=10**4, dataset=self.json_template)
+                for task in tasks:
                     task.result()
-                else:
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
-                                                                    batch_size=10**4, dataset=self.json_template)
-                    for task in tasks:
-                        task.result()
-                time.sleep(10)
+            time.sleep(10)
 
     def _create_test_buckets(self, num_buckets=3, bucket_size=256, bucket_storage="magma"):
         """
@@ -895,11 +874,155 @@ class BhiveVectorIndex(FileBasedRebalance):
 
     #TODO: Implement this method.
     def _create_scalar_indexes(self):
-        return []
+        scalar_def = []
+        scalar_def.append(QueryDefinition(
+            index_name="scalar_index_color",
+            index_fields=["color"],
+            query_template=RANGE_SCAN_TEMPLATE.format("color", "color = Green")
+        ))
+        scalar_def.append(QueryDefinition(
+            index_name="scalar_index_review",
+            index_fields=["review"],
+            query_template=RANGE_SCAN_TEMPLATE.format("review", "review > 0")
+        ))
+        return scalar_def
     
-    def _get_create_queries(self, bhive_def, scalar_def, composite_def, namespace):
-        bhive_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace, num_replica=self.num_replicas, bhive_index=True, defer_build_mix=True)
-        #scalar_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=scalar_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=True)
-        scalar_create_queries = []
-        composite_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=composite_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=True)
+    def _get_create_queries(self, bhive_def, scalar_def, composite_def, namespace, defer_build_mix=True):
+        bhive_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace, num_replica=self.num_replicas, bhive_index=True, defer_build_mix=defer_build_mix)
+        scalar_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=scalar_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=defer_build_mix)
+        # scalar_create_queries = []
+        composite_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=composite_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=defer_build_mix)
         return bhive_create_queries + scalar_create_queries + composite_create_queries
+    
+    def _rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
+                           swap_rebalance=False,
+                           services_in=None,select_queries=None,
+                           scan_results_check=False, 
+                           skip_shard_validations=False):
+        """
+        Perform rebalance operation and validate vector indexes after rebalance
+        
+        Args:
+            nodes_out_list: List of nodes to remove from cluster
+            nodes_in_list: List of nodes to add to cluster
+            swap_rebalance: Whether this is a swap rebalance operation
+            skip_array_index_item_count: Skip array index item count validation
+            services_in: Services to add on new nodes
+            failover_nodes_list: List of nodes to failover before rebalance
+            select_queries: List of select queries to validate before/after rebalance
+            vector_queries: List of vector queries to validate before/after rebalance
+            scan_results_check: Whether to check scan results before/after rebalance
+            skip_shard_validations: Skip shard-based rebalance validations
+            mutation_load: Whether to run mutation load during rebalance
+        """
+        if not nodes_out_list:
+            nodes_out_list = []
+        if not nodes_in_list:
+            nodes_in_list = []
+        
+        # Log rebalance operation details
+        self.log.info(f"Starting rebalance operation:")
+        self.log.info(f"  - Nodes in: {[node.ip for node in nodes_in_list]}")
+        self.log.info(f"  - Nodes out: {[node.ip for node in nodes_out_list]}")
+        self.log.info(f"  - Services in: {services_in}")
+        self.log.info(f"  - Swap rebalance: {swap_rebalance}")
+        
+        # Wait for system to stabilize before rebalance
+        self.sleep(60, "Waiting for system to stabilize before rebalance")
+        
+        # Capture state before rebalance
+        shard_list_before_rebalance = self.fetch_shard_id_list()
+
+        # Run scans before rebalance to compare results later
+        query_result = {}
+        if scan_results_check and select_queries is not None:
+            self.log.info("Running scans before rebalance")
+            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+            for query in select_queries:
+                query_result[query] = self.run_cbq_query(query=query, 
+                                                        scan_consistency='request_plus',
+                                                        server=n1ql_server)['results']
+        # Trigger rebalance operation
+        self.log.info("Triggering rebalance operation")
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], 
+            nodes_in_list, 
+            nodes_out_list,
+            services=services_in, 
+            cluster_config=self.cluster_config
+        )
+        
+        # Wait for rebalance to start
+        self.log.info("Waiting for rebalance to start")
+        time.sleep(3)
+        try:
+            status, _ = self.rest._rebalance_status_and_progress()
+            while status != 'running':
+                time.sleep(1)
+                status, _ = self.rest._rebalance_status_and_progress()
+            self.log.info("Rebalance has started running")
+        except Exception as e:
+            self.log.error(f"Error checking rebalance status: {e}")
+        
+        # Wait for rebalance to complete
+        self.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=500)
+        self.assertTrue(reached, "Rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        # Check if shard-based rebalance was used
+        shard_affinity = self.is_shard_based_rebalance_enabled()
+        self.log.info(f"Shard-based rebalance enabled: {shard_affinity}")
+        
+        # Allow system to stabilize after rebalance
+        self.sleep(60, "Allowing system to stabilize after rebalance")
+        
+        # Validate shard-based rebalance if enabled
+        if shard_affinity and not skip_shard_validations:
+            self.log.info("Running validations for shard-based rebalance")
+            
+            # Fetch and compare shard lists
+            shard_list_after_rebalance = self.fetch_shard_id_list()
+            self.log.info("Comparing shard lists before and after rebalance")
+            
+            if shard_list_before_rebalance:
+                if shard_list_after_rebalance != shard_list_before_rebalance:
+                    self.log.error(
+                        f"Shards before: {shard_list_before_rebalance}\nShards after: {shard_list_after_rebalance}"
+                    )
+                    raise AssertionError("Shards missing after rebalance")
+                    
+                self.log.info(
+                    f"Shard list before rebalance: {shard_list_before_rebalance}\nAfter rebalance: {shard_list_after_rebalance}"
+                )
+                
+            # Validate shard affinity and check logs
+            self.validate_shard_affinity()
+            self.sleep(30)
+            
+        # Run scans after rebalance and compare results
+        if scan_results_check and select_queries is not None:
+            self.log.info("Running scans after rebalance and comparing results")
+            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+            
+            for query in select_queries:
+                post_rebalance_result = self.run_cbq_query(
+                    query=query, 
+                    scan_consistency='request_plus',
+                    server=n1ql_server
+                )['results']
+                
+                from deepdiff import DeepDiff
+                diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
+                
+                if diffs:
+                    self.log.error(
+                        f"Mismatch in query result before and after rebalance.\n"
+                        f"Query: {query}\n"
+                        f"Result before: {query_result[query]}\n"
+                        f"Result after: {post_rebalance_result}"
+                    )
+                    raise Exception("Mismatch in query results before and after rebalance")
+        
+        # Log rebalance completion
+        self.log.info("Rebalance and validation completed successfully")

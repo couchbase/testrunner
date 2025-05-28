@@ -569,11 +569,13 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def get_per_index_codebook_memory_usage(self):
         stats_map = self.get_index_stats(perNode=True)
+        bhive_indexes = self.get_all_bhive_index_names()
+        composite_indexes = self.get_all_composite_index_names()
         index_code_book_memory_map = {}
         for node in stats_map:
             for ks in stats_map[node]:
                 for index in stats_map[node][ks]:
-                    if "primary" in index:
+                    if index not in bhive_indexes and index not in composite_indexes:
                         continue
                     index_code_book_memory_map[index] = stats_map[node][ks][index]['codebook_mem_usage']
         return index_code_book_memory_map, sum(index_code_book_memory_map.values())
