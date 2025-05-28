@@ -4877,3 +4877,37 @@ class QuerySanityTests(QueryTests):
             bindings = row['bindings']
             self.assertTrue('correlated' in str(bindings[0]['expr']),
                             f"Correlated marker missing in bindings for node {row['node']}: {bindings}")
+            
+    def test_prepared_star_expression(self):
+        """
+        MB-62932: Ensure that prepared statements containing * expressions in the projection return correct results.
+        """
+        self.fail_if_no_buckets()
+        # Create a collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_star IF NOT EXISTS')
+
+        # Insert test data
+        upsert_query = 'UPSERT INTO default._default.test_prepared_star (KEY, VALUE) VALUES ("key::1", {"type": "document", "id": 1}), ("key::2", {"type": "document", "id": 2}), ("key::3", {"type": "document", "name": "Raj", "timezone": "Local", "id": 3})'
+        self.run_cbq_query(upsert_query)
+
+        # Prepare a statement with * in the projection
+        prepare_query = 'PREPARE p_mb62932 FROM SELECT d.* FROM test_prepared_star as d ORDER BY id'
+        self.run_cbq_query(prepare_query, query_context='default._default')
+
+        # Expected result
+        expected_result = [
+            {"id": 1, "type": "document"},
+            {"id": 2, "type": "document"}, 
+            {"id": 3, "name": "Raj", "timezone": "Local", "type": "document"}
+        ]
+
+        # Execute the prepared statement on node1
+        result1 = self.run_cbq_query('EXECUTE p_mb62932', query_context='default._default', server=self.servers[0])
+        self.log.info(f"Result from node1: {result1['results']}")
+        # Execute the prepared statement on node2 
+        result2 = self.run_cbq_query('EXECUTE p_mb62932', query_context='default._default', server=self.servers[1])
+        self.log.info(f"Result from node2: {result2['results']}")
+        
+        # Extract only the fields for comparison (since result may include meta fields)
+        self.assertEqual(result1['results'], expected_result)
+        self.assertEqual(result2['results'], expected_result)
