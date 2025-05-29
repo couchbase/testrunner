@@ -265,6 +265,7 @@ class AdvancedQueryTests(QueryTests):
                    'select * from default limit 5;']
         pretty = self.execute_commands_inside(self.cbqpath, '', queries, '', '', '', '')
         try:
+            pretty = pretty.replace("\x04", "")
             pretty_json = json.loads(pretty)
         except Exception as ex:
             self.log.error("Incorrect JSON object is "+str(pretty)+"")
@@ -272,6 +273,7 @@ class AdvancedQueryTests(QueryTests):
         queries = ['\SET -pretty false;',
                    'select * from default limit 5;']
         ugly = self.execute_commands_inside(self.cbqpath, '', queries, '', '', '', '')
+        ugly = ugly.replace("\x04", "")
         ugly_json = json.loads(ugly)
         ugly_size = ugly_json['metrics']['resultSize']
         self.assertTrue(pretty_size > ugly_size)
