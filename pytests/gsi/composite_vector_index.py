@@ -3037,8 +3037,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
 
-            error_msg_and_doc_count = (f'"The value of a VECTOR expression is expected to be an array of floats. '
-                                       f'Found non-array type":{doc_count}')
+            error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
             self.drop_index_node_resources_utilization_validations()
 
@@ -3079,8 +3078,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             doc_count = int(result["results"][0]["$1"])
 
 
-            error_msg_and_doc_count = (f'"The value of a VECTOR expression is expected to be an array of floats. '
-                                       f'Found non-array type":{doc_count}')
+            error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
             self.drop_index_node_resources_utilization_validations()
 
@@ -3133,13 +3131,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
-            # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {namespace} where rating > 2"
-            result = self.run_cbq_query(query=select_query)
-            doc_count = int(result["results"][0]["$1"])
-
-            error_msg_and_doc_count = (f'"Length of VECTOR in incoming document is different from '
-                                       f'the expected dimension":{doc_count}')
+            error_msg_and_doc_count = (f'"invalid_vec_dim":10000')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
 
             # Updating dimension of description field back to 384 and re-run scans
