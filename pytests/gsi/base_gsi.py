@@ -3534,7 +3534,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         end_time = time.time() + timeout
         while time.time() < end_time:
-            index_stats = self.index_rest.get_index_stats()
+            indexer_node = self.get_nodes_from_services_map(service_type="index")
+            rest = RestConnection(indexer_node)
+            index_stats = rest.get_index_stats()
             pending_mutations = []
 
             for bucket, indexes in index_stats.items():
