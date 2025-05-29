@@ -8657,3 +8657,48 @@ class QueriesIndexTests(QueryTests):
 
         # check ix2 is used in explain result
         self.assertTrue('ix2' in str(explain_result['results'][0]['plan']))
+
+    def test_explain_plan_time(self):
+        """
+        MB-64031: Increased plan time for query when complex WHERE clause exists in indexes
+        This test creates a new collection in default._default, sets up the indexes and query as in the JIRA,
+        and asserts the query plan time is under 4 seconds.
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb64031"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Insert a document to ensure the collection is not empty
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('k1', {{'type':'docs','status':'new','timestamp':'2024-01-01T00:00:00Z','c0':'c0','c1':'c1','c2':'c2','c3':'c3','c4':'c4','c5':'c5','c6':'c60','c7':'c70','c8':'c80','c21':'v21','c22':'v22'}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('k2', {{'type':'others','c30':'v21','c32':'notempty','c33':null,'c41':'v22','c42':4,'c43':1,'c44':1,'c45':100,'c46':1}})", query_context=query_context)
+        # Create indexes as in JIRA
+        self.run_cbq_query(f"CREATE INDEX ix20 ON {collection_name}(str_to_millis(timestamp),c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10) WHERE type = 'docs' AND status != 'submitted' AND status != 'queued'", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ix22 ON {collection_name}(str_to_millis(timestamp),c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10) WHERE type = 'others' AND c9 IS MISSING AND c2 IS NOT NULL AND c2 != '' AND (c9 IS MISSING OR c9 = false)", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ixo01 ON {collection_name}(c30, c35, c37) WHERE type = 'others' AND c32 != '' AND (c33 IS MISSING OR c33 != 100)", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ixo02 ON {collection_name}(c41, c43, c44, c46) WHERE type = 'others' AND c42 NOT IN [1,2,3] AND c45 != 120", query_context=query_context)
+        # Query to EXPLAIN
+        explain_query = f"""
+        EXPLAIN SELECT t.*
+        FROM {collection_name} AS t
+           JOIN {collection_name} as r ON t.c21 = r.c30 AND r.type = 'others' AND r.c32 != '' AND (r.c33 IS MISSING OR r.c33 != 100)
+           JOIN {collection_name} as s ON t.c22 = s.c41 AND s.type = 'others' AND s.c42 NOT IN [1,2,3] AND s.c45 != 120
+        WHERE  t.type = 'docs'
+               AND t.status != 'submitted'
+               AND t.status != 'queued'
+               AND t.c1  = 'c1'
+               AND t.c2  = 'c2'
+               AND t.c3  = 'c3'
+               AND t.c4  = 'c4'
+               AND t.c5 IN ['c5']
+               AND t.c6 IN ['c60', 'c61', 'c62', 'c63','c64']
+               AND t.c7 IN ['c70', 'c71', 'c72', 'c73','c74']
+               AND t.c8 IN ['c80', 'c81', 'c82', 'c83','c84']
+               AND t.c0 IS NOT NULL
+               AND t.c0 != ''
+               AND str_to_millis(t.timestamp) IS NOT NULL
+               AND str_to_millis(t.timestamp) <= str_to_millis(clock_str());
+        """
+        self.run_cbq_query(explain_query, query_context=query_context, query_params={'timeout': '4s'})
+        self.log.info("MB-64031: Query plan completed within 4s timeout")
