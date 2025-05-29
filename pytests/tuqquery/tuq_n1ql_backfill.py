@@ -136,7 +136,7 @@ class QueryN1QLBackfillTests(QueryTests):
             self.assertEqual(expected_curl['errors']['queryTmpSpaceSize'], "Thevaluemustbeaninteger")
         # This error message is currently not correct in the current implementation of tmpspacesize
         elif self.out_of_range_size:
-            self.assertEqual(expected_curl['errors']['queryTmpSpaceSize'], "Thevaluemustbeinrangefrom-1toinfinity")
+            self.assertEqual(expected_curl['errors']['queryTmpSpaceSize'], "Thevaluemustbeinrangefrom-1to18446744073709551615(inclusive)")
         else:
             self.assertEqual(expected_curl['queryTmpSpaceSize'], self.tmp_size)
 
