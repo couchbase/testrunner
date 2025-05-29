@@ -44,7 +44,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.upgrade_to = self.input.param("upgrade_to")
         self.single_index_node = self.input.param("single_index_node", True)
         self.index_batch_size = self.input.param("index_batch_size", -1)
-        self.drop_all_indexes = self.input.param("drop_all_indexes", True)
+        self.drop_indexes = self.input.param("drop_indexes", True)
         self.toggle_disable_upgrade = self.input.param("toggle_disable_upgrade", False)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format("job_title")
@@ -2826,7 +2826,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             rebalance.result()
 
-        if self.drop_all_indexes:
+        if self.drop_indexes:
             for namespace in namespace_index_map:
                 drop_index_queries = self.gsi_util_obj.get_drop_index_list(
                     definition_list=namespace_index_map[namespace], namespace=namespace)
@@ -2859,7 +2859,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.assertNotEqual(sorted(shard_map_before_upgrade[node.ip]), sorted(shard_map_after_upgrade[node.ip]),
                                 f'shard map before upgrade {shard_map_before_upgrade}, shard map after upgrade {shard_map_after_upgrade}')
 
-        if not self.drop_all_indexes:
+        if not self.drop_indexes:
             self.log.info("Loading new docs to collection")
             task_list = []
             for namespace in self.namespaces:
