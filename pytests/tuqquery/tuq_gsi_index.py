@@ -8690,3 +8690,49 @@ class QueriesIndexTests(QueryTests):
         """
         self.run_cbq_query(explain_query, query_context=query_context, query_params={'timeout': '4s'})
         self.log.info("MB-64031: Query plan completed within 4s timeout")
+
+    def test_MB63883(self):
+        """
+        MB-63883: CBO: optimizer picks wrong index
+        This test creates a new collection in default._default, sets up the data and indexes as in the JIRA,
+        and asserts that the EXPLAIN plan uses the most efficient index (ix1 on c6).
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb63883"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Insert data (smaller range for test speed)
+        insert_query = f'''
+        INSERT INTO {collection_name} (key _k, value _v)
+        SELECT "k" || lpad(tostring(i), 9, '0') as _k,
+                {{"c1": lpad(tostring(IMod(i, 2)), 10, '0'),
+                "c2": lpad(tostring(IMod(i,11)), 10, '0'),
+                "c3": lpad(tostring(IMod(i,37)), 10, '0'),
+                "c4": lpad(tostring(IMod(i,113)), 10, '0'),
+                "c5": lpad(tostring(IMod(i,503)), 10, '0'),
+                "c6": lpad(tostring(IMod(i,5003)), 40, '0'),
+                "s1": lpad(tostring(i), 1024, '0'),
+                "s2": lpad(tostring(i), 1024, '0')}} as _v
+        FROM array_range(0,100000) as i
+        '''
+        self.run_cbq_query(insert_query, query_context=query_context)
+        # Create indexes
+        self.run_cbq_query(f"CREATE INDEX ix1 ON {collection_name}(c6)", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ix2 ON {collection_name}(c1, c2, c4, c5)", query_context=query_context)
+        # Update statistics
+        self.run_cbq_query(f"UPDATE STATISTICS FOR {collection_name} INDEX(ix1,ix2)", query_context=query_context)
+        # EXPLAIN query
+        explain_query = f'''
+        EXPLAIN SELECT * FROM {collection_name}
+        WHERE c1 = "0000000000"
+            AND c2 = "0000000003"
+            AND c5 = "0000000100"
+            AND c6 BETWEEN "0000000000000000000000000000000000000010" AND "0000000000000000000000000000000000000012"
+        '''
+        explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+        self.log.info(f"EXPLAIN result: {explain_result}")
+        # Check that ix1 is used in the plan
+        plan_str = str(explain_result['results'][0]['plan'])
+        self.assertIn('ix1', plan_str, f"Expected ix1 to be used in the plan, but got: {plan_str}")
