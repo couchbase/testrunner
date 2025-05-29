@@ -325,6 +325,7 @@ class N1QLHelper():
                 output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
             output = output[output.find('{"requestID":'):]
             try:
+                output = output.replace("\x04", "")
                 result = json.loads(output)
             except Exception as ex:
                 self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {ex}" )
