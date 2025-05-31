@@ -490,7 +490,7 @@ class GSIUtils(object):
                             index_where_clause='rating > 3',
                             dimension=384, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit,
+                            limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {desc_vecfield}",
                                                                                "rating = 4 and "
                                                                                'description like "%%Convertible%%"',
