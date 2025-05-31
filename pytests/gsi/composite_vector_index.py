@@ -1979,6 +1979,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(30)
 
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
+        self.wait_until_indexes_online()
 
         if self.memory_fill:
             for node in index_node:
