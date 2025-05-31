@@ -4080,9 +4080,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for batch in range(0, self.num_indexes_batch):
             for namespace in self.namespaces:
                 if self.bhive_index:
-                    prefix = "bhive " + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    prefix = "bhive_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
                 else:
-                    prefix = "composite_vector " + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    prefix = "composite_vector_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                           prefix=prefix,
                                                                           similarity=self.similarity, train_list=None,
@@ -4095,7 +4095,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          num_replica=self.num_index_replica,
-                                                                         defer_build=True, bhive_index=self.bhive_index)
+                                                                         defer_build=False, bhive_index=self.bhive_index)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
 
