@@ -3998,7 +3998,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
         namespace_index_map = {}
-        for index_type in ['composite_vector', 'bhive']:
+        for index_type in ['composite_vector', 'bhive_vector']:
             namespace_index_map[index_type] = []
             if index_type == 'composite_vector':
                 self.bhive_index = False
