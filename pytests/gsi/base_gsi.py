@@ -2964,11 +2964,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         settings = rest.get_indexer_internal_stats()
         max_shard_count = settings['indexer.plasma.shardLimitPerTenant']
         flush_buffer_quota = settings['indexer.plasma.flushBufferQuota']
+        min_shards_per_node = settings['indexer.plasma.minShardsPerNode']
         mem_quota = self.get_indexer_mem_quota()
-        shard_limit = int(mem_quota * 0.9 * flush_buffer_quota / 100)
+        shard_limit = int(int(mem_quota * 0.9 * flush_buffer_quota // 100) // flush_buffer_quota)
         if shard_limit % 2 != 0:
             shard_limit += 1
-        return min(max_shard_count, shard_limit)
+        shard_count = min(max_shard_count, shard_limit)
+        updated_shard_count = max(shard_count, min_shards_per_node)
+        return updated_shard_count
 
     def perform_ddl_operations_during_rebalance(self):
         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()

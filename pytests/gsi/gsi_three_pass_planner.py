@@ -650,8 +650,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             self.enable_shard_seggregation()
             self.sleep(10)
 
+        shard_list_before_rebalance = self.fetch_shard_id_list()
         if not self.toggle_on_off_shard_dealer or len(index_nodes) == 1:
-            shard_list_before_rebalance = self.fetch_shard_id_list()
             # to verify shards are within soft limit
             shard_partition_map = self.fetch_shard_partition_map()
             for shard in shard_partition_map:
