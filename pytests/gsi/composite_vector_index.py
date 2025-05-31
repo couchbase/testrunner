@@ -3249,31 +3249,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=create)
             self.item_count_related_validations()
 
-            # Updating vector fields in existing documents and running scans after that
-            keyspace = namespace.split(":")[-1]
-            bucket, scope, collection = keyspace.split(".")
-            bucket = bucket.split(':')[-1]
-            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
-                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="update", dim=384,mutate=1,
-                                            update_start=0, update_end=self.num_of_docs_per_collection)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+            with ThreadPoolExecutor() as executor:
+                self.gsi_util_obj.query_event.set()
+                executor.submit(self.gsi_util_obj.run_continous_query_load,
+                                select_queries=select_queries, query_node=self.n1ql_node)
 
-            # run scans in a loop while docs are getting expired
-            start_time = datetime.datetime.now()
-            end_time = start_time + datetime.timedelta(minutes=20)
-
-            while datetime.datetime.now() < end_time:
-                query_stats_map = {}
-                for query in select_queries:
-                    if "ANN_DISTANCE" not in query:
-                        continue
-                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
-                    query_stats_map[query] = [recall, accuracy]
-                self.gen_table_view(query_stats_map=query_stats_map,
-                                    message=f"quantization value is {self.quantization_algo_description_vector}")
-                self.sleep(5, "waiting before re-running queries")
+                # Updating vector fields in existing documents and running scans after that
+                keyspace = namespace.split(":")[-1]
+                bucket, scope, collection = keyspace.split(".")
+                bucket = bucket.split(':')[-1]
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                                percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template="Cars", timeout=2000,
+                                                op_type="update", dim=384,mutate=1,
+                                                update_start=0, update_end=self.num_of_docs_per_collection)
+                self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+                self.gsi_util_obj.query_event.clear()
 
             self.item_count_related_validations()
             # verify index count matches bucket item count
