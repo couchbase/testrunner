@@ -3130,9 +3130,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
-            error_msg_and_doc_count = (f'"invalid_vec_dim":10000')
-            self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
-
             # Updating dimension of description field back to 384 and re-run scans
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
@@ -3144,6 +3141,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
             self.item_count_related_validations()
+
+            error_msg_and_doc_count = (f'"invalid_vec_dim":10000')
+            self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
 
             query_stats_map = {}
             for query in select_queries:
