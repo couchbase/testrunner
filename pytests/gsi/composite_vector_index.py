@@ -22,7 +22,7 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition, FULL_SCAN_ORDER_BY_TEMPLATE, \
     RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE
 from gsi.base_gsi import BaseSecondaryIndexingTests
-from membase.api.on_prem_rest_client import RestHelper
+from membase.api.on_prem_rest_client import RestHelper, RestConnection
 from scripts.multilevel_dict import MultilevelDict
 from remote.remote_util import RemoteMachineShellConnection
 from table_view import TableView
@@ -1980,8 +1980,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
 
-        self.item_count_related_validations()
-
         if self.memory_fill:
             for node in index_node:
                 node_rest = RemoteMachineShellConnection(node)
@@ -2001,6 +1999,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             else:
                 for index in index_metadata:
                     self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
+            self.item_count_related_validations()
             self.drop_index_node_resources_utilization_validations()
         except Exception as ex:
             raise ex
@@ -3871,7 +3870,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                  services=['index'], cluster_config=self.cluster_config)
         rebalance.result()
 
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+
+        indexer_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(indexer_node)
+        index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
@@ -3881,7 +3883,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                  services=['index'], cluster_config=self.cluster_config)
         rebalance.result()
 
-        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
