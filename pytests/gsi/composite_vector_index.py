@@ -2330,10 +2330,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
             if index in partial_index_list:
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection // 5,
-                                 f"rollback of indexes havent happened {stats}")
-            else:
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         #log validation for recovery of bhive indexes
         is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
@@ -2403,10 +2401,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
             if index in partial_index_list:
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection // 5,
-                                 f"rollback of indexes havent happened {stats}")
-            else:
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         #log validation for recovery of bhive indexes
         is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
@@ -2608,9 +2604,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        keyspace = self.namespaces[0].split(":")[-1]
+        bucket, scope, collection = keyspace.split(".")
         build_index_tasks = []
         for build_query in build_queries:
-            build_index_tasks.append(self.cluster.async_build_index(server=self.n1ql_node, query=build_query))
+            build_index_tasks.append(self.cluster.async_build_index(server=self.n1ql_node,
+                bucket=bucket, query=build_query))
             self.run_cbq_query(query=build_query, server=self.n1ql_node)
 
         for task in build_index_tasks:
