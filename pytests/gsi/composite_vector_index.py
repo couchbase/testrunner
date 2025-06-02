@@ -235,8 +235,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 for query in drop_queries:
                     self.run_cbq_query(query=query, server=self.n1ql_node)
-                self.bhive_index = False
                 if self.bhive_composite_comparison:
+                    self.bhive_index = False
                     query_stats_map_new = deepcopy(query_stats_map)
                     query_stats_map = {}
                     query_comparison_list.append(query_stats_map_new)
