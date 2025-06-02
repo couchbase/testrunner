@@ -2739,9 +2739,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         timeout = 0
         with ThreadPoolExecutor() as executor:
             executor.submit(self.run_cbq_query, query=build_query, server=self.n1ql_node)
-            self.sleep(5)
             while timeout < 360:
-                index_state = self.index_rest.get_indexer_metadata()['status'][1]['status']
+                index_state = self.index_rest.get_indexer_metadata()['status'][2]['status']
                 if index_state == self.build_phase:
                     self.gsi_util_obj.create_gsi_indexes(create_queries=drop_queries, query_node=self.n1ql_node)
                     break
@@ -2751,7 +2750,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.fail("timeout exceeded")
         timeout = 0
         while timeout < 600:
-            if len(self.index_rest.get_indexer_metadata()['status']) == 0:
+            if 'status' not in self.index_rest.get_indexer_metadata():
                 break
             self.sleep(5)
             timeout = timeout + 5
