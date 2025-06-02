@@ -3913,7 +3913,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           bhive_index=self.bhive_index)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                          num_replica=self.num_index_replica,
-                                                                         defer_build=True, bhive_index=self.bhive_index)
+                                                                         defer_build=False, bhive_index=self.bhive_index)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
                 namespace_index_map[namespace] = definitions
