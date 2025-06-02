@@ -76,7 +76,9 @@ class QueryTests(BaseTestCase):
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.full_docs_list = self.generate_full_docs_list(self.gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-            self.load(self.gens_load, flag=self.item_flag, verify_data=verify_data, batch_size=self.batch_size)
+            # Add sleep to allow cluster to stabilize
+            self.sleep(120)
+            self.load(self.gens_load, flag=self.item_flag, verify_data=verify_data, batch_size=100)
             if self.doc_ops:
                 self.ops_dist_map = self.calculate_data_change_distribution(
                     create_per=self.create_ops_per, update_per=self.update_ops_per,
