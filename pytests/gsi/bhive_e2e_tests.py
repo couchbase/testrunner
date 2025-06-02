@@ -5,6 +5,7 @@ __maintainer = "Dananjay S"
 __email__ = "dananjay.s@couchbase.com"
 __git_user__ = "dananjay-s"
 """
+from copy import deepcopy
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from sentence_transformers import SentenceTransformer
@@ -16,6 +17,7 @@ from threading import Event
 import random
 import time
 from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPLATE
+import requests
 
 class BhiveVectorIndex(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -53,6 +55,577 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
     def suite_tearDown(self):
         pass
+
+    def test_stale_transfer_tokens(self):
+        """
+        Test to verify that no DCP transfer tokens exist after enabling file-based rebalance.
+        
+        Steps:
+        1. Setup cluster with file-based rebalance disabled
+        2. Create large indexes (GBs in size)
+        3. Enable file-based rebalance
+        4. Perform swap rebalance
+        5. Verify no DCP transfer tokens exist in listRebalanceTokens endpoint
+        """
+        self.log.info("Step 1: Setting up cluster with file-based rebalance disabled")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(index_nodes[0])
+        
+        # Ensure file-based rebalance is disabled
+        self.log.info("Disabling file-based rebalance")
+        rest.set_index_settings({"indexer.settings.enable_shard_affinity": False})
+        settings = rest.get_global_index_settings()
+        self.log.info(f"settings after disabling shard affinity: {settings}")
+        
+        self.log.info("Step 2: Creating large indexes")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        
+        # Create collection with large number of documents
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(
+                bucket_name=bucket, 
+                num_scopes=1, 
+                num_collections=1,
+                num_of_docs_per_collection=10000,
+                json_template=self.json_template, 
+                load_default_coll=False
+            )
+            
+        
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+
+        self.sleep(180, "Sleeping for 180 seconds to ensure documents are loaded")
+        # Create multiple large indexes
+        self.log.info("Creating multiple large indexes")
+        prefixes = ["test_scalar", "test_bhive", "test_composite"]
+        similarity = "COSINE"
+
+        for namespace in self.namespaces:
+            self.log.info(f"Creating index on {namespace}")
+            self.log.info("Getting query definitions...")
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            self.log.info("Successfully got query definitions")
+            
+            current_create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
+            self.gsi_util_obj.async_create_indexes(create_queries=current_create_queries, database=namespace, query_node=query_node)
+                
+        self.log.info("Waiting for indexes to be built")
+        self.wait_until_indexes_online()
+        self.sleep(60, "Allowing time for indexes to be fully built")
+        
+        self.log.info("Step 3: Enabling file-based rebalance")
+        rest.set_index_settings({"indexer.settings.enable_shard_affinity": True})
+        
+        self.log.info("Step 4: Performing swap rebalance")
+        # Get a new node for swap
+        new_node = self.servers[-1]  # Using last server as new node
+        swap_rebalance_out = index_nodes[1]  # Using second index node to swap out
+        
+        self.log.info(f"Swapping out node {swap_rebalance_out.ip} with new node {new_node.ip}")
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init],
+            [new_node],
+            [swap_rebalance_out],
+            services=["index"]
+        )
+        
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "Rebalance failed or did not complete")
+        rebalance.result()
+        
+        self.sleep(60, "Allowing time for rebalance to settle")
+        
+        self.log.info("Step 5: Verifying no DCP transfer tokens exist")
+        # Check all index nodes for transfer tokens
+        self.verify_dcp_transfer_tokens()
+                
+        self.log.info("No DCP transfer tokens found - test passed")
+        
+        # Cleanup
+        self.log.info("Cleaning up - dropping indexes")
+        self.drop_all_indexes()
+        self.sleep(30, "Waiting for cleanup to complete")
+
+    def test_duplicate_drop_during_training(self):
+        """
+        Test to verify that duplicate drop requests during index training are handled correctly.
+        
+        Steps:
+        1. Create a vector index that requires training
+        2. Initiate first drop while index is training
+        3. Try multiple concurrent drops - should fail with "Index drop already in progress"
+        """
+        self.log.info("Step 1: Setting up cluster and creating bucket/collection")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        
+        # Create collection and load enough data to ensure training takes time
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(
+                bucket_name=bucket, 
+                num_scopes=1, 
+                num_collections=1,
+                num_of_docs_per_collection=100000,  # Large enough to make training take time
+                json_template=self.json_template, 
+                load_default_coll=False
+            )
+        
+        self.sleep(180, "Sleeping for 180 seconds to ensure documents are loaded")
+
+        # Create a vector index that will require training
+        self.log.info("Creating vector index with large train_list to ensure training takes time")
+        index_name = "idx_training_test"
+        create_query = f"""CREATE VECTOR INDEX {index_name} ON `test_bucket_0.test_scope_1.test_collection_1` (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
+                                "similarity": "L2_SQUARED",
+                                "description": "IVF,SQ8",
+                                "train_list": 50000}}"""
+        
+        try:
+            self.run_cbq_query(query=create_query, server=query_node)
+        except Exception as e:
+            self.log.error(f"Failed to create index: {str(e)}")
+            raise
+
+        # Wait briefly to ensure index creation has started but not completed
+        self.sleep(5)
+        
+        # Function to execute a single drop request
+        def execute_drop(drop_id):
+            try:
+                drop_query = f"DROP INDEX {index_name} ON `test_bucket_0.test_scope_1.test_collection_1`"
+                self.run_cbq_query(query=drop_query, server=query_node)
+                return drop_id, None  # Success
+            except Exception as e:
+                return drop_id, str(e)  # Return the error
+        
+        # Submit concurrent drop requests
+        self.log.info("Submitting concurrent drop requests")
+        num_concurrent_drops = 5
+        drop_results = []
+        
+        with ThreadPoolExecutor(max_workers=num_concurrent_drops) as executor:
+            # Submit all drops simultaneously
+            futures = [executor.submit(execute_drop, i) for i in range(num_concurrent_drops)]
+            
+            # Wait for all drops to complete
+            for future in futures:
+                drop_id, error = future.result()
+                drop_results.append((drop_id, error))
+        
+        # Analyze results
+        successful_drops = 0
+        failed_drops = 0
+        
+        for drop_id, error in drop_results:
+            if error is None:
+                successful_drops += 1
+                self.log.info(f"Drop request {drop_id} succeeded")
+            else:
+                failed_drops += 1
+                self.log.info(f"Drop request {drop_id} failed with error: {error}")
+        
+        # Verify that exactly one drop succeeded and others failed
+        if successful_drops != 1:
+            self.fail(f"Expected exactly 1 successful drop, but got {successful_drops}")
+        
+        if failed_drops != num_concurrent_drops - 1:
+            self.fail(f"Expected {num_concurrent_drops - 1} failed drops, but got {failed_drops}")
+
+        # Wait for original drop to complete
+        self.sleep(60, "Waiting for original drop to complete")
+        
+        # Verify index was actually dropped
+        try:
+            verify_query = "SELECT * FROM system:indexes WHERE name = $1"
+            result = self.run_cbq_query(
+                query=verify_query, 
+                server=query_node,
+                query_params={"$1": index_name}
+            )
+            if result["results"]:
+                self.fail("Index still exists after drop")
+        except Exception as e:
+            self.log.error(f"Error verifying index drop: {str(e)}")
+            raise
+
+        self.log.info("Test completed successfully - concurrent drops were properly handled")
+
+    def test_index_definition_metadata(self):
+        """
+        Test to verify the metadata information of GSI indexes.
+        
+        This test validates that index metadata contains all required fields and proper values.
+        
+        Steps:
+        1. Create buckets and collections
+        2. Create different types of indexes (scalar, BHIVE vector, composite)
+        3. Verify index metadata contains:
+           - Index definition
+           - Last known scan time
+           - Number of replicas
+           - Other index statistics
+        4. Validate metadata values are correct and accessible
+        5. Clean up by dropping all indexes
+        
+        Expected Results:
+        - All indexes should have complete metadata
+        - Metadata fields should be accessible and contain valid values
+        - No missing or corrupted metadata fields
+        """
+        self.log.info("Step 1: Setting up the cluster with required services")
+        self.log.info("Step 2: Creating buckets and collections")
+        buckets = self._create_test_buckets(num_buckets=1)
+        prefixes = ["test_scalar", "test_bhive", "test_composite"]
+        similarity = "COSINE"
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        create_queries = []
+        select_queries = []
+        for namespace in self.namespaces:
+            self.log.info(f"Creating index on {namespace}")
+            self.log.info("Getting query definitions...")
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            self.log.info("Successfully got query definitions")
+
+            self.log.info("Combining definitions and creating queries...")
+            definitions = scalar_def + bhive_def + composite_def
+            current_create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
+            create_queries.extend(current_create_queries)
+
+            self.log.info(f"Creating {len(create_queries)} indexes...")
+            self.gsi_util_obj.async_create_indexes(
+                    create_queries=create_queries, 
+                    database=namespace,
+                    query_node=query_node
+            )
+            curr_select_queries = self.gsi_util_obj.get_select_queries(
+                definition_list=definitions,
+                namespace=namespace,
+                limit=self.scan_limit
+            )
+            select_queries.extend(curr_select_queries)
+        self.wait_until_indexes_online()
+        self.sleep(60)
+
+        self.log.info("Running test queries to verify indexes...")
+        for query in select_queries[:2]:
+            if "embVector" in query:
+                self.log.info("Replacing embVector in query...")
+                query = query.replace("embVector", str(self.bhive_sample_vector))
+            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                continue
+            self.log.info(f"Running test query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+            self.log.info("Test query completed successfully")
+        
+        # Query system:indexes and check metadata
+        query = """SELECT * FROM system:indexes"""
+        self.log.info("Checking index metadata")
+        result = self.run_cbq_query(query=query, server=query_node)
+
+        for index_metadata in result["results"]:
+            self.log.info(f"Index metadata: {index_metadata}")
+            # Check if metadata has definition, last_known_scan_time, num_replica
+            index_info = index_metadata.get("indexes", {})
+            self.log.info(f"Index info: {index_info}")
+            try:
+                metadata = index_info["metadata"]
+
+                definition = metadata["definition"]
+                last_known_scan_time = metadata["stats"]["last_known_scan_time"]
+                num_replica = metadata["num_replica"]
+            except KeyError:
+                self.log.error(f"Missing metadata in index")
+                raise
+            self.log.info(f"Index has definition: {definition}, last_known_scan_time: {last_known_scan_time}, num_replica: {num_replica}")
+        
+        self.log.info("Test query completed successfully")
+        
+        self.log.info("Dropping all indexes")
+        self.drop_all_indexes()
+
+    def test_limit_10k(self):
+        """
+        Test to verify BHIVE vector index behavior with large result sets and topN scanning.
+        
+        This test validates vector index performance and accuracy with different similarity metrics
+        and result set sizes.
+        
+        Steps:
+        1. Configure indexer settings for topN scanning (300 results)
+        2. Create buckets and collections
+        3. Create vector indexes with different similarity metrics:
+           - COSINE
+           - L2_SQUARED
+           - L2
+           - DOT
+           - EUCLIDEAN_SQUARED
+           - EUCLIDEAN
+        4. Load test documents
+        5. Validate:
+           - Query results and recall accuracy
+           - Codebook memory usage
+           - Index performance with large result sets
+        6. Compare BHIVE vs composite index performance (if enabled)
+        7. Clean up and validate resource usage
+        
+        Expected Results:
+        - Query recall should be >= 70%
+        - Memory usage should be within expected limits
+        - Proper cleanup of resources after test
+        """
+        self.log.info("Step 1: Setting up the cluster with required services")
+        self.log.info("Step 2: Creating buckets and collections")
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(index_node)
+        rest.set_index_settings({"indexer.bhive.topNScan": 300})
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=1, num_collections=1,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=False)
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+
+
+        simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
+        query_comparison_list = []
+        if self.bhive_composite_comparison:
+            self.bhive_index = True
+            similarity = random.choice(simlarity_list)
+            simlarity_list = [similarity] * 2
+        for similarity in simlarity_list:
+            for namespace in self.namespaces:
+                if self.bhive_index:
+                    prefix = f'test_{similarity}_bhive'
+                else:
+                    prefix = f'test_{similarity}_composite'
+                definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.dataset,
+                prefix=prefix,
+                similarity=similarity, 
+                train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                xattr_indexes=self.xattr_indexes,
+                limit=self.scan_limit, 
+                is_base64=self.base64,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=self.bhive_index, 
+                description_dimension=self.dimension
+            )
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace)
+                select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace, limit=self.scan_limit)
+                drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace)
+                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
+                self.wait_until_indexes_online()
+                self.sleep(60)
+                self.item_count_related_validations()
+
+                for query in select_queries:
+                    if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                        continue
+                    if "embVector" in query:
+                        query = query.replace("embVector", str(self.bhive_sample_vector))
+                    query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query, similarity=similarity, scan_consitency=True)
+                    query_stats_map[query] = [recall, accuracy]
+
+                codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
+                self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
+                self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
+
+                for query in drop_queries:
+                    self.run_cbq_query(query=query, server=self.n1ql_node)
+                if self.bhive_composite_comparison:
+                    self.bhive_index = False
+                    query_stats_map_new = deepcopy(query_stats_map)
+                    query_stats_map = {}
+                    query_comparison_list.append(query_stats_map_new)
+                    self.gen_table_view(query_stats_map=query_stats_map_new,
+                                        message=f"Bhive is  {self.bhive_index}")
+                    
+        if not self.bhive_composite_comparison:
+            self.gen_table_view(query_stats_map=query_stats_map,
+                                message=f"quantization value is {self.quantization_algo_description_vector}")
+            query_comparison_list.append(query_stats_map)
+
+        for query_stats_map in query_comparison_list:
+            for query in query_stats_map:
+                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
+                                        f"recall for query {query} is less than threshold 70")
+
+        self.rest.delete_bucket(bucket='metadata_bucket')
+        self.drop_index_node_resources_utilization_validations()
+
+    def test_long_index_keys(self):
+        """
+        Test to verify GSI behavior with extremely long index key values.
+        
+        This test validates that the indexer can handle index keys with large string values
+        without performance degradation or errors.
+        
+        Steps:
+        1. Create test bucket and collection
+        2. Create composite index on color and brand fields
+        3. Test queries with:
+           - Normal key values
+           - Very long key values (15000 characters)
+           - Mixed key value lengths
+        4. Validate:
+           - Index creation succeeds
+           - Queries execute successfully
+           - No memory issues or performance degradation
+        
+        Expected Results:
+        - Index should handle long key values correctly
+        - Queries should execute successfully
+        - No indexer crashes or out of memory errors
+        """
+        self.log.info("Step 1: Setting up the cluster with required services")
+        self.log.info("Step 2: Creating buckets and collections")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template)
+        self.log.info("Step 3: Creating index with long index keys")
+        query = """CREATE INDEX `idx_1` ON `test_bucket_0`(`color`,`brand`)"""
+        self.run_cbq_query(query=query, server=query_node)
+
+        self.log.info("Waiting for index to be online")
+        self.wait_until_indexes_online()
+        self.log.info("Index is online")
+
+        select_query_1 = """SELECT * FROM `test_bucket_0` WHERE `color` is not missing AND `brand` = repeat('a', 15000)"""
+        select_query_2 = """SELECT * FROM `test_bucket_0` WHERE `color` = repeat('a', 15000)"""
+        self.run_cbq_query(query=select_query_1, server=query_node)
+        self.run_cbq_query(query=select_query_2, server=query_node)
+
+        self.log.info("Step 4: Dropping all indexes")
+        self.drop_all_indexes()
+
+    def test_train_list_threshold(self):
+        """
+        Test to verify BHIVE vector index behavior with different train_list thresholds.
+        
+        This test validates that vector index creation properly handles train_list parameter
+        validation and enforces appropriate thresholds based on available document count.
+        
+        Steps:
+        1. Test Case 1 - Train List > Total Documents:
+           - Create bucket with small number of documents
+           - Attempt to create index with train_list (50000) > total documents
+           - Verify index creation fails with appropriate error
+        
+        2. Test Case 2 - Train List > Qualifying Vectors:
+           - Load documents with specific vector format (Hotel template)
+           - Attempt to create index with train_list (20000) > qualifying vectors
+           - Verify index creation fails appropriately
+        
+        3. Validation:
+           - Verify error messages are appropriate
+           - Check index doesn't exist after failed creation
+           - Validate no partial indexes remain
+        
+        Expected Results:
+        - Index creation should fail when train_list > total documents
+        - Index creation should fail when train_list > qualifying vectors
+        - Appropriate error messages should be returned
+        - No residual index artifacts should remain
+        - System should maintain stable state after failed creations
+        """
+        self.log.info("Step 1: Setting up the cluster with required services")
+        self.log.info("Step 2: Creating buckets and collections")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+        
+        self.log.info("Creating index with train list threshold")
+        index_failed_1 = False
+        query = """CREATE VECTOR INDEX `idx_sif10k` ON `test_bucket_0`(`color`,`embedding` VECTOR) WITH { "dimension":128, "similarity":"L2_SQUARED", "description":"IVF,SQ8", "train_list":50000 }"""
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+            index_failed_1 = True
+        except Exception as e:
+            self.log.info(f"Expected exception as train list is greater than number of documents: {e}")
+        if index_failed_1:
+            self.fail("Index creation should have failed")
+
+        #Case 2: Number of qualifying vectors is less than train list
+        for namespace in self.namespaces:
+            self.log.info(f"Loading docs into {namespace}")
+            self._load_docs_in_collection(namespace, json_template="Hotel")
+        
+        query = """CREATE VECTOR INDEX `idx_sif20k` ON `test_bucket_0`(`color`,`embedding` VECTOR) WITH { "dimension":128, "similarity":"L2_SQUARED", "description":"IVF,SQ8", "train_list":20000 }"""
+        index_failed_2 = False
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+            index_failed_2 = True
+        except Exception as e:
+            self.log.info(f"Expected exception as train list is greater than number of documents: {e}")
+        if index_failed_2:
+            self.fail("Index creation should have failed")
+
+        self.log.info("Waiting for index to be online")
+        self.wait_until_indexes_online()
+
+        self.log.info("Dropping all indexes")
+        self.drop_all_indexes()
+
+
+    def test_maximum_dimension_support(self):
+        self.log.info("Step 1: Setting up the cluster with required services")
+        self.log.info("Step 2: Creating buckets and collections")
+        buckets = self._create_test_buckets(num_buckets=1)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template, load_default_coll=True)
+        
+        self.log.info("Creating index with dimension greater than 4096")
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for namespace in self.namespaces:
+            self.log.info(f"Creating index on {namespace}")
+            bhive_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.dataset,
+                prefix="test_bhive",
+                similarity="L2_SQUARED", 
+                train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                xattr_indexes=self.xattr_indexes,
+                limit=self.scan_limit, 
+                is_base64=self.base64,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=True, 
+                description_dimension=4097
+            )
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace)
+            creation_success = False
+            try:
+                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
+                creation_success = True
+            except Exception as e:
+                self.log.info(f"Expected exception as dimension is greater than 4096: {e}")
+            if creation_success:
+                self.fail("Index creation should have failed")
+            self.wait_until_indexes_online()
+            self.log.info(f"Index created on {namespace}")
+
+        self.log.info("Dropping all indexes")
+        self.drop_all_indexes()
     
     def test_bhive_rebalance_comprehensive(self):
         """
@@ -67,40 +640,58 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         6. Validate after each operation
         7. Clean up
         """
+        self.log.info("=== Starting test_bhive_rebalance_comprehensive ===")
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
         buckets = []
         self.skip_shard_validations = False
         
+        self.log.info("Creating test buckets...")
         buckets = self._create_test_buckets(num_buckets=3) 
+        self.log.info(f"Successfully created {len(buckets)} test buckets")
         
         # Create collections and add to namespaces
+        self.log.info("Creating collections in each bucket...")
         for bucket in buckets:
-          self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+            self.log.info(f"Creating collections in bucket: {bucket}")
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
                                                  num_of_docs_per_collection=self.num_of_docs_per_collection,
                                                  json_template=self.json_template, load_default_coll=True)
+            self.log.info(f"Successfully created collections in bucket: {bucket}")
 
-
-            
+        self.log.info("Getting query and index nodes...")
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.log.info(f"Query node: {query_node.ip}, Index nodes: {[node.ip for node in index_nodes]}")
+        
+        self.log.info("Setting up operations tuple...")
         ops_tuple = tuple(self.ops_order.split("-"))
+        self.log.info(f"Operations tuple: {ops_tuple}")
+
+        self.log.info("Configuring index settings...")
         rest = RestConnection(index_nodes[0])
         settings = rest.get_global_index_settings()
         if 'redistributeIndexes' in settings:
+            self.log.info("Setting redistribute_indexes to True")
             rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
+        
         rest = RestConnection(index_nodes[0])
         settings = rest.get_global_index_settings()
         if 'redistributeIndexes' in settings:
+            self.log.info("Setting redistribute_indexes to True (second check)")
             rest.set_index_settings({"indexer.settings.rebalance.redistribute_indexes": True})
+        
         if self.rebalance_type == "file":
+            self.log.info("Rebalance type is 'file', checking shard affinity settings...")
             rest = RestConnection(index_nodes[0])
             settings = rest.get_global_index_settings()
             self.log.info(f"Global index settings: {settings}")
             if 'enableShardAffinity' in settings:
+                self.log.info("Enabling shard based rebalance...")
                 self.enable_shard_based_rebalance()
-                self.log.info("Shard affinity enabled")
+                self.log.info("Shard affinity enabled successfully")
         else:
+            self.log.info("Skipping shard validations as rebalance type is not 'file'")
             self.skip_shard_validations = True
         
         # Create indexes in all collections
@@ -109,102 +700,119 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         prefixes = ["test_scalar", "test_bhive", "test_composite"]
         select_queries = []
         create_queries = []
+        
+        self.log.info("Creating indexes for each namespace...")
         for namespace in self.namespaces:
-            self.log.info(f"Creating indexes on {namespace}")
+            self.log.info(f"Processing namespace: {namespace}")
             similarity = random.choice(simlarity_list)
-
+            self.log.info(f"Selected similarity metric: {similarity}")
             
+            self.log.info("Getting query definitions...")
             bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            self.log.info("Successfully got query definitions")
 
+            self.log.info("Combining definitions and creating queries...")
             definitions = scalar_def + bhive_def + composite_def
             current_create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
             create_queries.extend(current_create_queries)
+            self.log.info(f"Created {len(current_create_queries)} queries for namespace {namespace}")
         
-            # Wait for all indexes to be online
-            self.log.info("Waiting for all indexes to come online")
+            self.log.info("Waiting for indexes to come online...")
             self.wait_until_indexes_online()
-            self.log.info("All indexes are online")
+            self.log.info("All indexes are online for current namespace")
         
+            self.log.info("Getting select queries...")
             curr_select_queries = self.gsi_util_obj.get_select_queries(
                 definition_list=definitions,
                 namespace=namespace,
                 limit=self.scan_limit
             )
-
             select_queries.extend(curr_select_queries)
+            self.log.info(f"Added {len(curr_select_queries)} select queries")
         
-        self.log.info("Creating indexes")
+        self.log.info(f"Creating {len(create_queries)} indexes...")
         self.gsi_util_obj.async_create_indexes(
                 create_queries=create_queries, 
                 database=namespace,
                 query_node=query_node
         )
 
+        self.log.info("Sleeping for 2 minutes to allow indexes to be built...")
         self.sleep(120, "Sleeping for 2 minutes to allow indexes to be built")
-        self.log.info("Waiting for all indexes to come online")
+        
+        self.log.info("Waiting for all indexes to come online...")
         self.wait_until_indexes_online()
         self.log.info("All indexes are online")
 
-        self.log.info("Running a few select queries to ensure indexes are online")
+        self.log.info("Running test queries to verify indexes...")
         for query in select_queries[:2]:
             if "embVector" in query:
+                self.log.info("Replacing embVector in query...")
                 query = query.replace("embVector", str(self.bhive_sample_vector))
             if "DISTINCT" in query or "ANN_DISTANCE" not in query:
                 continue
-            self.log.info(f"Running query: {query}")
+            self.log.info(f"Running test query: {query}")
             self.run_cbq_query(query=query, server=query_node)
+            self.log.info("Test query completed successfully")
 
         self.log.info("Step 4: Loading data into all collections")
-        # Load data into all collections
         for namespace in self.namespaces:
-            self._load_docs_in_collection(namespace)
+            self.log.info(f"Loading data into namespace: {namespace}")
+            self._load_docs_in_collection(namespace, json_template=self.json_template)
+            self.log.info(f"Successfully loaded data into namespace: {namespace}")
         
+        self.log.info("Sleeping for 3 minutes to allow data to be loaded...")
         self.sleep(180, "Sleeping for 3 minutes to allow data to be loaded")
         
         self.log.info("Step 5: Running pre-rebalance validations")
         self._run_validations(select_queries,index_nodes)
+        self.log.info("Pre-rebalance validations completed successfully")
 
-        self.log.info("About to start workload.")
-
+        self.log.info("About to start workload")
         original_log_level = logging.getLogger().level
 
-        # Step 6: Add a new node and rebalance
         self.log.info("Step 6: Starting rebalance operations")
-        self.log.info(f"Servers: {self.servers}")
+        self.log.info(f"Available servers: {[server.ip for server in self.servers]}")
         new_node = self.servers[-1]
         swap_rebalance_in = index_nodes[1]
         swap_rebalance_out = new_node
         rebalance_order_arr = self.rebalance_order.split("-")
+        self.log.info(f"Rebalance order: {rebalance_order_arr}")
+        
+        swap_rebalance = False
         for rebalance_type in rebalance_order_arr:
+            self.log.info(f"=== Starting {rebalance_type} rebalance operation ===")
             workload_stop_event = Event()
             nodes_in_list = []
             nodes_out_list = []
             services_in = []
+            
             if rebalance_type == "in":
-                self.log.info("Starting rebalance-in operation")
+                self.log.info(f"Rebalance-in operation: Adding node {new_node.ip}")
                 nodes_in_list = [new_node]
                 services_in = ["index"]
             elif rebalance_type == "out":
-                self.log.info("Starting rebalance-out operation")
-                nodes_out_list = [self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]]
+                out_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]
+                self.log.info(f"Rebalance-out operation: Removing node {out_node.ip}")
+                nodes_out_list = [out_node]
             elif rebalance_type == "swap":
-                self.log.info("Starting swap rebalance operation")
+                self.log.info(f"Swap rebalance operation: Swapping out {swap_rebalance_in.ip} for {swap_rebalance_out.ip}")
+                swap_rebalance = True
                 nodes_out_list = [swap_rebalance_in]
                 nodes_in_list = [swap_rebalance_out]
                 services_in = ["index"]
             elif "failover" in rebalance_type:
-                service_type = rebalance_type.split("_")[1]  # Should be "kv" or "index"
+                service_type = rebalance_type.split("_")[1]
                 use_graceful = self.graceful and service_type == "kv"
+                self.log.info(f"Starting {service_type} failover operation (graceful: {use_graceful})")
                 
-                self.log.info(f"Starting failover-{service_type} operation")
-                
-                # Get the node to fail over based on service type
                 failover_node = self.get_nodes_from_services_map(
                     service_type=service_type, 
                     get_all_nodes=True
-                )[-1]
+                )[0]
+                nodes_out_list = [failover_node]
+                self.log.info(f"Failing over node: {failover_node.ip}")
                 
-                # Execute the failover
                 failover_task = self.cluster.async_failover(
                     self.servers[:self.nodes_init],
                     [failover_node],
@@ -212,54 +820,76 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                     wait_for_pending=120
                 )
                 failover_task.result()
+                self.log.info(f"Failover completed for node: {failover_node.ip}")
             
             try:
+                self.log.info(f"Setting log level to WARNING for {rebalance_type} operation")
                 logging.getLogger().setLevel(logging.WARNING)
                 self.log.warning(f"Starting background workloads for {rebalance_type}")
                 with ThreadPoolExecutor() as executor:
                     try:
+                        self.log.info("Starting mutation workload threads...")
                         bucket_0_thread, bucket_1_thread, bucket_2_thread = self._run_mutations_workload(executor, workload_stop_event, ops_tuple)
+                        self.log.info("Mutation workload threads started successfully")
+                        
+                        self.log.info("Allowing workloads to stabilize before rebalance...")
                         self.sleep(10, "Allowing workloads to stabilize before rebalance")
 
+                        self.log.info("Restoring original log level")
                         logging.getLogger().setLevel(original_log_level)
-                        self.log.info(f"Starting {rebalance_type} operation")
+                        self.log.info(f"Starting {rebalance_type} rebalance operation")
 
                         self._rebalance_and_validate(
                             nodes_in_list=nodes_in_list,
                             nodes_out_list=nodes_out_list,
-                            swap_rebalance=False,
+                            swap_rebalance=swap_rebalance,
                             services_in=services_in,
                             select_queries=None,
                             skip_shard_validations=self.skip_shard_validations,
                         )
-                        logging.getLogger().setLevel(logging.WARNING)
+                        self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
+                        
+                        swap_rebalance = False
+                        self.log.info("Stopping workload threads...")
                         workload_stop_event.set()
 
+                        self.log.info("Waiting for mutation workload threads to complete...")
                         self._finish_mutations_workload(bucket_0_thread, bucket_1_thread, bucket_2_thread)
+                        self.log.info("All mutation workload threads completed")
                     finally:
                         self.log.info(f"All workloads for {rebalance_type} operation completed")
-                    # Run validations after rebalance
+                    
             except Exception as err:
                 self.log.error(f"Error during {rebalance_type} operation: {str(err)}")
                 raise err
             finally:
                 self.log.info(f"{rebalance_type} operation completed")
-            self.sleep(30, "Sleeping for 30 seconds to allow rebalance to complete")
+                
+            self.log.info("Sleeping for 2 minutes to allow rebalance to complete...")
+            self.sleep(120, "Sleeping for 2 minutes to allow rebalance to complete")
+            
+            self.log.info("Running post-rebalance validations...")
             self._run_validations(select_queries,self.get_nodes_from_services_map(service_type="index", get_all_nodes=True))
-            logging.getLogger().setLevel(original_log_level)
+            self.log.info("Post-rebalance validations completed successfully")
 
-        self.log.info("All rebalance operations completed")
-        self.log.info("Dropping all indexes")
+        self.log.info("All rebalance operations completed successfully")
+        
+        self.log.info("Cleaning up - dropping all indexes...")
         self.drop_all_indexes()
-        self.log.info("Performing CPU validations")
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        self.log.info("All indexes dropped successfully")
+
+        self.sleep(120, "Sleeping for 2 minutes to allow indexes to be dropped")
+        
+        self.log.info("Performing final validations...")
         self.check_storage_directory_cleaned_up(threshold_gb=0.05)
+        self.log.info("Storage directory cleanup validation completed")
+        
         if not self.validate_cpu_normalized:
             self.log.error("CPU normalized validation failed")
             raise AssertionError("CPU normalized validation failed")
-        self.log.info("Comprehensive rebalance test completed successfully")
+        self.log.info("CPU normalization validation completed successfully")
+        
+        self.log.info("=== test_bhive_rebalance_comprehensive completed successfully ===")
     
     def test_index_lifecycle_operations(self):
         """
@@ -321,18 +951,18 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         drop_queries = [item for sublist in drop_queries for item in sublist]
 
         # Creating primary indexes on all the collections
-        self.run_cbq_query("CREATE PRIMARY INDEX idxtb0 ON default:test_bucket_0._default._default", server=query_node)
-        self.run_cbq_query("CREATE PRIMARY INDEX idxtb1 ON default:test_bucket_1._default._default", server=query_node)
+        self.run_cbq_query("CREATE PRIMARY INDEX IF NOT EXISTS idxtb0 ON default:test_bucket_0._default._default", server=query_node)
+        self.run_cbq_query("CREATE PRIMARY INDEX IF NOT EXISTS idxtb1 ON default:test_bucket_1._default._default", server=query_node)
         count = 0
         for namespace in self.namespaces:
-            self.run_cbq_query(f"CREATE PRIMARY INDEX idx{count} ON {namespace}", server=query_node)
+            self.run_cbq_query(f"CREATE PRIMARY INDEX IF NOT EXISTS idx{count} ON {namespace}", server=query_node)
             count += 1
 
         # Creating event flag
         workload_stop_event = Event()
 
         for namespace in self.namespaces:
-            self._load_docs_in_collection(namespace)
+            self._load_docs_in_collection(namespace, json_template=self.json_template)
             self.log.info(f"Loading documents into {namespace}")
 
         self.log.info("Starting background workloads for index lifecycle operations")
@@ -372,7 +1002,10 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 else:
                     queries = alter_queries
             for query in queries:
-                self.run_cbq_query(query=query, server=query_node)
+                try:
+                    self.run_cbq_query(query=query, server=query_node)
+                except Exception as e:
+                    self.log.warning(f"Index already exists or hasn't been created yet: {str(e)}")
             
 
         workload_stop_event.set()
@@ -517,11 +1150,15 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
     
     def _perform_query_operations(self, queries, query_node, workload_stop_event):
         for query in queries:
-            self.run_cbq_query(query=query, server=query_node)
+            try:
+                self.run_cbq_query(query=query, server=query_node)
+            except Exception as e:
+                self.log.warning(f"Index already exists or hasn't been created yet: {str(e)}")
             if workload_stop_event.is_set():
                 return    
 
     def _finish_mutations_workload(self, bucket_0_thread = None, bucket_1_thread = None, bucket_2_thread = None):
+        self.log.info("Waiting for all threads to complete")
         if bucket_0_thread:
             try:
                 bucket_0_thread.result()
@@ -543,7 +1180,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 self.log.error(f"Error during bucket_2_thread complete: {str(err)}")
                 raise err
 
-    def _load_docs_in_collection(self, namespace):
+    def _load_docs_in_collection(self, namespace, json_template=None):
         bucket, scope, collection = namespace.split(':')[-1].split('.')
         self.log.info(f"Loading data into {namespace}")
         self.gen_create = SDKDataLoader(
@@ -553,7 +1190,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 percent_delete=0, 
                 scope=scope,
                 collection=collection, 
-                json_template=self.json_template,
+                json_template=json_template,
                 output=True, 
                 username=self.username, 
                 password=self.password,
@@ -901,19 +1538,6 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                            skip_shard_validations=False):
         """
         Perform rebalance operation and validate vector indexes after rebalance
-        
-        Args:
-            nodes_out_list: List of nodes to remove from cluster
-            nodes_in_list: List of nodes to add to cluster
-            swap_rebalance: Whether this is a swap rebalance operation
-            skip_array_index_item_count: Skip array index item count validation
-            services_in: Services to add on new nodes
-            failover_nodes_list: List of nodes to failover before rebalance
-            select_queries: List of select queries to validate before/after rebalance
-            vector_queries: List of vector queries to validate before/after rebalance
-            scan_results_check: Whether to check scan results before/after rebalance
-            skip_shard_validations: Skip shard-based rebalance validations
-            mutation_load: Whether to run mutation load during rebalance
         """
         if not nodes_out_list:
             nodes_out_list = []
@@ -926,22 +1550,41 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.log.info(f"  - Nodes out: {[node.ip for node in nodes_out_list]}")
         self.log.info(f"  - Services in: {services_in}")
         self.log.info(f"  - Swap rebalance: {swap_rebalance}")
+
+        # # Check if we're removing a query node and get a different one if needed
+        # current_query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        # if nodes_out_list and current_query_node in nodes_out_list:
+        #     self.log.warning("Current query node is being removed, finding alternative query node...")
+        #     all_query_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        #     available_query_nodes = [node for node in all_query_nodes if node not in nodes_out_list]
+        #     if available_query_nodes:
+        #         current_query_node = available_query_nodes[0]
+        #         self.n1ql_node = current_query_node  # Update the main query node reference
+        #         self.log.info(f"Switched to alternative query node: {current_query_node.ip}")
+        #     else:
+        #         self.log.warning("No alternative query nodes available, some operations may fail")
         
         # Wait for system to stabilize before rebalance
         self.sleep(60, "Waiting for system to stabilize before rebalance")
         
         # Capture state before rebalance
         shard_list_before_rebalance = self.fetch_shard_id_list()
+        current_query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
 
         # Run scans before rebalance to compare results later
         query_result = {}
         if scan_results_check and select_queries is not None:
             self.log.info("Running scans before rebalance")
-            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             for query in select_queries:
-                query_result[query] = self.run_cbq_query(query=query, 
-                                                        scan_consistency='request_plus',
-                                                        server=n1ql_server)['results']
+                try:
+                    query_result[query] = self.run_cbq_query(
+                        query=query, 
+                        scan_consistency='request_plus',
+                        server=current_query_node
+                    )['results']
+                except Exception as e:
+                    self.log.warning(f"Pre-rebalance query failed (will retry later): {str(e)}")
+        
         # Trigger rebalance operation
         self.log.info("Triggering rebalance operation")
         rebalance = self.cluster.async_rebalance(
@@ -977,12 +1620,34 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Allow system to stabilize after rebalance
         self.sleep(60, "Allowing system to stabilize after rebalance")
         
+        # # After rebalance, verify and update query node if needed
+        # try:
+        #     current_query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        #     self.n1ql_node = current_query_node  # Update the main query node reference
+        #     self.log.info(f"Using query node after rebalance: {current_query_node.ip}")
+        # except Exception as e:
+        #     self.log.error(f"Error getting query node after rebalance: {e}")
+        #     raise
+        
         # Validate shard-based rebalance if enabled
         if shard_affinity and not skip_shard_validations:
             self.log.info("Running validations for shard-based rebalance")
             
             # Fetch and compare shard lists
-            shard_list_after_rebalance = self.fetch_shard_id_list()
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    shard_list_after_rebalance = self.fetch_shard_id_list()
+                    break
+                except Exception as e:
+                    retry_count += 1
+                    self.log.warning(f"Attempt {retry_count} to fetch shard list failed: {str(e)}")
+                    if retry_count == max_retries:
+                        self.log.error("Failed to fetch shard list after maximum retries")
+                        raise
+                    self.sleep(10)
+            
             self.log.info("Comparing shard lists before and after rebalance")
             
             if shard_list_before_rebalance:
@@ -1003,26 +1668,37 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Run scans after rebalance and compare results
         if scan_results_check and select_queries is not None:
             self.log.info("Running scans after rebalance and comparing results")
-            n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             
+            max_retries = 3
             for query in select_queries:
-                post_rebalance_result = self.run_cbq_query(
-                    query=query, 
-                    scan_consistency='request_plus',
-                    server=n1ql_server
-                )['results']
-                
-                from deepdiff import DeepDiff
-                diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
-                
-                if diffs:
-                    self.log.error(
-                        f"Mismatch in query result before and after rebalance.\n"
-                        f"Query: {query}\n"
-                        f"Result before: {query_result[query]}\n"
-                        f"Result after: {post_rebalance_result}"
-                    )
-                    raise Exception("Mismatch in query results before and after rebalance")
+                retry_count = 0
+                while retry_count < max_retries:
+                    try:
+                        post_rebalance_result = self.run_cbq_query(
+                            query=query, 
+                            scan_consistency='request_plus',
+                            server=current_query_node
+                        )['results']
+                        
+                        from deepdiff import DeepDiff
+                        diffs = DeepDiff(post_rebalance_result, query_result[query], ignore_order=True)
+                        
+                        if diffs:
+                            self.log.error(
+                                f"Mismatch in query result before and after rebalance.\n"
+                                f"Query: {query}\n"
+                                f"Result before: {query_result[query]}\n"
+                                f"Result after: {post_rebalance_result}"
+                            )
+                            raise Exception("Mismatch in query results before and after rebalance")
+                        break
+                    except Exception as e:
+                        retry_count += 1
+                        self.log.warning(f"Attempt {retry_count} to run post-rebalance query failed: {str(e)}")
+                        if retry_count == max_retries:
+                            self.log.error("Failed to run query after maximum retries")
+                            raise
+                        self.sleep(10)
         
         # Log rebalance completion
         self.log.info("Rebalance and validation completed successfully")

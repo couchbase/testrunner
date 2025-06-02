@@ -8,8 +8,13 @@ from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
 import traceback
 from deepdiff import DeepDiff
-from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+
+try:
+    from couchbase.cluster import Cluster
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    print("couchbasesdk not installed, skipping...")
+    pass
 
 from lib.Cb_constants.CBServer import CbServer
 

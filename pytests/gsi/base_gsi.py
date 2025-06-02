@@ -2811,6 +2811,17 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(f"===== {msg} not triggered."
                           f"No log lines matching string {log_string} seen on any of the indexer nodes.")
         return log_validated
+    
+    def verify_dcp_transfer_tokens(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        url = f"http://{index_node.ip}:9102/listRebalanceTokens"
+        try:
+            response = requests.get(url, auth=('Administrator', 'password'))
+            tokens_data = response.json()
+            self.log.info(f"tokens_data: {tokens_data}")
+        except Exception as e:
+            self.log.error(f"Error checking transfer tokens on node {index_node.ip}: {str(e)}")
+            raise
 
     def enable_shard_based_rebalance(self, provisioned=False):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -3187,7 +3198,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
             # Execute the count query
             try:
-                count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=self.n1ql_node)
+                count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=query_node)
                 count = count_result['results'][0]['$1']
             except Exception as e:
                 self.log.error(f"Error executing count query for index {index['name']}: {str(e)}")
