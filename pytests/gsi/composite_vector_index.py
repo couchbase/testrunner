@@ -1947,6 +1947,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_replica_repair(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         self.memory_fill = self.input.param("memory_fill", False)
+        if self.memory_fill:
+            self.install_tools()
         self.enable_shard_based_rebalance()
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
