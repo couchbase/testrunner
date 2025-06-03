@@ -2586,7 +2586,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
-        build_queries = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                     similarity=self.similarity, train_list=None,
@@ -2599,30 +2598,29 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                     defer_build=True, num_replica=1,
                                                                     bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
-            build_queries.extend(
-                self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace))
+            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        keyspace = self.namespaces[0].split(":")[-1]
-        bucket, scope, collection = keyspace.split(".")
-        build_index_tasks = []
-        for build_query in build_queries:
-            build_index_tasks.append(self.cluster.async_build_index(server=self.n1ql_node,
-                bucket=bucket, query=build_query))
-            self.run_cbq_query(query=build_query, server=self.n1ql_node)
 
-        for task in build_index_tasks:
-            task.result()
+        self.run_cbq_query(query=build_query, server=self.n1ql_node)
+
+        timeout = 0
+        while timeout < 360:
+            index_state = self.index_rest.get_indexer_metadata()['status'][2]['status']
+            if index_state == self.build_phase:
+                break
+            self.sleep(5)
+            timeout = timeout + 1
 
         if self.target_process == "memcached":
-            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote = RemoteMachineShellConnection(data_nodes[1])
             remote.kill_memcached()
         elif self.target_process == "projector":
-            remote = RemoteMachineShellConnection(self.data_nodes[1])
+            remote = RemoteMachineShellConnection(data_nodes[1])
             remote.terminate_process(process_name=self.targetProcess)
         elif self.target_process == "indexer":
-            remote = RemoteMachineShellConnection(self.index_nodes[0])
+            remote = RemoteMachineShellConnection(index_nodes[0])
             remote.terminate_process(process_name=self.targetProcess)
         else:
             for index_node in index_nodes:
