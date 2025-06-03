@@ -8624,3 +8624,20 @@ class QueriesIndexTests(QueryTests):
         AND NVL(t1.known_field2,0)
         '''
         self.run_cbq_query(query_context='default._default', query_params={'use_cbo': True})
+
+    def test_MB66955(self):
+        self.fail_if_no_buckets()
+        collection_name = "mb55955"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Create index
+        self.run_cbq_query(f"CREATE INDEX ix1 ON {collection_name}(type,c3)", query_context=query_context)
+        # Run explain query
+        explain_query = f'''
+        EXPLAIN SELECT * FROM {collection_name} 
+        WHERE type = "abc" AND IS_OBJECT(o1)
+        '''
+        # Just verify query does not fail
+        self.run_cbq_query(explain_query, query_context=query_context)
