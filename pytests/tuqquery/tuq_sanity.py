@@ -4665,3 +4665,27 @@ class QuerySanityTests(QueryTests):
             bindings = row['bindings']
             self.assertTrue('correlated' in str(bindings[0]['expr']),
                             f"Correlated marker missing in bindings for node {row['node']}: {bindings}")
+
+    # MB-66658
+    def test_prepare_force_no_name(self):
+        """
+        MB-66658: Ensure that PREPARE FORCE does not create a duplicate prepared entry when extra spaces are present.
+        Steps:
+        1. Clean system:prepareds
+        2. PREPARE select 1; (with one space)
+        3. PREPARE FORCE select 1; (with one space)
+        4. SELECT * FROM system:prepareds; should return only one entry per node for the statement
+        """
+        self.run_cbq_query('DELETE FROM system:prepareds')
+
+        # PREPARE and PREPARE FORCE both with one space
+        self.run_cbq_query('PREPARE select 1')
+        self.run_cbq_query('PREPARE FORCE select 1')
+        result = self.run_cbq_query('SELECT * FROM system:prepareds')
+        self.log.info(f"system:prepareds after one-space and force: {result['results']}")
+        # Check number of statements is same as number of nodes
+        self.assertEqual(len(result['results']), len(self.servers))
+        # Check each prepared statement entry
+        for prepared in result['results']:
+            statement = prepared['prepareds']['statement']
+            self.assertEqual('prepare select 1', statement.lower())
