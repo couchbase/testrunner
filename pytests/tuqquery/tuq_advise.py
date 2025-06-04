@@ -1,4 +1,3 @@
-
 from remote.remote_util import RemoteMachineShellConnection
 from .tuq import QueryTests
 import time
@@ -661,3 +660,43 @@ class QueryAdviseTests(QueryTests):
         self.assertEqual(result['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][1]['index_statement'],
                         "CREATE INDEX adv_c21_test_id_c22 ON `default`:`default`.`_default`.`mb66635`(`c21`,`c22`) WHERE `test_id` = 'advise'")
         
+    def test_advise_multiple_keyspaces(self):
+        """
+        MB-66570: Panic when performing ADVISE on query with multiple keyspaces in the FROM clause
+        Repro steps:
+        1. create collection c1;
+        2. create collection c2;
+        3. insert into c1 values ("doc1", {"a":1});
+        4. insert into c2 values ("doc1", {"a":1});
+        5. create index i_c1_1 on c1(a);
+        6. create index i_c2_1 on c2(a);
+        7. update statistics for c1 index all;
+        8. update statistics for c2 index all;
+        9. advise select * from c1 join c2 on c1.a = c2.a; (should not panic)
+        10. advise select * from c1 nest c2 on c1.a = c2.a; (should not panic)
+        """
+        # Create collections if not exist
+        self.run_cbq_query('CREATE COLLECTION default._default.c1 IF NOT EXISTS')
+        self.run_cbq_query('CREATE COLLECTION default._default.c2 IF NOT EXISTS')
+        self.sleep(2)
+        # Insert documents
+        self.run_cbq_query('UPSERT INTO c1 (KEY, VALUE) VALUES ("doc1", {"a":1})', query_context='default:default._default')
+        self.run_cbq_query('UPSERT INTO c2 (KEY, VALUE) VALUES ("doc1", {"a":1})', query_context='default:default._default')
+        # Create indexes
+        self.run_cbq_query('CREATE INDEX i_c1_1 IF NOT EXISTS ON c1(a)', query_context='default:default._default')
+        self.run_cbq_query('CREATE INDEX i_c2_1 IF NOT EXISTS ON c2(a)', query_context='default:default._default')
+        # Update statistics
+        self.run_cbq_query('UPDATE STATISTICS FOR c1 INDEX ALL', query_context='default:default._default')
+        self.run_cbq_query('UPDATE STATISTICS FOR c2 INDEX ALL', query_context='default:default._default')
+        # ADVISE with JOIN
+        try:
+            result_join = self.run_cbq_query('ADVISE SELECT * FROM c1 JOIN c2 ON c1.a = c2.a', query_context='default:default._default')
+            self.log.info(f"ADVISE JOIN result: {result_join['results']}")
+        except Exception as e:
+            self.fail(f"ADVISE JOIN panicked or failed: {e}")
+        # ADVISE with NEST
+        try:
+            result_nest = self.run_cbq_query('ADVISE SELECT * FROM c1 NEST c2 ON c1.a = c2.a', query_context='default:default._default')
+            self.log.info(f"ADVISE NEST result: {result_nest['results']}")
+        except Exception as e:
+            self.fail(f"ADVISE NEST panicked or failed: {e}")
