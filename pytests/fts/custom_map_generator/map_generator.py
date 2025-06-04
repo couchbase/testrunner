@@ -5,7 +5,7 @@ import copy
 from TestInput import TestInputSingleton
 
 EMP_FIELDS = {
-    'text': ["name", "dept", "languages_known", "email"],
+    'text': ["name", "dept", "languages_known", "email", "type"],
     'number': ["mutated", "salary"],
     'boolean': ["is_manager"],
     'datetime': ["join_date"],
@@ -97,7 +97,8 @@ CUSTOM_ANALYZER_TEMPLATE = {
             "filler": "",
             "max": 5,
             "min": 2,
-            "output_original": "false",
+            "output_original": True,
+            "output_unigrams": True,
             "separator": "",
             "type": "shingle"
         },
@@ -262,22 +263,10 @@ class CustomMapGenerator:
                                         "fields": [],
                                         "properties": {}
                                     }
-                self.es_map = {
-                        "dynamic": False,
-                        "properties": {}
-                    }
                 if collection_index:
                     self.build_custom_map("wiki", type_mapping)
                 else:
                     self.build_custom_map("wiki")
-            else:
-                if not TestInputSingleton.input.param("default_map", False):
-                    # if doc_maps=1 and default map is disabled, force single
-                    # map on ES by disabling wiki map
-                    self.es_map = {
-                            "dynamic": False,
-                            "properties": {}
-                        }
 
     def get_random_value(self, list):
         return list[random.randint(0, len(list)-1)]
@@ -302,8 +291,8 @@ class CustomMapGenerator:
             self.queryable_fields[field_type].append(field)
 
     def build_custom_map(self, dataset, collection_type=None):
-        for x in range(0, self.num_field_maps):
-            field, _type = self.get_random_field_name_and_type(self.fields)
+        field_map = self.field_map(self.fields)
+        for field, _type in field_map.items():
             type_val = collection_type + "." + dataset if collection_type else dataset
             if field not in iter(list(self.nested_fields.keys())):
                 fts_child, es_child = self.get_child_field(field, _type)
@@ -461,6 +450,13 @@ class CustomMapGenerator:
         type = self.get_random_value(list(fields.keys()))
         field = self.get_random_value(fields[type])
         return field, type
+    
+    def field_map(self, fields):
+        map = {}
+        for k,v in fields.items():
+            for j in v:
+                map[j] = k
+        return map
 
     def get_nested_child_field(self, nested_field):
         if nested_field in iter(list(self.nested_fields.keys())):

@@ -3022,7 +3022,7 @@ class RestConnection(object):
         else:
             protocol = self.fts_baseUrl.split('://')[0]
             port = self.fts_baseUrl.split(':')[2]
-            api = f"{protocol}://{node.ip}:{port}/api/nsstats"
+            api = f"{protocol}://{node.ip}:{port}api/nsstats"
 
         attempts = 0
         while attempts < 5:

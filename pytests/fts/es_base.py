@@ -6,6 +6,13 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 import time
 import ast
 
+def replace_analyzer(d):
+    for k, v in d.items():
+        if isinstance(v, dict):
+            replace_analyzer(v)
+        elif k == "analyzer" and v == "standard":
+            d[k] = "custom_standard_analyzer"
+
 class BLEVE:
     STOPWORDS = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
                  'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him',
@@ -33,19 +40,34 @@ class BLEVE:
                  'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own',
                  'same', 'so', 'than', 'too', 'very']
 
+    CUSTOM_STOP_FILTER = {"type": "stop",
+                        "stopwords": STOPWORDS}
+
     STD_ANALYZER = {
         "settings": {
             "analysis": {
                 "analyzer": {
-                    "default": {
-                        "type": "standard",
-                        "stopwords": STOPWORDS
+                    "custom_standard_analyzer": {
+                        "type": "custom",
+                        "tokenizer": "standard",
+                        "filter": ["lowercase", "custom_stop_filter"]
+                    }
+                },
+                "filter": {
+                    "custom_stop_filter": CUSTOM_STOP_FILTER
+                },
+                "tokenizer": {
+                    "standard": {
+                        "type": "standard"
                     }
                 }
-            }
+            },
+            "index": {
+                "max_ngram_diff": 2
+            },
+            "index.max_shingle_diff": 4
         }
     }
-
     
     CUSTOM_ANALYZER = {
         "settings": {
@@ -85,7 +107,7 @@ class BLEVE:
                     },
                     "stopwords": {
                         "type": "stop",
-                        "stopwords_path": "stopwords.txt"
+                        "stopwords": STOPWORDS
                     },
                     "length": {
                         "type": "length",
@@ -96,7 +118,7 @@ class BLEVE:
                         "type": "shingle",
                         "max_shingle_size": 5,
                         "min_shingle_size": 2,
-                        "output_unigrams": False,
+                        "output_unigrams": True,
                         "output_unigrams_if_no_shingles": False,
                         "token_separator": "",
                         "filler_token": ""
@@ -123,6 +145,9 @@ class BLEVE:
                     "stemmer_pt_light": {
                         "type": "stemmer",
                         "name": "light_portuguese"
+                    },
+                    "reverse": {
+                        "type": "reverse"
                     }
                 }
             }
@@ -314,6 +339,7 @@ class ElasticSearchBase(object):
         Creates a new default index, with the given mapping
         """
         self.delete_index(index_name)
+        es_settings = {}
 
         if not fts_mapping:
             map = {"mappings": es_mapping, "settings": BLEVE.STD_ANALYZER['settings']}
@@ -327,6 +353,8 @@ class ElasticSearchBase(object):
         
         if "geo" in es_mapping['properties']:
             map['mappings']['properties']['geo'] = {"type": "geo_point","ignore_malformed": False,"ignore_z_value": True}
+
+        replace_analyzer(es_mapping)
 
         # Create ES index
         try:
@@ -404,13 +432,18 @@ class ElasticSearchBase(object):
                 BLEVE.FTS_ES_ANALYZER_MAPPING['tokenizers'][fts_tokenizer]
 
             for fts_token_filter in fts_token_filters:
-                analyzer_map[customAnalyzerName]['filter'].append( \
-                    BLEVE.FTS_ES_ANALYZER_MAPPING['token_filters'][fts_token_filter])
+                if fts_token_filter == "back_edge_ngram":
+                    analyzer_map[customAnalyzerName]['filter'].extend(["reverse", "front_edge_ngram", "reverse"])
+                else:
+                    analyzer_map[customAnalyzerName]['filter'].append(BLEVE.FTS_ES_ANALYZER_MAPPING['token_filters'][fts_token_filter])
 
             n += 1
 
         analyzer = BLEVE.CUSTOM_ANALYZER
         analyzer['settings']['analysis']['analyzer'] = analyzer_map
+        analyzer['settings']['index'] = {}
+        analyzer['settings']['index']['max_ngram_diff'] = 2
+        analyzer['settings']['index']['max_shingle_diff'] = 4
         return analyzer
 
     def create_alias(self, name, indexes):
@@ -512,7 +545,7 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise e
 
-    def search(self, index_name, query, result_size=1000000,dataset=None): 
+    def search(self, index_name, query, result_size=1000000,dataset=None,ignore_wiki=False): 
     # the default limit without requiring the scroll API is 10000
         if dataset == "geojson":
             result_size=10000
@@ -534,8 +567,11 @@ class ElasticSearchBase(object):
             if status:
                 content = json.loads(content)
                 for doc in content['hits']['hits']:
+                    if ignore_wiki:
+                        if 'wiki' in doc['_id']:
+                            continue
                     doc_ids.append(doc['_id'])
-                return content['hits']['total'], doc_ids, content['took']
+                return len(doc_ids), doc_ids, content['took']
         except Exception as e:
             self.__log.error("Couldn't run query on ES: %s, reason : %s"
                              % (json.dumps(query), e))
