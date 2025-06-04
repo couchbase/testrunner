@@ -8753,3 +8753,41 @@ class QueriesIndexTests(QueryTests):
         '''
         # Just verify query does not fail
         self.run_cbq_query(explain_query, query_context=query_context)
+
+    def test_MB63163(self):
+        """
+        MB-63163: Sargable index not sarged for OUTER JOIN with array predicate in ON clause
+        This test creates a new collection in default._default, sets up the array index and data as in the JIRA,
+        and asserts that the queries with LEFT JOIN and ANY clause succeed with no plan error.
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb63163"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Create array index as in JIRA
+        self.run_cbq_query(f"CREATE INDEX ix20 ON {collection_name}(ALL a1) WHERE type = 'docs'", query_context=query_context)
+        # Insert documents
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('2345234', {{'type':'docs', 'test':1}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('d2id', {{'type':'docs', 'id':'d2id', 'c2':'val', 'a1':['2345234']}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('d2id2', {{'type':'docs', 'id':'d2id2', 'c2':'val2', 'a1':['notmatch']}})", query_context=query_context)
+        # Query 1: LEFT JOIN with ANY in ON clause
+        query1 = f"""
+        SELECT d1, d2.id, d2.c2
+        FROM {collection_name} AS d1 USE KEYS '2345234'
+        LEFT JOIN {collection_name} AS d2 ON d2.type = 'docs' AND ANY id IN d2.a1 SATISFIES id = META(d1).id END
+        """
+        result1 = self.run_cbq_query(query1, query_context=query_context)
+        self.assertIn('status', result1)
+        self.assertEqual(result1['status'], 'success', f"Query 1 failed: {result1}")
+        # Query 2: Same with WHERE d1.test = 1
+        query2 = f"""
+        SELECT d1, d2.id, d2.c2
+        FROM {collection_name} AS d1 USE KEYS '2345234'
+        LEFT JOIN {collection_name} AS d2 ON d2.type = 'docs' AND ANY id IN d2.a1 SATISFIES id = META(d1).id END
+        WHERE d1.test = 1
+        """
+        result2 = self.run_cbq_query(query2, query_context=query_context)
+        self.assertIn('status', result2)
+        self.assertEqual(result2['status'], 'success', f"Query 2 failed: {result2}")
