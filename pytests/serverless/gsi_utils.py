@@ -453,7 +453,7 @@ class GSIUtils(object):
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, persist_full_vector=False,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield},"
-                                                                              f" {scan_desc_vec_1}",
+                                                                              f" {scan_desc_vec_2}",
                                                                               scan_desc_vec_2)))
 
         # Single vector field + multiple scalar fields + partitioned on scalar field
