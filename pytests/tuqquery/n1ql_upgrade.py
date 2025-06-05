@@ -818,7 +818,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if int(self.initial_version[0]) < 7:
+                if int(self.initial_version[0]) < 7 or phase == "post-upgrade":
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
@@ -855,7 +855,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if int(self.initial_version[0]) < 7:
+                if int(self.initial_version[0]) < 7 or phase == "post-upgrade":
                     if scoping == "global_scoped":
                         self.run_cbq_query("DROP FUNCTION default:default._default.nested_funcgs")
                         self.run_cbq_query("DROP FUNCTION nested_funcgs2")
@@ -920,17 +920,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibrarygs")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegs3")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss")
-                    self.run_cbq_query("DROP FUNCTION default:default._default.nestedinliness3")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
-                self.log.info("Delete n1ql library")
-                self.delete_library("n1ql")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibrarygs")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegs3")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinliness3")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
+                    self.log.info("Delete n1ql library")
+                    self.delete_library("n1ql")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -967,15 +968,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegs2")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedinliness2")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegs2")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedinliness2")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
             except Exception as e:
                 self.log.error(str(e))
     
@@ -1012,15 +1014,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs2")
-                    self.run_cbq_query("DROP FUNCTION inlinegs")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness2")
-                    self.run_cbq_query("DROP FUNCTION default._default.inliness")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg2")
-                    self.run_cbq_query("DROP FUNCTION inlinegg")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs2")
+                        self.run_cbq_query("DROP FUNCTION inlinegs")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness2")
+                        self.run_cbq_query("DROP FUNCTION default._default.inliness")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg2")
+                        self.run_cbq_query("DROP FUNCTION inlinegg")
             except Exception as e:
                 self.log.error(str(e))
     
@@ -1057,15 +1060,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs3")
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegs")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness3")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg3")
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs3")
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegs")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness3")
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg3")
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
             except Exception as e:
                 self.log.error(str(e))
     
@@ -1129,17 +1133,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION nestedjslibrarygs2")
-                    self.run_cbq_query("DROP FUNCTION default:default._default.nestedinlinegslibrary")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss2")
-                    self.run_cbq_query("DROP FUNCTION default:default._default.nestedinlinesslibrary")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
-                self.log.info("Delete n1ql library")
-                self.delete_library("n1ql")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION nestedjslibrarygs2")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinlinegslibrary")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss2")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinlinesslibrary")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
+                    self.log.info("Delete n1ql library")
+                    self.delete_library("n1ql")
             except Exception as e:
                 self.log.error(str(e))
 
