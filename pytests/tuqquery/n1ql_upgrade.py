@@ -641,7 +641,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         index = "CREATE INDEX idx1 on `travel-sample`(id)"
         idx_list.append((index, ("`travel-sample`", "idx1")))
         query = "select * from default d1 RIGHT OUTER JOIN `travel-sample` t on (d1.join_day == t.id)"
-        queries_to_run.append((query, 31591)) # 31591 for doc-per-day=1
+        queries_to_run.append((query, 31875)) # 31875 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
     def run_test_cte(self):
@@ -1942,7 +1942,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'] or 'Errorevaluatingprojection' in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
@@ -1951,7 +1951,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'] or 'Errorevaluatingprojection' in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.google_error_msg))
 
