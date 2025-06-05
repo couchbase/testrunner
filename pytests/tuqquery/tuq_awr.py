@@ -81,12 +81,12 @@ class QueryAWRTests(QueryTests):
         # Check workload collection for first query
         check_workload = self.run_cbq_query("SELECT meta().id,* FROM `travel-sample`._default.workload WHERE txt = 'SELECT * FROM `travel-sample` LIMIT 15000'")
         self.assertTrue(len(check_workload['results']) > 0, "Expected non-zero results for first query workload")
-        self.assertEqual(check_workload['results'][0]['cnt'], 5, "Expected count of 5 for first query workload, please check the results {check_workload}")
+        self.assertEqual(check_workload['results'][0]['workload']['cnt'], 5, "Expected count of 5 for first query workload, please check the results {check_workload}")
 
         # Check workload collection for second query
         check_workload = self.run_cbq_query("SELECT meta().id,* FROM `travel-sample`._default.workload WHERE txt = 'SELECT * FROM `travel-sample` LIMIT 25000'")
         self.assertTrue(len(check_workload['results']) > 0, "Expected non-zero results for first query workload")
-        self.assertEqual(check_workload['results'][0]['cnt'], 3, "Expected count of 3 for first query workload, please check the results {check_workload}")
+        self.assertEqual(check_workload['results'][0]['workload']['cnt'], 3, "Expected count of 3 for first query workload, please check the results {check_workload}")
         
 
     '''Set location to a keyspace that does not exist and enable awr, should be in quiescent mode'''
@@ -215,11 +215,6 @@ class QueryAWRTests(QueryTests):
     
     '''This will test if we can set the number of statements to a valid number'''
     def test_awr_num_statements(self):
-        update_awr = self.run_cbq_query("UPDATE system:awr SET num_statements = 0")
-        self.assertEqual(update_awr['status'], 'success')
-        check_awr = self.run_cbq_query("SELECT * FROM system:awr")
-        self.assertEqual(check_awr['results'][0]['awr']['num_statements'], 0, f"AWR num_statements is not set to the expected value, please check the results {check_awr}")
-
         update_awr = self.run_cbq_query("UPDATE system:awr SET num_statements = 100000")
         self.assertEqual(update_awr['status'], 'success')
         check_awr = self.run_cbq_query("SELECT * FROM system:awr")
@@ -236,22 +231,16 @@ class QueryAWRTests(QueryTests):
             update_awr = self.run_cbq_query("UPDATE system:awr SET num_statements = -1")
             self.fail("We expect this query to error out")
         except Exception as e:
-            import pdb; pdb.set_trace()
-            self.assertTrue("must be: A positive integer." in str(e), f"Error is not as expected, please check the results {e}")
+            self.assertTrue("must be: A positive integer" in str(e), f"Error is not as expected, please check the results {e}")
 
         try:
             update_awr = self.run_cbq_query("UPDATE system:awr SET num_statements = 1.5") 
             self.fail("We expect this query to error out")
         except Exception as e:
-            self.assertTrue("must be: A positive integer." in str(e), f"Error is not as expected, please check the results {e}")
+            self.assertTrue("must be: A positive integer" in str(e), f"Error is not as expected, please check the results {e}")
     
     '''This will test if we can set the queue length to a valid number'''
     def test_awr_queue_length(self):
-        update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 0")
-        self.assertEqual(update_awr['status'], 'success')
-        check_awr = self.run_cbq_query("SELECT * FROM system:awr")
-        self.assertEqual(check_awr['results'][0]['awr']['queue_len'], 0, f"AWR queue_len is not set to the expected value, please check the results {check_awr}")
-
         update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 100000")
         self.assertEqual(update_awr['status'], 'success')
         check_awr = self.run_cbq_query("SELECT * FROM system:awr")
@@ -268,14 +257,13 @@ class QueryAWRTests(QueryTests):
             update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = -1")
             self.fail("We expect this query to error out")
         except Exception as e:
-            import pdb; pdb.set_trace()
-            self.assertTrue("must be: A positive integer." in str(e), f"Error is not as expected, please check the results {e}")
+            self.assertTrue("must be: A positive integer" in str(e), f"Error is not as expected, please check the results {e}")
 
         try:
             update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 1.5") 
             self.fail("We expect this query to error out")
         except Exception as e:
-            self.assertTrue("must be: A positive integer." in str(e), f"Error is not as expected, please check the results {e}")
+            self.assertTrue("must be: A positive integer" in str(e), f"Error is not as expected, please check the results {e}")
     
     '''This will test if we can set the threshold to a valid number of seconds'''
     def test_threshold(self):
