@@ -1068,6 +1068,9 @@ class JoinTests(QuerySanityTests):
             FROM ARRAY_RANGE(0, 512000) AS i'''
             self.run_cbq_query(insert_query, query_context='default._default')
 
+            # update statistics for c2 field since we need histogram for c2 field
+            self.run_cbq_query("UPDATE STATISTICS FOR mb65949(c2)", query_context='default._default')
+
             # create index on mb65949 collection
             self.run_cbq_query("CREATE INDEX ix1 ON mb65949 (c3, c4, c1, c5)", query_context='default._default')
 
