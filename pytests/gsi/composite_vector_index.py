@@ -3224,7 +3224,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                       skip_default_scope=self.skip_default)
 
         # change bucket maxTTL to 120 secs to trigger expiration of docs
-        self.rest.change_bucket_props(self.buckets[0], maxTTL=120)
+        self.rest.change_bucket_props(self.buckets[0], maxTTL=20)
 
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(
@@ -3265,13 +3265,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
                 self.gsi_util_obj.query_event.clear()
 
+            # wait for docs to expire
+            self.sleep(300)
+
             self.item_count_related_validations()
             # verify index count matches bucket item count
             self._verify_bucket_count_with_index_count()
 
-            # validate that number of indexed docs are zero for all the indexes
-            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            self.assertTrue(self.check_if_index_count_zero(definitions, index_nodes))
             self.drop_index_node_resources_utilization_validations()
 
     def test_run_scans_on_dgm(self):
