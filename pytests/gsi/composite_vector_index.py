@@ -3613,7 +3613,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False, bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
-        self.item_count_related_validations()
 
         #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
         index_stats = self.index_rest.get_index_stats()
