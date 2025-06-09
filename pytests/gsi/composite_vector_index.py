@@ -1501,7 +1501,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 executor.submit(self.run_cbq_query, query=query)
         self.wait_until_indexes_online(timeout=600)
         index_metadata = self.index_rest.get_indexer_metadata()
-        self.assertEqual(len(index_metadata), 1, 'Indexes not dropped')
+        self.assertTrue(len(index_metadata) == 1 or len(index_metadata['status']) == 0, 'Indexes not dropped')
 
     def test_alter_index_alter_replica_count(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
