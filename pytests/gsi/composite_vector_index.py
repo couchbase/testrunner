@@ -3594,15 +3594,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         modification_query = f"UPDATE {collection_namespace} SET descriptionVector = [100,100,100,1000,1000] WHERE META().id NOT IN (SELECT RAW META().id FROM {collection_namespace} AS inner_coll LIMIT {self.num_centroids});"
         self.run_cbq_query(query=modification_query)
 
+        if self.bhive_index:
+            index_fields = ['descriptionVector VECTOR']
+            include_fields = ['category']
+        else:
+            index_fields = ['descriptionVector VECTOR', 'category']
+            include_fields = None
+
         vector_index = QueryDefinition('oneScalarOneVectorLeading',
-                                       index_fields=['descriptionVector VECTOR', 'category'],
+                                       index_fields=index_fields,
                                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
                                        similarity=self.similarity, scan_nprobes=self.scan_nprobes,
                                        train_list=self.trainlist, limit=self.scan_limit, is_base64=self.base64,
                                        query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                            f"category, descriptionVector",
                                            'category in ["Sedan", "Luxury Car"] ',
-                                           scan_desc_vec_2), bhive_index=self.bhive_index)
+                                           scan_desc_vec_2), include_fields=include_fields, bhive_index=self.bhive_index)
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False, bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
