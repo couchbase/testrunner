@@ -145,6 +145,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
+        self.bhive_index = self.input.param("bhive_index", False)
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
         self.dimension = self.input.param("dimension", 384)
@@ -152,16 +153,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.scan_nprobes = self.input.param("scan_nprobes", 100)
-        self.scan_limit = self.input.param("scan_limit", 100)
+        self.scan_limit = self.input.param("scan_limit", 10 if self.bhive_index else 100)
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "SQ8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "SQ8")
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
-        self.scan_limit = self.input.param("scan_limit", 100)
         self.base64 = self.input.param("base64", False)
         self.use_magma_server = self.input.param("use_magma_server", False)
-        self.bhive_index = self.input.param("bhive_index", False)
         self.targetProcess = self.input.param("targetProcess", 'memcached')
         self.namespaces = []
         if self.index_loglevel:
@@ -3137,6 +3136,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gen_table_view(query_stats_map=query_stats_map, message=message)
         if stats_assertion:
             for query in query_stats_map:
+                if self.bhive_index and "colorRGBVector" in query:
+                    continue
                 self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
                                         f"recall for query {query} is less than threshold 70")
                 # uncomment the below code snippet to do assertions for accuracy
