@@ -2521,13 +2521,17 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.assertEqual(index['numReplica'], self.num_index_replica - 1, "No. of replicas are not matching")
 
 
+        self.update_master_node()
+        self.sleep(15)
         nodes_in_cluster = self.get_nodes_in_cluster_after_upgrade(master_node=self.master)
+        self.log.info(f"Nodes in cluster before rebalance ops post creating vector index {nodes_in_cluster}")
         rebalance_nodes = []
         for node in self.servers:
             if node not in nodes_in_cluster:
                 rebalance_nodes.append(node)
                 if len(rebalance_nodes) == 1:
                     break
+
         existing_indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         nodes_for_installation = []
 
@@ -2550,6 +2554,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         node_in = rebalance_nodes[0]
         node_out = existing_indexer_node
+        self.log.info(f"Node to be rebalanced in {node_in}")
+        self.log.info(f"Node to be rebalanced out {node_out}")
 
         # swap rebalance with dcp rebalance
         self.disable_shard_based_rebalance()
@@ -2571,7 +2577,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance.result()
 
         self.enable_shard_based_rebalance()
+        self.update_master_node()
         self.sleep(10)
+
 
 
         node_in, node_out = node_out, node_in
