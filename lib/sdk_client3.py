@@ -65,12 +65,12 @@ class SDKClient(object):
         conn_string = ConnectionString.parse(connection_string)
 
         if scheme == "couchbases":
-            conn_string.set_option('certpath', certpath)
+            # conn_string.set_option('certpath', certpath)
             if not certpath:
                 conn_string.set_option('ssl', 'no_verify')
 
-        if sasl_mech is not None:
-            conn_string.set_option('sasl_mech_force',sasl_mech)
+        # if sasl_mech is not None:
+        #     conn_string.set_option('sasl_mech_force',sasl_mech)
 
         if ipv6 == True:
             conn_string.set_option('ipv6',"allow")
@@ -78,7 +78,7 @@ class SDKClient(object):
         if compression == True:
             conn_string.set_option('compression',"on")
         else:
-            conn_string.set_option('compression', "off")
+            conn_string.set_option('compression',"off")
 
         return conn_string
 

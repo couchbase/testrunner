@@ -889,15 +889,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         if not scan_consistency:
             scan_consistency = self.scan_consistency
         self.gen_results.query = query_definition.generate_query(bucket=bucket)
-        if expected_result == None:
-            expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
+        if not expected_result:
+            expected_result = self.gen_results.generate_expected_result(print_expected_result=True)
         self.query = self.gen_results.query
-        log.info("Query : {0}".format(self.query))
+        self.log.info("Query : {0}".format(self.query))
         msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=500,
                                                                   expected_result=expected_result,
                                                                   scan_consistency=scan_consistency,
                                                                   scan_vector=scan_vector,
                                                                   verify_results=verify_results)
+        self.log.info(f"Message is {msg}. Check is {check}")
         self.assertTrue(check, msg)
 
     def async_query_using_index(self, bucket, query_definition, expected_result=None, scan_consistency=None,
@@ -912,7 +913,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             query=self.query, n1ql_helper=self.n1ql_helper,
             expected_result=expected_result, index_name=query_definition.index_name,
             scan_consistency=scan_consistency, scan_vector=scan_vector,
-            verify_results=self.verify_query_result)
+            verify_results=True)
         return query_with_index_task
 
     def query_using_index_with_emptyset(self, bucket, query_definition):
@@ -945,6 +946,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 if expected_results:
                     expected_result = expected_results[query_definition.index_name]
+                    expected_result = [list(values.values())[0] for values in expected_result]
+                    expected_result = sorted(expected_result)
+                    # self.log.info(f"expected multi_query_using_index being parsed {expected_result}")
                 else:
                     expected_result = None
                 self.query_using_index(bucket=bucket.name, query_definition=query_definition,
@@ -3224,6 +3228,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             where_clause = ""
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
+            elif index.get('index_key') and not index.get('condition'):
+                where_clause = f" WHERE {'and '.join(list(index.get('index_key')))} is not null"
 
             if ("`colorRGBVector` VECTOR" in index['index_key'] and "similarity" in index['with']
                 and index['with']['similarity'] == "cosine"):
@@ -3309,6 +3315,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                 error['error'] = f"Counts for index {index_name_in_kv_dict} don't match. index map count {index_count_in_index_dict} kv map count {index_count_in_kv_dict}"
                 error_obj.append(error)
         if error_obj:
+            self.log.info(f"{error_obj}")
+            self.sleep(36000)
             raise Exception(f"Counts don't match for the following indexes: {error_obj}")
 
     def get_all_array_index_names(self):

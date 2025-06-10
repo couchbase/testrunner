@@ -854,7 +854,7 @@ class Cluster(object):
                                       is_explain_query=False,
                                       index_name=None,
                                       verify_results=True,
-                                      retry_time=2,
+                                      retry_time=5,
                                       scan_consistency=None,
                                       scan_vector=None):
         """Asynchronously runs n1ql querya and verifies result if required

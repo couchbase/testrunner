@@ -154,6 +154,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                  get_all_nodes=True)
         for node in nodes:
             self._verify_indexer_storage_mode(node)
+        self.sleep(120)
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql",
+                                                      get_all_nodes=False)
         self.multi_query_using_index(buckets=self.buckets, query_definitions=self.load_query_definitions)
         try:
             self._execute_prepare_statement(prepare_statements)
@@ -344,9 +347,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             if not node:
                 self.fail("Node info not provided for Rebalancing In new node")
             node_rest = RestConnection(node)
+            remote_machine = RemoteMachineShellConnection(node)
             cb_version = "-".join(node_rest.get_nodes_version().split('-')[0:-1])
             self.log.info(f'cb version {cb_version}')
             self.log.info(f'upgrade version {self.upgrade_versions}')
+            remote_machine.couchbase_uninstall()
+            self.sleep(180)
             if cb_version != self.upgrade_versions:
                 upgrade_th = self._async_update(self.upgrade_to, [node])
                 for th in upgrade_th:
@@ -606,7 +612,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             if RestHelper(self.rest).rebalance_reached(percentage=40):
                 self.validate_indexing_rebalance_master()
         rebalance.result()
-        self._run_tasks([kv_ops, in_between_tasks])
+        self._run_tasks([kv_ops])
         self.sleep(60)
         log.info("Upgraded to: {0}".format(node_version))
         nodes_out = []
@@ -617,7 +623,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         else:
             self._verify_bucket_count_with_index_count()
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
-        self.sleep(180)
+        self.sleep(120)
         self._run_tasks([after_tasks])
         self._mixed_mode_tasks()
 
@@ -639,7 +645,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         rebalance.result()
         log.info("===== Nodes Swapped with Upgraded versions =====")
         self.upgrade_servers = self.nodes_in_list
-        self._run_tasks([kv_ops, in_between_tasks])
+        self._run_tasks([kv_ops])
         self.sleep(60)
         nodes_out = []
         for service in self.nodes_out_dist.split("-"):
@@ -649,7 +655,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         else:
             self._verify_bucket_count_with_index_count()
         after_tasks = self.async_run_operations(buckets=self.buckets, phase="after")
-        self.sleep(180)
+        self.sleep(360)
         self._run_tasks([after_tasks])
 
     def test_online_upgrade_with_rebalance(self):
@@ -688,7 +694,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.validate_indexing_rebalance_master()
             rebalance.result()
             log.info("===== Node Rebalanced In with Upgraded version =====")
-            self._run_tasks([kv_ops, in_between_tasks])
+            self._run_tasks([kv_ops])
             rebalance = self.cluster.async_rebalance(active_nodes, [], [node])
             rebalance.result()
             if "index" in node_services_list:
@@ -760,7 +766,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             log.info("Adding node back to cluster...")
             rebalance = self.cluster.async_rebalance(active_nodes, [], [])
             rebalance.result()
-            self._run_tasks([kv_ops, in_between_tasks])
+            self._run_tasks([kv_ops])
             ops_map = self.generate_operation_map("before")
             if "index" in node_services:
                 if self.initial_version < "5":

@@ -29,7 +29,6 @@ from couchbase_helper.document import DesignDocument
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 from deepdiff import DeepDiff
-from mc_bin_client import MemcachedError
 from membase.api.exception import BucketCreationException
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, \
     DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
@@ -41,6 +40,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcacheConstants import ERR_NOT_FOUND, NotFoundError
 from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.kvstore import KVStore
+from mc_bin_client import MemcachedError
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from tasks.future import Future
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
@@ -48,6 +48,7 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
 
 from TestInput import TestInputServer, TestInputSingleton
 from lib.Cb_constants.CBServer import CbServer
+import logging
 
 try:
     CHECK_FLAG = False
@@ -3378,7 +3379,7 @@ class N1QLQueryTask(Task):
         self.verify_results = verify_results
         self.is_explain_query = is_explain_query
         self.index_name = index_name
-        self.retry_time = 2
+        self.retry_time = 5
         self.scan_consistency = scan_consistency
         self.scan_vector = scan_vector
 

@@ -402,10 +402,9 @@ class N1QLHelper():
 
 
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
-        self.log.info(" Analyzing Actual Result")
         actual_result = self._gen_dict(actual_result)
-        self.log.info(" Analyzing Expected Result")
         expected_result = self._gen_dict(expected_result)
+        self.log.info(f"equality of len is {len(actual_result) == len(expected_result)}")
         if len(actual_result) != len(expected_result):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
         msg = "The number of rows match but the results mismatch, please check"
@@ -822,9 +821,9 @@ class N1QLHelper():
             try:
                 actual_result = self.run_cbq_query(query=query, server=server, scan_consistency=scan_consistency,
                                                    scan_vector=scan_vector)
-                #self.log.info("-->actual_result={}".format(actual_result))
+
+                # self.log.info("-->actual_results as seen in run_query_and_verify_result={}".format(actual_result))
                 if verify_results:
-                    #self._verify_results(sorted(actual_result['results']), sorted(expected_result))
                     self._verify_results(actual_result['results'], expected_result)
                 else:
                     return "ran query with success and validated results", True
@@ -981,6 +980,7 @@ class N1QLHelper():
         return int(res['results'][0]['$1'])
 
     def _gen_dict(self, result):
+        self.log.info("In _gen_dict method")
         result_set = []
         if result is not None and len(result) > 0:
             for val in result:
