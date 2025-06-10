@@ -2014,6 +2014,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_vector_indexes_after_bucket_flush(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
+        self.rest.change_bucket_props(self.buckets[0], flushEnabled=1)
 
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         select_queries = []
@@ -2135,8 +2136,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             doc_count[namespace] = result
-        # changing the interval to 10 mins
-        setting = {"indexer.settings.persisted_snapshot.moi.interval": 1000000}
+        # changing the interval to 20 mins
+        setting = {"indexer.settings.persisted_snapshot.moi.interval": 1200000}
         self.index_rest.set_index_settings(setting)
         disk_snapshots = MultilevelDict()
         for bucket, indexes in index_stats.items():
@@ -2152,8 +2153,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
-                                            create_end=(self.num_of_docs_per_collection +
-                                                        self.num_of_docs_per_collection // 2))
+                                            create_end=self.num_of_docs_per_collection * 2)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
         remote_client = RemoteMachineShellConnection(index_node)
