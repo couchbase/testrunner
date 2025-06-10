@@ -1656,7 +1656,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             time.sleep(20)
         self.sleep(10)
         if not self.capella_run:
-            reached = RestHelper(self.rest).rebalance_reached()
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=100)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             shard_affinity = self.is_shard_based_rebalance_enabled()
