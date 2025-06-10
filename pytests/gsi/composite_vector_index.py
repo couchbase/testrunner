@@ -894,7 +894,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
                             select_queries=select_queries, query_node=query_node)
-            add_nodes = [self.servers[3]]
+            add_nodes = [self.servers[4]]
             try:
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[data_nodes[0]], services=['kv'])
