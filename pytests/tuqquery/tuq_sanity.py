@@ -4935,3 +4935,103 @@ class QuerySanityTests(QueryTests):
         for prepared in result['results']:
             statement = prepared['prepareds']['statement']
             self.assertEqual('prepare select 1', statement.lower())
+
+    def test_MB66699(self):
+        """
+        Test case for MB-66699: Remote execution of prepared statement not covered when WITH alias referenced
+        
+        This test verifies that prepared statements with WITH clauses use covering index scans
+        when executed on different nodes in a cluster.
+        
+        Steps:
+        1. Create a separate collection for this test
+        2. Insert test data using query_context
+        3. Create a covering index
+        4. Prepare a statement with WITH clause that references an alias
+        5. Execute the prepared statement with profiling and verify it uses covering index scan
+        6. Clean up the test collection
+        """
+        # Create separate collection for this test
+        collection_name = "mb66699_test"
+        scope_name = "_default"
+        self.run_cbq_query(f'CREATE COLLECTION default.{scope_name}.{collection_name}')
+        
+        try:
+            bucket_name = self.bucket_name
+            query_context = f"`{bucket_name}`.`{scope_name}`"
+            
+            # Insert test data using query_context
+            upsert_query = f"""UPSERT INTO `{collection_name}` (KEY,VALUE) VALUES
+                ("test11_withs", {{"c11": 1, "c12": 10, "a11": [1, 2, 3, 4], "type": "left", "test_id": "withs"}}),
+                ("test12_withs", {{"c11": 2, "c12": 20, "a11": [3, 3, 5, 10], "type": "left", "test_id": "withs"}}),
+                ("test13_withs", {{"c11": 3, "c12": 30, "a11": [3, 4, 20, 40], "type": "left", "test_id": "withs"}}),
+                ("test14_withs", {{"c11": 4, "c12": 40, "a11": [30, 30, 30], "type": "left", "test_id": "withs"}})"""
+            
+            self.run_cbq_query(upsert_query, query_context=query_context)
+            
+            # Create covering index using query_context
+            index_name = f"idx_mb66699_{collection_name}"
+            create_index_query = f"CREATE INDEX `{index_name}` ON `{collection_name}`(c11, c12) WHERE type = 'left'"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.sleep(10)
+
+            # Prepare statement with WITH clause using query_context
+            prepare_query = f"""PREPARE p_mb66699 FROM
+                WITH w1 AS ([10, 20]),
+                     w2 AS (SELECT c11, c12 FROM `{collection_name}` d WHERE c11 IS NOT MISSING AND c12 IN w1 AND type = "left")
+                SELECT w2"""
+            
+            self.run_cbq_query(prepare_query, query_context=query_context)
+
+            # Execute prepared statement on different query nodes with profiling enabled
+            execute_query = f"EXECUTE p_mb66699"
+            
+            # Get available query nodes
+            query_nodes = []
+            if hasattr(self, 'n1ql_nodes') and self.n1ql_nodes:
+                query_nodes = self.n1ql_nodes
+            elif hasattr(self, 'servers') and len(self.servers) > 1:
+                query_nodes = self.servers[:2]  # Use first two servers as query nodes
+            else:
+                # Fallback to single node execution
+                query_nodes = [self.master]
+                        
+            # Execute on each available query node
+            for i, node in enumerate(query_nodes[:2]):  # Limit to 2 nodes max
+                node_name = f"node_{i+1}"
+                self.log.info(f"Executing prepared statement on {node_name} ({node.ip}:{node.port})")
+                
+                result = self.run_cbq_query(execute_query, server=node, query_context=query_context, 
+                                          query_params={'profile': 'timings'})
+                
+                # Verify correct results are returned
+                self.assertTrue('results' in result, f"Query should return results on {node_name}")
+                self.assertEqual(len(result['results']), 1, f"Should return one result on {node_name}")
+                
+                w2_result = result['results'][0]['w2']
+                self.assertEqual(len(w2_result), 2, f"Should return 2 matching documents on {node_name}")
+                
+                # Verify the returned data
+                expected_results = [
+                    {"c11": 1, "c12": 10},
+                    {"c11": 2, "c12": 20}
+                ]
+                
+                self.assertEqual(w2_result, expected_results, f"Results do not match expected on {node_name}")
+                
+                # Analyze profiling information
+                if 'profile' in result:
+                    profile = result['profile']
+                    self.assertTrue('phaseOperators' in profile,
+                                  f"Profile should contain phase operators information on {node_name}")
+                    
+                    # Check that there is no fetch operation in phaseOperators
+                    self.assertNotIn('fetch', profile['phaseOperators'],
+                                  f"Query should not use fetch operation on {node_name}")
+                    
+                    self.log.info(f"MB-66699: No fetch operation detected on {node_name} - using covering index")
+                    self.log.debug(f"MB-66699 Full profile on {node_name}: {profile}")            
+        finally:
+            # Clean up
+            self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
+            self.run_cbq_query("DELETE FROM system:prepareds WHERE name = 'p_mb66699'", query_context=query_context)
