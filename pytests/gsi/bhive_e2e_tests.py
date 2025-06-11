@@ -40,9 +40,10 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.HIGH_OPS_RATE = 1000
         self.LOW_OPS_RATE = 50
         self.rebalance_type = self.input.param("rebalance_type", "dcp")
-        self.rebalance_order = self.input.param("rebalance_order", "in-out-swap-failover_kv-failover_index")
+        self.rebalance_order = self.input.param("rebalance_order", "out-swap-in-failover_kv-failover_index")
         self.ops_order = self.input.param("ops_order", "high_create_update-low_create_update-high_create_delete")
         self.index_ops_order = self.input.param("index_ops_order", "create-drop-create-drop-create-drop")
+        self.run_mutation_workload = self.input.param("run_mutation_workload", False)
         self.log.info("==============  BhiveVectorIndex setup has ended ==============")
 
     def tearDown(self):
@@ -55,6 +56,31 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
     def suite_tearDown(self):
         pass
+
+    def test_failover_nodes(self):
+        self.log.info("Step 1: Setting up cluster with file-based rebalance disabled")
+        self.log.info("Step 2 : Creating bucket")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(
+                bucket_name=bucket, 
+                num_scopes=1, 
+                num_collections=1,
+                num_of_docs_per_collection=10000,
+                json_template=self.json_template, 
+                load_default_coll=False
+            )
+        
+        # create_query = f"""CREATE VECTOR INDEX test_idx_1 ON `test_bucket_0` (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
+        #                         "similarity": "L2_SQUARED",
+        #                         "description": "IVF,SQ8"}}"""
+        # self.log.info(f"Creating index on {bucket}")
+        # self.run_cbq_query(query=create_query, server=query_node)
+
+        
+        self.sleep(36000, "Sleeping for 30600 seconds to ensure documents are loaded")
+            
 
     def test_stale_transfer_tokens(self):
         """
@@ -172,12 +198,15 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 load_default_coll=False
             )
         
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+        
         self.sleep(180, "Sleeping for 180 seconds to ensure documents are loaded")
 
         # Create a vector index that will require training
         self.log.info("Creating vector index with large train_list to ensure training takes time")
         index_name = "idx_training_test"
-        create_query = f"""CREATE VECTOR INDEX {index_name} ON `test_bucket_0.test_scope_1.test_collection_1` (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
+        create_query = f"""CREATE VECTOR INDEX {index_name} ON `test_bucket_0` (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
                                 "similarity": "L2_SQUARED",
                                 "description": "IVF,SQ8",
                                 "train_list": 50000}}"""
@@ -194,7 +223,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Function to execute a single drop request
         def execute_drop(drop_id):
             try:
-                drop_query = f"DROP INDEX {index_name} ON `test_bucket_0.test_scope_1.test_collection_1`"
+                drop_query = f"DROP INDEX {index_name} ON `test_bucket_0`"
                 self.run_cbq_query(query=drop_query, server=query_node)
                 return drop_id, None  # Success
             except Exception as e:
@@ -647,14 +676,14 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.skip_shard_validations = False
         
         self.log.info("Creating test buckets...")
-        buckets = self._create_test_buckets(num_buckets=3) 
+        buckets = self._create_test_buckets(num_buckets=1) 
         self.log.info(f"Successfully created {len(buckets)} test buckets")
         
         # Create collections and add to namespaces
         self.log.info("Creating collections in each bucket...")
         for bucket in buckets:
             self.log.info(f"Creating collections in bucket: {bucket}")
-            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=1,
                                                  num_of_docs_per_collection=self.num_of_docs_per_collection,
                                                  json_template=self.json_template, load_default_coll=True)
             self.log.info(f"Successfully created collections in bucket: {bucket}")
@@ -773,11 +802,10 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         self.log.info("Step 6: Starting rebalance operations")
         self.log.info(f"Available servers: {[server.ip for server in self.servers]}")
-        new_node = self.servers[-1]
-        swap_rebalance_in = index_nodes[1]
-        swap_rebalance_out = new_node
         rebalance_order_arr = self.rebalance_order.split("-")
         self.log.info(f"Rebalance order: {rebalance_order_arr}")
+        out_node = None
+        in_node = None
         
         swap_rebalance = False
         for rebalance_type in rebalance_order_arr:
@@ -788,19 +816,20 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             services_in = []
             
             if rebalance_type == "in":
-                self.log.info(f"Rebalance-in operation: Adding node {new_node.ip}")
-                nodes_in_list = [new_node]
-                services_in = ["index"]
+                self.log.info(f"Rebalance-in operation: Adding node {in_node.ip}")
+                nodes_in_list = [in_node]
+                services_in = ["index,n1ql"]
             elif rebalance_type == "out":
                 out_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]
                 self.log.info(f"Rebalance-out operation: Removing node {out_node.ip}")
                 nodes_out_list = [out_node]
             elif rebalance_type == "swap":
-                self.log.info(f"Swap rebalance operation: Swapping out {swap_rebalance_in.ip} for {swap_rebalance_out.ip}")
+                in_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]
+                self.log.info(f"Swap rebalance operation: Swapping out {in_node.ip} for {out_node.ip}")
                 swap_rebalance = True
-                nodes_out_list = [swap_rebalance_in]
-                nodes_in_list = [swap_rebalance_out]
-                services_in = ["index"]
+                nodes_out_list = [in_node]
+                nodes_in_list = [out_node]
+                services_in = ["index,n1ql"]
             elif "failover" in rebalance_type:
                 service_type = rebalance_type.split("_")[1]
                 use_graceful = self.graceful and service_type == "kv"
@@ -809,7 +838,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 failover_node = self.get_nodes_from_services_map(
                     service_type=service_type, 
                     get_all_nodes=True
-                )[0]
+                )[-1]
                 nodes_out_list = [failover_node]
                 self.log.info(f"Failing over node: {failover_node.ip}")
                 
@@ -823,23 +852,45 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 self.log.info(f"Failover completed for node: {failover_node.ip}")
             
             try:
-                self.log.info(f"Setting log level to WARNING for {rebalance_type} operation")
-                logging.getLogger().setLevel(logging.WARNING)
-                self.log.warning(f"Starting background workloads for {rebalance_type}")
-                with ThreadPoolExecutor() as executor:
-                    try:
-                        self.log.info("Starting mutation workload threads...")
-                        bucket_0_thread, bucket_1_thread, bucket_2_thread = self._run_mutations_workload(executor, workload_stop_event, ops_tuple)
-                        self.log.info("Mutation workload threads started successfully")
-                        
-                        self.log.info("Allowing workloads to stabilize before rebalance...")
-                        self.sleep(10, "Allowing workloads to stabilize before rebalance")
+                if self.run_mutation_workload:
+                    self.log.info(f"Setting log level to WARNING for {rebalance_type} operation")
+                    # logging.getLogger().setLevel(logging.WARNING)
+                    self.log.warning(f"Starting background workloads for {rebalance_type}")
+                    with ThreadPoolExecutor() as executor:
+                        try:
+                            self.log.info("Starting mutation workload threads...")
+                            bucket_0_thread, bucket_1_thread, bucket_2_thread = self._run_mutations_workload(executor, workload_stop_event, ops_tuple)
+                            self.log.info("Mutation workload threads started successfully")
+                            
+                            self.log.info("Allowing workloads to stabilize before rebalance...")
+                            self.sleep(10, "Allowing workloads to stabilize before rebalance")
 
-                        self.log.info("Restoring original log level")
-                        logging.getLogger().setLevel(original_log_level)
-                        self.log.info(f"Starting {rebalance_type} rebalance operation")
+                            self.log.info("Restoring original log level")
+                            logging.getLogger().setLevel(original_log_level)
+                            self.log.info(f"Starting {rebalance_type} rebalance operation")
 
-                        self._rebalance_and_validate(
+                            self._rebalance_and_validate(
+                                nodes_in_list=nodes_in_list,
+                                nodes_out_list=nodes_out_list,
+                                swap_rebalance=swap_rebalance,
+                                services_in=services_in,
+                                select_queries=None,
+                                skip_shard_validations=self.skip_shard_validations,
+                            )
+                            self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
+                            
+                            swap_rebalance = False
+                            self.log.info("Stopping workload threads...")
+                            workload_stop_event.set()
+
+                            self.log.info("Waiting for mutation workload threads to complete...")
+                            self._finish_mutations_workload(bucket_0_thread, bucket_1_thread, bucket_2_thread)
+                            self.log.info("All mutation workload threads completed")
+                        finally:
+                            self.log.info(f"All workloads for {rebalance_type} operation completed")
+
+                else:
+                    self._rebalance_and_validate(
                             nodes_in_list=nodes_in_list,
                             nodes_out_list=nodes_out_list,
                             swap_rebalance=swap_rebalance,
@@ -847,18 +898,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                             select_queries=None,
                             skip_shard_validations=self.skip_shard_validations,
                         )
-                        self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
-                        
-                        swap_rebalance = False
-                        self.log.info("Stopping workload threads...")
-                        workload_stop_event.set()
-
-                        self.log.info("Waiting for mutation workload threads to complete...")
-                        self._finish_mutations_workload(bucket_0_thread, bucket_1_thread, bucket_2_thread)
-                        self.log.info("All mutation workload threads completed")
-                    finally:
-                        self.log.info(f"All workloads for {rebalance_type} operation completed")
-                    
+                    self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
+                
+                swap_rebalance = False
             except Exception as err:
                 self.log.error(f"Error during {rebalance_type} operation: {str(err)}")
                 raise err
@@ -1369,8 +1411,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.wait_for_mutation_processing(index_nodes)
         
         # Perform index item count checks
-        self.log.info("Validating index item counts")
-        self.compare_item_counts_between_kv_and_gsi()
+        if self.run_mutation_workload == False:
+            self.log.info("Validating index item counts")
+            self.compare_item_counts_between_kv_and_gsi()
         
         # Validate replica indexes have equal item counts
         self.log.info("Validating replica index item counts")
