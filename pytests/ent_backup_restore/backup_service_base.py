@@ -187,7 +187,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.active_repository_api = ActiveRepositoryApi(self.api_client)
 
         # Backup Service Constants
-        self.default_plans = ["_hourly_backups", "_daily_backups"]
+        self.default_plans = ["_hourly_backups", "_daily_backups", "_daily_full_backups_with_incrementals", "_weekly_full_backups_with_incrementals"]
         self.periods = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
 
         # A connection to every single machine in the cluster

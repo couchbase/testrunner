@@ -25,7 +25,7 @@ from couchbase_helper.stats_tools import StatsCommon
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
                           ENT_BKRS, ENT_BKRS_FTS
 from datetime import datetime, timedelta, timezone
-from sdk_client3 import SDKClient
+# from sdk_client3 import SDKClient
 import requests
 from requests.auth import HTTPBasicAuth
 from collection.collections_cli_client import CollectionsCLI
@@ -6167,233 +6167,233 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if expected_output not in output[0]:
             self.fail("The backup didn't delete successfully. The output is - {}".format(output))
 
-    def get_timestamp(self, server):
-        remote_client = RemoteMachineShellConnection(server)
-        cmd = "date --iso-8601=seconds"
-        output, error = remote_client.execute_command(cmd)
-        return output
-
-    def test_continuous_backup_basic_test(self):
-        '''
-            1. Create a magma bucket with continuous backup enabled and period to 2 mins
-            2. Load data into the bucket
-            3. Take a traditional backup
-            4. Upsert the documents
-            5. Wait for 120 seconds and record the timestamp
-            6. Upsert the documents and record the timestamp again
-            7. Wait for 120 seconds
-            8. Restore to the continuous backup with timestamp recorded in step 5
-            9. Validate the bucket params with sequence number, number of docs, etc.
-        '''
-        self.log.info("Testing the continuous backup process")
-
-        bucket = "bucket1"
-        interval_time = self.input.param("interval_time", 2)
-
-        output, error = self.create_bucket_for_continuous_backup(bucket, interval_time)
-        self.log.info("The create bucket output is - {}".format(output))
-        self.log.info("The create bucket error is - {}".format(error))
-
-        self.sleep(10, "Waiting for bucket to be ready")
-
-        sdk_client = SDKClient(bucket, hosts=[self.master.ip], username=self.master.rest_username,
-                               password=self.master.rest_password, sasl_mech=None,
-                               compression=None)
-
-        print(f"Inserting {self.num_items} documents into the bucket...")
-
-        doc_value = {"num": 1}
-        for i in range(self.num_items):
-            result = sdk_client.insert("doc_" + str(i), doc_value)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents inserted successfully".format(self.num_items))
-
-        output, error = self.backup_create()
-        self.log.info("The output of backup cluster command is -", output)
-        self.log.info("The error of backup cluster command is -", error)
-
-        self.log.info("Taking 1 backups")
-        self._take_n_backups(n=1)
-
-        self.log.info("Upserting 10 documents in the bucket")
-
-        doc_value = {"num": 2}
-        for i in range(self.num_items//10):
-            result = sdk_client.upsert("doc_" + str(i), doc_value)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents upserted successfully".format(self.num_items // 10))
-
-        self.sleep(int(interval_time) * 60 + 10, "Waiting for the backup interval to lapse")
-
-        first_upsert_time = self.get_timestamp(self.master)[0]
-        self.log.info("The first upsert time is - {}".format(first_upsert_time))
-
-        print(f"Upserting existing {self.num_items} documents...")
-
-        doc_value = {"num": 3}
-        for i in range(self.num_items):
-            result = sdk_client.upsert("doc_" + str(i), doc_value)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents upserted successfully".format(self.num_items))
-
-        self.sleep(int(interval_time) * 60 + 10, "Waiting to lapse the backup interval")
-
-        second_upsert_time = self.get_timestamp(self.master)[0]
-        self.log.info("The second upsert time is - {}".format(second_upsert_time))
-
-        output, error = self.backup_restore()
-        self.log.info("The output of the traditional restore command is - {}".format(output))
-        self.log.info("The error of the traditional restore command is - {}".format(error))
-
-        output, error = self.restore_continuous_backup(first_upsert_time)
-
-        self.log.info("The output of cbcontbk command is - {}".format(output))
-        self.log.info("The error of cbcontbk command is - {}".format(error))
-
-    def test_continuous_backup_with_collections(self):
-        self.log.info("Testing continuous backups with collections creations")
-
-        bucket = "collections-bucket"
-        interval_time = self.input.param("interval_time", 2)
-
-        output, error = self.create_bucket_for_continuous_backup(bucket, interval_time)
-        self.log.info("The create bucket output is - {}".format(output))
-        self.log.info("The create bucket error is - {}".format(error))
-
-        self.sleep(10, "Waiting for bucket to be ready")
-
-        sdk_client = SDKClient(bucket, hosts=[self.master.ip], username=self.master.rest_username,
-                               password=self.master.rest_password, sasl_mech=None,
-                               compression=None)
-
-        print(f"Inserting {self.num_items} documents into {bucket}->_default->_default...")
-
-        doc_value = {"num": 1}
-        for i in range(self.num_items):
-            result = sdk_client.insert("doc_" + str(i), doc_value)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents inserted successfully".format(self.num_items))
-
-        output, error = self.backup_create()
-        self.log.info("The output of backup cluster command is -", output)
-        self.log.info("The error of backup cluster command is -", error)
-
-        self.log.info("Taking 1 backups")
-        self._take_n_backups(n=1)
-
-        collections_cli = CollectionsCLI(self.master)
-        collection_name = "col1"
-        collections_cli.create_collection(bucket, scope="_default", collection=collection_name)
-
-        print(f"Inserting {self.num_items} documents into {bucket}->_default->{collection_name}...")
-
-        doc_value = {"num": 1}
-        for i in range(self.num_items):
-            result = sdk_client.insert("doc_" + str(i), doc_value, collection=collection_name)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents inserted successfully".format(self.num_items))
-
-        self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
-
-        first_upsert_time = self.get_timestamp(self.master)[0]
-        self.log.info("The first upsert time is - {}".format(first_upsert_time))
-
-        collections_cli.delete_collection(bucket=bucket, collection=collection_name)
-
-        self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
-
-        output, error = self.backup_restore()
-        self.log.info("The output of the traditional restore command is - {}".format(output))
-        self.log.info("The error of the traditional restore command is - {}".format(error))
-        self.log.info("The bucket collections after trad bkp restore are - {}".format(
-            collections_cli.get_bucket_collections(bucket=bucket)))
-
-        self.sleep(20, "Waiting for 20 seconds")
-
-        output, error = self.restore_continuous_backup(first_upsert_time)
-        self.log.info("The output of cbcontbk command is - {}".format(output))
-        self.log.info("The error of cbcontbk command is - {}".format(error))
-        self.log.info("The bucket collections after trad bkp restore are - {}".format(
-            collections_cli.get_bucket_collections(bucket=bucket)))
-
-        self.sleep(30, "Waiting for 30 seconds")
-
-    def test_continuous_backup_with_collections_deletions(self):
-        self.log.info("Testing continuous backups with collections deletions")
-
-        bucket = "collections-bucket"
-        interval_time = self.input.param("interval_time", 2)
-
-        output, error = self.create_bucket_for_continuous_backup(bucket, interval_time)
-        self.log.info("The create bucket output is - {}".format(output))
-        self.log.info("The create bucket error is - {}".format(error))
-
-        self.sleep(10, "Waiting for bucket to be ready")
-
-        sdk_client = SDKClient(bucket, hosts=[self.master.ip], username=self.master.rest_username,
-                               password=self.master.rest_password, sasl_mech=None,
-                               compression=None)
-
-        print(f"Inserting {self.num_items} documents into {bucket}->_default->_default...")
-
-        doc_value = {"num": 1}
-        for i in range(self.num_items):
-            result = sdk_client.insert("doc_" + str(i), doc_value)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents inserted successfully".format(self.num_items))
-
-        collections_cli = CollectionsCLI(self.master)
-        collection_name = "col1"
-        collections_cli.create_collection(bucket=bucket, scope="_default", collection=collection_name)
-        print(f"Inserting {self.num_items} documents into {bucket}->_default->{collection_name}...")
-
-        doc_value = {"num": 1}
-        for i in range(self.num_items):
-            result = sdk_client.insert("doc_" + str(i), doc_value, collection=collection_name)
-            self.log.info("{}: The output is - {}".format(i, result))
-
-        self.log.info("{} documents inserted successfully".format(self.num_items))
-
-        output, error = self.backup_create()
-        self.log.info("The output of backup cluster command is -", output)
-        self.log.info("The error of backup cluster command is -", error)
-
-        self.log.info("Taking 1 backups")
-        self._take_n_backups(n=1)
-
-        collections_cli.delete_collection(bucket=bucket, collection=collection_name)
-
-        self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
-
-        upsert_time = self.get_timestamp(self.master)[0]
-        self.log.info("The upsert time is - {}".format(upsert_time))
-
-        collection_name = "col2"
-        collections_cli.create_collection(bucket=bucket, scope="_default", collection=collection_name)
-
-        self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
-
-        output, error = self.backup_restore()
-        self.log.info("The output of the traditional restore command is - {}".format(output))
-        self.log.info("The error of the traditional restore command is - {}".format(error))
-
-        self.log.info("The bucket collections after trad bkp restore are - {}".format(
-            collections_cli.get_bucket_collections(bucket=bucket)))
-
-        self.sleep(20, "Waiting for 20 seconds before restoring continuous backup")
-
-        output, error = self.restore_continuous_backup(upsert_time)
-        self.log.info("The output of cbcontbk command is - {}".format(output))
-        self.log.info("The error of cbcontbk command is - {}".format(error))
-
-        self.sleep(20, "Waiting for 20 seconds")
-
-        self.log.info("The bucket collections after cont bkp restore are - {}".format(
-            collections_cli.get_bucket_collections(bucket=bucket)))
-        self.sleep(30, "Waiting for 30 seconds")
+    # def get_timestamp(self, server):
+    #     remote_client = RemoteMachineShellConnection(server)
+    #     cmd = "date --iso-8601=seconds"
+    #     output, error = remote_client.execute_command(cmd)
+    #     return output
+    #
+    # def test_continuous_backup_basic_test(self):
+    #     '''
+    #         1. Create a magma bucket with continuous backup enabled and period to 2 mins
+    #         2. Load data into the bucket
+    #         3. Take a traditional backup
+    #         4. Upsert the documents
+    #         5. Wait for 120 seconds and record the timestamp
+    #         6. Upsert the documents and record the timestamp again
+    #         7. Wait for 120 seconds
+    #         8. Restore to the continuous backup with timestamp recorded in step 5
+    #         9. Validate the bucket params with sequence number, number of docs, etc.
+    #     '''
+    #     self.log.info("Testing the continuous backup process")
+    #
+    #     bucket = "bucket1"
+    #     interval_time = self.input.param("interval_time", 2)
+    #
+    #     output, error = self.create_bucket_for_continuous_backup(bucket, interval_time)
+    #     self.log.info("The create bucket output is - {}".format(output))
+    #     self.log.info("The create bucket error is - {}".format(error))
+    #
+    #     self.sleep(10, "Waiting for bucket to be ready")
+    #
+    #     sdk_client = SDKClient(bucket, hosts=[self.master.ip], username=self.master.rest_username,
+    #                            password=self.master.rest_password, sasl_mech=None,
+    #                            compression=None)
+    #
+    #     print(f"Inserting {self.num_items} documents into the bucket...")
+    #
+    #     doc_value = {"num": 1}
+    #     for i in range(self.num_items):
+    #         result = sdk_client.insert("doc_" + str(i), doc_value)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents inserted successfully".format(self.num_items))
+    #
+    #     output, error = self.backup_create()
+    #     self.log.info("The output of backup cluster command is -", output)
+    #     self.log.info("The error of backup cluster command is -", error)
+    #
+    #     self.log.info("Taking 1 backups")
+    #     self._take_n_backups(n=1)
+    #
+    #     self.log.info("Upserting 10 documents in the bucket")
+    #
+    #     doc_value = {"num": 2}
+    #     for i in range(self.num_items//10):
+    #         result = sdk_client.upsert("doc_" + str(i), doc_value)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents upserted successfully".format(self.num_items // 10))
+    #
+    #     self.sleep(int(interval_time) * 60 + 10, "Waiting for the backup interval to lapse")
+    #
+    #     first_upsert_time = self.get_timestamp(self.master)[0]
+    #     self.log.info("The first upsert time is - {}".format(first_upsert_time))
+    #
+    #     print(f"Upserting existing {self.num_items} documents...")
+    #
+    #     doc_value = {"num": 3}
+    #     for i in range(self.num_items):
+    #         result = sdk_client.upsert("doc_" + str(i), doc_value)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents upserted successfully".format(self.num_items))
+    #
+    #     self.sleep(int(interval_time) * 60 + 10, "Waiting to lapse the backup interval")
+    #
+    #     second_upsert_time = self.get_timestamp(self.master)[0]
+    #     self.log.info("The second upsert time is - {}".format(second_upsert_time))
+    #
+    #     output, error = self.backup_restore()
+    #     self.log.info("The output of the traditional restore command is - {}".format(output))
+    #     self.log.info("The error of the traditional restore command is - {}".format(error))
+    #
+    #     output, error = self.restore_continuous_backup(first_upsert_time)
+    #
+    #     self.log.info("The output of cbcontbk command is - {}".format(output))
+    #     self.log.info("The error of cbcontbk command is - {}".format(error))
+    #
+    # def test_continuous_backup_with_collections(self):
+    #     self.log.info("Testing continuous backups with collections creations")
+    #
+    #     bucket = "collections-bucket"
+    #     interval_time = self.input.param("interval_time", 2)
+    #
+    #     output, error = self.create_bucket_for_continuous_backup(bucket, interval_time)
+    #     self.log.info("The create bucket output is - {}".format(output))
+    #     self.log.info("The create bucket error is - {}".format(error))
+    #
+    #     self.sleep(10, "Waiting for bucket to be ready")
+    #
+    #     sdk_client = SDKClient(bucket, hosts=[self.master.ip], username=self.master.rest_username,
+    #                            password=self.master.rest_password, sasl_mech=None,
+    #                            compression=None)
+    #
+    #     print(f"Inserting {self.num_items} documents into {bucket}->_default->_default...")
+    #
+    #     doc_value = {"num": 1}
+    #     for i in range(self.num_items):
+    #         result = sdk_client.insert("doc_" + str(i), doc_value)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents inserted successfully".format(self.num_items))
+    #
+    #     output, error = self.backup_create()
+    #     self.log.info("The output of backup cluster command is -", output)
+    #     self.log.info("The error of backup cluster command is -", error)
+    #
+    #     self.log.info("Taking 1 backups")
+    #     self._take_n_backups(n=1)
+    #
+    #     collections_cli = CollectionsCLI(self.master)
+    #     collection_name = "col1"
+    #     collections_cli.create_collection(bucket, scope="_default", collection=collection_name)
+    #
+    #     print(f"Inserting {self.num_items} documents into {bucket}->_default->{collection_name}...")
+    #
+    #     doc_value = {"num": 1}
+    #     for i in range(self.num_items):
+    #         result = sdk_client.insert("doc_" + str(i), doc_value, collection=collection_name)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents inserted successfully".format(self.num_items))
+    #
+    #     self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
+    #
+    #     first_upsert_time = self.get_timestamp(self.master)[0]
+    #     self.log.info("The first upsert time is - {}".format(first_upsert_time))
+    #
+    #     collections_cli.delete_collection(bucket=bucket, collection=collection_name)
+    #
+    #     self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
+    #
+    #     output, error = self.backup_restore()
+    #     self.log.info("The output of the traditional restore command is - {}".format(output))
+    #     self.log.info("The error of the traditional restore command is - {}".format(error))
+    #     self.log.info("The bucket collections after trad bkp restore are - {}".format(
+    #         collections_cli.get_bucket_collections(bucket=bucket)))
+    #
+    #     self.sleep(20, "Waiting for 20 seconds")
+    #
+    #     output, error = self.restore_continuous_backup(first_upsert_time)
+    #     self.log.info("The output of cbcontbk command is - {}".format(output))
+    #     self.log.info("The error of cbcontbk command is - {}".format(error))
+    #     self.log.info("The bucket collections after trad bkp restore are - {}".format(
+    #         collections_cli.get_bucket_collections(bucket=bucket)))
+    #
+    #     self.sleep(30, "Waiting for 30 seconds")
+    #
+    # def test_continuous_backup_with_collections_deletions(self):
+    #     self.log.info("Testing continuous backups with collections deletions")
+    #
+    #     bucket = "collections-bucket"
+    #     interval_time = self.input.param("interval_time", 2)
+    #
+    #     output, error = self.create_bucket_for_continuous_backup(bucket, interval_time)
+    #     self.log.info("The create bucket output is - {}".format(output))
+    #     self.log.info("The create bucket error is - {}".format(error))
+    #
+    #     self.sleep(10, "Waiting for bucket to be ready")
+    #
+    #     sdk_client = SDKClient(bucket, hosts=[self.master.ip], username=self.master.rest_username,
+    #                            password=self.master.rest_password, sasl_mech=None,
+    #                            compression=None)
+    #
+    #     print(f"Inserting {self.num_items} documents into {bucket}->_default->_default...")
+    #
+    #     doc_value = {"num": 1}
+    #     for i in range(self.num_items):
+    #         result = sdk_client.insert("doc_" + str(i), doc_value)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents inserted successfully".format(self.num_items))
+    #
+    #     collections_cli = CollectionsCLI(self.master)
+    #     collection_name = "col1"
+    #     collections_cli.create_collection(bucket=bucket, scope="_default", collection=collection_name)
+    #     print(f"Inserting {self.num_items} documents into {bucket}->_default->{collection_name}...")
+    #
+    #     doc_value = {"num": 1}
+    #     for i in range(self.num_items):
+    #         result = sdk_client.insert("doc_" + str(i), doc_value, collection=collection_name)
+    #         self.log.info("{}: The output is - {}".format(i, result))
+    #
+    #     self.log.info("{} documents inserted successfully".format(self.num_items))
+    #
+    #     output, error = self.backup_create()
+    #     self.log.info("The output of backup cluster command is -", output)
+    #     self.log.info("The error of backup cluster command is -", error)
+    #
+    #     self.log.info("Taking 1 backups")
+    #     self._take_n_backups(n=1)
+    #
+    #     collections_cli.delete_collection(bucket=bucket, collection=collection_name)
+    #
+    #     self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
+    #
+    #     upsert_time = self.get_timestamp(self.master)[0]
+    #     self.log.info("The upsert time is - {}".format(upsert_time))
+    #
+    #     collection_name = "col2"
+    #     collections_cli.create_collection(bucket=bucket, scope="_default", collection=collection_name)
+    #
+    #     self.sleep(int(interval_time) * 60 + 10, "Waiting for continuous backup interval to lapse")
+    #
+    #     output, error = self.backup_restore()
+    #     self.log.info("The output of the traditional restore command is - {}".format(output))
+    #     self.log.info("The error of the traditional restore command is - {}".format(error))
+    #
+    #     self.log.info("The bucket collections after trad bkp restore are - {}".format(
+    #         collections_cli.get_bucket_collections(bucket=bucket)))
+    #
+    #     self.sleep(20, "Waiting for 20 seconds before restoring continuous backup")
+    #
+    #     output, error = self.restore_continuous_backup(upsert_time)
+    #     self.log.info("The output of cbcontbk command is - {}".format(output))
+    #     self.log.info("The error of cbcontbk command is - {}".format(error))
+    #
+    #     self.sleep(20, "Waiting for 20 seconds")
+    #
+    #     self.log.info("The bucket collections after cont bkp restore are - {}".format(
+    #         collections_cli.get_bucket_collections(bucket=bucket)))
+    #     self.sleep(30, "Waiting for 30 seconds")
