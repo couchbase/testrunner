@@ -1483,7 +1483,7 @@ class GSIUtils(object):
                                                            train_list=None, scan_nprobes=1,
                                                            limit=10, quantization_algo_color_vector=None,
                                                            quantization_algo_description_vector=None, is_base64=False,
-                                                           description_dimension=384):
+                                                           description_dimension=384, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "hotel" + str(uuid.uuid4()).replace("-", "")
@@ -1993,6 +1993,14 @@ class GSIUtils(object):
                   1.5966797, 1.0058594, 0.54003906, -0.22290039]
         vec_1 = f"ANN_DISTANCE(emb, {vector}, '{similarity}', {scan_nprobes})"
 
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("*", "rating > 3"),
+                                is_primary=True))
+
         # single vector field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'embVectorBhive', index_fields=['emb VECTOR'],
@@ -2037,8 +2045,7 @@ class GSIUtils(object):
                             index_fields=['emb VECTOR'],
                             dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, is_base64=is_base64, missing_indexes=True,
-                            missing_field_desc=True,
+                            train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"avg_rating, free_breakfast,"
                                                                                f" emb, {vec_1}",
                                                                                'avg_rating = 3 and '
@@ -2315,7 +2322,7 @@ class GSIUtils(object):
                     definition_list = self.generate_hotel_data_index_definition_vectors_bhive(index_name_prefix=prefix,
                         scan_nprobes=scan_nprobes, similarity=similarity, limit=limit,
                         quantization_algo_description_vector=quantization_algo_description_vector,
-                        description_dimension=description_dimension)
+                        description_dimension=description_dimension, skip_primary=skip_primary)
                 else:
                     definition_list = self.generate_hotel_data_index_definition_vectors(index_name_prefix=prefix,
                         scan_nprobes=scan_nprobes, similarity=similarity, limit=limit,
