@@ -2988,8 +2988,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] == "8.0":
                 cluster_profile = None
             nodes_to_be_swapped_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            self.log.info(f"nodes to be swapped out are {nodes_to_be_swapped_out}")
 
             nodes_to_be_swapped_in = self.servers[self.nodes_init:][:len(nodes_to_be_swapped_out)]
+            self.log.info(f"nodes to be swapped in are {nodes_to_be_swapped_in}")
             upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=nodes_to_be_swapped_in,
                                             cluster_profile=cluster_profile)
             for th in upgrade_th:
@@ -3001,6 +3003,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                      nodes_to_be_swapped_out, services=['index']*len(nodes_to_be_swapped_in))
 
             rebalance.result()
+
 
         self.update_master_node()
         self.sleep(20)

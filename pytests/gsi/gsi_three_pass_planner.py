@@ -340,7 +340,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         elif self.index_type == "all":
             # creating scalar index
             scalar_idx = QueryDefinition(index_name='scalar_rgb', index_fields=['color'], partition_by_fields=['meta().id'])
-            query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_partition=6)
+            query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_partition=4)
             self.run_cbq_query(query=query, server=self.n1ql_node)
 
             # creating vector index
@@ -354,7 +354,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                         index_fields=['descriptionVector VECTOR'],
                                         dimension=384, description=f"IVF,PQ32x8",
                                         similarity="L2_SQUARED", partition_by_fields=['meta().id'])
-            query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_partition=6)
+            query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_partition=4)
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.wait_until_indexes_online()
 
