@@ -31,7 +31,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             # add if condition
             self.rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
         self.rest.set_index_settings({"indexer.plasma.mainIndex.minCPUsForInMemCompression": 1})
-        self.rest.set_index_settings({"indexer.plasma.backIndex.minCPUsForInMemCompression ": 1})
+        self.rest.set_index_settings({"indexer.plasma.backIndex.minCPUsForInMemCompression": 1})
         self.deploy_node_info = ["{0}:{1}".format(self.dgmServer.ip, self.node_port)]
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 5)

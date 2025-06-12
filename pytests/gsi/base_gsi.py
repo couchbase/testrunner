@@ -2823,6 +2823,37 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.error(f"Error checking transfer tokens on node {index_node.ip}: {str(e)}")
             raise
 
+    def check_gsi_logs_for_snapshot_recovery(self, log_string="Recovering from recovery point", msg="Index recovery from disk snapshot"):
+        count = 0
+        all_nodes_validated = True
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not indexer_nodes:
+            return None
+        for server in indexer_nodes:
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval(
+                'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            indexer_log = str(dir) + '/indexer.log*'
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                               format(log_string, indexer_log))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            shell.disconnect()
+            if count > 0:
+                self.log.info(f"=====  {msg} found"
+                              f" in logs on node {server.ip}=====. The no. of occurrences - {count}")
+            else:
+                self.log.info(f"===== {msg} not found in logs"
+                              f" on node {server.ip}. No log lines matching string {log_string} seen.")
+                all_nodes_validated = False
+        if all_nodes_validated:
+            self.log.info(f"===== {msg} found in logs on all indexer nodes =====")
+        else:
+            self.log.info(f"===== {msg} not found in logs on all indexer nodes =====")
+        return all_nodes_validated
+
     def enable_shard_based_rebalance(self, provisioned=False):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)

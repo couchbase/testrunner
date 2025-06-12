@@ -6135,8 +6135,8 @@ class NodesFailureTask(Task):
     def _get_mktime_from_server_time(self, server_time):
         time_format = "%Y-%m-%dT%H:%M:%S"
         server_time = server_time.split('.')[0]
-        mk_time = time.mktime(time.strptime(server_time, time_format))
-        return mk_time
+        import calendar
+        return calendar.timegm(time.strptime(server_time, time_format))  # Use UTC time instead of local time
 
     def _rebalance(self):
         rest = RestConnection(self.master)
@@ -6265,7 +6265,7 @@ class AutoFailoverNodesFailureTask(Task):
                 self.max_time_to_wait_for_failover)
         if self.expect_auto_failover:
             if autofailover_initiated:
-                if time_taken < max_timeout + 1:
+                if time_taken <= max_timeout:
                     self.log.info("Autofailover of node {0} successfully "
                                   "initiated in {1} sec".format(
                         self.current_failure_node.ip, time_taken))
@@ -6273,8 +6273,8 @@ class AutoFailoverNodesFailureTask(Task):
                     self.state = EXECUTING
                 else:
                     message = "Autofailover of node {0} was initiated after " \
-                              "the timeout period. Expected  timeout: {1} " \
-                              "Actual time taken: {2}".format(
+                              "the timeout period. Expected  timeout: {1} sec " \
+                              "Actual time taken: {2} sec".format(
                         self.current_failure_node.ip, self.timeout, time_taken)
                     self.log.error(message)
                     rest.print_UI_logs(10)
@@ -6283,7 +6283,7 @@ class AutoFailoverNodesFailureTask(Task):
                     self.set_exception(AutoFailoverException(message))
             else:
                 message = "Autofailover of node {0} was not initiated after " \
-                          "the expected timeout period of {1}".format(
+                          "the expected timeout period of {1} sec".format(
                     self.current_failure_node.ip, self.timeout)
                 rest.print_UI_logs(10)
                 self.log.error(message)
@@ -6556,8 +6556,8 @@ class AutoFailoverNodesFailureTask(Task):
     def _get_mktime_from_server_time(self, server_time):
         time_format = "%Y-%m-%dT%H:%M:%S"
         server_time = server_time.split('.')[0]
-        mk_time = time.mktime(time.strptime(server_time, time_format))
-        return mk_time
+        import calendar
+        return calendar.timegm(time.strptime(server_time, time_format))  # Use UTC time instead of local time
 
     def _rebalance(self):
         rest = RestConnection(self.master)

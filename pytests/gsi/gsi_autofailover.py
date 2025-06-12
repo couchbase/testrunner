@@ -103,6 +103,7 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                                        namespace=namespace, limit=self.scan_limit))
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.sleep(120)
         self.wait_until_indexes_online()
         self.item_count_related_validations()
 
