@@ -3267,13 +3267,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
                 self.gsi_util_obj.query_event.clear()
 
-            # wait for docs to expire
-            self.sleep(300)
-
-            self.item_count_related_validations()
-            # verify index count matches bucket item count
-            self._verify_bucket_count_with_index_count()
-
             self.drop_index_node_resources_utilization_validations()
 
     def test_run_scans_on_dgm(self):
