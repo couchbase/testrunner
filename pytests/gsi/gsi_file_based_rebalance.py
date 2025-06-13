@@ -1690,30 +1690,31 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             shard_affinity = True
         # TODO remove sleep after MB-58840 fix
         time.sleep(60)
-        if shard_affinity and not skip_shard_validations:
-            self.log.info("Running validations for shard-based rebalance")
-            self.log.info("Fetching list of shards after completion of rebalance")
-            shard_list_after_rebalance = self.fetch_shard_id_list()
-            self.log.info("Compare shard list before and after rebalance.")
-            # uncomment after MB-58776 is fixed
-            if shard_list_before_rebalance:
-                if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in [
-                    'rebalance_during_ddl', 'ddl_during_rebalance']:
-                    self.log.error(
-                        f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
-                    raise AssertionError("Shards missing after rebalance")
-                self.log.info(
-                    f"Shard list before rebalance {shard_list_before_rebalance}. After rebalance {shard_list_after_rebalance}")
+        if shard_affinity:
+            if not skip_shard_validations:
+                self.log.info("Running validations for shard-based rebalance")
+                self.log.info("Fetching list of shards after completion of rebalance")
+                shard_list_after_rebalance = self.fetch_shard_id_list()
+                self.log.info("Compare shard list before and after rebalance.")
                 # uncomment after MB-58776 is fixed
-                self.validate_shard_affinity()
-                self.sleep(30)
-                if not self.capella_run:
-                    if not self.check_gsi_logs_for_shard_transfer():
-                        raise Exception("Shard based rebalance not triggered")
+                if shard_list_before_rebalance:
+                    if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in [
+                        'rebalance_during_ddl', 'ddl_during_rebalance']:
+                        self.log.error(
+                            f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
+                        raise AssertionError("Shards missing after rebalance")
+                    self.log.info(
+                        f"Shard list before rebalance {shard_list_before_rebalance}. After rebalance {shard_list_after_rebalance}")
+                    # uncomment after MB-58776 is fixed
+                    self.validate_shard_affinity()
+                    self.sleep(30)
+                    if not self.capella_run:
+                        if not self.check_gsi_logs_for_shard_transfer():
+                            raise Exception("Shard based rebalance not triggered")
         else:
-            self.log.info("Running validations for MOI type indexes")
+            self.log.info("Running validations for non-shard-based rebalance")
             if self.check_gsi_logs_for_shard_transfer():
-                raise Exception("Shard based rebalance triggered for MOI type indexes")
+                raise Exception("Shard based rebalance triggered despite the flag not being set")
         self.log.info("Running scans after rebalance")
         if scan_results_check and select_queries is not None and not self.bhive_index:
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)

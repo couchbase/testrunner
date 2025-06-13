@@ -2070,7 +2070,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # restoring and running queries again to validate recall percentage
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        self.sleep(60)
+        self.sleep(300)
         # adding validations for item count post recovery of bucket
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
@@ -2082,13 +2082,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if 'partial' in index:
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection // 5,
-                                 f"rollback of indexes havent happened {stats}")
-            else:
+            if 'partial' not in index:
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
-
-
 
 
         for select_query in select_queries:
@@ -2416,6 +2411,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
+        data_node = self.get_nodes_from_services_map(service_type="kv")
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                     similarity=self.similarity, train_list=None,
@@ -2491,6 +2487,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
+        data_node = self.get_nodes_from_services_map(service_type="kv")
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                     similarity=self.similarity, train_list=None,

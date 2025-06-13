@@ -194,7 +194,9 @@ class AutoFailoverBaseTest(BaseTestCase):
         """
         status = self.disable_autofailover()
         self.assertTrue(status, "Failed to change autofailover_settings!")
+        self.sleep(5)
         settings = self.rest.get_autofailover_settings()
+        self.log.info(f"Autofailover settings are {settings}")
         self.assertFalse(settings.enabled, "Failed to disable "
                                            "autofailover_settings!")
 
