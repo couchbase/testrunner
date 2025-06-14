@@ -189,6 +189,7 @@ CMDS = {
         "uninstall":
             UNMOUNT_NFS_CMD +
             "yes | yum remove 'couchbase*' > /dev/null; " +
+            "yes | yum remove 'enterprise-analytics*' > /dev/null; " +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
