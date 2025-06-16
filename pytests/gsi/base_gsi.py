@@ -3204,7 +3204,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         Gets all indexes and their definitions using N1QL system:indexes
         Returns a list of dictionaries containing index name and actual count from executing query
         """
-        query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition` FROM system:indexes"
+        query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition`, `with` FROM system:indexes"
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
 
@@ -3224,6 +3224,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             where_clause = ""
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
+
+            if ("`colorRGBVector` VECTOR" in index['index_key'] and "similarity" in index['with']
+                and index['with']['similarity'] == "cosine"):
+                condition = "colorRGBVector != [0, 0, 0]"
+                if where_clause:
+                    where_clause += f" AND {condition}"
+                else:
+                    where_clause = f" WHERE {condition}"
 
             count_query = f"SELECT COUNT(*) FROM {keyspace} {where_clause}"
 
