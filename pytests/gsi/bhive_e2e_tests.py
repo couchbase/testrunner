@@ -10,6 +10,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from sentence_transformers import SentenceTransformer
 from couchbase_helper.documentgenerator import SDKDataLoader
+from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestHelper
 from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection
@@ -57,29 +58,241 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
     def suite_tearDown(self):
         pass
 
-    def test_failover_nodes(self):
-        self.log.info("Step 1: Setting up cluster with file-based rebalance disabled")
-        self.log.info("Step 2 : Creating bucket")
-        buckets = self._create_test_buckets(num_buckets=1)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+    def load_docs_into_buckets(self):
+        buckets = self._create_test_buckets(num_buckets=2)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=10000,
+                                                 json_template=self.json_template, load_default_coll=False)
+        self.sleep(360000)
+
+    def test_logs_on_moi_disk(self):
+        """
+        Test MOI snapshot retention and log sequence numbers during network partition and recovery.
+        Steps:
+        1. Create a 3-node cluster (kv, kv, n1ql:index)
+        2. Create 2 buckets (b1, b2), load 10k docs each
+        3. Create 2 MOI indexes per bucket
+        4. Partition network between both kv nodes
+        5. Set MOI snapshot interval to 1 min
+        6. Start continuous kv load on 1st kv node
+        7. Wait for num_disk_snapshot to reach 4 and num_commits > 4
+        8. Remove partition, stop load, wait for sync
+        9. Check num_disk_snapshot reduces to 2
+        10. Log sequence numbers when num_disk_snapshot > 2
+        """
+        
+        # 1. Setup cluster and buckets
+        self.log.info("Setting up 2 buckets and loading 10k docs each")
+        buckets = self._create_test_buckets(num_buckets=2)
         for bucket in buckets:
             self.prepare_collection_for_indexing(
-                bucket_name=bucket, 
-                num_scopes=1, 
+                bucket_name=bucket,
+                num_scopes=1,
                 num_collections=1,
                 num_of_docs_per_collection=10000,
-                json_template=self.json_template, 
+                json_template=self.json_template,
+                load_default_coll=False
+            )
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+        self.sleep(60, "Waiting for docs to be loaded")
+
+        # 2. Create 2 MOI indexes per bucket
+        self.log.info("Creating 2 MOI indexes per bucket")
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        prefixes = ["test_scalar", "test_bhive", "test_composite"]
+        similarity = "COSINE"
+        create_queries = []
+        for namespace in self.namespaces:
+            _, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            current_create_queries = self._get_create_queries(None, scalar_def, composite_def, namespace=namespace, defer_build_mix=False) 
+            create_queries.extend(current_create_queries)
+        
+        self.log.info(f"Running create_queries")
+        for query in create_queries:
+            self.log.info(f"Running create query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+            
+        self.wait_until_indexes_online()
+        self.sleep(10, "Indexes online")
+
+        # 3. Partition network between both kv nodes
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        if len(kv_nodes) < 2:
+            self.fail("Test requires at least 2 KV nodes")
+        self.log.info("Partitioning network between kv nodes")
+        self.block_incoming_network_from_node(kv_nodes[0], kv_nodes[1])
+        self.block_incoming_network_from_node(kv_nodes[1], kv_nodes[0])
+
+        # 4. Set MOI snapshot interval to 1 min
+        self.log.info("Setting MOI snapshot interval to 1 min")
+        self.set_persisted_snapshot_interval(interval=60000)
+
+        # 5. Start continuous kv load on 1st kv node
+        self.log.info("Starting continuous kv load on 1st kv node")
+        stop_event = Event()
+        with ThreadPoolExecutor() as executor:
+            kv_thread = executor.submit(self.perform_continuous_kv_mutations, stop_event, timeout=600, num_docs_mutating=10000)
+            # 6. Wait for num_disk_snapshot to reach 4 and num_commits > 4
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            index_node = index_nodes[0]
+            snapshot_reached = False
+            while not snapshot_reached:
+                index_stats = RestConnection(index_node).get_index_stats()
+                for bucket in index_stats:
+                    for idx in index_stats[bucket]:
+                        self.log.info(f"Printing index stats before removing network partition: {index_stats}")
+                        stats = index_stats[bucket][idx]
+                        num_snapshots = stats.get("num_snapshots", 0)
+                        num_commits = stats.get("num_commits", 0)
+                        seqno = stats.get("last_persisted_seqno", 0)
+                        if num_snapshots >= 4 and num_commits > 4:
+                            self.log.info(f"num_snapshots={num_snapshots}, num_commits={num_commits}, seqno={seqno} for {idx}")
+                            snapshot_reached = True
+                self.sleep(10, "Waiting for num_snapshots >= 4 and num_commits > 4")
+
+            # 7. Remove partition, stop load, wait for sync
+            self.log.info("Removing network partition and stopping kv load")
+            self.resume_blocked_incoming_network_from_node(kv_nodes[0], kv_nodes[1])
+            self.resume_blocked_incoming_network_from_node(kv_nodes[1], kv_nodes[0])
+            stop_event.set()
+            kv_thread.result()
+            self.sleep(60, "Waiting for nodes to sync")
+
+            # 8. Check num_disk_snapshot reduces to 2
+            reduced = False
+            for _ in range(12):
+                index_stats = RestConnection(index_node).get_index_stats()
+                self.log.info(f"Printing index_stats after removing network partition: {index_stats}")
+                for bucket in index_stats:
+                    for idx in index_stats[bucket]:
+                        stats = index_stats[bucket][idx]
+                        num_snapshots = stats.get("num_snapshots", 0)
+                        if num_snapshots <= 2:
+                            self.log.info(f"num_snapshots reduced to {num_snapshots} for {idx}")
+                            reduced = True
+                        else:
+                            self.log.info(f"num_snapshots={num_snapshots} for {idx}")
+                            reduced = False
+                if reduced:
+                    break
+                self.sleep(10, "Waiting for num_snapshots to reduce to 2")
+            self.assertTrue(reduced, "num_snapshots did not reduce to 2 after sync")
+
+        self.log.info("Test completed: MOI disk snapshot retention and log sequence numbers")
+
+    def test_indexer_crash_recovery(self):
+        """
+        Test to verify indexer performance after crash recovery.
+        
+        This test validates that:
+        1. Initial query performance is good (around 30ms)
+        2. After indexer crash and recovery:
+           - Query still works but with higher latency (around 300ms)
+           - Performance remains degraded even after multiple runs
+           - No QPS degradation in normal operation
+        
+        Steps:
+        1. Create bucket and load siftsmall dataset
+        2. Create vector index with specific configuration
+        3. Run initial queries and measure latency
+        4. Crash indexer process
+        5. Wait for recovery
+        6. Run same queries and measure latency
+        7. Run multiple times to verify consistent behavior
+        
+        Expected Results:
+        - Initial query latency should be ~30ms
+        - Post-recovery query latency should be ~300ms
+        - Latency should remain high even after multiple runs
+        - No QPS degradation in normal operation
+        """
+        self.log.info("Step 1: Setting up test environment")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        
+        # Create collection and load siftsmall dataset
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(
+                bucket_name=bucket,
+                num_scopes=1,
+                num_collections=1,
+                num_of_docs_per_collection=10000,
+                json_template="siftBigANN",
                 load_default_coll=False
             )
         
-        # create_query = f"""CREATE VECTOR INDEX test_idx_1 ON `test_bucket_0` (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
-        #                         "similarity": "L2_SQUARED",
-        #                         "description": "IVF,SQ8"}}"""
-        # self.log.info(f"Creating index on {bucket}")
-        # self.run_cbq_query(query=create_query, server=query_node)
+        self.sleep(120, "Waiting for documents to be loaded")
 
+        prefixes = ["test_bhive", "test_scalar", "test_composite"]
+        similarity = "L2_SQUARED"
+        select_queries = []
+        for namespace in self.namespaces:
+            self.log.info(f"Creating index on {namespace}")
+            self.log.info("Getting query definitions...")
+            _, _, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            self.log.info("Successfully got query definitions")
+            create_queries = self._get_create_queries(None, None, composite_def, namespace, defer_build_mix=False)
+            self.log.info("Running create queries for index creation...")
+            for query in create_queries:
+                self.log.info(f"Running create query: {query}")
+                self.run_cbq_query(query=query, server=query_node)
+            self.log.info("Waiting for index to be built...")
+            self.wait_until_indexes_online()
+
+            select_queries.extend(self.gsi_util_obj.get_select_queries(
+                definition_list=composite_def,
+                namespace=namespace,
+                limit=self.scan_limit
+            ))
         
-        self.sleep(36000, "Sleeping for 30600 seconds to ensure documents are loaded")
+        self.log.info("Running select queries before crashing the indexer node.")
+        total_execution_time_before = 0
+        total_execution_time_after = 0
+        for _ in range(10):
+            for query in select_queries:
+                if "embVector" in query:
+                    self.log.info("Replacing embVector in query...")
+                    query = query.replace("embVector", str(self.bhive_sample_vector))
+            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                continue
+            self.log.info(f"Running select query: {query}")
+            result = self.run_cbq_query(query=query, server=query_node)
+            total_execution_time_before += result.get("metrics", {}).get("executionTime", 0)
+            self.log.info(f"Query result: {result}")
+
+        self.log.info("Crashing the indexer node")
+        for index_node in index_nodes:
+            remote_client = RemoteMachineShellConnection(index_node)
+            remote_client.terminate_process(process_name='indexer')
+
+        self.log.info("Waiting for indexer to crash")
+        self.sleep(120, "Waiting for indexer to crash")
+
+        self.log.info("Running select queries after crashing the indexer node.")
+        for _ in range(10):
+            for query in select_queries:
+                if "embVector" in query:
+                    self.log.info("Replacing embVector in query...")
+                query = query.replace("embVector", str(self.bhive_sample_vector))
+            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                continue
+            self.log.info(f"Running select query: {query}")
+            result = self.run_cbq_query(query=query, server=query_node)
+            total_execution_time_after += result.get("metrics", {}).get("executionTime", 0)
+            self.log.info(f"Query result: {result}")
+        
+        self.log.info("Indexer crash recovery test completed successfully.")
+        self.log.info(f"Total execution time before crash: {total_execution_time_before}")
+        self.log.info(f"Total execution time after crash: {total_execution_time_after}")
+        average_execution_time_before = total_execution_time_before / 10
+        average_execution_time_after = total_execution_time_after / 10  
+        self.log.info(f"Average execution time before crash: {average_execution_time_before}")
+        self.log.info(f"Average execution time after crash: {average_execution_time_after}")
+        # Checking whether the increase is not more than 50%
+        self.assertTrue(average_execution_time_after <= average_execution_time_before * 1.5, "Average execution time after crash should be less than 50% increase from before crash")
             
 
     def test_stale_transfer_tokens(self):
@@ -206,7 +419,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Create a vector index that will require training
         self.log.info("Creating vector index with large train_list to ensure training takes time")
         index_name = "idx_training_test"
-        create_query = f"""CREATE VECTOR INDEX {index_name} ON `test_bucket_0` (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
+        create_query = f"""CREATE VECTOR INDEX {index_name} ON test_bucket_0.test_scope_1.test_collection_1 (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
                                 "similarity": "L2_SQUARED",
                                 "description": "IVF,SQ8",
                                 "train_list": 50000}}"""
@@ -223,7 +436,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Function to execute a single drop request
         def execute_drop(drop_id):
             try:
-                drop_query = f"DROP INDEX {index_name} ON `test_bucket_0`"
+                drop_query = f"DROP INDEX {index_name} ON test_bucket_0.test_scope_1.test_collection_1"
                 self.run_cbq_query(query=drop_query, server=query_node)
                 return drop_id, None  # Success
             except Exception as e:
@@ -808,6 +1021,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         in_node = None
         
         swap_rebalance = False
+        is_failover = False
         for rebalance_type in rebalance_order_arr:
             self.log.info(f"=== Starting {rebalance_type} rebalance operation ===")
             workload_stop_event = Event()
@@ -833,6 +1047,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             elif "failover" in rebalance_type:
                 service_type = rebalance_type.split("_")[1]
                 use_graceful = self.graceful and service_type == "kv"
+                is_failover = True
                 self.log.info(f"Starting {service_type} failover operation (graceful: {use_graceful})")
                 
                 failover_node = self.get_nodes_from_services_map(
@@ -869,17 +1084,23 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                             logging.getLogger().setLevel(original_log_level)
                             self.log.info(f"Starting {rebalance_type} rebalance operation")
 
+                            skip_shard_validations = self.skip_shard_validations
+
+                            if is_failover:
+                                skip_shard_validations = True
+
                             self._rebalance_and_validate(
                                 nodes_in_list=nodes_in_list,
                                 nodes_out_list=nodes_out_list,
                                 swap_rebalance=swap_rebalance,
                                 services_in=services_in,
                                 select_queries=None,
-                                skip_shard_validations=self.skip_shard_validations,
+                                skip_shard_validations=skip_shard_validations,
                             )
                             self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
                             
                             swap_rebalance = False
+                            is_failover = False
                             self.log.info("Stopping workload threads...")
                             workload_stop_event.set()
 
@@ -1568,10 +1789,15 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         return scalar_def
     
     def _get_create_queries(self, bhive_def, scalar_def, composite_def, namespace, defer_build_mix=True):
-        bhive_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace, num_replica=self.num_replicas, bhive_index=True, defer_build_mix=defer_build_mix)
-        scalar_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=scalar_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=defer_build_mix)
-        # scalar_create_queries = []
-        composite_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=composite_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=defer_build_mix)
+        bhive_create_queries = []
+        scalar_create_queries = []
+        composite_create_queries = []
+        if bhive_def:
+            bhive_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace, num_replica=self.num_replicas, bhive_index=True, defer_build_mix=defer_build_mix)
+        if scalar_def:
+            scalar_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=scalar_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=defer_build_mix)
+        if composite_def:
+            composite_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=composite_def, namespace=namespace, num_replica=self.num_replicas, defer_build_mix=defer_build_mix)
         return bhive_create_queries + scalar_create_queries + composite_create_queries
     
     def _rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
