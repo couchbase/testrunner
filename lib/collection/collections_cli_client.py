@@ -7,10 +7,10 @@ class CollectionsCLI(object):
         self.log = logger.Logger.get_logger()
         self.cli = CouchbaseCLI(node)
 
-    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0",
+    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0", max_ttl=None,
                           admin_tools_package=False):
-        status, content, success = self.cli.create_collection(bucket, scope, collection,
-                                                              admin_tools_package)
+        status, content, success = self.cli.create_collection(bucket, scope, collection, max_ttl=max_ttl,
+                                                              admin_tools_package=admin_tools_package)
         if success:
             self.log.info("Collection created {}->{}->{}".format(bucket, scope, collection))
         else:

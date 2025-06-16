@@ -440,11 +440,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("delete dir %s" % validation_files_location)
             shutil.rmtree(validation_files_location)
 
+        cont_backup_files = ["continuous_backup", "restoreContBk"]
+        list_cont_backup_files = "ls /tmp/"
+        output, error = remote_client.execute_command(list_cont_backup_files)
+        for file in cont_backup_files:
+            command = "rm -rf /tmp/{}".format(file)
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+
         # testrunner runs the teardown before running setup which means the 'objstore_provider' will be undefined
         # we can continue in this case knowing that we haven't yet loaded any data into the cloud.
         try:
             if self.objstore_provider:
                 self.objstore_provider.teardown(info, remote_client)
+                self.objstore_provider.remove_bucket()
                 # Foor Azure we're deleting the remote storage resoruce
                 if self.input.param("objstore_provider", None) == "azure":
                     self.objstore_provider.__del__()
@@ -3238,7 +3247,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return rest._http_request(api, "POST", params)
 
     def create_bucket_for_continuous_backup(self, bucket_name, interval_time, history_retention_seconds=86400,
-                                            history_retention_bytes=16106127360):
+                                            history_retention_bytes=16106127360, max_ttl=None, replica_number=0):
 
         command = f"curl -v http://{self.master.ip}:8091/pools/default/buckets \
                           -u {self.master.rest_username}:{self.master.rest_password} \
@@ -3250,9 +3259,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                           -d historyRetentionSeconds={history_retention_seconds} \
                           -d historyRetentionBytes={history_retention_bytes} \
                           -d durabilityMinLevel=majority \
-                          -d replicaNumber=0 \
+                          -d replicaNumber={replica_number} \
                           -d continuousBackupInterval={interval_time} \
                           -d historyRetentionCollectionDefault=true"
+        if max_ttl is not None:
+            command += f"-d maxTTL={max_ttl}"
 
         remote_client = RemoteMachineShellConnection(self.master)
         output, error = remote_client.execute_command(command)
