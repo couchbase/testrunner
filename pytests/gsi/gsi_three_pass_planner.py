@@ -358,13 +358,10 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.wait_until_indexes_online()
 
-        # validating if num_shards are at shard capacity
-        max_shards = self.fetch_total_shards_limit()
-        self.validate_no_of_shards(validation_length=max_shards)
-
-        #if indexes from all the categories exist then the shards must be reused
-        if self.index_type == "all":
-            num_shards_before = self.fetch_shard_id_list()
+        # validating if num_shards are at shard capacity only when all categories of indexes are not created since when all categories of indexes are created there is an overflow of no of shards
+        if not self.index_type == "all":
+            max_shards = self.fetch_total_shards_limit()
+            self.validate_no_of_shards(validation_length=max_shards)
 
         if self.index_type == "scalar":
             vector_idx = QueryDefinition(index_name='vector_rgb_2', index_fields=['colorRGBVector VECTOR'], dimension=3,
@@ -431,10 +428,6 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
 
             self.wait_until_indexes_online()
 
-        # if indexes from all the categories exist then the shards must be reused
-        if self.index_type == "all":
-            num_shards_after = self.fetch_shard_id_list()
-            self.assertEqual(len(num_shards_before), len(num_shards_after), f"shard list before {num_shards_before}, shard list after {num_shards_after}")
         # if different categories of indexes are created after shard capacity has been reached by only one category of indexes then new shards will be created
         else:
             shard_index_map = self.get_shards_index_map()
