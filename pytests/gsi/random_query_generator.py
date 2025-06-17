@@ -1,6 +1,9 @@
 try:
     import docker
     import logging
+    import subprocess
+    import time
+    import os
 except ImportError:
     print("WARN: fail to import docker")
 
@@ -16,9 +19,29 @@ class RandomQueryGenerator(BaseTestCase):
         self.docker_client = docker.from_env()
         self.docker_image = "sequoiatools/random_query_generator"
         self.debug = debug
+        # Check if Docker daemon is running and start it if not
+        try:
+            ps_output = subprocess.run(['ps', '-ef', '|', 'grep', 'docker'],
+                                        shell=True, capture_output=True, text=True)
+            docker_status = ps_output.stdout
+            logging.info(f" tus: {docker_status}")
+            if 'dockerd' not in docker_status:
+                logging.info("Starting Docker daemon...")
+                docker_cmd = "nohup /usr/bin/dockerd -D -H 0.0.0.0:2375 -H unix:///var/run/docker.sock --data-root=/data > /dev/null 2>&1 &"
+                subprocess.Popen(docker_cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                time.sleep(120)
+                ps_output = subprocess.run(['ps', '-ef', '|', 'grep', 'docker'],
+                                            shell=True, capture_output=True, text=True)
+                docker_status = ps_output.stdout
+                if 'dockerd' not in docker_status:
+                    raise Exception("Docker daemon is not running")
+            else:
+                logging.info(f"Docker daemon is running: {docker_status}")
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"Failed to manage Docker daemon: {str(e)}") from e
         # Pulling the docker image
         try:
-            logging.info(f"Pulling docker image {self.docker_image}")
+            logging.info(f" e {self.docker_image}")
             self.docker_client.images.pull('sequoiatools/random_query_generator')
         except docker.errors.APIError as e:
             logging.info(f"Exception will pulling docker image {self.docker_image}: {e}")
