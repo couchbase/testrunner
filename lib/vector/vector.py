@@ -203,15 +203,19 @@ class IndexVector(object):
         else:
             index_query = index_queries[index_order]
         if use_bhive:
-            if ",vec VECTOR" in custom_index_fields:
-                custom_index_fields = custom_index_fields.replace(",vec VECTOR", "")
-            elif "vec VECTOR" in custom_index_fields:
-                custom_index_fields = custom_index_fields.replace("vec VECTOR", "")
             if custom_index_fields:
-                if custom_name:
-                    index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
-                else:
-                    index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+                if ",vec VECTOR" in custom_index_fields:
+                    custom_index_fields = custom_index_fields.replace(",vec VECTOR", "")
+                    if custom_name:
+                        index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+                    else:
+                        index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+                elif "vec VECTOR" in custom_index_fields:
+                    custom_index_fields = custom_index_fields.replace("vec VECTOR", "")
+                    if custom_name:
+                        index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
+                    else:
+                        index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
             else:
                 index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE(size, brand) WITH {vector_definition}'
         if use_partition:
