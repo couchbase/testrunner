@@ -4936,7 +4936,7 @@ class QuerySanityTests(QueryTests):
             statement = prepared['prepareds']['statement']
             self.assertEqual('prepare select 1', statement.lower())
 
-    def test_MB66699(self):
+    def test_prepared_mb66699(self):
         """
         Test case for MB-66699: Remote execution of prepared statement not covered when WITH alias referenced
         
