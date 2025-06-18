@@ -4982,6 +4982,7 @@ class QuerySanityTests(QueryTests):
                 SELECT w2"""
             
             self.run_cbq_query(prepare_query, query_context=query_context)
+            self.sleep(10)
 
             # Execute prepared statement on different query nodes with profiling enabled
             execute_query = f"EXECUTE p_mb66699"
