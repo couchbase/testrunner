@@ -63,6 +63,7 @@ class QueryAUSTests(QueryTests):
                 "aus": {
                     "all_buckets": False,
                     "change_percentage": 10,
+                    'create_missing_statistics': False,
                     "enable": False
                 }
             }
