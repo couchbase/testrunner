@@ -987,16 +987,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inlinegs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs(a,b,c);}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inliness(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness(a,b,c);}'")
                 else:
-                    #global calling global 
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg(a,b,c);}'")
+                    #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION inlinegg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg(a,b,c);}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness2(10,20,30)")
@@ -1033,16 +1033,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinlinegs(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs(a,b,c);}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness(a,b,c);}'")
                 else:
-                    #global calling global 
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg(a,b,c);}'")
+                    #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg(a,b,c);}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness3(10,20,30)")
@@ -1179,7 +1179,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { return a; }'")
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { if (a >= 10) { return a;} else { return jsudfrecursive(a+2); } }'")
-            if phase == "mixed-mode" or phase == "post-upgrade":
+            if (phase == "mixed-mode" or phase == "post-upgrade") and self.initial_version:
                 results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.jsudfrecursive(2)")
                 self.assertEqual(results['results'], [10])
                 results = self.run_cbq_query("SELECT `travel-sample`.inventory.jsudfrecursive(2)")
@@ -1193,7 +1193,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) { a }")
                 self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
-            if phase == "mixed-mode" or phase == "post-upgrade":
+                # If initial version is 7.2.8 or greater we need can use the original udf
+            if (phase == "mixed-mode" or phase == "post-upgrade") and (int(self.initial_version[0]) == 7 and int(self.initial_version[1]) >= 1):
+                results = self.run_cbq_query("EXECUTE FUNCTION default:`travel-sample`.inventory.udfrecursive(2)")
+                self.assertEqual(results['results'], [10])
+                results = self.run_cbq_query("SELECT default:`travel-sample`.inventory.udfrecursive(2)")
+                self.assertEqual(results['results'], [{'$1': 10}])
+            else:
+                # If initial version is 7.1.x we need to create the udf again
+                self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) { a }")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
                 results = self.run_cbq_query("EXECUTE FUNCTION default:`travel-sample`.inventory.udfrecursive(2)")
                 self.assertEqual(results['results'], [10])
                 results = self.run_cbq_query("SELECT default:`travel-sample`.inventory.udfrecursive(2)")
