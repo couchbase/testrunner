@@ -1223,7 +1223,7 @@ class EventingBaseTest(QueryHelperTests):
         self.sleep(10, message=msg)
         result = self.rest.get_composite_eventing_status()
         count = 0
-        while result['apps'] is not None and count < iterations:
+        while result['apps'] != [] and count < iterations:
             self.sleep(10, message=msg)
             result = self.rest.get_composite_eventing_status()
             count += 1
@@ -1252,7 +1252,7 @@ class EventingBaseTest(QueryHelperTests):
             if self.non_default_collection:
                 for bucket in self.rest.get_buckets():
                     self.create_scope_collection(bucket.name, bucket.name, bucket.name)
-    
+
     def check_lcb_exception(self):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         error_occurred=False
@@ -1264,4 +1264,3 @@ class EventingBaseTest(QueryHelperTests):
                 log.info("LCB Exception occured: ",total_lcb_exceptions )
                 error_occurred=True
         return error_occurred
-    
