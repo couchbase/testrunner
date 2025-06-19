@@ -2222,9 +2222,16 @@ class GSIUtils(object):
         return tasks
 
     def run_continous_query_load(self, select_queries, database=None, capella_run=False,
-                                 query_node=False, sleep_timer=30):
+                                 query_node=False, sleep_timer=30, timeout=1200):
+        start_time = datetime.datetime.now()
         while self.query_event.is_set():
             try:
+                # Check if timeout has been reached
+                curr_time = datetime.datetime.now()
+                if (curr_time - start_time).total_seconds() > timeout:
+                    self.log.info(f"Query load timeout reached after {timeout} seconds. Exiting continuous query load.")
+                    break
+                
                 tasks = self.aysnc_run_select_queries(select_queries=select_queries, database=database,
                                                       capella_run=capella_run, query_node=query_node)
                 for task in tasks:

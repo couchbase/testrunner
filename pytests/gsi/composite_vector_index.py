@@ -1007,19 +1007,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
                             select_queries=select_queries, query_node=query_node)
-
+            self.log.info("Starting failover of KV node")
             # perform failover of KV node
-            failover_task = self.cluster.async_failover([self.master], failover_nodes=[data_nodes[2]], graceful=False)
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=[data_nodes[-1]], graceful=False)
             failover_task.result()
-
-            self.rest.add_back_node("ns_1@{}".format(data_nodes[2].ip))
-            self.rest.set_recovery_type("ns_1@{}".format(data_nodes[2].ip), self.recovery_type)
+            self.log.info("Failover of KV node completed")
+            self.log.info("Starting recovery of KV node")
+            self.rest.add_back_node("ns_1@{}".format(data_nodes[-1].ip))
+            self.rest.set_recovery_type("ns_1@{}".format(data_nodes[-1].ip), self.recovery_type)
             self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            self.log.info("Recovery of KV node completed")
             msg = "rebalance failed while recovering failover nodes {0}".format(
-                self.server_to_fail[0])
+                data_nodes[-1])
             self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
+            self.log.info("Rebalance completed. Clearing query event")
             self.gsi_util_obj.query_event.clear()
-
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
             for node in stats:
