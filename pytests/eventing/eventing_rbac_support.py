@@ -205,8 +205,7 @@ class EventingRBACSupport(EventingBaseTest):
             self.deploy_function(body, username="john", password="asdasd")
         except Exception as e:
             self.log.info(e)
-            assert "ERR_FORBIDDEN" in str(e) and "Owner of the function doesn\'t exist" in str(e), True
-        self.delete_function(body, username="john", password="asdasd")
+            assert ("ERR_FORBIDDEN" in str(e) and "Owner of the function doesn't exist" in e.args[0].decode('utf-8'))
 
     def test_function_scope_modification_after_function_creation(self):
         body = self.create_save_function_body(self.function_name, self.handler_code,
