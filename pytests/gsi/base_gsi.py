@@ -2815,7 +2815,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(f"===== {msg} not triggered."
                           f"No log lines matching string {log_string} seen on any of the indexer nodes.")
         return log_validated
-    
+
     def verify_dcp_transfer_tokens(self):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         url = f"http://{index_node.ip}:9102/listRebalanceTokens"
@@ -3316,7 +3316,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                 error_obj.append(error)
         if error_obj:
             self.log.info(f"{error_obj}")
-            self.sleep(36000)
             raise Exception(f"Counts don't match for the following indexes: {error_obj}")
 
     def get_all_array_index_names(self):
