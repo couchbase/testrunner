@@ -152,7 +152,7 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
             self.deploy_function(body, deployment_fail=True)
         except Exception as e:
-            if "Function handler should not be empty" not in str(e):
+            if "ERR_HANDLER_COMPILATION" not in str(e):
                 self.fail("Function deployment succeeded with empty handler")
 
     def test_without_update_delete(self):
