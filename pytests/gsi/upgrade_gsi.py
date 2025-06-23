@@ -2545,6 +2545,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             if RestConnection(node).get_complete_version() != self.upgrade_to.split("-")[0]:
                 nodes_for_installation.append(node)
 
+        remote_machine = RemoteMachineShellConnection(rebalance_nodes[0])
+        remote_machine.couchbase_uninstall()
+        self.sleep(60, "Lettinng the machine sleep after uninstall")
+        remote_machine.disconnect()
         # the below functionality is used to install the desired version of cb server on the given list of nodes
         if self.community_upgrade:
             self._install(rebalance_nodes, version=self.upgrade_to, community_to_enterprise=True)
