@@ -3228,8 +3228,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             where_clause = ""
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
-            elif index.get('index_key') and not index.get('condition'):
-                where_clause = f" WHERE {'and '.join(list(index.get('index_key')))} is not null"
 
             if ("`colorRGBVector` VECTOR" in index['index_key'] and "similarity" in index['with']
                 and index['with']['similarity'] == "cosine"):
