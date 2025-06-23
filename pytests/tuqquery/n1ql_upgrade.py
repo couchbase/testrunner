@@ -327,8 +327,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_test_udf_inline(phase=phase)
                     if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
                         self.run_test_udf_js_inline(phase=phase)
-                        self.run_test_udj_js_inline_scope(phase=phase)
-                        self.run_test_udj_js_inline_recursive(phase=phase)
+                        self.run_test_udf_js_inline_scope(phase=phase)
+                        self.run_test_udf_js_inline_recursive(phase=phase)
                     self.run_test_udf_inline_recursive(phase=phase)
                 with self.subTest("PRE UDF INLINE NESTED INLINE TEST"):
                     self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
@@ -373,8 +373,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline(phase=phase)
                 if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
                     self.run_test_udf_js_inline(phase=phase)
-                    self.run_test_udj_js_inline_scope(phase=phase)
-                    self.run_test_udj_js_inline_recursive(phase=phase)
+                    self.run_test_udf_js_inline_scope(phase=phase)
+                    self.run_test_udf_js_inline_recursive(phase=phase)
                 self.run_test_udf_inline_recursive(phase=phase)
             with self.subTest("MIXED UDF INLINE NESTED INLINE TEST"):
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
@@ -449,8 +449,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_test_udf_inline(phase=phase)
                 if (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 6) or int(self.initial_version[0]) >= 8:
                     self.run_test_udf_js_inline(phase=phase)
-                    self.run_test_udj_js_inline_scope(phase=phase)
-                    self.run_test_udj_js_inline_recursive(phase=phase)
+                    self.run_test_udf_js_inline_scope(phase=phase)
+                    self.run_test_udf_js_inline_recursive(phase=phase)
                 self.run_test_udf_inline_recursive(phase=phase)
             with self.subTest("POST UDF INLINE NESTED INLINE TEST"):
                 self.run_test_udf_inline_nested_inline(phase=phase,scoping="global_global")
@@ -888,20 +888,20 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     }\
                     return acc;\
                 }'
-                function_names = ["selectnested","selectnestedinventory"]
+                function_names = ["selectnestedglobal","selectnestedinventory"]
                 self.log.info("Create n1ql library")
-                self.create_library("n1ql", functions, function_names)
+                self.create_library("n1ql2", functions, function_names)
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibrarygs(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibrarygs(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql2"')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegs3(a,b,c) { (SELECT RAW default:default._default.nestedjslibrarygs(a,b,c)) }")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql2"')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default:default._default.nestedinliness3(a,b,c) { (SELECT RAW default:default._default.nestedjslibraryss(a,b,c)) }")
                 else:
                     #global calling global 
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql"')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql2"')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg3(a,b,c) { (SELECT RAW nestedjsinlinegg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
@@ -931,7 +931,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
                         self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
                     self.log.info("Delete n1ql library")
-                    self.delete_library("n1ql")
+                    self.delete_library("n1ql2")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -988,15 +988,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if scoping == "global_scoped":
                     #global calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inlinegs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs(a,b,c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs($a,$b,$c);}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inliness(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness(a,b,c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness($a,$b,$c);}'")
                 else:
                     #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION inlinegg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg(a,b,c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg($a,$b,$c);}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness2(10,20,30)")
@@ -1034,15 +1034,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if scoping == "global_scoped":
                     #global calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinlinegs(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs(a,b,c) { return a+b+c-40; }'")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs(a,b,c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs($a,$b,$c);}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness(a,b,c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness($a,$b,$c);}'")
                 else:
                     #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg(a,b,c) { return a+b+c-40; }'")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg(a,b,c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg($a,$b,$c);}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness3(10,20,30)")
@@ -1078,7 +1078,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         try:
             if phase == "pre-upgrade":
                 functions = 'function selectnestedglobalinline(doctype,cityname) {\
-                    var query = SELECT RAW nestedinlinegglibrary(doctype,cityname);\
+                    var query = SELECT RAW nestedinlinegglibrary($doctype,$cityname);\
                     var acc = [];\
                     for (const row of query) {\
                         acc.push(row);\
@@ -1086,7 +1086,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     return acc;\
                 }\
                 function selectnestedglobalscopedinline(doctype,cityname) {\
-                    var query = SELECT RAW default._default.nestedinlinegslibrary(doctype,cityname);\
+                    var query = SELECT RAW default._default.nestedinlinegslibrary($doctype,$cityname);\
                     var acc = [];\
                     for (const row of query) {\
                         acc.push(row);\
@@ -1094,27 +1094,27 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     return acc;\
                 }\
                 function selectnestedinventoryinline(doctype,cityname){\
-                    var query = SELECT RAW nestedinlinesslibrary(doctype,cityname);\
+                    var query = SELECT RAW nestedinlinesslibrary($doctype,$cityname);\
                     var acc = [];\
                     for (const row of query) {\
                         acc.push(row);\
                     }\
                     return acc;\
                 }'
-                function_names = ["selectnestedglobalinline","selectnestedinventoryinline,selectnestedglobalscopedinline"]
+                function_names = ["selectnestedglobalinline","selectnestedinventoryinline","selectnestedglobalscopedinline"]
                 self.log.info("Create n1ql library")
-                self.create_library("n1ql", functions, function_names)
+                self.create_library("n1ql3", functions, function_names)
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygs2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalscopedinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygs2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalscopedinline" AT "n1ql3"')
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinegslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql3"')
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 else:
                     #global calling global 
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalinline" AT "n1ql3"')
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION nestedinlinegglibrary(doctype,cityname) { (SELECT airportname FROM `travel-sample` WHERE type = doctype AND city = cityname ORDER BY airportname)  }')
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
@@ -1144,7 +1144,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
                         self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
                     self.log.info("Delete n1ql library")
-                    self.delete_library("n1ql")
+                    self.delete_library("n1ql3")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -1154,14 +1154,14 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_cbq_query("CREATE or REPLACE FUNCTION jsudf1(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf1(a,b,c) { return a+b+c-40; }'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 results = self.run_cbq_query("EXECUTE FUNCTION jsudf1(10,20,30)")
-                self.assertEqual(results['results'], [[20]])
+                self.assertEqual(results['results'], [20])
                 results = self.run_cbq_query("SELECT jsudf1(10,20,30)")
                 self.assertEqual(results['results'], [{'$1': 20}])
         except Exception as e:
             self.log.error(str(e))
             self.fail()
 
-    def run_test_udj_js_inline_scope(self, phase):
+    def run_test_udf_js_inline_scope(self, phase):
         try:
             if phase == "pre-upgrade":
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudf2(a,b,c) LANGUAGE JAVASCRIPT as 'function jsudf2(a,b,c) { return a+b+c-40; }'")
@@ -1174,12 +1174,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.log.error(str(e))
             self.fail()
 
-    def run_test_udj_js_inline_recursive(self, phase):
+    def run_test_udf_js_inline_recursive(self, phase):
         try:
             if phase == "pre-upgrade":
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { return a; }'")
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { if (a >= 10) { return a;} else { return jsudfrecursive(a+2); } }'")
-            if (phase == "mixed-mode" or phase == "post-upgrade") and self.initial_version:
+            if (phase == "mixed-mode" or phase == "post-upgrade") and (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 1):
                 results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.jsudfrecursive(2)")
                 self.assertEqual(results['results'], [10])
                 results = self.run_cbq_query("SELECT `travel-sample`.inventory.jsudfrecursive(2)")
@@ -1194,7 +1194,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) { a }")
                 self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
                 # If initial version is 7.2.8 or greater we need can use the original udf
-            if (phase == "mixed-mode" or phase == "post-upgrade") and (int(self.initial_version[0]) == 7 and int(self.initial_version[1]) >= 1):
+            if (phase == "mixed-mode" or phase == "post-upgrade") and (int(self.initial_version[0]) == 7 and int(self.initial_version[2]) >= 1):
                 results = self.run_cbq_query("EXECUTE FUNCTION default:`travel-sample`.inventory.udfrecursive(2)")
                 self.assertEqual(results['results'], [10])
                 results = self.run_cbq_query("SELECT default:`travel-sample`.inventory.udfrecursive(2)")
@@ -1865,25 +1865,63 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if phase == "pre-upgrade":
             self.run_cbq_query(f"DROP SEQUENCE `default`.`_default`.{sequence_name} IF EXISTS")
             self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name}")
-        elif phase in ["post-upgrade", "mixed-mode"]:
+
+            result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+            self.assertEqual(result['results'], expected_default)
+            
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertEqual(nextval['results'][0]['val'], 0) 
+
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertEqual(nextval['results'][0]['val'], 1) 
+
+            prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertEqual(prevval['results'][0]['val'], 1)
+
+            prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertEqual(prevval['results'][0]['val'], 1)
+
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertEqual(nextval['results'][0]['val'], 2)
+        elif phase  == "mixed-mode":
             self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name} IF NOT EXISTS")
-        result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
-        self.assertEqual(result['results'], expected_default)
+            result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+            self.assertEqual(result['results'], expected_default)
+            
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 0 or nextval['results'][0]['val'] == 3 or nextval['results'][0]['val'] == 50) 
 
-        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-        self.assertEqual(nextval['results'][0]['val'], 0)
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51) 
 
-        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-        self.assertEqual(nextval['results'][0]['val'], 1)
+            prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51) 
 
-        prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
-        self.assertEqual(prevval['results'][0]['val'], 1)
+            prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51) 
 
-        prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
-        self.assertEqual(prevval['results'][0]['val'], 1)
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 2 or nextval['results'][0]['val'] == 5 or nextval['results'][0]['val'] == 52) 
+        elif phase == "post-upgrade":
+            result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
+            self.assertEqual(result['results'], expected_default)
+            
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 3 or nextval['results'][0]['val'] == 6 or nextval['results'][0]['val'] == 53) 
 
-        nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-        self.assertEqual(nextval['results'][0]['val'], 2)
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54) 
+
+            prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54) 
+
+            prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54) 
+
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 5 or nextval['results'][0]['val'] == 8  or nextval['results'][0]['val'] == 55) 
+
+
     
     ###############################
     #
