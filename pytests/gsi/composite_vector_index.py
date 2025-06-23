@@ -3015,7 +3015,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
 
             # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {collection_namespace} where rating > 2"
+            select_query = f"select count(*) from {collection_namespace} where rating > 2 and colorRGBVector != [0, 0, 0]"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
 
@@ -3059,7 +3059,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
 
-
+            self.sleep(300)
             error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
             self.drop_index_node_resources_utilization_validations()
