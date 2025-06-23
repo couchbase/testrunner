@@ -187,7 +187,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         self.active_repository_api = ActiveRepositoryApi(self.api_client)
 
         # Backup Service Constants
-        self.default_plans = ["_hourly_backups", "_daily_backups"]
+        self.default_plans = ["_hourly_backups", "_daily_backups", "_daily_full_backups_with_incrementals", "_weekly_full_backups_with_incrementals"]
         self.periods = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
 
         # A connection to every single machine in the cluster
@@ -237,7 +237,7 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         super().setUp()
         self.preamble()
 
-        # Specifify this is a backup service test
+        # Specify this is a backup service test
         self.backupset.backup_service = True
 
         # Run cbbackupmgr on the same node as the backup service being tested
@@ -1206,6 +1206,13 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             self.delete_all_plans()
 
         return self.wait_until_repositories_are_deleted()
+
+    def modify_plan_for_active_repository(self, repo_name, plan_name):
+        rest = RestConnection(self.master)
+        params = {}
+        base_url = "http://%s:%s/" % (self.master.ip, "8097")
+        api = base_url + f"api/v1/cluster/self/repository/active/{repo_name}/plan/{plan_name}"
+        return rest.urllib_request(api, 'POST', params)
 
     # Clean up cbbackupmgr
     def tearDown(self):

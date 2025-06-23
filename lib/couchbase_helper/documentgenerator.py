@@ -725,11 +725,13 @@ class SDKDataLoader(object):
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
                  es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False,
                  base64=False, model="sentence-transformers/all-MiniLM-L6-v2", mutate=0, dim=128, mutation_timeout=0,
-                 create_start=0, create_end=0, update_start=0, update_end=0, delete_start=0, delete_end=0):
+                 create_start=0, create_end=0, update_start=0, update_end=0, delete_start=0, delete_end=0, expiry_start=0, expiry_end=0, read_start=0, read_end=0, percent_expiry=0, percent_read=0):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
         self.percent_delete = percent_delete
+        self.percent_expiry = percent_expiry
+        self.percent_read = percent_read
         self.json_template = json_template
         self.key_prefix = key_prefix
         self.start = start
@@ -774,7 +776,10 @@ class SDKDataLoader(object):
         self.update_end = update_end
         self.delete_start = delete_start
         self.delete_end = delete_end
-
+        self.expiry_start = expiry_start
+        self.expiry_end = expiry_end
+        self.read_start = read_start
+        self.read_end = read_end
 
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1

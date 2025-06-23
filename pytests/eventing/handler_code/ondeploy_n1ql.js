@@ -13,7 +13,7 @@ function OnDeploy(action) {
     var meta = { id: randomId };  // Set the random id to meta.id
     try {
         var docId = meta.id;
-        var query_n1ql = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docId ,'Executing N1QL Query');
+        var query_n1ql = INSERT INTO default.scope0.collection1 ( KEY, VALUE ) VALUES ( $docId ,'Executing N1QL Query');
     } catch (e) {
         log("Error executing N1QL query:", e);
     }

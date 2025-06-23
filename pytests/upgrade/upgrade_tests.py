@@ -227,6 +227,9 @@ class UpgradeTests(NewUpgradeBaseTest):
     """
 
     def load_items_during_rebalance(self,server):
+        if not self.fts_upgrade:
+            return
+
         self.sleep(15)
         self.fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
         while(not self.isRebalanceComplete):
@@ -1000,6 +1003,7 @@ class UpgradeTests(NewUpgradeBaseTest):
             raise
     
     def trigger_rebalance(self,servers, servers_in,servers_out,servicesNodeOut):
+        start_services_num = 0
         try:
             if self.upgrade_services_in == "same":
                 self.cluster.rebalance(list(servers.values()),

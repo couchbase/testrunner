@@ -59,6 +59,8 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED_RECOVERY
         elif handler_code == 'ondeploy_test':
             self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP
+        elif handler_code == 'ondeploy_test_pause_resume':
+            self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_PAUSE_RESUME
         else:
             self.handler_code = "handler_code/ABO/insert_recovery.js"
         if self.is_expired:
@@ -1339,6 +1341,39 @@ class EventingRecovery(EventingBaseTest):
         self.verify_doc_count_collections("default.scope0.collection1", 1)
         self.undeploy_and_delete_function(body)
 
+    #MB-66217 
+    def test_is_balanced_after_restarting_eventing_producer(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.non_default_collection:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+        else:
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        self.deploy_function(body)
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        self.kill_producer(eventing_node)
+        self.sleep(120)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        else:
+            self.wait_for_handler_state(body['appname'], "deployed")
+        if self.non_default_collection:
+            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        rest_conn = RestConnection(eventing_node)
+        json_response = rest_conn.cluster_status()
+        self.log.info("Pools Default Statistics: {0}".format(json_response))
+        is_balanced=json_response['balanced']
+        if not is_balanced:
+            servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
+            self.assertFalse('eventing' in servicesNeedRebalance,
+                    msg="Eventing Nodes are not balanced after restarting eventing producer, need rebalance."  )
+
     def test_ondeploy_after_stopping_couchbase_server(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name,self.handler_code)
@@ -1352,4 +1387,23 @@ class EventingRecovery(EventingBaseTest):
         self.log.info("Pools Default Statistics: {0}".format(json_response))
         self.sleep(10)
         self.wait_for_handler_state(body['appname'], "deployed")
+        self.undeploy_and_delete_function(body)
+
+    def test_ondeploy_after_stopping_couchbase_server_while_resume_is_triggered(self):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name,self.handler_code)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 1)
+        self.pause_function(body)
+        self.resume_function(body, wait_for_resume=False)
+        #Node killed during the "resuming..." state
+        self.stop_server(eventing_node, True)
+        self.log.info("Couchbase stopped on the eventing node")
+        self.start_server(eventing_node)
+        rest_conn = RestConnection (eventing_node)
+        json_response = rest_conn.cluster_status()
+        self.log.info("Pools Default Statistics: {0}".format(json_response))
+        self.sleep(10)
+        #Function goes back to the "resuming..." state which is the previous state and then gets deployed
+        self.wait_for_handler_state(body ['appname'], "deployed")
         self.undeploy_and_delete_function(body)

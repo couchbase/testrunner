@@ -72,7 +72,6 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.keyspace = []
         self.create_scope_collections(num_scopes=self.num_scopes, num_collections=self.num_collections)
         self.run_tasks = True
-        self.targetProcess = self.input.param("targetProcess", 'memcached')
         self.data_nodes = self.get_kv_nodes()
         self.sleep_time = self.input.param("sleep_time", 1)
         self.dgm_check_timeout = self.input.param("dgm_check_timeout", 1800)

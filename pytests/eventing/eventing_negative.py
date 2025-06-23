@@ -57,7 +57,7 @@ class EventingNegative(EventingBaseTest):
         try:
             self.deploy_function(body)
         except Exception as ex:
-            if "ERR_INVALID_REQUEST" not in str(ex):
+            if "ERR_BUCKET_MISSING" not in str(ex):
                 self.fail("Function save/deploy succeeded even when src/dst/metadata buckets doesn't exist")
 
     def test_deploy_function_where_source_and_metadata_buckets_are_same(self):

@@ -153,7 +153,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.assertEqual(
                     idx_after_restore['status'], "Created", msg=msg)
 
-                self.assertEqual(self.num_index_replicas,
+                self.assertEqual(idx_before_backup['numReplica'],
                                  idx_after_restore['numReplica'], msg=msg)
 
                 self.assertEqual(idx_before_backup['numPartition'],
@@ -784,9 +784,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         """
         if len(self.indexer_nodes) < 2:
             self.fail("Atleast 2 indexer required")
-        if self.num_index_replicas == 0 or\
-                self.num_index_replicas >= len(self.indexer_nodes):
-            self.num_index_replicas = len(self.indexer_nodes) - 1
+        if self.num_index_replica == 0 or\
+                self.num_index_replica >= len(self.indexer_nodes):
+            self.num_index_replica = len(self.indexer_nodes) - 1
         self._drop_indexes(self.rest.get_indexer_metadata()['status'])
         replica_index = QueryDefinition(
             "replica_index",
@@ -798,7 +798,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
-            num_replica=self.num_index_replicas
+            num_replica=self.num_index_replica
         )
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
@@ -808,7 +808,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         indexer_stats_before_backup = self.rest.get_indexer_metadata()
         replica_indexes_before_backup = indexer_stats_before_backup['status']
         self.assertEqual(
-            len(replica_indexes_before_backup), self.num_index_replicas + 1)
+            len(replica_indexes_before_backup), self.num_index_replica + 1)
         indexes_before_backup = [
             index for index in replica_indexes_before_backup
             if index['indexName'] == replica_index.index_name]
@@ -836,7 +836,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         time.sleep(30)
         indexes_after_restore = [index for index in self.rest.get_indexer_metadata()['status']
                                  if index['indexName'] == replica_index.index_name]
-        if len(index_nodes) > self.num_index_replicas:
+        if len(index_nodes) > self.num_index_replica:
             self.assertEqual(len(indexes_after_restore), len(indexes_before_backup))
         else:
             self.assertEqual(len(indexes_after_restore), len(index_nodes))
@@ -1000,9 +1000,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
     def test_backup_restore_with_duplicate_replica_index_name(self):
         if len(self.indexer_nodes) < 2:
             self.fail("Atleast 2 indexer required")
-        if self.num_index_replicas == 0 or\
-                self.num_index_replicas >= len(self.indexer_nodes):
-            self.num_index_replicas = len(self.indexer_nodes) - 1
+        if self.num_index_replica == 0 or\
+                self.num_index_replica >= len(self.indexer_nodes):
+            self.num_index_replica = len(self.indexer_nodes) - 1
         bucket = self.buckets[0].name
         scope = self.rest.get_bucket_scopes(bucket)[0]
         collection = self.rest.get_scope_collections(bucket, scope)[0]
@@ -1019,7 +1019,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
-            num_replica=self.num_index_replicas
+            num_replica=self.num_index_replica
         )
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
@@ -1058,7 +1058,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 node.ip + ":" + self.node_port
                 for node in self.indexer_nodes],
             defer_build=self.defer_build,
-            num_replica=self.num_index_replicas
+            num_replica=self.num_index_replica
         )
         self.run_cbq_query(query)
         self.sleep(5, "wait for index to create")
@@ -1082,7 +1082,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         msg = "indexes before backup: {0}\nindexes after restore: {1}".format(
             basic_indexes_before_backup, basic_indexes_after_restore)
         self.assertEqual(len(basic_indexes_after_restore),
-                         self.num_index_replicas + 1, msg=msg)
+                         self.num_index_replica + 1, msg=msg)
 
     def test_backup_restore_with_duplicate_index_name_different_fields(self):
         """
@@ -2257,6 +2257,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                          query_node=query_node)
             self.wait_until_indexes_online()
+            self.item_count_related_validations()
             self.validate_shard_affinity()
             query_results_before_backup = self.run_scans_and_return_results(select_queries)
             for bucket in self.buckets:
@@ -2442,6 +2443,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
             self.wait_until_indexes_online()
+            self.item_count_related_validations()
 
             for bucket in self.buckets:
                 backup_client = IndexBackupClient(self.master,
@@ -2450,7 +2452,9 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 bucket_collection_namespaces = [
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
-                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                    if namespace.split(':')[-1].split(".")[0] == bucket.name]
+                map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True,
+                                                                                 map_from_index_nodes=True)
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2458,18 +2462,18 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
-                print(f"indexes before backup {indexes_before_backup}")
+                self.log.info(f"indexes before backup {indexes_before_backup}")
                 backup_result = backup_client.backup(bucket_collection_namespaces, use_https=self.use_https)
                 self.assertTrue(
                     backup_result[0],
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(60)
+                self.sleep(120)
                 timeout = 0
-                while timeout<=360:
-                    index_status = self.index_rest.get_indexer_metadata()['status']
-                    if len(index_status) == 0:
+                while timeout <= 360:
+                    indexer_metadata = self.index_rest.get_indexer_metadata()
+                    if 'status' not in indexer_metadata:
                         break
                     else:
                         timeout = timeout + 1
@@ -2523,8 +2527,10 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
                 self._build_indexes(indexes_after_restore)
+                self.sleep(10)
                 self.wait_until_indexes_online()
                 self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
+
 
             self.wait_until_indexes_online()
             rebalance_task = False
@@ -2534,7 +2540,6 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 self.enable_redistribute_indexes()
                 rebalance_task = True
             if rebalance_task:
-                map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], nodes_in_list, [],
                                                          services=['index'], cluster_config=self.cluster_config)
                 self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
@@ -2554,7 +2559,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     if bucket.name == index['bucket']
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
-                self._verify_indexes(indexes_before_backup, indexes_after_replica_repair)
+                self._verify_indexes(indexes_before_backup, indexes_after_replica_repair, new_indexes=True)
                 map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
                 self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
@@ -2564,6 +2569,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                item_count_increase=False,
                                                                per_node=True, skip_array_index_item_count=False)
                 self.display_recall_and_accuracy_stats(select_queries=select_queries, message="recall and accuracy stats after adding back a node and post replica repair", similarity=self.similarity)
+                self.drop_index_node_resources_utilization_validations()
 
         finally:
             if backup_client:
@@ -2623,7 +2629,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 bucket_collection_namespaces = [
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
-                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                    if namespace.split(':')[-1].split(".")[0] == bucket.name]
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2655,7 +2661,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(60)
+                self.sleep(120)
                 self.rest.delete_all_buckets()
 
                 with ThreadPoolExecutor() as executor:
@@ -2753,6 +2759,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                         similarity="L2_SQUARED")
             query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_replica=self.num_index_replica)
             self.run_cbq_query(query=query, server=self.n1ql_node)
+            self.item_count_related_validations()
 
 
             for bucket in self.buckets:
@@ -2762,7 +2769,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                 bucket_collection_namespaces = [
                     namespace.split(".", 1)[1] for namespace
                     in self.namespaces
-                    if namespace.split(':')[0].split(".")[0] == bucket.name]
+                    if namespace.split(':')[-1].split(".")[0] == bucket.name]
                 indexer_stats_before_backup = self.index_rest.get_indexer_metadata()
                 indexes_before_backup = [
                     index
@@ -2777,11 +2784,11 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     "backup failed for {0} with {1}".format(
                         bucket_collection_namespaces, backup_result[1]))
                 self._drop_indexes(indexes_before_backup)
-                self.sleep(60)
+                self.sleep(120)
                 timeout = 0
                 while timeout <= 360:
-                    index_status = self.index_rest.get_indexer_metadata()['status']
-                    if len(index_status) == 0:
+                    indexer_metadata = self.index_rest.get_indexer_metadata()
+                    if 'status' not in indexer_metadata:
                         break
                     else:
                         timeout = timeout + 1
@@ -2836,6 +2843,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
 
                 shard_index_map = self.get_shards_index_map()
                 self.validate_shard_seggregation(shard_index_map=shard_index_map)
+                self.drop_index_node_resources_utilization_validations()
 
 
         finally:

@@ -8516,3 +8516,278 @@ class QueriesIndexTests(QueryTests):
             # Drop the index
             self.query = f"DROP INDEX {index_name} ON {query_bucket} USING GSI"
             self.run_cbq_query()
+
+    def test_covering_with_upper(self):
+        self.fail_if_no_buckets()
+        # create collection1 in default bucket
+        self.query = "CREATE COLLECTION collection1"
+        self.run_cbq_query(query_context='default._default')
+
+        # insert documents into collection1
+        self.query = "insert into collection1 (key, value) values ('key::1', {'name':'John'})"
+        self.run_cbq_query(query_context='default._default')
+
+        # create indexes on collection1
+        self.query = "create index idx_name_1 on collection1(name, upper(name))"
+        self.run_cbq_query(query_context='default._default')
+        self.query = "create index idx_name_2 on collection1(name)"
+        self.run_cbq_query(query_context='default._default')
+
+        # query collection1 with index index_name_1
+        self.query = "select upper(name) from collection1 use index (idx_name_1) where name = 'John' group by name"
+        result_index_1 = self.run_cbq_query(query_context='default._default')
+        self.log.info(f"Query result: {result_index_1}")
+
+        # query collection1 with index index_name_2
+        self.query = "select upper(name) from collection1 use index (idx_name_2) where name = 'John' group by name"
+        result_index_2 = self.run_cbq_query(query_context='default._default')
+        self.log.info(f"Query result: {result_index_2}")
+
+        # assert the result
+        self.assertEqual(result_index_1['results'][0]['$1'], 'JOHN', "Result from index index_name_1 is not correct")
+        self.assertEqual(result_index_2['results'][0]['$1'], 'JOHN', "Result from index index_name_2 is not correct")
+
+    def test_MB66129(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query("CREATE COLLECTION collection1 IF NOT EXISTS", query_context='default._default')
+        self.run_cbq_query("CREATE COLLECTION collection2 IF NOT EXISTS", query_context='default._default')
+
+        # create index on collection2
+        self.query = "CREATE INDEX idx_name_1 IF NOT EXISTS on collection2(`known_field` INCLUDE MISSING,`fx`,`jf1021067`,`jf1021072_copy`,`known_field2`)"
+        self.run_cbq_query(query_context='default._default')
+
+        # run query 1
+        self.query = "SELECT * FROM collection2 AS t1 WHERE t1.known_field2 = 0 or NVL(t1.known_field,'') = 'something'"
+        self.run_cbq_query(query_context='default._default', query_params={'use_cbo': True})
+
+        # run query 2
+        self.query = '''
+        SELECT jf1021075_copy AS p0,known_field2 AS p1,known_field2 AS p2,jf1021075_copy AS p3,
+            (SELECT COUNT(1) FROM collection1 AS t2 WHERE t1.fx > t2.f1) AS x 
+        FROM collection2 AS t1
+        WHERE jf1021070_copy NOT LIKE "%_voBRyciaOpmp4FPm%"
+        AND (known_field2 = 0 OR jf1021070_copy > "hFE_DVU4bWA9J4yRP")
+        AND jf1021075_copy != false
+        AND NVL(t1.known_field,"") != "something"
+        AND NVL(t1.known_field2,0)
+        '''
+        self.run_cbq_query(query_context='default._default', query_params={'use_cbo': True})
+
+    # MB-66160
+    def test_invalid_use_index(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query("DROP INDEX ix1 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix2 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix3 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix4 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix5 IF EXISTS ON default")
+        self.run_cbq_query("DROP INDEX ix6 IF EXISTS ON default")
+        try:
+            # create index on default bucket
+            self.run_cbq_query("CREATE INDEX ix1 IF NOT EXISTS ON default(c2 INCLUDE MISSING, c1, c11, c12, c13, c14)")
+            self.run_cbq_query("CREATE INDEX ix2 IF NOT EXISTS ON default(c1, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix3 IF NOT EXISTS ON default(c11, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix4 IF NOT EXISTS ON default(c12, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix5 IF NOT EXISTS ON default(c13, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+            self.run_cbq_query("CREATE INDEX ix6 IF NOT EXISTS ON default(c14, c2, DISTINCT ARRAY FLATTEN_KEYS(v.a1, v.a2) FOR v IN arr1 END)")
+
+            # run explain query
+            explain_query = '''
+            EXPLAIN SELECT f1, f2
+            FROM default
+            WHERE c2 = 100
+            AND (ANY v IN arr1 SATISFIES v.a1 >= 0 END AND
+                 ANY v IN arr1 SATISFIES v.a2 <= 100 END)
+            AND (c1 = 0 OR c11 = 1 OR c12 = 2 OR c13 = 3 OR c14 = 4)
+            '''
+            explain_result = self.run_cbq_query(explain_query, query_params={'use_cbo': False})
+            self.log.info(f"Explain without hint result: {explain_result}")
+
+            # check ix1 is used in explain result
+            self.assertTrue('ix1' in str(explain_result['results'][0]['plan']))
+
+            explain_query_use_index = '''
+            EXPLAIN SELECT f1, f2
+            FROM default USE INDEX(dummy)
+            WHERE c2 = 100
+            AND (ANY v IN arr1 SATISFIES v.a1 >= 0 END AND
+                 ANY v IN arr1 SATISFIES v.a2 <= 100 END)
+            AND (c1 = 0 OR c11 = 1 OR c12 = 2 OR c13 = 3 OR c14 = 4)
+            '''
+            explain_result_use_index = self.run_cbq_query(explain_query_use_index, query_params={'use_cbo': False})
+            self.log.info(f"Explain with hint result: {explain_result_use_index}")
+
+            # check hint is invalid in explain result
+            self.assertTrue('Invalid indexes specified: dummy' in str(explain_result_use_index['results'][0]['optimizer_hints']))
+
+            # check ix1 is used in explain result
+            self.assertTrue('ix1' in str(explain_result_use_index['results'][0]['plan']))
+
+        finally:
+            # drop index
+            self.run_cbq_query("DROP INDEX ix1 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix2 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix3 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix4 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix5 IF EXISTS ON default")
+            self.run_cbq_query("DROP INDEX ix6 IF EXISTS ON default")
+
+    def test_MB52090(self):
+        self.fail_if_no_buckets()
+        self.run_cbq_query("CREATE COLLECTION mb52090 IF NOT EXISTS", query_context='default._default')
+        self.run_cbq_query('CREATE INDEX ix2 IF NOT EXISTS ON mb52090(c1) WHERE type LIKE "airport%"', query_context='default._default')
+
+        explain_query = '''
+        EXPLAIN SELECT 1 FROM mb52090 WHERE c1 = 10 AND type LIKE $atype
+        '''
+        explain_result = self.run_cbq_query(explain_query, query_context='default._default', query_params={'$atype': '"airport%"'})
+        self.log.info(f"Explain result: {explain_result}")
+
+        # check ix2 is used in explain result
+        self.assertTrue('ix2' in str(explain_result['results'][0]['plan']))
+
+    def test_explain_plan_time(self):
+        """
+        MB-64031: Increased plan time for query when complex WHERE clause exists in indexes
+        This test creates a new collection in default._default, sets up the indexes and query as in the JIRA,
+        and asserts the query plan time is under 4 seconds.
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb64031"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Insert a document to ensure the collection is not empty
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('k1', {{'type':'docs','status':'new','timestamp':'2024-01-01T00:00:00Z','c0':'c0','c1':'c1','c2':'c2','c3':'c3','c4':'c4','c5':'c5','c6':'c60','c7':'c70','c8':'c80','c21':'v21','c22':'v22'}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('k2', {{'type':'others','c30':'v21','c32':'notempty','c33':null,'c41':'v22','c42':4,'c43':1,'c44':1,'c45':100,'c46':1}})", query_context=query_context)
+        # Create indexes as in JIRA
+        self.run_cbq_query(f"CREATE INDEX ix20 ON {collection_name}(str_to_millis(timestamp),c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10) WHERE type = 'docs' AND status != 'submitted' AND status != 'queued'", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ix22 ON {collection_name}(str_to_millis(timestamp),c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,c10) WHERE type = 'others' AND c9 IS MISSING AND c2 IS NOT NULL AND c2 != '' AND (c9 IS MISSING OR c9 = false)", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ixo01 ON {collection_name}(c30, c35, c37) WHERE type = 'others' AND c32 != '' AND (c33 IS MISSING OR c33 != 100)", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ixo02 ON {collection_name}(c41, c43, c44, c46) WHERE type = 'others' AND c42 NOT IN [1,2,3] AND c45 != 120", query_context=query_context)
+        # Query to EXPLAIN
+        explain_query = f"""
+        EXPLAIN SELECT t.*
+        FROM {collection_name} AS t
+           JOIN {collection_name} as r ON t.c21 = r.c30 AND r.type = 'others' AND r.c32 != '' AND (r.c33 IS MISSING OR r.c33 != 100)
+           JOIN {collection_name} as s ON t.c22 = s.c41 AND s.type = 'others' AND s.c42 NOT IN [1,2,3] AND s.c45 != 120
+        WHERE  t.type = 'docs'
+               AND t.status != 'submitted'
+               AND t.status != 'queued'
+               AND t.c1  = 'c1'
+               AND t.c2  = 'c2'
+               AND t.c3  = 'c3'
+               AND t.c4  = 'c4'
+               AND t.c5 IN ['c5']
+               AND t.c6 IN ['c60', 'c61', 'c62', 'c63','c64']
+               AND t.c7 IN ['c70', 'c71', 'c72', 'c73','c74']
+               AND t.c8 IN ['c80', 'c81', 'c82', 'c83','c84']
+               AND t.c0 IS NOT NULL
+               AND t.c0 != ''
+               AND str_to_millis(t.timestamp) IS NOT NULL
+               AND str_to_millis(t.timestamp) <= str_to_millis(clock_str());
+        """
+        self.run_cbq_query(explain_query, query_context=query_context, query_params={'timeout': '4s'})
+        self.log.info("MB-64031: Query plan completed within 4s timeout")
+
+    def test_MB63883(self):
+        """
+        MB-63883: CBO: optimizer picks wrong index
+        This test creates a new collection in default._default, sets up the data and indexes as in the JIRA,
+        and asserts that the EXPLAIN plan uses the most efficient index (ix1 on c6).
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb63883"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Insert data (smaller range for test speed)
+        insert_query = f'''
+        INSERT INTO {collection_name} (key _k, value _v)
+        SELECT "k" || lpad(tostring(i), 9, '0') as _k,
+                {{"c1": lpad(tostring(IMod(i, 2)), 10, '0'),
+                "c2": lpad(tostring(IMod(i,11)), 10, '0'),
+                "c3": lpad(tostring(IMod(i,37)), 10, '0'),
+                "c4": lpad(tostring(IMod(i,113)), 10, '0'),
+                "c5": lpad(tostring(IMod(i,503)), 10, '0'),
+                "c6": lpad(tostring(IMod(i,5003)), 40, '0'),
+                "s1": lpad(tostring(i), 1024, '0'),
+                "s2": lpad(tostring(i), 1024, '0')}} as _v
+        FROM array_range(0,100000) as i
+        '''
+        self.run_cbq_query(insert_query, query_context=query_context)
+        # Create indexes
+        self.run_cbq_query(f"CREATE INDEX ix1 ON {collection_name}(c6)", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX ix2 ON {collection_name}(c1, c2, c4, c5)", query_context=query_context)
+        # Update statistics
+        self.run_cbq_query(f"UPDATE STATISTICS FOR {collection_name} INDEX(ix1,ix2)", query_context=query_context)
+        # EXPLAIN query
+        explain_query = f'''
+        EXPLAIN SELECT * FROM {collection_name}
+        WHERE c1 = "0000000000"
+            AND c2 = "0000000003"
+            AND c5 = "0000000100"
+            AND c6 BETWEEN "0000000000000000000000000000000000000010" AND "0000000000000000000000000000000000000012"
+        '''
+        explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+        self.log.info(f"EXPLAIN result: {explain_result}")
+        # Check that ix1 is used in the plan
+        plan_str = str(explain_result['results'][0]['plan'])
+        self.assertIn('ix1', plan_str, f"Expected ix1 to be used in the plan, but got: {plan_str}")
+
+    def test_MB66955(self):
+        self.fail_if_no_buckets()
+        collection_name = "mb55955"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Create index
+        self.run_cbq_query(f"CREATE INDEX ix1 ON {collection_name}(type,c3)", query_context=query_context)
+        # Run explain query
+        explain_query = f'''
+        EXPLAIN SELECT * FROM {collection_name} 
+        WHERE type = "abc" AND IS_OBJECT(o1)
+        '''
+        # Just verify query does not fail
+        self.run_cbq_query(explain_query, query_context=query_context)
+
+    def test_MB63163(self):
+        """
+        MB-63163: Sargable index not sarged for OUTER JOIN with array predicate in ON clause
+        This test creates a new collection in default._default, sets up the array index and data as in the JIRA,
+        and asserts that the queries with LEFT JOIN and ANY clause succeed with no plan error.
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb63163"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        # Create array index as in JIRA
+        self.run_cbq_query(f"CREATE INDEX ix20 ON {collection_name}(ALL a1) WHERE type = 'docs'", query_context=query_context)
+        # Insert documents
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('2345234', {{'type':'docs', 'test':1}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('d2id', {{'type':'docs', 'id':'d2id', 'c2':'val', 'a1':['2345234']}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('d2id2', {{'type':'docs', 'id':'d2id2', 'c2':'val2', 'a1':['notmatch']}})", query_context=query_context)
+        # Query 1: LEFT JOIN with ANY in ON clause
+        query1 = f"""
+        SELECT d1, d2.id, d2.c2
+        FROM {collection_name} AS d1 USE KEYS '2345234'
+        LEFT JOIN {collection_name} AS d2 ON d2.type = 'docs' AND ANY id IN d2.a1 SATISFIES id = META(d1).id END
+        """
+        result1 = self.run_cbq_query(query1, query_context=query_context)
+        self.assertIn('status', result1)
+        self.assertEqual(result1['status'], 'success', f"Query 1 failed: {result1}")
+        # Query 2: Same with WHERE d1.test = 1
+        query2 = f"""
+        SELECT d1, d2.id, d2.c2
+        FROM {collection_name} AS d1 USE KEYS '2345234'
+        LEFT JOIN {collection_name} AS d2 ON d2.type = 'docs' AND ANY id IN d2.a1 SATISFIES id = META(d1).id END
+        WHERE d1.test = 1
+        """
+        result2 = self.run_cbq_query(query2, query_context=query_context)
+        self.assertIn('status', result2)
+        self.assertEqual(result2['status'], 'success', f"Query 2 failed: {result2}")

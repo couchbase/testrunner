@@ -11,6 +11,7 @@ from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 import json
 import time
+import random
 
 class MovingTopFTS(FTSBaseTest):
 
@@ -35,6 +36,73 @@ class MovingTopFTS(FTSBaseTest):
             self.index_path = rest.get_index_path()
             if self.index_path == "/data":
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
+        
+        self.read_from_replica = TestInputSingleton.input.param("read_from_replica", False)
+        self.parition_selection = TestInputSingleton.input.param("parition_selection", "")
+
+        self.fts_nodes = None
+        self.fts_target_node = None
+        self.index_src=None
+        self.validation_data = None
+        try:
+            RestConnection(self._cb_cluster.__master_node()[0]).modify_memory_quota(kv_quota=512,fts_quota=2500)
+        except Exception as e:
+            self.log.info(f"Error modifying memory quota: {e}")
+    
+    def read_from_replica_setup(self):
+        #skips the validation check for random / random balanced queries
+        if TestInputSingleton.input.param("skip_replica_validation", False):
+            return
+
+        #selecting the fts target node (random)
+        self.fts_target_node = random.choice(self._cb_cluster.get_fts_nodes())
+        self.fts_nodes = self._cb_cluster.get_fts_nodes()
+
+        #store the active and replica stat for all indices present in the cluster. This should be executed post index creation
+        for index in self._cb_cluster.get_indexes():
+            index_name = index.name
+            self.index_src = index._source_name
+
+            #cfg inspection
+            _,payload = RestConnection(self.fts_target_node).get_cfg_stats()
+            node_map = {}
+
+            for k,v in payload['nodeDefsKnown'].items():
+                if k == "nodeDefs":
+                    for a,b in v.items():
+                        node_map[a] = b['hostPort'].split(':')[0]
+
+            partition_map = {}
+            for i,j in node_map.items():
+                partition_map[j] = 0
+
+            rep_partition_map = {}
+            for i,j in node_map.items():
+                rep_partition_map[j] = 0
+
+            for k,v in payload['planPIndexes'].items():
+                if k == "planPIndexes":
+                    for a,b in v.items():
+                        try:
+                            key = a.split('.')[2]
+                        except:
+                            key = a
+                        
+                        if index_name in key:
+                            for m,n in b.items():
+                                if m == 'nodes':
+                                    for i,j in n.items():
+                                        if j['priority'] == 0:
+                                            partition_map[node_map[i]] += 1
+                                        else:
+                                            rep_partition_map[node_map[i]] += 1
+
+            local_target = partition_map[self.fts_target_node.ip] + rep_partition_map[self.fts_target_node.ip]
+
+            total_partitions = self.num_index_partitions
+            partition_rem = total_partitions - local_target
+
+            self.validation_data = [local_target, partition_rem]
 
     def tearDown(self):
         super(MovingTopFTS, self).tearDown()
@@ -1015,6 +1083,41 @@ class MovingTopFTS(FTSBaseTest):
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
             self.fail(err)
+    
+    def rebalance_in_between_indexing_and_querying_rfr(self):
+        #TESTED
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        if rest.is_enterprise_edition():
+            services = "fts"
+        else:
+            services = "fts,kv,index,n1ql"
+        self._cb_cluster.rebalance_in(num_nodes=self.num_rebalance,
+                                      services=[services])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+
+        self.wait_for_indexing_complete()
+
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query=self.query,
+                                                expected_hits=self._find_expected_indexed_items_number(),
+                                                bucket_name=self.index_src,
+                                                validation_data=self.validation_data,
+                                                fts_nodes=self.fts_nodes,
+                                                variable_node=self.fts_target_node)
+            self.log.info("SUCCESS! Hits: %s" % hits)
+        frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        err = self.validate_partition_distribution(frest)
+        if len(err) > 0:
+            self.fail(err)
 
     def rebalance_out_between_indexing_and_querying(self):
         #TESTED
@@ -1029,6 +1132,34 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._find_expected_indexed_items_number())
+            self.log.info("SUCCESS! Hits: %s" % hits)
+        frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
+        err = self.validate_partition_distribution(frest)
+        if len(err) > 0:
+            self.fail(err)
+    
+    def rebalance_out_between_indexing_and_querying_rfr(self):
+        #TESTED
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        self._cb_cluster.rebalance_out(num_nodes=self.num_rebalance)
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        
+        if self.read_from_replica:
+            self.read_from_replica_setup()
+
+        for index in self._cb_cluster.get_indexes():
+            hits, _, _, _ = index.execute_query(query=self.query,
+                                             expected_hits=self._find_expected_indexed_items_number(),
+                                             bucket_name=self.index_src,
+                                             validation_data=self.validation_data,
+                                             fts_nodes=self.fts_nodes,
+                                             variable_node=self.fts_target_node)
             self.log.info("SUCCESS! Hits: %s" % hits)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)

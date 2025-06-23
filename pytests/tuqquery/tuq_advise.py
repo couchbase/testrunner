@@ -1,4 +1,3 @@
-
 from remote.remote_util import RemoteMachineShellConnection
 from .tuq import QueryTests
 import time
@@ -626,3 +625,78 @@ class QueryAdviseTests(QueryTests):
         advise_query = 'ADVISE SELECT meta().id FROM default WHERE type = "xx" AND (REGEXP_CONTAINS (c1, "^[0-9;]*$") OR  c1 IS MISSING  OR  c1 is null)'
         result = self.run_cbq_query(advise_query)
         self.log.info(f"Advise result is: {result['results']}")
+
+    def test_advise_nested_subquery(self):
+        query = "SELECT (SELECT 3 ) AS a3, (SELECT 1 AS a21, (SELECT 2 AS a22 ) AS a22 ) AS a2"
+        result = self.run_cbq_query(f'ADVISE {query}')
+        self.log.info(f"Advise result is: {result['results']}")
+
+        subqueries = ["select 3", "select 2 as `a22`", "select 1 as `a21`, (select 2 as `a22`) as `a22`"]
+        # check main query
+        self.assertEqual(query, result['results'][0]['query'], f"Main query {query} not found")
+        # check nested subqueries
+        for subquery in result['results'][0]['~subqueries']:
+            self.assertTrue(subquery['subquery'] in subqueries, f"Subquery {subquery} not found")
+
+    def test_advise_covered_index_join(self):
+        # create mb66635 collection
+        self.run_cbq_query('CREATE COLLECTION default._default.mb66635 IF NOT EXISTS')
+        insert1 = 'UPSERT INTO mb66635 (KEY,VALUE) VALUES("test11_advise", {"c11": 1, "c12": 10, "a11": [ 1, 2, 3, 4 ], "type": "left", "test_id": "advise"}), VALUES("test12_advise", {"c11": 2, "c12": 20, "a11": [ 3, 3, 5, 10 ], "type": "left", "test_id": "advise"}), VALUES("test13_advise", {"c11": 3, "c12": 30, "a11": [ 3, 4, 20, 40 ], "type": "left", "test_id": "advise"}), VALUES("test14_advise", {"c11": 4, "c12": 40, "a11": [ 30, 30, 30 ], "type": "left", "test_id": "advise"})'
+        insert2 = 'UPSERT INTO mb66635 (KEY,VALUE) VALUES("test21_advise", {"c21": 1, "c22": 10, "a21": [ 1, 10, 20], "a22": [ 1, 2, 3, 4 ], "type": "right", "test_id": "advise"}), VALUES("test22_advise", {"c21": 2, "c22": 20, "a21": [ 2, 3, 30], "a22": [ 3, 5, 10, 3 ], "type": "right", "test_id": "advise"}), VALUES("test23_advise", {"c21": 2, "c22": 21, "a21": [ 2, 20, 30], "a22": [ 3, 3, 5, 10 ], "type": "right", "test_id": "advise"}), VALUES("test24_advise", {"c21": 3, "c22": 30, "a21": [ 3, 10, 30], "a22": [ 3, 4, 20, 40 ], "type": "right", "test_id": "advise"}), VALUES("test25_advise", {"c21": 3, "c22": 31, "a21": [ 3, 20, 40], "a22": [ 4, 3, 40, 20 ], "type": "right", "test_id": "advise"}), VALUES("test26_advise", {"c21": 3, "c22": 32, "a21": [ 4, 14, 24], "a22": [ 40, 20, 4, 3 ], "type": "right", "test_id": "advise"}), VALUES("test27_advise", {"c21": 5, "c22": 50, "a21": [ 5, 15, 25], "a22": [ 1, 2, 3, 4 ], "type": "right", "test_id": "advise"}), VALUES("test28_advise", {"c21": 6, "c22": 60, "a21": [ 6, 16, 26], "a22": [ 3, 3, 5, 10 ], "type": "right", "test_id": "advise"}), VALUES("test29_advise", {"c21": 7, "c22": 70, "a21": [ 7, 17, 27], "a22": [ 30, 30, 30 ], "type": "right", "test_id": "advise"}), VALUES("test30_advise", {"c21": 8, "c22": 80, "a21": [ 8, 18, 28], "a22": [ 30, 30, 30 ], "type": "right", "test_id": "advise"})'
+        self.run_cbq_query(insert1, query_context='default:default._default')
+        self.run_cbq_query(insert2, query_context='default:default._default')
+
+        # update statistics
+        update_stats = 'UPDATE STATISTICS FOR mb66635(c11, c12, c21, c22, DISTINCT a11, DISTINCT a21, DISTINCT a22, type, test_id)'
+        self.run_cbq_query(update_stats, query_context='default:default._default')
+
+        advise_query = 'ADVISE select a1.c12, a2.c22 from mb66635 a1 join mb66635 a2 on a1.c11=a2.c21 and a2.test_id = "advise" where a1.test_id = "advise" and a1.c12 < 40'
+        result = self.run_cbq_query(advise_query, query_context='default:default._default')
+        self.log.info(f"Advise result is: {result['results']}")
+
+        # Check we get proper covered index recommendations
+        self.assertEqual(result['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], 
+                        "CREATE INDEX adv_c12_test_id_c11 ON `default`:`default`.`_default`.`mb66635`(`c12`,`c11`) WHERE `test_id` = 'advise'")
+        self.assertEqual(result['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][1]['index_statement'],
+                        "CREATE INDEX adv_c21_test_id_c22 ON `default`:`default`.`_default`.`mb66635`(`c21`,`c22`) WHERE `test_id` = 'advise'")
+        
+    def test_advise_multiple_keyspaces(self):
+        """
+        MB-66570: Panic when performing ADVISE on query with multiple keyspaces in the FROM clause
+        Repro steps:
+        1. create collection c1;
+        2. create collection c2;
+        3. insert into c1 values ("doc1", {"a":1});
+        4. insert into c2 values ("doc1", {"a":1});
+        5. create index i_c1_1 on c1(a);
+        6. create index i_c2_1 on c2(a);
+        7. update statistics for c1 index all;
+        8. update statistics for c2 index all;
+        9. advise select * from c1 join c2 on c1.a = c2.a; (should not panic)
+        10. advise select * from c1 nest c2 on c1.a = c2.a; (should not panic)
+        """
+        # Create collections if not exist
+        self.run_cbq_query('CREATE COLLECTION default._default.c1 IF NOT EXISTS')
+        self.run_cbq_query('CREATE COLLECTION default._default.c2 IF NOT EXISTS')
+        self.sleep(2)
+        # Insert documents
+        self.run_cbq_query('UPSERT INTO c1 (KEY, VALUE) VALUES ("doc1", {"a":1})', query_context='default:default._default')
+        self.run_cbq_query('UPSERT INTO c2 (KEY, VALUE) VALUES ("doc1", {"a":1})', query_context='default:default._default')
+        # Create indexes
+        self.run_cbq_query('CREATE INDEX i_c1_1 IF NOT EXISTS ON c1(a)', query_context='default:default._default')
+        self.run_cbq_query('CREATE INDEX i_c2_1 IF NOT EXISTS ON c2(a)', query_context='default:default._default')
+        # Update statistics
+        self.run_cbq_query('UPDATE STATISTICS FOR c1 INDEX ALL', query_context='default:default._default')
+        self.run_cbq_query('UPDATE STATISTICS FOR c2 INDEX ALL', query_context='default:default._default')
+        # ADVISE with JOIN
+        try:
+            result_join = self.run_cbq_query('ADVISE SELECT * FROM c1 JOIN c2 ON c1.a = c2.a', query_context='default:default._default')
+            self.log.info(f"ADVISE JOIN result: {result_join['results']}")
+        except Exception as e:
+            self.fail(f"ADVISE JOIN panicked or failed: {e}")
+        # ADVISE with NEST
+        try:
+            result_nest = self.run_cbq_query('ADVISE SELECT * FROM c1 NEST c2 ON c1.a = c2.a', query_context='default:default._default')
+            self.log.info(f"ADVISE NEST result: {result_nest['results']}")
+        except Exception as e:
+            self.fail(f"ADVISE NEST panicked or failed: {e}")

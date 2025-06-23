@@ -1,0 +1,164 @@
+There are 4 collections in the database: hotel, reviews, users, and bookings. The hotel collection has the following fields:
+{
+  "hotel_id": "string",
+  "name": "string", 
+  "address": "string",
+  "rooms": "int",
+  "room_types": [
+    {
+      "name": "string",
+      "price": "float",
+      "availability": "int",
+      "features": ["string"]
+    }
+  ],
+  "rating": "float",
+  "reviews": "int",
+  "amenities": ["string"],
+  "country": "string",
+  "city": "string",
+  "type": "string",
+  "url": "string",
+  "email": "string", 
+  "phone": "string",
+  "has_rewards_program": "boolean",
+  "geo": {
+    "lat": "float",
+    "long": "float"
+  }
+}
+The reviews collection has the following fields:
+{
+  "review_id": "string",
+  "hotel_id": "string", 
+  "review_date": "datetime",
+  "user_id": "string",
+  "ratings": {
+    "Value": "int",
+    "Cleanliness": "int", 
+    "Overall": "int",
+    "Check in / front desk": "int",
+    "Rooms": "int"
+  },
+  "comments": "string"
+}
+The users collection has the following fields:
+{
+  "user_id": "string",
+  "username": "string",
+  "name": "string", 
+  "email": "string",
+  "phone": "string or null",
+  "address": "string",
+  "country": "string",
+  "city": "string",
+  "zipcode": "string"
+}
+The bookings collection has the following fields:
+{
+  "booking_id": "string",
+  "hotel_id": "string",
+  "user_id": "string",
+  "checkin": "datetime",
+  "checkout": "datetime", 
+  "room_type": "string",
+  "room_count": "int",
+  "total_price": "float",
+  "payment_method": "string",
+  "payment_status": "string"
+}
+Your goal is to generate complex sql++ queries.
+'''
+sample_documents = {
+  "hotel": {
+    "hotel_id": "hotel_001",
+    "name": "Peterson, Jacobson and Burke Hotel",
+    "address": "380 Peterson Unions",
+    "rooms": 73,
+    "room_types": [
+      {
+        "name": "Deluxe",
+        "price": 129.07,
+        "availability": 30,
+        "features": [
+          "TV",
+          "Air Conditioning",
+          "Private Bathroom",
+          "Mini Bar",
+          "City View"
+        ]
+      },
+      {
+        "name": "Suite",
+        "price": 274.66,
+        "availability": 9,
+        "features": [
+          "TV",
+          "Air Conditioning",
+          "Private Bathroom",
+          "Mini Bar",
+          "Living Room",
+          "Kitchenette"
+        ]
+      }
+    ],
+    "rating": 3.6,
+    "reviews": 805,
+    "amenities": [
+      "Conference Rooms",
+      "Airport Shuttle",
+      "Bar",
+      "Business Center",
+      "Pool",
+      "Gym",
+      "Restaurant"
+    ],
+    "country": "Suriname",
+    "city": "Cookmouth",
+    "type": "Spa Resort",
+    "url": "www.roberts.com",
+    "email": "info@blankenship.com",
+    "phone": "(606)910-5047x0746",
+    "geo": {
+      "lat": -49.7170015,
+      "long": -10.957396
+    }
+  },
+  "reviews":   {
+    "review_id": "review_002",
+    "hotel_id": "hotel_157",
+    "review_date": "2024-10-16T19:40:58.139273Z",
+    "user_id": "user_783",
+    "ratings": {
+      "Check in / front desk": 5,
+      "Cleanliness": 3,
+      "Overall": 4,
+      "Rooms": 5,
+      "Value": 4
+    },
+    "comments": "Third dog change head somebody remember summer. Take trade difficult fall."
+  },
+  "users": {
+    "user_id": "user_001",
+    "username": "jamesglover",
+    "name": "Veronica Thomas",
+    "email": "thomaslee@example.com",
+    "phone": "2598535925",
+    "address": "2897 Christine Radial Suite 399",
+    "country": "Tajikistan",
+    "city": "Port David",
+    "zipcode": "18239"
+  },
+  "bookings": {
+    "booking_id": "booking_001",
+    "hotel_id": "hotel_125",
+    "user_id": "user_457",
+    "checkin": "2025-10-25T10:26:09.455086Z",
+    "checkout": "2025-10-30T10:26:09.455086Z",
+    "room_type": "Penthouse",
+    "room_count": 3,
+    "total_price": 2334.36,
+    "payment_method": "Bank Transfer",
+    "payment_status": "Cancelled"
+  }
+}

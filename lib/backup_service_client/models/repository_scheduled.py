@@ -96,7 +96,7 @@ class RepositoryScheduled(object):
         :param task_type: The task_type of this RepositoryScheduled.  # noqa: E501
         :type: str
         """
-        allowed_values = ["BACKUP", "MERGE"]  # noqa: E501
+        allowed_values = ["BACKUP", "MERGE", "PRUNE"]  # noqa: E501
         if task_type not in allowed_values:
             raise ValueError(
                 "Invalid value for `task_type` ({0}), must be one of {1}"  # noqa: E501

@@ -103,7 +103,9 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                                        namespace=namespace, limit=self.scan_limit))
 
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+        self.sleep(120)
         self.wait_until_indexes_online()
+        self.item_count_related_validations()
 
         index_meta_data_before_autofailover = self.index_rest.get_indexer_metadata()['status']
         map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
@@ -140,9 +142,11 @@ class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
                                                        stats_map_after_rebalance=stats_after_rebalance,
                                                        item_count_increase=False,
                                                        per_node=True, skip_array_index_item_count=False)
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after adding node in post autofailover of a node", similarity=self.similarity)
+        self.drop_index_node_resources_utilization_validations()
 
     def test_failed_rebalance_with_gsi_autofailover(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,

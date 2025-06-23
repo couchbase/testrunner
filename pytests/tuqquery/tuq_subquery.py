@@ -57,7 +57,7 @@ class QuerySubqueryTests(QueryTests):
         self.assertTrue(actual_result['results'] == [])
 
     def test_MB63274(self):
-        self.run_cbq_query('CREATE INDEX ix1 ON default(type, META().id)')
+        self.run_cbq_query('CREATE INDEX ix10101 IF NOT EXISTS ON default(type, META().id)')
         self.run_cbq_query('UPSERT INTO default (KEY t.id, VALUE t) '
                            'SELECT {"type":"doc", "id":"aa_"||TO_STR(d), "a1": ARRAY {"ac0":IMOD(d1,1), '
                            '"ac1":IMOD(d1,10), "ac2":IMOD(d1,2), "ac3":IMOD(d1,3)} FOR d1 IN ARRAY_RANGE(0,5) END  } AS t '

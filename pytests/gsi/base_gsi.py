@@ -90,7 +90,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.partition_fields = self.input.param('partition_fields', None)
         self.partitoned_index = self.input.param('partitioned_index', False)
         self.json_template = self.input.param("json_template", "Person")
-        self.magma_flask_host = self.input.param("magma_flask_host", '172.23.219.57')
+        self.magma_flask_host = self.input.param("magma_flask_host", '172.23.121.85')
         self.magma_flask_port = self.input.param("magma_flask_port", 5000)
         if self.partition_fields:
             self.partition_fields = self.partition_fields.split(',')
@@ -117,6 +117,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.use_cbo = self.input.param("use_cbo", False)
         self.xattr_indexes = self.input.param("xattr_indexes", False)
         self.create_query_node_pattern = r"create .*?index (.*?) on .*?nodes':.*?\[(.*?)].*?$"
+        self.bhive_sample_vector = [3.0, 9.0, 17.0, 78.0, 83.0, 15.0, 10.0, 8.0, 101.0, 109.0, 21.0, 8.0, 3.0, 2.0, 9.0, 64.0, 39.0, 31.0, 18.0, 80.0, 55.0, 10.0, 2.0, 12.0, 7.0, 7.0, 26.0, 58.0, 32.0, 6.0, 4.0, 3.0, 14.0, 2.0, 13.0, 28.0, 37.0, 19.0, 47.0, 59.0, 109.0, 22.0, 2.0, 6.0, 18.0, 15.0, 20.0, 109.0, 30.0, 8.0, 11.0, 44.0, 109.0, 54.0, 19.0, 32.0, 17.0, 21.0, 15.0, 22.0, 12.0, 28.0, 101.0, 35.0, 66.0, 11.0, 9.0, 30.0, 68.0, 35.0, 30.0, 75.0, 106.0, 103.0, 26.0, 50.0, 76.0, 20.0, 8.0, 13.0, 51.0, 41.0, 63.0, 109.0, 40.0, 2.0, 3.0, 15.0, 36.0, 49.0, 21.0, 13.0, 12.0, 9.0, 36.0, 37.0, 52.0, 37.0, 24.0, 34.0, 19.0, 3.0, 13.0, 23.0, 21.0, 8.0, 3.0, 20.0, 68.0, 56.0, 79.0, 60.0, 99.0, 36.0, 7.0, 28.0, 78.0, 41.0, 7.0, 21.0, 74.0, 26.0, 3.0, 15.0, 34.0, 15.0, 12.0, 27.0]
         # current value of n1ql_feat_ctrl disables sequential scan. To enable it set value to 0x4c
         self.n1ql_feat_ctrl = self.input.param("n1ql_feat_ctrl", "16460")
         if self.aws_access_key_id:
@@ -144,25 +145,23 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.memory_drop_list = []
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
+        self.bhive_index = self.input.param("bhive_index", False)
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
-        self.dimension = self.input.param("dimension", None)
+        self.dimension = self.input.param("dimension", 384)
         self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.scan_nprobes = self.input.param("scan_nprobes", 100)
-        self.scan_limit = self.input.param("scan_limit", 100)
-        self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "PQ3x8")
-        self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "PQ32x8")
+        self.scan_limit = self.input.param("scan_limit", 10 if self.bhive_index else 100)
+        self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "SQ8")
+        self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "SQ8")
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
-        self.dimension = self.input.param("dimension", None)
-        self.trainlist = self.input.param("trainlist", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
-        self.scan_limit = self.input.param("scan_limit", 100)
         self.base64 = self.input.param("base64", False)
         self.use_magma_server = self.input.param("use_magma_server", False)
-        self.bhive_index = self.input.param("bhive_index", False)
+        self.targetProcess = self.input.param("targetProcess", 'memcached')
         self.namespaces = []
         if self.index_loglevel:
             self.set_indexer_logLevel(self.index_loglevel)
@@ -433,7 +432,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         repo = filename.split('.')[0]
         remote_client.execute_command("rm -rf backup")
         if type == 'windows':
-            couchbase_root_dir = '"C:\\Program Files\\Couchbase\\Server\\bin\\cbbackupmgr"'
+            couchbase_root_dir = '"/cygdrive/c/Program Files/Couchbase/Server/bin/cbbackupmgr"'
         else:
             couchbase_root_dir = "/opt/couchbase/bin/cbbackupmgr"
         backup_config_cmd = f"{couchbase_root_dir} config --archive backup/ --repo {repo}"
@@ -442,11 +441,19 @@ class BaseSecondaryIndexingTests(QueryTests):
         if "failed" in out[0]:
             self.fail(out)
         self.log.info("unzip the backup repo before restoring it")
-        unzip_cmd = f"unzip -o {filename}"
+        if type == 'windows':
+            unzip_cmd = f'powershell -command "Expand-Archive -Path \'C:\\cygwin64\\home\\Administrator\\{filename}\' -DestinationPath \'C:\\cygwin64\\home\\Administrator\\\'"'
+        else:
+            unzip_cmd = f"unzip -o {filename}"
         remote_client.execute_command(command=unzip_cmd)
-        restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
-                      f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
-                      f"-auto-create-buckets "
+        if self.use_https:
+            restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
+                          f"--cluster couchbases://127.0.0.1 --username {self.username} --password {self.password} " \
+                          f"-auto-create-buckets --no-ssl-verify "
+        else:
+            restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
+                          f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
+                          f"-auto-create-buckets "
         restore_out = remote_client.execute_command(restore_cmd)
         self.log.debug(restore_out)
 
@@ -463,7 +470,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info("namespaces created successfully")
         self.log.info(self.namespaces)
 
-    def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False):
+    def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False,
+                                               variable_limit=False):
+        if variable_limit:
+            self.scan_limit = random.choice([10, 20, 50, 100])
+            select_query = re.sub(r"LIMIT \d+", f"LIMIT {self.scan_limit}", select_query)
         faiss_query = self.convert_to_faiss_queries(select_query=select_query)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
@@ -491,10 +502,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             else:
                 value = list_of_vectors_to_be_indexed_on_faiss[idx]
             faiss_closest_vectors.append(value)
+
         if scan_consitency:
             gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node, scan_consistency=self.scan_consistency)['results']
         else:
             gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
+
+        if variable_limit:
+            self.assertEqual(len(gsi_query_res), self.scan_limit, f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
+
         gsi_query_vec_list = []
 
         for v in gsi_query_res:
@@ -536,9 +552,9 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def extract_vector_field_and_query_vector(self, query):
         if self.base64:
-            pattern = r"ANN\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
+            pattern = r"ANN_DISTANCE\(.*?\s*\((.*?),\s*.*?\),\s*(\[.*?\])"
         else:
-            pattern = r"ANN\(\s*(.*?),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
+            pattern = r"ANN_DISTANCE\(\s*(.*?),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
         matches = re.search(pattern, query)
 
         if matches:
@@ -553,24 +569,40 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def get_per_index_codebook_memory_usage(self):
         stats_map = self.get_index_stats(perNode=True)
+        bhive_indexes = self.get_all_bhive_index_names()
+        composite_indexes = self.get_all_composite_index_names()
         index_code_book_memory_map = {}
         for node in stats_map:
             for ks in stats_map[node]:
                 for index in stats_map[node][ks]:
-                    if "primary" in index:
+                    if index not in bhive_indexes and index not in composite_indexes:
                         continue
                     index_code_book_memory_map[index] = stats_map[node][ks][index]['codebook_mem_usage']
         return index_code_book_memory_map, sum(index_code_book_memory_map.values())
-    
+
+    def get_partial_indexes_name_list(self):
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
+        partial_index_list = []
+        for index in index_metadata:
+            if "where" in index:
+                partial_index_list.append(index['name'])
+        return partial_index_list
+
     def validate_shard_seggregation(self, shard_index_map):
-        index_categories = ['scalar', 'vector', 'bhive']
+        bhive_indexes = self.get_all_bhive_index_names()
+        composite_indexes = self.get_all_composite_index_names()
         for shard, indices in shard_index_map.items():
             categories_found = set()
 
             for index in indices:
-                for category in index_categories:
-                    if category in index:
-                        categories_found.add(category)
+                if index in bhive_indexes:
+                    categories_found.add('bhive')
+                elif index in composite_indexes:
+                    categories_found.add('vector')
+                else:
+                    categories_found.add('scalar')
 
             # To check if exactly more than one category is found for this shard
             self.assertEqual(len(categories_found), 1, f"More than category of index found for the shard specific shard {indices}. The shard mapping to index is {shard_index_map}")
@@ -593,6 +625,13 @@ class BaseSecondaryIndexingTests(QueryTests):
         for key, value in shard_index_map.items():
             shard_index_map[key] = list(set(shard_index_map[key]))
         return shard_index_map
+
+    def kill_stress_tool(self):
+        nodes = self.servers
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command('pkill stress')
+            shell.execute_command('pkill iotop')
 
     def _return_maps(self, perNode=False, map_from_index_nodes=False):
         if map_from_index_nodes:
@@ -850,15 +889,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         if not scan_consistency:
             scan_consistency = self.scan_consistency
         self.gen_results.query = query_definition.generate_query(bucket=bucket)
-        if expected_result == None:
-            expected_result = self.gen_results.generate_expected_result(print_expected_result=False)
+        if not expected_result:
+            expected_result = self.gen_results.generate_expected_result(print_expected_result=True)
         self.query = self.gen_results.query
-        log.info("Query : {0}".format(self.query))
+        self.log.info("Query : {0}".format(self.query))
         msg, check = self.n1ql_helper.run_query_and_verify_result(query=self.query, server=self.n1ql_node, timeout=500,
                                                                   expected_result=expected_result,
                                                                   scan_consistency=scan_consistency,
                                                                   scan_vector=scan_vector,
                                                                   verify_results=verify_results)
+        self.log.info(f"Message is {msg}. Check is {check}")
         self.assertTrue(check, msg)
 
     def async_query_using_index(self, bucket, query_definition, expected_result=None, scan_consistency=None,
@@ -873,7 +913,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             query=self.query, n1ql_helper=self.n1ql_helper,
             expected_result=expected_result, index_name=query_definition.index_name,
             scan_consistency=scan_consistency, scan_vector=scan_vector,
-            verify_results=self.verify_query_result)
+            verify_results=True)
         return query_with_index_task
 
     def query_using_index_with_emptyset(self, bucket, query_definition):
@@ -906,6 +946,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query_definition in query_definitions:
                 if expected_results:
                     expected_result = expected_results[query_definition.index_name]
+                    expected_result = [list(values.values())[0] for values in expected_result]
+                    expected_result = sorted(expected_result)
+                    # self.log.info(f"expected multi_query_using_index being parsed {expected_result}")
                 else:
                     expected_result = None
                 self.query_using_index(bucket=bucket.name, query_definition=query_definition,
@@ -1809,28 +1852,28 @@ class BaseSecondaryIndexingTests(QueryTests):
                                 check = True
                             else:
                                 check = False
-                                time.sleep(1)
+                                time.sleep(10)
                                 break
                         elif check_paused_index:
                             if index_state["status"] == "Paused" or index_state["status"] == "Ready":
                                 check = True
                             else:
                                 check = False
-                                time.sleep(1)
+                                time.sleep(10)
                                 break
                         elif schedule_index:
                             if index_state["status"] == "Ready" or index_state["status"] == "Scheduled for Creation":
                                 check = True
                             else:
                                 check = False
-                                time.sleep(1)
+                                time.sleep(10)
                                 break
                         else:
                             if index_state["status"] == "Ready":
                                 check = True
                             else:
                                 check = False
-                                time.sleep(1)
+                                time.sleep(10)
                                 break
                     if next_time - init_time > timeout:
                         timed_out = True
@@ -2225,6 +2268,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         }
 
         response = requests.post(url, data=params)
+        self.log.info(f"Response from magma server is {response.content}")
         if response.status_code != 200:
             raise Exception(f'exception is {response.content}')
         else:
@@ -2232,7 +2276,8 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
                                         indexes_before_load=False, json_template="Person", batch_size=10**4,
-                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False, model="sentence-transformers/all-MiniLM-L6-v2"):
+                                        bucket_name=None, key_prefix='doc_', load_default_coll=False, base64=False,
+                                        model="sentence-transformers/all-MiniLM-L6-v2"):
         if not bucket_name:
             bucket_name = self.test_bucket
         pre_load_idx_pri = None
@@ -2264,11 +2309,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template,
-                                                    output=True, username=self.username, password=self.password, base64=base64, model=model)
+                                                    output=True, username=self.username, password=self.password,
+                                                    key_prefix=key_prefix, base64=base64, model=model)
                     if self.use_magma_loader:
                         task = self.cluster.async_load_gen_docs(self.master, bucket=bucket_name,
-                                                                generator=self.gen_create, pause_secs=1,
-                                                                timeout_secs=300, use_magma_loader=True)
+                                                                generator=self.gen_create,
+                                                                use_magma_loader=True)
                         task.result()
                     else:
                         tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
@@ -2308,6 +2354,24 @@ class BaseSecondaryIndexingTests(QueryTests):
         content = rest.cluster_status()
         return int(content['indexMemoryQuota'])
 
+    def item_count_related_validations(self):
+        self.wait_until_indexes_online()
+        self.sleep(10)
+        self.validate_no_pending_mutations()
+        self.sleep(120)
+        self.compare_item_counts_between_kv_and_gsi()
+        self.backstore_mainstore_check()
+        self.validate_replica_indexes_item_counts()
+
+    def drop_index_node_resources_utilization_validations(self):
+        self.drop_all_indexes()
+        self.sleep(120)
+        # self.check_storage_directory_cleaned_up()
+        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
+        # if not self.validate_memory_released():
+        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        if not self.validate_cpu_normalized():
+            raise AssertionError("CPU not normalized despite dropping all the indexes")
     def update_master_node(self):
         for server in self.servers:
             try:
@@ -2451,6 +2515,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             nodes = [node.strip("' ") for node in nodes.split(',')]
             index_map[index_name.strip('`')] = nodes
 
+        self.log.info(f"index map is {index_map}")
         for idx in indexer_metadata:
             if idx['scope'] == '_system':
                 continue
@@ -2458,6 +2523,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             if idx_name not in index_map:
                 continue
             host = idx['hosts'][0]
+            self.log.info("==================================================")
+            self.log.info(f"index is {idx_name}")
+            self.log.info(f"host is {host} map is {index_map[idx_name]}")
+            self.log.info(f"{host in index_map[idx_name]}")
+            self.log.info("==================================================")
             self.assertTrue(host in index_map[idx_name], "Index is not hosted on specified Node")
 
 
@@ -2716,11 +2786,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
-    def check_gsi_logs_for_shard_transfer(self):
+    def check_gsi_logs_for_shard_transfer(self, log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer", msg="File transfer based rebalance "):
         """ Checks if file transfer based rebalance is triggered.
         """
         count = 0
-        log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer"
         log_validated = False
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not indexer_nodes:
@@ -2738,14 +2807,56 @@ class BaseSecondaryIndexingTests(QueryTests):
                 count = int(count)
             shell.disconnect()
             if count > 0:
-                self.log.info(f"===== File transfer based rebalance triggered "
+                self.log.info(f"=====  {msg} triggered"
                               f"as validated from the log on {server.ip}=====. The no. of occurrences - {count}")
                 log_validated = True
                 break
         if not log_validated:
-            self.log.info(f"===== File transfer based rebalance not triggered."
+            self.log.info(f"===== {msg} not triggered."
                           f"No log lines matching string {log_string} seen on any of the indexer nodes.")
         return log_validated
+
+    def verify_dcp_transfer_tokens(self):
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        url = f"http://{index_node.ip}:9102/listRebalanceTokens"
+        try:
+            response = requests.get(url, auth=('Administrator', 'password'))
+            tokens_data = response.json()
+            self.log.info(f"tokens_data: {tokens_data}")
+        except Exception as e:
+            self.log.error(f"Error checking transfer tokens on node {index_node.ip}: {str(e)}")
+            raise
+
+    def check_gsi_logs_for_snapshot_recovery(self, log_string="Recovering from recovery point", msg="Index recovery from disk snapshot"):
+        count = 0
+        all_nodes_validated = True
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not indexer_nodes:
+            return None
+        for server in indexer_nodes:
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval(
+                'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            indexer_log = str(dir) + '/indexer.log*'
+            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
+                                               format(log_string, indexer_log))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            shell.disconnect()
+            if count > 0:
+                self.log.info(f"=====  {msg} found"
+                              f" in logs on node {server.ip}=====. The no. of occurrences - {count}")
+            else:
+                self.log.info(f"===== {msg} not found in logs"
+                              f" on node {server.ip}. No log lines matching string {log_string} seen.")
+                all_nodes_validated = False
+        if all_nodes_validated:
+            self.log.info(f"===== {msg} found in logs on all indexer nodes =====")
+        else:
+            self.log.info(f"===== {msg} not found in logs on all indexer nodes =====")
+        return all_nodes_validated
 
     def enable_shard_based_rebalance(self, provisioned=False):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -2899,11 +3010,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         settings = rest.get_indexer_internal_stats()
         max_shard_count = settings['indexer.plasma.shardLimitPerTenant']
         flush_buffer_quota = settings['indexer.plasma.flushBufferQuota']
+        min_shards_per_node = settings['indexer.plasma.minShardsPerNode']
         mem_quota = self.get_indexer_mem_quota()
-        shard_limit = math.floor(mem_quota * 0.9 * flush_buffer_quota / 100)
+        shard_limit = int(int(mem_quota * 0.9 * flush_buffer_quota // 100) // flush_buffer_quota)
         if shard_limit % 2 != 0:
             shard_limit += 1
-        return min(max_shard_count, shard_limit)
+        shard_count = min(max_shard_count, shard_limit)
+        updated_shard_count = max(shard_count, min_shards_per_node)
+        return updated_shard_count
 
     def perform_ddl_operations_during_rebalance(self):
         query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
@@ -3068,6 +3182,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.gen_table_view(query_stats_map=query_stats_map, message=message)
         if stats_assertion:
             for query in query_stats_map:
+                if self.bhive_index and "colorRGBVector" in query:
+                    continue
                 self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
                                         f"recall for query {query} is less than threshold 70")
                 # uncomment the below code snippet to do assertions for accuracy
@@ -3086,6 +3202,1290 @@ class BaseSecondaryIndexingTests(QueryTests):
         if len(output) == 0:
             return False
         return True
+
+    def get_item_counts_from_kv(self):
+        """
+        Gets all indexes and their definitions using N1QL system:indexes
+        Returns a list of dictionaries containing index name and actual count from executing query
+        """
+        query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition`, `with` FROM system:indexes"
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
+
+        simplified_results = []
+        # Add select query field for each index
+        for index in result['results']:
+            # Build the keyspace string
+            if 'bucket_id' not in index:
+                bucket = index['keyspace_id']
+                collection = '_default'
+            else:
+                bucket = index['bucket_id']
+                collection = index.get('keyspace_id', '_default')
+            scope = index.get('scope_id', '_default')
+            keyspace = f"`{bucket}`.`{scope}`.`{collection}`"
+
+            where_clause = ""
+            if index.get('condition'):
+                where_clause = f" WHERE {index['condition']}"
+
+            if ("`colorRGBVector` VECTOR" in index['index_key'] and "similarity" in index['with']
+                and index['with']['similarity'] == "cosine"):
+                condition = "colorRGBVector != [0, 0, 0]"
+                if where_clause:
+                    where_clause += f" AND {condition}"
+                else:
+                    where_clause = f" WHERE {condition}"
+
+            count_query = f"SELECT COUNT(*) FROM {keyspace} {where_clause}"
+
+            # Execute the count query
+            try:
+                count_result = self.n1ql_helper.run_cbq_query(query=count_query, server=query_node)
+                count = count_result['results'][0]['$1']
+            except Exception as e:
+                self.log.error(f"Error executing count query for index {index['name']}: {str(e)}")
+                count = 0
+
+            # Add only name and count to results
+            if 'bucket_id' not in index:
+                simplified_results.append({
+                    "name": f"{bucket}.{index['name']}",
+                    "count": count
+                })
+            else:
+                simplified_results.append({
+                    "name": f"default:{bucket}.{scope}.{collection}.{index['name']}",
+                    "count": count
+                })
+
+        return simplified_results
+
+    def get_item_counts_from_index_stats(self):
+        """
+        Gets item count for all indexes using the /stats endpoint
+        Returns a list of dictionaries containing index name and aggregated items_count
+        Handles partitioned indexes by summing counts across nodes
+        """
+        index_counts_map = {}  # Use map to aggregate counts
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in indexer_nodes:
+            rest = RestConnection(node)
+            stats = rest.get_index_stats()
+            for index_path, index_stats in stats.items():
+                for key, value in index_stats.items():
+                    if '_system:' in index_path:
+                        continue
+                    index_name = key
+                    items_count = value.get('items_count', 0)
+                    if f"{index_path}.{index_name}" in index_counts_map:
+                        index_counts_map[f"{index_path}.{index_name}"] += items_count
+                    else:
+                        index_counts_map[f"{index_path}.{index_name}"] = items_count
+
+        # Convert map to list format
+        index_counts = [
+            {"name": name, "count": count}
+            for name, count in index_counts_map.items()
+        ]
+        return index_counts
+
+    def compare_item_counts_between_kv_and_gsi(self):
+        kv_map = self.get_item_counts_from_kv()
+        index_map = self.get_item_counts_from_index_stats()
+        self.log.info(f"kv_map : {kv_map}")
+        self.log.info(f"index_map : {index_map}")
+        array_indexes = self.get_all_array_index_names()
+        self.log.info(f"array_indexes : {array_indexes}")
+        error_obj = []
+        for kv_dict in kv_map:
+            index_name_in_kv_dict, index_count_in_kv_dict = kv_dict['name'], kv_dict['count']
+            index_name_only = index_name_in_kv_dict.split('.')[-1]
+            if index_name_only in array_indexes:
+                continue
+            for index_dict in index_map:
+                if index_name_in_kv_dict == index_dict ['name']:
+                    _, index_count_in_index_dict = index_dict['name'], index_dict['count']
+                    break
+            if index_count_in_index_dict != index_count_in_kv_dict:
+                error = {}
+                self.log.error(f"Counts are index map {index_count_in_index_dict} kv map {index_count_in_kv_dict} for index {index_name_in_kv_dict}")
+                error['error'] = f"Counts for index {index_name_in_kv_dict} don't match. index map count {index_count_in_index_dict} kv map count {index_count_in_kv_dict}"
+                error_obj.append(error)
+        if error_obj:
+            self.log.info(f"{error_obj}")
+            raise Exception(f"Counts don't match for the following indexes: {error_obj}")
+
+    def get_all_array_index_names(self):
+        """Returns a list of all array indexes in the cluster
+        """
+        array_indexes = []
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains array indexing syntax like ALL or DISTINCT
+            defn_lower = index['definition'].lower()
+            if 'all' in defn_lower or 'distinct' in defn_lower:
+                array_indexes.append(index['name'])
+        return array_indexes
+
+    def get_all_primary_index_names(self):
+        """Returns a list of all primary indexes in the cluster
+        """
+        primary_index = []
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains primary indexing syntax like PRIMARY
+            if 'definition' in index and ('isPrimary' in index):
+                primary_index.append(index['indexName'])
+        return primary_index
+
+    def get_all_bhive_index_names(self):
+        """Returns a list of all bhive indexes in the cluster
+        """
+        bhive_index = []
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains bhive indexing syntax like VECTOR
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
+            if 'definition' in index and ('VECTOR' in index['definition'][:14]):
+                bhive_index.append(index['indexName'])
+        return bhive_index
+
+    def get_all_composite_index_names(self):
+        """Returns a list of all composite indexes in the cluster
+        """
+        composite_index = []
+        index_node = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(index_node)
+        index_metadata = rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            # Check if index definition contains composite indexing syntax like dimension
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
+            if 'definition' in index and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'distance' in index['definition']):
+                composite_index.append(index['indexName'])
+        return composite_index
+
+    def get_storage_stats_map(self, node):
+        """
+        Fetches index storage stats from /stats/storage endpoint
+        Args:
+            node: Node to fetch stats from
+        Returns:
+            List of dictionaries containing storage stats for each index
+        """
+        rest = RestConnection(node)
+        api = f"/api/v1/stats/storage"
+        status, content, _ = rest.http_request(api)
+        if not status:
+            raise Exception(f"Error getting storage stats: {content}")
+        storage_stats = json.loads(content)
+        index_stats = []
+        # Process and format the storage stats
+        for index_path, stats in storage_stats.items():
+            if '_system:' in index_path:
+                continue
+            for index_name, index_stats in stats.items():
+                stat_obj = {
+                    "name": f"{index_path}:{index_name}",
+                    "mainstore_count": index_stats.get("MainStore", {}).get("items_count", 0),
+                    "backstore_count": index_stats.get("BackStore", {}).get("items_count", 0)
+                }
+                index_stats.append(stat_obj)
+        return index_stats
+
+    def backstore_mainstore_check(self):
+        # Get all index nodes in the cluster
+        idx_node_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # Exclude all array indexes
+        ignore_count_index_list = self.get_all_array_index_names()
+        primary_index_list = self.get_all_primary_index_names()
+        bhive_index_list = self.get_all_bhive_index_names()
+        errors = []
+        for node in idx_node_list:
+            self.log.info(f"Checking stats for node {node}")
+            indexer_rest = RestConnection(node)
+            content = indexer_rest.get_index_storage_stats()
+            for index in list(content.values()):
+                for index_name, stats in index.items():
+                    self.log.info(f"checking for index {index_name}")
+                    if index_name in primary_index_list:
+                        continue
+                    if index_name in ignore_count_index_list or "BackStore" not in stats:
+                        continue
+                    if index_name in bhive_index_list:
+                        key = "item_count"
+                    else:
+                        key = "items_count"
+                    if stats["MainStore"][key] != stats["BackStore"][key]:
+                        self.log.info(f"Index map as seen during backstore_mainstore_check is {stats}")
+                        self.log.error(f"Item count mismatch in backstore and mainstore for {index_name}")
+                        errors_obj = dict()
+                        errors_obj["type"] = "mismatch in backstore and mainstore"
+                        errors_obj["index_name"] = index_name
+                        errors_obj["mainstore_count"] = stats["MainStore"][key]
+                        errors_obj["backstore_count"] = stats["BackStore"][key]
+                        errors.append(errors_obj)
+        if len(errors) > 0:
+            return errors
+        else:
+            self.log.info("backstore_mainstore_check passed. No discrepancies seen.")
+
+    def check_storage_directory_cleaned_up(self, threshold_gb=0.025):
+        """
+        Checks if storage directory is cleaned up
+        Args:
+            threshold_gb (float): Maximum allowed storage space in GB (default: 0.025 GB or ~25MB)
+        """
+        idx_node_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in idx_node_list:
+            rest = RestConnection(node)
+            storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+            used_space = self.get_storage_directory_used_space(node, storage_dir)
+            if used_space > threshold_gb:
+                self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+                raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+
+    def get_storage_directory_used_space(self, node, storage_dir):
+        """
+        Fetches used space for storage directory
+        Returns:
+            Used space in GB
+        """
+        shell = RemoteMachineShellConnection(node)
+        try:
+            # Use du command to get specific directory size in MB
+            output, error = shell.execute_command(f"du -s --block-size=1M {storage_dir} | cut -f1")
+            if error or not output:
+                self.log.error(f"Error getting disk space for {storage_dir}: {error}")
+            used_space_mb = int(output[0])  # Size in MB
+            used_space = used_space_mb / 1024.0  # Convert MB to GB
+        except Exception as e:
+            self.log.error(f"Error getting storage directory used space: {str(e)}")
+            used_space = None
+        finally:
+            shell.disconnect()
+        return used_space
+
+    def drop_all_indexes(self):
+        """
+        Drops all indexes in the cluster except system indexes
+        """
+        self.log.info("Dropping all indexes...")
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        query = "SELECT bucket_id, scope_id, keyspace_id, name FROM system:indexes WHERE `using`='gsi'"
+        result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
+        for index in result['results']:
+            try:
+                if 'bucket_id' not in index:
+                    bucket = index['keyspace_id']
+                    collection = '_default'
+                else:
+                    bucket = index['bucket_id']
+                    collection = index.get('keyspace_id', '_default')
+                    scope = index.get('scope_id', '_default')
+                index_name = index['name']
+                if bucket == '_system':
+                    continue
+                drop_query = f"DROP INDEX `{index_name}` ON default:`{bucket}`.`{scope}`.`{collection}`"
+                self.log.info(f"Executing: {drop_query}")
+                self.n1ql_helper.run_cbq_query(query=drop_query, server=query_node)
+            except Exception as e:
+                self.log.error(f"Error dropping index {index_name}: {str(e)}")
+        self.log.info("Finished dropping indexes")
+
+    def validate_replica_indexes_item_counts(self):
+        """
+        Gets item counts for all replica indexes and validates counts match across replicas.
+        Handles both regular and partitioned indexes.
+        Returns:
+            List of dictionaries containing any mismatches found between replica counts
+        """
+        errors = []
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(indexer_nodes[0])
+        index_metadata = rest.get_indexer_metadata()['status']
+
+        # Group indexes by definition ID to compare replicas
+        defn_groups = {}
+        for index in index_metadata:
+            if '_system:' in index['bucket']:
+                continue
+            defn_id = index['defnId']
+            if defn_id not in defn_groups:
+                defn_groups[defn_id] = []
+            defn_groups[defn_id].append(index)
+
+        # Compare counts across replicas
+        for defn_id, replicas in defn_groups.items():
+            if len(replicas) <= 1:  # Skip non-replica indexes
+                continue
+
+            # Get counts for each replica
+            replica_counts = {}
+            for replica in replicas:
+                index_name = replica['name']
+                bucket = replica['bucket']
+                scope = replica.get('scope', '_default')
+                collection = replica.get('collection', '_default')
+                replica_id = replica['replicaId']
+                is_partitioned = 'partitionId' in replica
+
+                # Initialize count for this replica
+                if replica_id not in replica_counts:
+                    replica_counts[replica_id] = {
+                        'name': index_name,
+                        'count': 0,
+                        'nodes': set(),
+                        'is_partitioned': is_partitioned
+                    }
+
+                # Get stats from all nodes for partitioned indexes, or hosting node for non-partitioned
+                for node in indexer_nodes:
+                    rest = RestConnection(node)
+                    stats = rest.get_index_stats()
+                    index_key = f"default:{bucket}.{scope}.{collection}"
+
+                    if index_key in stats:
+                        # For partitioned indexes, need to look for partition suffixes
+                        matching_indexes = []
+                        for stat_index in stats[index_key]:
+                            if is_partitioned:
+                                # Match base name for partitioned indexes
+                                if stat_index.startswith(index_name + " "):
+                                    matching_indexes.append(stat_index)
+                            elif stat_index == index_name:
+                                matching_indexes.append(stat_index)
+
+                        # Sum up counts across all partitions/replicas on this node
+                        for matching_index in matching_indexes:
+                            if matching_index in stats[index_key]:
+                                count = stats[index_key][matching_index].get('items_count', 0)
+                                replica_counts[replica_id]['count'] += count
+                                replica_counts[replica_id]['nodes'].add(node.ip)
+
+            # Compare counts between replicas
+            if len(replica_counts) > 1:
+                base_count = None
+                for replica_id, info in replica_counts.items():
+                    if base_count is None:
+                        base_count = info['count']
+                    elif info['count'] != base_count:
+                        error = {
+                            'definition_id': defn_id,
+                            'index_name': replicas[0]['name'],  # Base index name
+                            'is_partitioned': info['is_partitioned'],
+                            'mismatches': replica_counts,
+                            'error': f"Replica counts don't match for index {replicas[0]['name']}"
+                        }
+                        self.log.error(f"Count mismatch found for index {replicas[0]['name']}: {replica_counts}")
+                        errors.append(error)
+                        break
+
+                # Log the successful comparison
+                self.log.info(f"Index {replicas[0]['name']} counts: {replica_counts}")
+        return errors
+
+    def validate_no_pending_mutations(self, timeout=1800):
+        """
+        Validates that there are no pending mutations by checking num_docs_pending stats.
+        Retries for specified timeout period.
+
+        Args:
+            timeout (int): Maximum time in seconds to wait for pending mutations to clear
+
+        Returns:
+            bool: True if no pending mutations found, False otherwise
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            indexer_node = self.get_nodes_from_services_map(service_type="index")
+            rest = RestConnection(indexer_node)
+            index_stats = rest.get_index_stats()
+            pending_mutations = []
+
+            for bucket, indexes in index_stats.items():
+                for index, stats in indexes.items():
+                    for key, val in stats.items():
+                        if 'num_docs_pending' in key and val > 0:
+                            pending_mutations.append(f"{bucket}.{index}.{key}:{val}")
+
+            if not pending_mutations:
+                return True
+
+            self.log.info(f"Docs still pending: {pending_mutations}")
+            time.sleep(60)
+
+        self.log.error(f"Mutations still pending after {timeout} seconds")
+        return False
+
+    def validate_memory_released(self, timeout=300, threshold_ratio=0.1):
+        """
+        Validates that memory has been properly freed up after index operations
+        across all index nodes.
+
+        Args:
+            timeout (int): Maximum time in seconds to wait for memory to be released
+            threshold_ratio (float): Maximum acceptable ratio of memory_rss/memory_total
+                                (e.g., 0.1 means RSS should be below 10% of total)
+        Returns:
+            bool: True if memory has been properly released on all nodes, False otherwise
+        """
+        end_time = time.time() + timeout
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        while time.time() < end_time:
+            high_memory_nodes = []
+
+            for node in indexer_nodes:
+                rest = RestConnection(node)
+                index_stats = rest.get_all_index_stats()
+
+                # Get memory stats for this node
+                memory_rss = index_stats.get('memory_rss', 0)
+                memory_total = index_stats.get('memory_total', 0)
+
+                if memory_total > 0:  # Avoid division by zero
+                    ratio = memory_rss / memory_total
+                    if ratio > threshold_ratio:
+                        high_memory_nodes.append((node.ip, ratio * 100))
+
+            if not high_memory_nodes:
+                return True
+
+            self.log.info(f"Memory still high on nodes: {', '.join([f'{ip}:{ratio:.1f}%' for ip, ratio in high_memory_nodes])}")
+            time.sleep(5)
+
+        self.log.error(f"Memory not properly released on nodes {high_memory_nodes} after {timeout} seconds")
+        return False
+
+    def validate_cpu_normalized(self, timeout=300, threshold_ratio=0.1):
+        """
+        Validates that CPU usage has returned to normal levels after index operations
+        across all index nodes.
+
+        Args:
+            timeout (int): Maximum time in seconds to wait for CPU to normalize
+            threshold_percent (float): Maximum acceptable CPU utilization percentage
+                                    (e.g., 10 means CPU should be below 10%)
+        Returns:
+            bool: True if CPU usage is below threshold on all nodes, False otherwise
+        """
+        end_time = time.time() + timeout
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        while time.time() < end_time:
+            high_cpu_nodes = []
+
+            for node in indexer_nodes:
+                rest = RestConnection(node)
+                index_stats = rest.get_all_index_stats()
+
+                # Get CPU stats for this node
+                cpu_utilization = index_stats.get('cpu_utilization', 0)
+                num_cpu_core = index_stats.get('num_cpu_core', 0)
+                if num_cpu_core > 0:
+                    utilization_ratio = cpu_utilization / (num_cpu_core * 100)
+
+                if utilization_ratio > threshold_ratio:
+                    high_cpu_nodes.append((node.ip, cpu_utilization))
+
+            if not high_cpu_nodes:
+                return True
+
+            self.log.info(f"CPU still high on nodes: {', '.join([f'{ip}:{cpu:.1f}%' for ip, cpu in high_cpu_nodes])}")
+            time.sleep(5)
+
+        self.log.error(f"CPU usage remained high on nodes {high_cpu_nodes} after {timeout} seconds")
+        return False
+
+    def run_system_failure_scenario(self):
+        """
+        Simulates different system failure scenarios for testing.
+        The specific scenario is controlled by self.system_failure_scenario parameter.
+        """
+        self.cleanup_info = {}  # Single variable to store all cleanup information
+        if not hasattr(self, 'system_failure_scenario'):
+            return
+
+        self.log.info(f"Running system failure scenario: {self.system_failure_scenario}")
+
+        if self.system_failure_scenario == "disk_full":
+            self.cleanup_info = self.fill_up_disk(disk_fill_percent=90)
+
+        elif self.system_failure_scenario == "lower_file_descriptor_limit":
+            self.cleanup_info = self.lower_file_descriptor_limit()
+
+        elif self.system_failure_scenario == "limit_open_files":
+            self.cleanup_info = self.limit_open_files()
+
+        elif self.system_failure_scenario == "rename_2i_data_files":
+            self.cleanup_info = self.rename_2i_data_files()
+
+        elif self.system_failure_scenario == "remove_folder_permissions":
+            self.cleanup_info = self.revoke_folder_permissions()
+
+        elif self.system_failure_scenario == "simulate_disk_corruption":
+            self.cleanup_info = self.simulate_disk_corruption()
+
+        elif self.system_failure_scenario == "clock_skew":
+            self.cleanup_info = self.skew_node_clocks()
+        elif self.system_failure_scenario == "run_stress_tool":
+            self.run_stress_tool()
+        else:
+            self.log.warning(f"Unknown system failure scenario: {self.system_failure_scenario}")
+
+    def cleanup_post_failure_scenario(self):
+        """
+        Cleans up the system after the failure scenario has been run.
+        """
+        if self.cleanup_info:
+            if self.system_failure_scenario == "rename_2i_data_files":
+                self.restore_2i_data_files(self.cleanup_info)
+            elif self.system_failure_scenario == "remove_folder_permissions":
+                self.restore_folder_permissions(self.cleanup_info)
+            elif self.system_failure_scenario == "simulate_disk_corruption":
+                self.restore_corrupted_files(self.cleanup_info)
+            elif self.system_failure_scenario == "run_stress_tool":
+                self.kill_stress_tool()
+            elif self.system_failure_scenario == "clock_skew":
+                for node, cleanup_commands in self.cleanup_info.items():
+                    shell = RemoteMachineShellConnection(node)
+                    try:
+                        for cmd in cleanup_commands:
+                            shell.execute_command(cmd)
+                    finally:
+                        shell.disconnect()
+            else:
+                for node, cleanup_cmd in self.cleanup_info.items():
+                    shell = RemoteMachineShellConnection(node)
+                    try:
+                        shell.execute_command(cleanup_cmd)
+                    finally:
+                        shell.disconnect()
+
+    def install_tools(self):
+        nodes = self.servers
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command(command='apt-get install -qq -y stress-ng > /dev/null && echo 1 || echo 0',
+                                get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y stress > /dev/null && echo 1 || echo 0', get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y sysstat > /dev/null && echo 1 || echo 0',
+                                get_pty=True)
+            shell.execute_command(command='apt-get install -qq -y iptables > /dev/null && echo 1 || echo 0',
+                                get_pty=True)
+
+    def run_stress_tool(self, stress_factor=0.25, timeout=1800):
+        nodes_all = self.servers
+        shell = RemoteMachineShellConnection(nodes_all[0])
+        free_mem_cmd = "free -m | awk 'NR==2 {print $4}'"
+        output, error = shell.execute_command(free_mem_cmd)
+        free_mem_in_mb = int(output[0])
+        ram = math.floor(free_mem_in_mb * stress_factor)
+        num_cpu_cmd = "grep -c ^processor /proc/cpuinfo"
+        output, error = shell.execute_command(num_cpu_cmd)
+        num_cpu = int(output[0])
+        cpu = math.floor(num_cpu * stress_factor)
+        cmd = f'stress --cpu {cpu} --vm-bytes {ram}M --vm 1 --timeout {timeout} -d 1 & > /dev/null && echo 1 || echo 0'
+        self.log.info(f"Will run this command to simulate CPU and memory stress {cmd}")
+        with ThreadPoolExecutor() as executor_main:
+            for node in nodes_all:
+                shell = RemoteMachineShellConnection(node)
+                executor_main.submit(shell.execute_command, cmd)
+
+    def kill_stress_tool(self):
+        nodes = self.servers
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            shell.execute_command('pkill stress')
+            shell.execute_command('pkill iotop')
+
+    def fill_up_disk(self, disk_fill_percent=10):
+        self.log.info("Will check the disk usage on all indexer nodes")
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(nodes[0])
+        storage_dir = os.path.dirname((rest.get_indexer_internal_stats()['indexer.storage_dir']))
+        cmd_device = f"df -P -T {storage_dir} | tail -n +2 | awk '{{print $1}}'"
+        DUMMY_FILE_NAME = 'DUMMY_FILE_DELETE_IF_STILL_PRESENT'
+        nodes_paths_dict = {}
+        for node in nodes:
+            shell = RemoteMachineShellConnection(node)
+            self.log.info(f"Cmd to find the device {cmd_device}")
+            output, error = shell.execute_command(cmd_device)
+            device = output[0]
+            self.log.info(f"Device {device}")
+            empty_space_cmd = f"df -P -T -h {device} | tail -n +2 | awk '{{print $5}}'"
+            output, error = shell.execute_command(empty_space_cmd)
+            self.log.info(f"Cmd to find empty space {empty_space_cmd}")
+            space = float(output[0].rstrip("G"))
+            self.log.info(f"Empty space {space}")
+            space_to_fill = math.floor(disk_fill_percent * space * 1024 / 100)
+            self.log.info(f"space_to_fill is  {space_to_fill}")
+            cmd_disk_fill_up = fr"dd if={device} of={storage_dir}/{DUMMY_FILE_NAME} bs=1M count={space_to_fill}"
+            self.log.info(f"cmd_disk_fill_up is  {cmd_disk_fill_up}")
+            shell.execute_command(cmd_disk_fill_up, timeout=3600)
+            nodes_paths_dict[node] = f"rm -f {storage_dir}/{DUMMY_FILE_NAME}"
+        return nodes_paths_dict
+
+    def delete_dummy_files(self, nodes_paths_dict):
+        for item in nodes_paths_dict:
+            shell = RemoteMachineShellConnection(item)
+            shell.execute_command(nodes_paths_dict[item])
+
+    def run_disk_usage_tool(self, event, timeout=1800):
+        self.log.info("Will check the disk usage on all indexer nodes")
+        nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(nodes[0])
+        storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+        cmd_device = f"df -P -T {storage_dir} | tail -n +2 | awk '{{print $1}}'"
+        time_now = time.time()
+        while not event.is_set() and time.time() - time_now < timeout:
+            for node in nodes:
+                shell = RemoteMachineShellConnection(node)
+                output, error = shell.execute_command(cmd_device)
+                device = output[0]
+                self.log.info(f"The physical device is {device}")
+                shell.execute_command(f"iostat -dkxyN 1 1 {device} | grep -v '^$' | tail -n 2")
+                output, error = shell.execute_command(f"iostat -dkxyN 1 1 {device} | grep -v '^$' | tail -n 2")
+                disk_output = output[0]
+                print(f"Disk output as seen on {node.ip} is {disk_output}")
+                time.sleep(60)
+
+    def lower_file_descriptor_limit(self, limit=256):
+        """
+        Lowers the file descriptor limit on all index nodes to simulate resource constraints.
+        Returns a dict mapping nodes to their cleanup commands.
+
+        Args:
+            limit (int): The new file descriptor limit to set (default: 256)
+        Returns:
+            dict: Mapping of nodes to cleanup commands that restore original limits
+        """
+        self.log.info(f"Lowering file descriptor limit to {limit} on index nodes")
+        nodes_cleanup_dict = {}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                # Get current limits to use in cleanup command
+                cmd = "ulimit -n"
+                output, error = shell.execute_command(cmd)
+                original_limit = int(output[0])
+                self.log.info(f"Current file descriptor limit on {node.ip}: {original_limit}")
+                # Set new lower limit
+                cmd = f"ulimit -n {limit}"
+                shell.execute_command(cmd)
+                # Verify new limit
+                cmd = "ulimit -n"
+                output, error = shell.execute_command(cmd)
+                new_limit = int(output[0])
+                self.log.info(f"New file descriptor limit on {node.ip}: {new_limit}")
+
+                if new_limit != limit:
+                    self.log.error(f"Failed to set file descriptor limit on {node.ip}. Expected: {limit}, Got: {new_limit}")
+                # Store cleanup command to restore original limit
+                nodes_cleanup_dict[node] = f"ulimit -n {original_limit}"
+            except Exception as e:
+                self.log.error(f"Error setting file descriptor limit on {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+        return nodes_cleanup_dict
+
+    def limit_open_files(self, limit=256):
+        """
+        Limits the number of open files on all index nodes by modifying /etc/security/limits.conf.
+        Returns a dict mapping nodes to their cleanup commands.
+
+        Args:
+            limit (int): The new open files limit to set (default: 256)
+        Returns:
+            dict: Mapping of nodes to cleanup commands that restore original limits
+        """
+        self.log.info(f"Setting open files limit to {limit} on index nodes")
+        nodes_cleanup_dict = {}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for node in index_nodes:
+            shell = RemoteMachineShellConnection(node)
+            try:
+                # Backup original limits.conf
+                cmd = "cp /etc/security/limits.conf /etc/security/limits.conf.bak"
+                shell.execute_command(cmd)
+
+                # Get current open files limit
+                cmd = "cat /proc/sys/fs/file-max"
+                output, error = shell.execute_command(cmd)
+                original_limit = int(output[0])
+                self.log.info(f"Current open files limit on {node.ip}: {original_limit}")
+
+                # Add new limits to limits.conf
+                limits_entry = f"""
+                *         hard    nofile      {limit}
+                *         soft    nofile      {limit}
+                root      hard    nofile      {limit}
+                root      soft    nofile      {limit}
+                """
+                cmd = f"echo '{limits_entry}' >> /etc/security/limits.conf"
+                shell.execute_command(cmd)
+
+                # Apply new limits
+                cmd = f"sysctl -w fs.file-max={limit}"
+                shell.execute_command(cmd)
+
+                # Verify new limit
+                cmd = "cat /proc/sys/fs/file-max"
+                output, error = shell.execute_command(cmd)
+                new_limit = int(output[0])
+                self.log.info(f"New open files limit on {node.ip}: {new_limit}")
+
+                if new_limit != limit:
+                    self.log.error(f"Failed to set open files limit on {node.ip}. Expected: {limit}, Got: {new_limit}")
+
+                # Store cleanup command to restore original config
+                cleanup_cmd = "mv /etc/security/limits.conf.bak /etc/security/limits.conf; "
+                cleanup_cmd += f"sysctl -w fs.file-max={original_limit}"
+                nodes_cleanup_dict[node] = cleanup_cmd
+
+            except Exception as e:
+                self.log.error(f"Error setting open files limit on {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+
+        return nodes_cleanup_dict
+
+    def rename_2i_data_files(self, rename_pattern="corrupted_%s"):
+        """
+        Renames all folders/files under the 2i data directory to simulate corruption scenarios.
+
+        Args:
+            rename_pattern (str): Pattern to use when renaming files. Default: "corrupted_%s"
+                                The %s will be replaced with original filename
+
+        Returns:
+            dict: Mapping of nodes to lists of original->new filename pairs for cleanup
+        """
+        self.log.info(f"Renaming files in 2i data directory using pattern: {rename_pattern}")
+        nodes_files_map = {}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for node in index_nodes:
+            try:
+                shell = RemoteMachineShellConnection(node)
+                rest = RestConnection(node)
+
+                # Get storage directory path
+                storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+                renamed_files = []
+
+                # Find all files/directories under storage directory
+                cmd = f"find {storage_dir} -mindepth 1"
+                output, error = shell.execute_command(cmd)
+
+                if error:
+                    self.log.error(f"Error finding files in 2i directory on {node.ip}: {error}")
+                    continue
+
+                # Sort in reverse order to handle nested directories correctly
+                items = sorted([item.strip() for item in output if item.strip()], reverse=True)
+
+                # Select N random items to rename
+                num_files = min(len(items), 5)  # Default to 5 files if not specified
+                items_to_rename = random.sample(items, num_files)
+
+                # Rename selected files/directories
+                for item in items_to_rename:
+                    try:
+                        dirname = os.path.dirname(item)
+                        basename = os.path.basename(item)
+                        new_name = os.path.join(dirname, rename_pattern % basename)
+
+                        cmd = f"mv {item} {new_name}"
+                        output, error = shell.execute_command(cmd)
+
+                        if error:
+                            self.log.error(f"Error renaming {item} on {node.ip}: {error}")
+                            continue
+
+                        renamed_files.append((item, new_name))
+                        self.log.info(f"Renamed on {node.ip}: {item} -> {new_name}")
+
+                    except Exception as e:
+                        self.log.error(f"Error renaming {item} on {node.ip}: {str(e)}")
+
+                if renamed_files:
+                    nodes_files_map[node] = renamed_files
+
+            except Exception as e:
+                self.log.error(f"Error processing node {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+
+        return nodes_files_map
+
+    def restore_2i_data_files(self, nodes_files_map):
+        """
+        Restores previously renamed 2i data files to their original names.
+
+        Args:
+            nodes_files_map (dict): Mapping of nodes to lists of original->new filename pairs
+                                  as returned by rename_2i_data_files()
+        """
+        self.log.info("Restoring renamed 2i data files")
+
+        for node, renamed_files in nodes_files_map.items():
+            try:
+                shell = RemoteMachineShellConnection(node)
+
+                # Sort in reverse order to handle nested directories correctly
+                for original, renamed in sorted(renamed_files, reverse=True):
+                    try:
+                        cmd = f"mv {renamed} {original}"
+                        output, error = shell.execute_command(cmd)
+
+                        if error:
+                            self.log.error(f"Error restoring {renamed} to {original} on {node.ip}: {error}")
+                            continue
+
+                        self.log.info(f"Restored on {node.ip}: {renamed} -> {original}")
+
+                    except Exception as e:
+                        self.log.error(f"Error restoring {renamed} to {original} on {node.ip}: {str(e)}")
+
+            except Exception as e:
+                self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+
+    def revoke_folder_permissions(self, permission="000"):
+        """
+        Revokes permissions on all folders/files under the 2i data directory.
+
+        Args:
+            permission (str): Permission string in octal format (default: "000" for no permissions)
+
+        Returns:
+            dict: Mapping of nodes to lists of paths and their original permissions for cleanup
+        """
+        self.log.info(f"Revoking permissions in 2i data directory using permission: {permission}")
+        nodes_perms_map = {}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for node in index_nodes:
+            try:
+                shell = RemoteMachineShellConnection(node)
+                rest = RestConnection(node)
+                # Get storage directory path
+                storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+                modified_paths = []
+                # Find all files/directories under storage directory
+                cmd = f"find {storage_dir} -mindepth 1"
+                output, error = shell.execute_command(cmd)
+                if error:
+                    self.log.error(f"Error finding files in 2i directory on {node.ip}: {error}")
+                    continue
+                # Sort in reverse order to handle nested directories correctly
+                items = sorted([item.strip() for item in output if item.strip()], reverse=True)
+                # Change permissions for each file/directory
+                for item in items:
+                    try:
+                        # Get original permissions
+                        cmd = f"stat -c %a {item}"
+                        output, error = shell.execute_command(cmd)
+                        if error:
+                            self.log.error(f"Error getting permissions for {item} on {node.ip}: {error}")
+                            continue
+
+                        original_perm = output[0]
+
+                        # Change permissions
+                        cmd = f"chmod {permission} {item}"
+                        output, error = shell.execute_command(cmd)
+
+                        if error:
+                            self.log.error(f"Error changing permissions for {item} on {node.ip}: {error}")
+                            continue
+
+                        modified_paths.append((item, original_perm))
+                        self.log.info(f"Changed permissions on {node.ip}: {item} from {original_perm} to {permission}")
+
+                    except Exception as e:
+                        self.log.error(f"Error modifying permissions for {item} on {node.ip}: {str(e)}")
+                if modified_paths:
+                    nodes_perms_map[node] = modified_paths
+
+            except Exception as e:
+                self.log.error(f"Error processing node {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+        return nodes_perms_map
+
+    def restore_folder_permissions(self, nodes_perms_map):
+        """
+        Restores previously modified permissions of 2i data files to their original values.
+
+        Args:
+            nodes_perms_map (dict): Mapping of nodes to lists of paths and their original permissions
+                                as returned by revoke_folder_permissions()
+        """
+        self.log.info("Restoring permissions of 2i data files")
+
+        for node, modified_paths in nodes_perms_map.items():
+            try:
+                shell = RemoteMachineShellConnection(node)
+
+                # Sort in reverse order to handle nested directories correctly
+                for path, original_perm in sorted(modified_paths, reverse=True):
+                    try:
+                        cmd = f"chmod {original_perm} {path}"
+                        output, error = shell.execute_command(cmd)
+
+                        if error:
+                            self.log.error(f"Error restoring permissions for {path} on {node.ip}: {error}")
+                            continue
+
+                        self.log.info(f"Restored permissions on {node.ip}: {path} to {original_perm}")
+
+                    except Exception as e:
+                        self.log.error(f"Error restoring permissions for {path} on {node.ip}: {str(e)}")
+
+            except Exception as e:
+                self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+
+    def skew_node_clocks(self, skew_minutes=30):
+        """
+        Introduces clock skew on index nodes by adjusting the system time.
+        Note: This is a fallback method that may be less reliable with Xen virtualization.
+
+        Args:
+            skew_minutes (int): Number of minutes to skew the clock (positive = forward, negative = backward)
+                            Default is 30 minutes ahead
+
+        Returns:
+            dict: Mapping of nodes to cleanup commands that restore original time
+        """
+        self.log.warning("Using fallback clock adjustment method which may be less reliable with Xen virtualization")
+        nodes_cleanup_dict = {}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for node in index_nodes:
+            try:
+                shell = RemoteMachineShellConnection(node)
+
+                # Get current time for cleanup
+                cmd = "date '+%Y-%m-%d %H:%M:%S'"
+                output, error = shell.execute_command(cmd)
+                if error:
+                    self.log.error(f"Error getting current time on {node.ip}: {error}")
+                    continue
+                original_time = output[0]
+                shell.execute_command("systemctl stop systemd-timesyncd || true")
+                shell.execute_command("systemctl stop ntp || true")
+                shell.execute_command("systemctl stop ntpd || true")
+                shell.execute_command("systemctl stop chronyd || true")
+                # Randomize skew within ±skew_minutes range for each node
+                node_skew = random.randint(-skew_minutes, skew_minutes)
+                if node_skew >= 0:
+                    cmd = f"date -s '+{node_skew} minutes'"
+                else:
+                    cmd = f"date -s '{node_skew} minutes'"
+
+                output, error = shell.execute_command(cmd)
+                if error:
+                    self.log.error(f"Error adjusting time on {node.ip}: {error}")
+                    continue
+
+                # Verify the change
+                cmd = "date '+%Y-%m-%d %H:%M:%S'"
+                output, error = shell.execute_command(cmd)
+                new_time = output[0]
+                self.log.info(f"Adjusted clock on {node.ip} from {original_time} to {new_time}")
+
+                # Store cleanup command
+                cleanup_cmd_list = ["systemctl start systemd-timesyncd", "systemctl start ntp", "systemctl start ntpd", "systemctl start chronyd"]
+                nodes_cleanup_dict[node] = cleanup_cmd_list
+
+            except Exception as e:
+                self.log.error(f"Error adjusting clock on {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+        return nodes_cleanup_dict
+
+    def simulate_disk_corruption(self, num_files=5,):
+        """
+        Simulates disk corruption in index storage files.
+
+        Args:
+            num_files (int): Number of files to corrupt
+
+        Returns:
+            dict: Mapping of nodes to lists of corrupted files and their backups
+        """
+        corrupt_file_type = getattr(self, 'corrupt_file_type', 'config')
+        nodes_files_map = {}
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for node in index_nodes:
+            try:
+                shell = RemoteMachineShellConnection(node)
+                rest = RestConnection(node)
+                corrupted_files = []
+                # Get storage directory path
+                storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+                # recovery point files corruption
+                if corrupt_file_type == "rp":
+                    cmd = f"find {storage_dir}/@bhive -path '*/recovery/*' -type f -name 'rp.[0-9]*'"
+                # state file corruption
+                elif corrupt_file_type == "state_file":
+                    cmd = f"find {storage_dir}/@bhive -type f -name 'state.[0-9]*'"
+                # config file corruption
+                elif corrupt_file_type == "config":
+                    cmd = f"find {storage_dir}/@bhive/bhive-shards -type f -name 'config.json'"
+                # sstable files corruption
+                elif corrupt_file_type == "sstable":
+                    cmd = f"find {storage_dir}/@bhive -type f -name 'sstable.[0-9]*'"
+                # codebook files corruption
+                elif corrupt_file_type == "codebook":
+                    cmd = f"find {storage_dir}/@bhive -type f -name '*.codebook'"
+                # lss_data files corruption
+                elif corrupt_file_type == "lss_data":
+                    cmd = f"find {storage_dir}/@bhive -type f -name 'log*'"
+                output, error = shell.execute_command(cmd)
+                if error:
+                    self.log.error(f"Error finding files on {node.ip}: {error}")
+                    continue
+                storage_files = [f.strip() for f in output if f.strip()]
+                if not storage_files:
+                    self.log.info(f"No files found in {storage_dir} on {node.ip}")
+                    continue
+
+                # Select random files to corrupt
+                target_files = random.sample(storage_files, min(num_files, len(storage_files)))
+
+                for target_file in target_files:
+                    try:
+                        backup_file = f"{target_file}.bak"
+                        # Backup original file
+                        cmd = f"cp {target_file} {backup_file}"
+                        shell.execute_command(cmd)
+                            # Get file size
+                        cmd = f"stat -c %s {target_file}"
+                        output, error = shell.execute_command(cmd)
+                        file_size = int(output[0])
+                        # Truncate file to random size
+                        new_size = random.randint(1, file_size)
+                        cmd = f"truncate -s {new_size} {target_file}"
+                        shell.execute_command(cmd)
+                        corrupted_files.append((target_file, backup_file))
+                        self.log.info(f"Corrupted file {target_file} on {node.ip}")
+                    except Exception as e:
+                        self.log.error(f"Error corrupting file {target_file} on {node.ip}: {str(e)}")
+
+                if corrupted_files:
+                    nodes_files_map[node] = corrupted_files
+
+            except Exception as e:
+                self.log.error(f"Error corrupting files on {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+
+        return nodes_files_map
+
+    def restore_corrupted_files(self, nodes_files_map):
+        """
+        Restores corrupted files from their backups.
+
+        Args:
+            nodes_files_map (dict): Mapping of nodes to lists of corrupted files and their backups
+                                as returned by simulate_disk_corruption()
+        """
+        self.log.info("Restoring corrupted files from backups")
+
+        for node, corrupted_files in nodes_files_map.items():
+            try:
+                shell = RemoteMachineShellConnection(node)
+
+                for corrupted_file, backup_file in corrupted_files:
+                    try:
+                        # Restore from backup
+                        cmd = f"mv {backup_file} {corrupted_file}"
+                        output, error = shell.execute_command(cmd)
+
+                        if error:
+                            self.log.error(f"Error restoring {corrupted_file} from {backup_file} on {node.ip}: {error}")
+                            continue
+
+                        self.log.info(f"Restored {corrupted_file} on {node.ip}")
+
+                    except Exception as e:
+                        self.log.error(f"Error restoring {corrupted_file} on {node.ip}: {str(e)}")
+
+            except Exception as e:
+                self.log.error(f"Error connecting to node {node.ip}: {str(e)}")
+            finally:
+                shell.disconnect()
+
+    def get_vector_index_metadata_dict(self):
+        """
+        Fetches index metadata and returns a dictionary with index details
+        Returns:
+            dict: Dictionary with index name as key and metadata as nested dict
+        """
+        index_metadata = {}
+        try:
+            metadata = self.index_rest.get_indexer_metadata()['status']
+            for index in metadata:
+                index_name = index.get('indexName', '')
+                definition = index.get('definition', '')
+
+                # Extract similarity from WITH clause
+                if 'WITH' in definition:
+                    # Initialize metadata dict for this index
+                    index_metadata[index_name] = {
+                        'similarity': None,
+                        'description': None,
+                        'train_list': None,
+                        'nprobes': None
+                    }
+                    with_clause = definition.split('WITH')[1].strip()
+                    try:
+                        with_dict = json.loads(with_clause)
+                        index_metadata[index_name]['similarity'] = with_dict.get('similarity')
+                        index_metadata[index_name]['description'] = with_dict.get('description')
+                        index_metadata[index_name]['train_list'] = with_dict.get('train_list')
+                        index_metadata[index_name]['nprobes'] = with_dict.get('scan_nprobes')
+
+                    except Exception as e:
+                        self.log.error(f"Error processing index {index_name}: {str(e)}")
+                        raise
+        except Exception as e:
+            self.log.error(f"Error getting index metadata: {str(e)}")
+            raise
+        # Validate that no fields are None
+        required_fields = ['similarity', 'description']
+        for index_name, metadata in index_metadata.items():
+            for field in required_fields:
+                if metadata.get(field) is None:
+                    raise Exception(f"Required field '{field}' is missing in index {index_name}")
+        return index_metadata
+
+    def form_vector_index_metadata_dict_from_index_definitions(self, index_definitions):
+        metadata_dict = {}
+        for definition in index_definitions:
+            if "primary" in definition.index_name:
+                continue
+            metadata_dict[definition.index_name] = {
+                "similarity": definition.similarity,
+                "description": definition.description,
+                "train_list": definition.train_list,
+                "nprobes": definition.scan_nprobes
+            }
+        return metadata_dict
+
+    def get_queries_with_inline_filters(self, select_queries):
+        """
+        Identifies queries that have inline filtering by comparing WHERE clause conditions
+        with index conditions.
+
+        Args:
+            select_queries (list): List of select queries to analyze
+
+        Returns:
+            dict: Dictionary mapping index names to their corresponding queries with inline filters
+                 e.g., {"idx1": "select 1", "idx2": "select 2"}
+        """
+        result = {}
+
+        for query in select_queries:
+            try:
+                # Get query explain plan
+                explain = self.n1ql_helper.run_cbq_query(
+                    query=f"EXPLAIN {query}",
+                    server=self.n1ql_node
+                )
+
+                plan = explain['results'][0]['plan']
+
+                # Check for Filter operator in explain plan
+                if self._has_filter_operator(plan):
+                    # Extract index name from plan and map it to the query
+                    index_name = self._extract_index_name(plan)
+                    if index_name:
+                        result[index_name] = query
+
+            except Exception as e:
+                self.log.error(f"Error analyzing query for inline filters: {query}")
+                self.log.error(f"Error details: {str(e)}")
+
+        return result
+
+    def _extract_index_name(self, plan):
+        """
+        Recursively extracts the index name from an explain plan by looking for IndexScan operator.
+
+        Args:
+            plan (dict): Explain plan or sub-plan to check
+
+        Returns:
+            str: Index name if found, None otherwise
+        """
+        if isinstance(plan, dict):
+            # Check if current node is an IndexScan
+            if plan.get('#operator', '').startswith('IndexScan'):
+                return plan.get('index')
+
+            # Recursively check all values
+            for value in plan.values():
+                if isinstance(value, (dict, list)):
+                    result = self._extract_index_name(value)
+                    if result:
+                        return result
+
+        # Handle list of child operators
+        elif isinstance(plan, list):
+            for item in plan:
+                result = self._extract_index_name(item)
+                if result:
+                    return result
+
+        return None
+
+    def _has_filter_operator(self, plan):
+        """
+        Recursively checks if an explain plan contains a Filter operator.
+
+        Args:
+            plan (dict): Explain plan or sub-plan to check
+
+        Returns:
+            bool: True if plan contains a Filter operator
+        """
+        # Check if current node is a Filter operator
+        if isinstance(plan, dict):
+            if plan.get('#operator') == 'Filter':
+                return True
+
+            # Recursively check children
+            for key, value in plan.items():
+                if isinstance(value, (dict, list)):
+                    if self._has_filter_operator(value):
+                        return True
+
+        # Check list of child operators
+        elif isinstance(plan, list):
+            for item in plan:
+                if self._has_filter_operator(item):
+                    return True
+
+        return False
 
 class ConCurIndexOps():
     def __init__(self):

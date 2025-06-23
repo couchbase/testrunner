@@ -7,6 +7,7 @@ cryptography==2.9.2
 decorator==4.4.2
 deepdiff==5.0.2
 docutils==0.16
+Faker
 Geohash==1.0
 paramiko==2.7.1
 pycparser==2.20

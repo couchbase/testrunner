@@ -7,20 +7,22 @@ import json
 import sys
 import time
 
-#import couchbase_core
+# import couchbase_core
 import crc32
 import logger
 from couchbase.cluster import Cluster, ClusterOptions
 from couchbase.auth import PasswordAuthenticator
-#from couchbase.cluster import _N1QLQuery
+# from couchbase.cluster import _N1QLQuery
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-#from couchbase_core.cluster import PasswordAuthenticator
+# from couchbase_core.cluster import PasswordAuthenticator
 
 from lib.Cb_constants import CBServer
 from lib.Cb_constants.CBServer import CbServer
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
-#from couchbase_core.connstr import ConnectionString
+
+
+# from couchbase_core.connstr import ConnectionString
 
 
 class SDKClient(object):
@@ -29,14 +31,15 @@ class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
-                 ssl_path=None, uhm_options=None, username= None, password=None,
+                 ssl_path=None, uhm_options=None, username=None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
                  sasl_mech=True):
         if CbServer.use_https:
             scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
-                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression, sasl_mech=sasl_mech)
+                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression,
+                               sasl_mech=sasl_mech)
         self.bucket = bucket
         sys.setrecursionlimit(100)
         if username == None:
@@ -44,7 +47,7 @@ class SDKClient(object):
         else:
             self.username = username
         if password == None:
-            self.password ='password'
+            self.password = 'password'
         else:
             self.password = password
         self.quiet = quiet
@@ -88,13 +91,13 @@ class SDKClient(object):
         # Append query parameters to the connection string
         if query_params:
             connection_string += f"?{'&'.join(query_params)}"
-        
+
         return connection_string
 
     def _createConn(self):
         try:
             self.cluster = Cluster(str(self.connection_string),
-                                       ClusterOptions(PasswordAuthenticator(self.username, self.password)))
+                                   ClusterOptions(PasswordAuthenticator(self.username, self.password)))
             self.cb = self.cluster.bucket(self.bucket)
             self.default_collection = self.cb.default_collection()
         except BucketNotFoundException:
@@ -482,7 +485,7 @@ class SDKClient(object):
                 return self.default_collection.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
         except CouchbaseException as e:
             return (e)
-            #self.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
+            # self.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
             # try:
             #     time.sleep(10)
             #     if collection:
@@ -533,10 +536,10 @@ class SDKClient(object):
             if collection:
                 self.collection_connect(scope, collection)
                 result = self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
-                                       replicate_to=replicate_to)
+                                                replicate_to=replicate_to)
             else:
                 result = self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
-                                               replicate_to=replicate_to)
+                                                        replicate_to=replicate_to)
             return result
         except CouchbaseException as e:
             try:
@@ -1037,7 +1040,8 @@ class SDKSmartClient(object):
         finally:
             self.client.cb.timeout = self.client.default_timeout
 
-    def getrMulti(self, keys_lst, replica_index=None, pause=None, timeout_sec=5.0, parallel=None, scope=None, collection=None):
+    def getrMulti(self, keys_lst, replica_index=None, pause=None, timeout_sec=5.0, parallel=None, scope=None,
+                  collection=None):
         try:
             self.client.cb.timeout = timeout_sec
             map = self.client.rget_multi(keys_lst, replica_index=replica_index, scope=scope, collection=collection)

@@ -4,6 +4,7 @@ import random
 import numpy as np
 import ast
 from membase.api.exception import CBQError
+from membase.api.rest_client import RestConnection
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster, ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
@@ -135,7 +136,15 @@ class VectorSearchTests(QueryTests):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, nprobes=self.nprobes, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+
+            self.log.info("Verify Vector Index Metadata and Stats")
+            self.verify_vector_index_metadata_and_stats(expected_description=self.description,
+                                            expected_dimension=self.dimension,
+                                            expected_train_list=self.train,
+                                            expected_nprobes=self.nprobes,
+                                            expected_similarity=self.distance)
+
             begin = random.randint(0, len(self.xq) - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
@@ -163,7 +172,15 @@ class VectorSearchTests(QueryTests):
         faiss_distances, faiss_result = faiss().search_index(faiss_index, self.xq, normalize)
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, nprobes=self.nprobes, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+
+            self.log.info("Verify Vector Index Metadata and Stats")
+            self.verify_vector_index_metadata_and_stats(expected_description=self.description,
+                                            expected_dimension=self.dimension,
+                                            expected_train_list=self.train,
+                                            expected_nprobes=self.nprobes,
+                                            expected_similarity=self.distance)
+
             begin = random.randint(0, len(self.xq) - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
             distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
@@ -1448,3 +1465,44 @@ class VectorSearchTests(QueryTests):
             self.fail(f"we expect this index creation to fail currently please check the results {results}")
         except Exception as ex:
             self.assertTrue("Failure to create vector index. Vector index with any field having array expression is currently not supported" in str(ex), f'We expect a specific error message, please check {str(ex)}')
+
+    def verify_vector_index_metadata_and_stats(self, expected_description, expected_dimension, expected_train_list, expected_nprobes, expected_similarity):
+        """Helper method to verify vector index metadata matches expected values"""
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        # Get metadata from first node
+        index_rest = RestConnection(index_nodes[0])
+        index_metadata = index_rest.get_indexer_metadata()['status']
+        index_hosts = index_metadata[0]['hosts']
+        index_name = index_metadata[0]['name']
+        # Extract ip address from hosts
+        index_ip = index_hosts[0].split(':')[0]
+        # Get stats from index node
+        for node in index_nodes:
+            if index_ip == node.ip:
+                index_node = node
+                break
+        index_rest = RestConnection(index_node)
+        index_stats = index_rest.get_index_stats()
+        
+        with_clause = index_metadata[0]['definition'].split('WITH')[1].strip()
+        with_clause = ast.literal_eval(with_clause)
+        self.log.info(f"With clause: {with_clause}")
+
+        # get doc count from bucket via n1ql
+        query = f"SELECT COUNT(*) FROM default"
+        doc_count = self.run_cbq_query(query)
+        self.log.info(f"Doc count: {doc_count}")
+        num_docs_indexed = doc_count['results'][0]['$1']
+        
+        # Check metatdata
+        self.assertEqual(with_clause['description'], expected_description)
+        self.assertEqual(with_clause['dimension'], expected_dimension) 
+        self.assertEqual(with_clause['train_list'], expected_train_list)
+        self.assertEqual(with_clause['scan_nprobes'], expected_nprobes)
+        self.assertEqual(with_clause['similarity'], expected_similarity)
+
+        # Check num_docs_pending
+        self.assertEqual(index_stats['default'][index_name]['num_docs_pending'], 0)
+
+        # Check num_docs_indexed
+        self.assertEqual(index_stats['default'][index_name]['num_docs_indexed'], num_docs_indexed)

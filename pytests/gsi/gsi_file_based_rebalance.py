@@ -9,7 +9,6 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.query_tests_helper import QueryHelperTests
 from .base_gsi import BaseSecondaryIndexingTests, log
-
 from threading import Event
 from deepdiff import DeepDiff
 
@@ -79,15 +78,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 create_queries = []
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
+                        prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
                         query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                                  prefix='test_',
+                                                                                  prefix=prefix,
                                                                                   similarity=self.similarity, train_list=None,
                                                                                   scan_nprobes=self.scan_nprobes,
                                                                                   array_indexes=False,
@@ -107,7 +107,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                              query_node=query_node)
                         create_queries.extend(queries)
 
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -168,15 +168,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 create_queries = []
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
+                        prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
                         query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                                  prefix='test_',
+                                                                                  prefix=prefix,
                                                                                   similarity=self.similarity, train_list=None,
                                                                                   scan_nprobes=self.scan_nprobes,
                                                                                   array_indexes=False,
@@ -196,7 +197,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                              query_node=query_node)
                         create_queries.extend(queries)
 
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -268,15 +269,17 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
+
                     for namespace in self.namespaces:
+                        prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
                         query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                                  prefix='test_',
+                                                                                  prefix=prefix,
                                                                                   similarity=self.similarity, train_list=None,
                                                                                   scan_nprobes=self.scan_nprobes,
                                                                                   array_indexes=False,
@@ -295,7 +298,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -358,15 +361,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
+                        prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
                         query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                                  prefix='test_',
+                                                                                  prefix=prefix,
                                                                                   similarity=self.similarity, train_list=None,
                                                                                   scan_nprobes=self.scan_nprobes,
                                                                                   array_indexes=False,
@@ -385,7 +389,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
@@ -445,15 +449,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries = []
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                     for namespace in self.namespaces:
+                        prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
                         query_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                                  prefix='test_',
+                                                                                  prefix=prefix,
                                                                                   similarity=self.similarity, train_list=None,
                                                                                   scan_nprobes=self.scan_nprobes,
                                                                                   array_indexes=False,
@@ -472,7 +477,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                         self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                              query_node=query_node)
                         create_queries.extend(queries)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=1200)
                 if self.use_nodes_clause:
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -560,14 +565,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 query_node = self.get_nodes_from_services_map(service_type="n1ql")
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 create_queries = []
-                for _ in range(self.initial_index_batches):
+                for i in range(self.initial_index_batches):
                     replica_count = random.randint(1, 2)
                     deploy_nodes = None
                     if self.use_nodes_clause:
                         nodes_list = random.sample(index_nodes, k=replica_count + 1)
                         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
                     for namespace in self.namespaces:
-                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                        prefix = f'test_{i + 1}' + ''.join(namespace.split(':')[1].split('.'))
+                        query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -633,14 +639,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         create_queries = []
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for _ in range(3):
+        for i in range(3):
             replica_count = 0
             deploy_nodes = None
             if self.use_nodes_clause:
                 nodes_list = random.sample(index_nodes, k=replica_count + 1)
                 deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
             for namespace in self.namespaces:
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -685,14 +692,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         create_queries = []
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        for _ in range(self.initial_index_batches):
+        for i in range(self.initial_index_batches):
             replica_count = random.randint(1, 2)
             deploy_nodes = None
             if self.use_nodes_clause:
                 nodes_list = random.sample(index_nodes, k=replica_count + 1)
                 deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
             for namespace in self.namespaces:
-                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                prefix = f'test_{i+1}' + ''.join(namespace.split(':')[1].split('.'))
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -721,9 +729,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                  cluster_config=self.cluster_config)
         time.sleep(3)
         status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
         while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
         time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
@@ -796,7 +809,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     nodes_list = random.sample(index_nodes, k=replica_count + 1)
                     deploy_nodes = [f"{node.ip}:{node.port}" for node in nodes_list]
                 for namespace in self.namespaces:
-                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+                    prefix = 'test_' + ''.join(namespace.split(':')[1].split('.'))
+                    query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition(index_name_prefix=prefix)
                     select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                namespace=namespace))
                     queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -836,9 +850,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                          cluster_config=self.cluster_config)
                 time.sleep(3)
                 status, _ = self.rest._rebalance_status_and_progress()
+                start_time = time.time()
+                timeout = 60  # 60 seconds timeout
                 while status != 'running':
+                    if time.time() - start_time > timeout:
+                        self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
                     time.sleep(1)
                     status, _ = self.rest._rebalance_status_and_progress()
+                self.log.info("Rebalance has started running.")
                 time.sleep(10)
                 future_disk_usage = executor_main.submit(self.run_disk_usage_tool, event)
                 reached = RestHelper(self.rest).rebalance_reached(retry_count=500)
@@ -922,9 +941,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                  cluster_config=self.cluster_config)
         time.sleep(1)
         status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
         while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
         time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=500)
         rebalance.result()
@@ -1004,9 +1028,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                  cluster_config=self.cluster_config)
         time.sleep(1)
         status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
         while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
         time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
@@ -1112,9 +1141,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                  to_remove=[], services=['index'], cluster_config=self.cluster_config)
         time.sleep(1)
         status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
         while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
         time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
@@ -1219,7 +1253,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.wait_until_indexes_online()
 
     def test_disable_move_node_replicas_to_maintain_shard_affinity(self):
-        if self.cb_version[:4] < "7.6.6":
+        if self.cb_version[:5] < "7.6.6":
             self.skipTest("Not applicable less than 7.6.6")
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
@@ -1314,9 +1348,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
 
         time.sleep(3)
         status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
         while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
         time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
@@ -1413,9 +1452,14 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                  to_remove=[index_nodes_before_rebalance[1]], services=['index'])
         time.sleep(1)
         status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
         while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
         time.sleep(10)
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
@@ -1546,7 +1590,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
     def rebalance_and_validate(self, nodes_out_list=None, nodes_in_list=None,
                                swap_rebalance=False, skip_array_index_item_count=False,
                                services_in=None, failover_nodes_list=None, select_queries=None,
-                               scan_results_check=False, capella_rebalance=None, skip_shard_validations=False):
+                               scan_results_check=False, capella_rebalance=None, skip_shard_validations=False, continuous_mutations=False):
         if not nodes_out_list:
             nodes_out_list = []
         if not nodes_in_list:
@@ -1603,7 +1647,12 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         time.sleep(3)
         try:
             status, _ = self.rest._rebalance_status_and_progress()
+            start_time = time.time()
+            timeout = 60  # 60 seconds timeout
             while status != 'running':
+                if time.time() - start_time > timeout:
+                    self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                    raise Exception(f"Rebalance timeout: status '{status}' after {timeout} seconds")
                 time.sleep(1)
                 status, _ = self.rest._rebalance_status_and_progress()
             self.log.info("Rebalance has started running.")
@@ -1647,7 +1696,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             time.sleep(20)
         self.sleep(10)
         if not self.capella_run:
-            reached = RestHelper(self.rest).rebalance_reached()
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=100)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             shard_affinity = self.is_shard_based_rebalance_enabled()
@@ -1681,32 +1730,33 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             shard_affinity = True
         # TODO remove sleep after MB-58840 fix
         time.sleep(60)
-        if shard_affinity and not skip_shard_validations:
-            self.log.info("Running validations for shard-based rebalance")
-            self.log.info("Fetching list of shards after completion of rebalance")
-            shard_list_after_rebalance = self.fetch_shard_id_list()
-            self.log.info("Compare shard list before and after rebalance.")
-            # uncomment after MB-58776 is fixed
-            if shard_list_before_rebalance:
-                if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in [
-                    'rebalance_during_ddl', 'ddl_during_rebalance']:
-                    self.log.error(
-                        f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
-                    raise AssertionError("Shards missing after rebalance")
-                self.log.info(
-                    f"Shard list before rebalance {shard_list_before_rebalance}. After rebalance {shard_list_after_rebalance}")
+        if shard_affinity:
+            if not skip_shard_validations:
+                self.log.info("Running validations for shard-based rebalance")
+                self.log.info("Fetching list of shards after completion of rebalance")
+                shard_list_after_rebalance = self.fetch_shard_id_list()
+                self.log.info("Compare shard list before and after rebalance.")
                 # uncomment after MB-58776 is fixed
-                self.validate_shard_affinity()
-                self.sleep(30)
-                if not self.capella_run:
-                    if not self.check_gsi_logs_for_shard_transfer():
-                        raise Exception("Shard based rebalance not triggered")
+                if shard_list_before_rebalance:
+                    if shard_list_after_rebalance != shard_list_before_rebalance and self.chaos_action not in [
+                        'rebalance_during_ddl', 'ddl_during_rebalance']:
+                        self.log.error(
+                            f"Shards before {shard_list_before_rebalance}. Shards after {shard_list_after_rebalance}")
+                        raise AssertionError("Shards missing after rebalance")
+                    self.log.info(
+                        f"Shard list before rebalance {shard_list_before_rebalance}. After rebalance {shard_list_after_rebalance}")
+                    # uncomment after MB-58776 is fixed
+                    self.validate_shard_affinity()
+                    self.sleep(30)
+                    if not self.capella_run:
+                        if not self.check_gsi_logs_for_shard_transfer():
+                            raise Exception("Shard based rebalance not triggered")
         else:
-            self.log.info("Running validations for MOI type indexes")
+            self.log.info("Running validations for non-shard-based rebalance")
             if self.check_gsi_logs_for_shard_transfer():
-                raise Exception("Shard based rebalance triggered for MOI type indexes")
+                raise Exception("Shard based rebalance triggered despite the flag not being set")
         self.log.info("Running scans after rebalance")
-        if scan_results_check and select_queries is not None:
+        if scan_results_check and select_queries is not None and not self.bhive_index:
             n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
             for query in select_queries:
                 post_rebalance_result = self.run_cbq_query(query=query, scan_consistency='request_plus',
@@ -1723,18 +1773,19 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             indexes_changed = True
         else:
             indexes_changed = False
-        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
-                                                      map_after_rebalance=map_after_rebalance,
-                                                      stats_map_before_rebalance=stats_map_before_rebalance,
-                                                      stats_map_after_rebalance=stats_map_after_rebalance,
-                                                      nodes_in=nodes_in_list,
-                                                      nodes_out=nodes_out_list,
-                                                      swap_rebalance=swap_rebalance,
-                                                      use_https=False,
-                                                      item_count_increase=False,
-                                                      per_node=True,
-                                                      skip_array_index_item_count=skip_array_index_item_count,
-                                                      indexes_changed=indexes_changed)
+        if not continuous_mutations:
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
+                                                        map_after_rebalance=map_after_rebalance,
+                                                        stats_map_before_rebalance=stats_map_before_rebalance,
+                                                        stats_map_after_rebalance=stats_map_after_rebalance,
+                                                        nodes_in=nodes_in_list,
+                                                        nodes_out=nodes_out_list,
+                                                        swap_rebalance=swap_rebalance,
+                                                        use_https=False,
+                                                        item_count_increase=False,
+                                                        per_node=True,
+                                                        skip_array_index_item_count=skip_array_index_item_count,
+                                                        indexes_changed=indexes_changed)
 
     def drop_replicas(self, num_indexes=5):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1759,7 +1810,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.run_cbq_query(query=alter_index_query, server=n1ql_node)
 
     def run_post_rebalance_operations(self, map_after_rebalance, stats_map_after_rebalance):
-        if self.gsi_type == 'memory_optimized':
+        if self.gsi_type == 'memory_optimized' or self.bhive_index:
             self.log.info("Skipping post rebalance operations for MOI type indexes")
             return
         self.run_operation(phase="after")
@@ -1801,13 +1852,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             for node in nodes_all:
                 shell = RemoteMachineShellConnection(node)
                 executor_main.submit(shell.execute_command, cmd)
-
-    def kill_stress_tool(self):
-        nodes = self.servers
-        for node in nodes:
-            shell = RemoteMachineShellConnection(node)
-            shell.execute_command('pkill stress')
-            shell.execute_command('pkill iotop')
 
     def fill_up_disk(self, disk_fill_percent=10):
         self.log.info("Will check the disk usage on all indexer nodes")

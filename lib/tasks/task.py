@@ -29,7 +29,6 @@ from couchbase_helper.document import DesignDocument
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
 from deepdiff import DeepDiff
-from mc_bin_client import MemcachedError
 from membase.api.exception import BucketCreationException
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, \
     DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
@@ -41,6 +40,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcacheConstants import ERR_NOT_FOUND, NotFoundError
 from memcached.helper.data_helper import MemcachedClientHelper
 from memcached.helper.kvstore import KVStore
+from mc_bin_client import MemcachedError
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from tasks.future import Future
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
@@ -48,6 +48,7 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, \
 
 from TestInput import TestInputServer, TestInputSingleton
 from lib.Cb_constants.CBServer import CbServer
+import logging
 
 try:
     CHECK_FLAG = False
@@ -1717,10 +1718,6 @@ class ESBulkLoadGeneratorTask(Task):
                     "_id": key,
                 }
             }
-            if self.dataset == "geojson":
-                es_doc[self.op_type]["_type"] = "_doc"
-            else:
-                es_doc[self.op_type]["_type"] = doc['type']
 
             es_bulk_docs.append(json.dumps(es_doc))
             if self.op_type == "create":
@@ -1748,7 +1745,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None):
+                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None,ignore_wiki=False):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1767,6 +1764,10 @@ class ESRunQueryCompare(Task):
         self.dataset = dataset
         self.reduce_query_logging = reduce_query_logging
         self.variable_node = variable_node
+        self.fts_nodes = fts_nodes
+        self.fts_target_node = fts_target_node
+        self.validation_data = validation_data
+        self.ignore_wiki = ignore_wiki
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1803,6 +1804,7 @@ class ESRunQueryCompare(Task):
     def execute(self, task_manager):
         self.es_compare = True
         should_verify_n1ql = True
+    
         try:
             if not self.reduce_query_logging:
                 self.log.info("---------------------------------------"
@@ -1818,8 +1820,44 @@ class ESRunQueryCompare(Task):
                 search_vector = encoder.encode(vector_query)
                 self.fts_query["vector"] = search_vector.tolist()
             try:
+                if self.validation_data:
+                    #init
+                    prev_map = {}
+                    for i in self.fts_nodes:
+                        prev_map[i.ip] = {}
+                        prev_map[i.ip]['active'] = 0
+                        prev_map[i.ip]['replica'] = 0
+
+                    #get stats
+                    for i in self.fts_nodes:
+                        _,prev_map[i.ip]['active'] = RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)
+                        _,prev_map[i.ip]['replica'] = RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_replicas",node=i)
+
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
                     self.run_fts_query(self.fts_query, self.score)
+
+                #read from replica validation
+                if self.validation_data:
+                    target_node_stat = 0 
+                    rem_nodes_stat = 0
+                    for i in self.fts_nodes:
+                        if i.ip == self.fts_target_node.ip:
+                            target_node_stat = RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+                            target_node_stat += RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_replicas",node=i)[1] - prev_map[i.ip]['replica']
+                        else:
+                            rem_nodes_stat += RestConnection(i).get_fts_stats(index_name=self.fts_index.name,bucket_name=self.fts_index._source_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+                    
+
+                    self.log.info(f"Target_node_stat : {target_node_stat} || rem_nodes_stat : {rem_nodes_stat}")
+                    self.log.info(f"Validation_data : {self.validation_data}")
+
+                    if target_node_stat == self.validation_data[0] and rem_nodes_stat == self.validation_data[1]:
+                        self.log.info(f"Validation data matches: {target_node_stat} == {self.validation_data[0]}, {rem_nodes_stat} == {self.validation_data[1]}")
+                    else:
+                        self.log.error(f"Validation data mismatch: {target_node_stat} != {self.validation_data[0]}, {rem_nodes_stat} != {self.validation_data[1]}")
+                        self.passed = False
+
+
                 if "vector" in str(self.fts_query):
                     self.log.info(fts_doc_ids)
                 if not self.reduce_query_logging:
@@ -1874,7 +1912,7 @@ class ESRunQueryCompare(Task):
                 self.passed = False
             es_hits = 0
             if self.es and self.es_query and "vector" not in self.fts_query:
-                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset)
+                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset,ignore_wiki=self.ignore_wiki)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
                               (json.dumps(self.es_query, ensure_ascii=False),
                                self.es_index_name,
@@ -2028,10 +2066,12 @@ class ESRunQueryCompare(Task):
             self.set_exception(e)
             self.state = FINISHED
     def run_fts_query(self, query, score=''):
-        return self.fts_index.execute_query(query, score=score,variable_node=self.variable_node)
+        if self.fts_target_node:
+            self.variable_node = self.fts_target_node
+        return self.fts_index.execute_query(query, score=score,variable_node=self.variable_node,fts_nodes=self.fts_nodes,validation_data=self.validation_data)
 
-    def run_es_query(self, query,dataset=None):
-        return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset)
+    def run_es_query(self, query,dataset=None,ignore_wiki=False):
+        return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset,ignore_wiki=ignore_wiki)
 
 
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
@@ -3339,7 +3379,7 @@ class N1QLQueryTask(Task):
         self.verify_results = verify_results
         self.is_explain_query = is_explain_query
         self.index_name = index_name
-        self.retry_time = 2
+        self.retry_time = 5
         self.scan_consistency = scan_consistency
         self.scan_vector = scan_vector
 
@@ -6097,8 +6137,8 @@ class NodesFailureTask(Task):
     def _get_mktime_from_server_time(self, server_time):
         time_format = "%Y-%m-%dT%H:%M:%S"
         server_time = server_time.split('.')[0]
-        mk_time = time.mktime(time.strptime(server_time, time_format))
-        return mk_time
+        import calendar
+        return calendar.timegm(time.strptime(server_time, time_format))  # Use UTC time instead of local time
 
     def _rebalance(self):
         rest = RestConnection(self.master)
@@ -6227,7 +6267,7 @@ class AutoFailoverNodesFailureTask(Task):
                 self.max_time_to_wait_for_failover)
         if self.expect_auto_failover:
             if autofailover_initiated:
-                if time_taken < max_timeout + 1:
+                if time_taken <= max_timeout:
                     self.log.info("Autofailover of node {0} successfully "
                                   "initiated in {1} sec".format(
                         self.current_failure_node.ip, time_taken))
@@ -6235,8 +6275,8 @@ class AutoFailoverNodesFailureTask(Task):
                     self.state = EXECUTING
                 else:
                     message = "Autofailover of node {0} was initiated after " \
-                              "the timeout period. Expected  timeout: {1} " \
-                              "Actual time taken: {2}".format(
+                              "the timeout period. Expected  timeout: {1} sec " \
+                              "Actual time taken: {2} sec".format(
                         self.current_failure_node.ip, self.timeout, time_taken)
                     self.log.error(message)
                     rest.print_UI_logs(10)
@@ -6245,7 +6285,7 @@ class AutoFailoverNodesFailureTask(Task):
                     self.set_exception(AutoFailoverException(message))
             else:
                 message = "Autofailover of node {0} was not initiated after " \
-                          "the expected timeout period of {1}".format(
+                          "the expected timeout period of {1} sec".format(
                     self.current_failure_node.ip, self.timeout)
                 rest.print_UI_logs(10)
                 self.log.error(message)
@@ -6518,8 +6558,8 @@ class AutoFailoverNodesFailureTask(Task):
     def _get_mktime_from_server_time(self, server_time):
         time_format = "%Y-%m-%dT%H:%M:%S"
         server_time = server_time.split('.')[0]
-        mk_time = time.mktime(time.strptime(server_time, time_format))
-        return mk_time
+        import calendar
+        return calendar.timegm(time.strptime(server_time, time_format))  # Use UTC time instead of local time
 
     def _rebalance(self):
         rest = RestConnection(self.master)
@@ -6673,17 +6713,35 @@ class MagmaDocLoader(Task):
         if self.sdk_docloader.op_type == "create" and self.sdk_docloader.create_end == 0:
             self.sdk_docloader.create_end = self.sdk_docloader.end + 1
 
-        command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
+        if self.sdk_docloader.json_template == 'siftBigANN':
+            command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar SIFTLoader -n {self.server.ip} " \
                   f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
                   f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \
                   f"-update_s {self.sdk_docloader.update_start} -update_e {self.sdk_docloader.update_end} " \
                   f"-delete_s {self.sdk_docloader.delete_start} -delete_e {self.sdk_docloader.delete_end} " \
+                  f"-expiry_s {self.sdk_docloader.expiry_start} -expiry_e {self.sdk_docloader.expiry_end} " \
+                  f"-read_s {self.sdk_docloader.read_start} -read_e {self.sdk_docloader.read_end} " \
+                  f"-ex {self.sdk_docloader.percent_expiry} -rd {self.sdk_docloader.percent_read} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_update} " \
-                  f"-dl {self.sdk_docloader.percent_delete} -rd 0 -mutate {self.sdk_docloader.mutate} " \
-                  f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
+                  f"-dl {self.sdk_docloader.percent_delete} -mutate {self.sdk_docloader.mutate} " \
+                  f"-docSize {self.sdk_docloader.doc_size}  -valueType {self.sdk_docloader.json_template} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
-                  f"-valueType {self.sdk_docloader.json_template} -dim {self.sdk_docloader.dim} " \
-                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} -model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} -maxTTL 1800"
+                  f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
+                  f"-baseVectorsFilePath /mnt/nfsdata/bigann"
+
+        else:
+            command = f"java -cp magma_loader/DocLoader/target/magmadocloader/magmadocloader.jar Loader -n {self.server.ip} " \
+                      f"-user {self.sdk_docloader.username} -pwd {self.sdk_docloader.password} -b {self.bucket} " \
+                      f"-p 11207 -create_s {self.sdk_docloader.create_start} -create_e {self.sdk_docloader.create_end} " \
+                      f"-update_s {self.sdk_docloader.update_start} -update_e {self.sdk_docloader.update_end} " \
+                      f"-delete_s {self.sdk_docloader.delete_start} -delete_e {self.sdk_docloader.delete_end} " \
+                      f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_update} " \
+                      f"-dl {self.sdk_docloader.percent_delete} -mutate {self.sdk_docloader.mutate} " \
+                      f" -docSize {self.sdk_docloader.doc_size} -keyPrefix {self.sdk_docloader.key_prefix} " \
+                      f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
+                      f"-valueType {self.sdk_docloader.json_template} -dim {self.sdk_docloader.dim} " \
+                      f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
+                      f"-model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} -maxTTL 1800"
 
         self.log.info(command)
         try:
@@ -6732,9 +6790,7 @@ class SDKLoadDocumentsTask(Task):
                   f"-st {self.sdk_docloader.start+start_seq_num_shift} -en {self.sdk_docloader.end+start_seq_num_shift} -o {self.sdk_docloader.output} -sd {self.sdk_docloader.shuffle_docs} --secure {self.sdk_docloader.secure} -cpl {self.sdk_docloader.capella}"
         if self.sdk_docloader.es_compare:
             command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
-                self.sdk_docloader.es_port) + \
-                      " -es_login " + str(self.sdk_docloader.es_login) + " -es_password " + str(
-                self.sdk_docloader.es_password)
+                self.sdk_docloader.es_port)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = self.sdk_docloader.fields_to_update if self.sdk_docloader.fields_to_update else ""
             if len(arr_fields_to_update) > 0:

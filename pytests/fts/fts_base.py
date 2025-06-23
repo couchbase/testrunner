@@ -76,6 +76,7 @@ import lib.capella.utils as capella_utils
 from .vector_dataset_generator.vector_dataset_generator import VectorDataset
 from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVectorLoader
 from .docfilter_datagen.docfilter_datagen import DocFilterLoader
+from .synonym_datagen.synonym_datagen import SynonymDatagen
 
 
 class RenameNodeException(FTSException):
@@ -795,7 +796,7 @@ class FTSIndex:
                  source_name=None, index_type='fulltext-index', index_params=None,
                  plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None,
                  type_mapping=None, collection_index=False, scope=None, collections=None, multiple_ca=False,
-                 is_elixir=False, reduce_query_logging=False):
+                 is_elixir=False, reduce_query_logging=False,synonym_source=None):
 
         """
          @param name : name of index/alias
@@ -837,6 +838,7 @@ class FTSIndex:
         self.store_in_xattr = TestInputSingleton.input.param("store_in_xattr", False)
         self.dynamic_store = TestInputSingleton.input.param("dynamic_store", True)
         self.num_pindexes = 0
+        self.synonym_source = synonym_source
 
 
         self.index_definition = {
@@ -903,6 +905,28 @@ class FTSIndex:
             "kvStoreName": "mossStore",
             "mossStoreOptions": {}
         }
+
+
+        if self.synonym_source:
+            if 'mapping' not in self.index_definition['params']:
+                self.index_definition['params']['mapping'] = {}
+            
+            # Check if 'analysis' exists, create if not
+            if 'analysis' not in self.index_definition['params']['mapping']:
+                self.index_definition['params']['mapping']['analysis'] = {}
+            
+            # Check if 'synonym_sources' exists, create if not
+            if 'synonym_sources' not in self.index_definition['params']['mapping']['analysis']:
+                self.index_definition['params']['mapping']['analysis']['synonym_sources'] = {}
+            
+            # Add the synonym source to the structure
+            synonym_source_map = {
+                self.synonym_source[0] : {
+                    "collection": self.synonym_source[1],
+                    "analyzer": self.synonym_source[2]
+                }
+            }
+            self.index_definition['params']['mapping']['analysis']['synonym_sources'] = synonym_source_map
 
         if self.index_storage_type:
             self.index_definition['params']['store']['indexType'] = self.index_storage_type
@@ -1489,9 +1513,9 @@ class FTSIndex:
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
 
-    def get_src_collections_doc_count(self):
-        return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections)
-
+    def get_src_collections_doc_count(self, extra_collections = None):
+        return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections, extra_collections = extra_collections)
+    
     def get_uuid(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_uuid(self.name, self._source_name, self.scope)
@@ -1508,6 +1532,9 @@ class FTSIndex:
                                   consistency_vectors={},
                                   score='',
                                   knn=None, vector_search=False):
+        read_from_replica = TestInputSingleton.input.param("read_from_replica",False)
+        parition_selection = TestInputSingleton.input.param("parition_selection","")
+
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         max_limit_matches = TestInputSingleton.input.param("query_limit_matches", None)
         query_json = copy.deepcopy(QUERY.JSON)
@@ -1550,6 +1577,8 @@ class FTSIndex:
             del query_json['ctl']['consistency']['vectors']
         elif consistency_vectors != {}:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
+        if read_from_replica:
+            query_json['ctl']['partition_selection'] = parition_selection
         if score != '':
             query_json['score'] = "none"
         if knn is not None:
@@ -1625,7 +1654,9 @@ class FTSIndex:
                       highlight_style=None, highlight_fields=None, consistency_level='',
                       consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
                       node=None, knn=None, fields=None,
-                      raise_on_error=False, variable_node=None):
+                      raise_on_error=False, variable_node=None,bucket_name=None,validation_data=None,fts_nodes=None):
+        
+        
 
         vector_search = False
         if self.is_vector_query(query):
@@ -1660,7 +1691,8 @@ class FTSIndex:
                 rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, scope_name=self.scope,
-                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest, variable_node = variable_node)
+                                             bucket_name=self._source_name, node=node, timeout=rest_timeout, rest=rest, variable_node = variable_node,
+                                             fts_nodes=fts_nodes,validation_data=validation_data)
         except ServerUnavailableException:
             if zero_results_ok and (expected_hits is None or expected_hits <= 0):
                 return hits, doc_ids, time_taken, status
@@ -2808,7 +2840,7 @@ class CouchbaseCluster:
                          index_params=None, plan_params=None,
                          source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard",
                          scope=None, collections=None, no_check=False,xattr_flag=False,base64_flag=False,store_all_flag=False,
-                         filters = None,payload=None):
+                         filters = None,payload=None,synonym_source=None):
 
 
 
@@ -2847,7 +2879,8 @@ class CouchbaseCluster:
             type_mapping=_type,
             collection_index=collection_index,
             scope=scope,
-            collections=collections
+            collections=collections,
+            synonym_source=synonym_source
         )
 
         if payload:
@@ -2887,6 +2920,10 @@ class CouchbaseCluster:
             
             index.index_definition['params']['doc_config'] = {}
             index.index_definition['params']['doc_config'] = doc_config
+        
+        if synonym_source:
+            index.index_definition['params']['mapping']['types'][f"{synonym_source[3]}.{collections[0]}"]["default_synonym_source"] = synonym_source[0]
+            index.index_definition['params']['mapping']['types'][f"{synonym_source[3]}.{collections[0]}"]["default_analyzer"] = analyzer
 
         if no_check:
             index.create_no_check()
@@ -2932,7 +2969,7 @@ class CouchbaseCluster:
         self.__indexes.clear()
 
     def run_fts_query(self, index_name, query_dict, bucket_name=None, scope_name=None, node=None, timeout=100,
-                      rest=None,variable_node = None):
+                      rest=None,variable_node = None,validation_data = None,fts_nodes = None):
         """ Runs a query defined in query_json against an index/alias and
         a specific node
 
@@ -2950,9 +2987,37 @@ class CouchbaseCluster:
             self.__log.info("Running query %s on node as %s : %s:%s"
                             % (json.dumps(query_dict, ensure_ascii=False),
                                node.ip, rest.username, node.fts_port))
+        if validation_data:
+            prev_map = {}
+            for i in fts_nodes:
+                prev_map[i.ip] = {}
+                prev_map[i.ip]['active'] = 0
+                prev_map[i.ip]['replica'] = 0
+
+            for i in fts_nodes:
+                _,prev_map[i.ip]['active'] = RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_actives",node=i)
+                _,prev_map[i.ip]['replica'] = RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_replicas",node=i)
 
         total_hits, hit_list, time_taken, status = \
-            rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name)
+            rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name,node=variable_node)
+        
+
+        if validation_data:
+            target_node_stat = 0 
+            rem_nodes_stat = 0
+
+            for i in fts_nodes:
+                if i.ip == variable_node.ip:
+                    target_node_stat = RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+                    target_node_stat += RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_replicas",node=i)[1] - prev_map[i.ip]['replica']
+                else:
+                    rem_nodes_stat += RestConnection(i).get_fts_stats(index_name=index_name,bucket_name=bucket_name,stat_name="total_queries_to_actives",node=i)[1] - prev_map[i.ip]['active']
+
+            if target_node_stat == validation_data[0] and rem_nodes_stat == validation_data[1]:
+                self.__log.info(f"Validation data matches: {target_node_stat} == {validation_data[0]}, {rem_nodes_stat} == {validation_data[1]}")
+            else:
+                self.__log.error(f"Validation data mismatch: {target_node_stat} != {validation_data[0]}, {rem_nodes_stat} != {validation_data[1]}")
+
         return total_hits, hit_list, time_taken, status
 
     def run_fts_query_generalized(self, index_name, query_dict, node=None, timeout=70):
@@ -3027,11 +3092,14 @@ class CouchbaseCluster:
     def get_doc_count_in_bucket(self, bucket):
         return RestConnection(self.__master_node).get_active_key_count(bucket)
 
-    def get_doc_count_in_collections(self, bucket, scope, collections):
+    def get_doc_count_in_collections(self, bucket, scope, collections, extra_collections=None):
         stat = CollectionsStats(self.__master_node)
         count = 0
         for c in collections:
             count = count + stat.get_collection_item_count_cumulative(bucket, scope, c, self.get_kv_nodes())
+        if extra_collections:
+            for c in extra_collections:
+                count = count + stat.get_collection_item_count_cumulative(bucket, scope, c, self.get_kv_nodes())
         return count
 
     def delete_bucket(self, bucket_name):
@@ -3508,7 +3576,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None, variable_node = None):
+                                    use_collections=False, dataset=None, variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None,ignore_wiki=False):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3521,7 +3589,11 @@ class CouchbaseCluster:
                                                             use_collections=use_collections,
                                                             dataset=dataset,
                                                             reduce_query_logging=self.reduce_query_logging,
-                                                            variable_node = variable_node)
+                                                            variable_node = variable_node,
+                                                            fts_nodes=fts_nodes,
+                                                            fts_target_node=fts_target_node,
+                                                            validation_data=validation_data,
+                                                            ignore_wiki=ignore_wiki)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4188,6 +4260,7 @@ class FTSBaseTest(unittest.TestCase):
         self.storage_prefix = self._input.param("storage_prefix", None)
         self.store_in_xattr = self._input.param("store_in_xattr", False)
         self.encode_base64_vector = self._input.param("encode_base64_vector", False)
+        self.query_size = self._input.param("query_size", 200000)
         self.docker_containers = []
 
 
@@ -5231,7 +5304,7 @@ class FTSBaseTest(unittest.TestCase):
                 retry_count -= 1
             time.sleep(6)
 
-    def wait_for_indexing_complete(self, item_count=None, es_index="es_index"):
+    def wait_for_indexing_complete(self, item_count=None, es_index="es_index",extra_collections = None):
         """
         Wait for index_count for any index to stabilize or reach the
         index count specified by item_count
@@ -5250,7 +5323,7 @@ class FTSBaseTest(unittest.TestCase):
                     index_doc_count = index.get_indexed_doc_count()
 
                     if index.collections:
-                        container_doc_count = index.get_src_collections_doc_count()
+                        container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
                     else:
                         container_doc_count = index.get_src_bucket_doc_count()
 
@@ -5527,9 +5600,10 @@ class FTSBaseTest(unittest.TestCase):
                                         "conjunction", "disjunction"]
         """
         from .random_query_generator.rand_query_gen import FTSESQueryGenerator
+        self.doc_maps = int(TestInputSingleton.input.param("doc_maps", 1))
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
                                         seed=seed, dataset=self.dataset,
-                                        fields=index.smart_query_fields)
+                                        fields=index.smart_query_fields,doc_map_count=self.doc_maps)
         for fts_query in query_gen.fts_queries:
             index.fts_queries.append(
                 json.loads(json.dumps(fts_query, ensure_ascii=False)))
@@ -5697,7 +5771,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None, collection_index=False, _type=None, analyzer="standard", scope=None,
-                     collections=None, no_check=False,store_all_flag=False,filters = None):
+                     collections=None, no_check=False,store_all_flag=False,filters = None,synonym_source=None):
         """
         Creates a default index given bucket, index_name and plan_params
         """
@@ -5718,7 +5792,8 @@ class FTSBaseTest(unittest.TestCase):
             xattr_flag = self.store_in_xattr,
             base64_flag = self.encode_base64_vector,
             store_all_flag = store_all_flag,
-            filters = filters)
+            filters = filters,
+            synonym_source=synonym_source)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -5807,11 +5882,16 @@ class FTSBaseTest(unittest.TestCase):
 
     def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False,
                                         vector_fields=None, field_type=None, field_name=None, extra_fields=None,
-                                        wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False,filters=None):
-
-        if store_all_flag:
+                                        wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False,filters=None,synonym_source=None,index_name=None):
+        
+        if store_all_flag: 
             self.store_in_xattr = xattr_flag
             self.encode_base64_vector = base64_flag
+
+        extra_collections = []
+        
+        if synonym_source:
+            extra_collections.append(synonym_source[1])
 
         if test_indexes is None:
             test_indexes = eval(TestInputSingleton.input.param("idx", "[]"))
@@ -5820,10 +5900,13 @@ class FTSBaseTest(unittest.TestCase):
             decoded_index = self._decode_index(idx)
             collection_index, _type, index_scope, index_collections = self.define_index_params(decoded_index)
             fts_index = None
+            if not index_name:
+                index_name = decoded_index["name"]
             if collection_index:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
-                                              decoded_index["name"], collection_index=True, _type=_type,
-                                              scope=index_scope, collections=index_collections,store_all_flag=store_all_flag,filters=filters)
+                                              index_name, collection_index=True, _type=_type,
+                                              scope=index_scope, collections=index_collections,store_all_flag=store_all_flag,filters=filters,synonym_source=synonym_source,
+                                              analyzer=self.analyzer)
                 
                 if field_name and field_type:
                     for collection in index_collections:
@@ -5872,7 +5955,7 @@ class FTSBaseTest(unittest.TestCase):
                         fts_index.update_num_replicas(index_replica)
             else:
                 fts_index = self.create_index(self._cb_cluster.get_bucket_by_name(decoded_index["bucket"]),
-                                              decoded_index["name"], collection_index=False)
+                                              index_name, collection_index=False,analyzer=self.analyzer)
                 if index_replica > 1:
                     fts_index.update_num_replicas(index_replica)
 
@@ -5882,7 +5965,7 @@ class FTSBaseTest(unittest.TestCase):
             indexes.append(decoded_index)
             self.sleep(5, "Waiting 5 seconds for index to update..")
             if wait_for_index_complete:
-                self.wait_for_indexing_complete()
+                self.wait_for_indexing_complete(extra_collections=extra_collections)
 
         time.sleep(20)
         return indexes
@@ -6001,6 +6084,8 @@ class FTSBaseTest(unittest.TestCase):
         return faiss_index
 
     def create_es_index_mapping(self, es_mapping, fts_mapping=None):
+        if self.es == None:
+            pass
         if not (self.num_custom_analyzers > 0):
             self.es.create_index_mapping(index_name="es_index",
                                          es_mapping=es_mapping, fts_mapping=None)
@@ -6048,11 +6133,9 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("Creating a geo-index on Elasticsearch...")
             self.es.delete_indices()
             es_mapping = {
-                "earthquake": {
-                    "properties": {
-                        "geo": {
-                            "type": "geo_point"
-                        }
+                "properties": {
+                    "geo": {
+                        "type": "geo_point"
                     }
                 }
             }
@@ -6266,7 +6349,7 @@ class FTSBaseTest(unittest.TestCase):
                 self.delete_gen.op_type = OPS.DELETE
                 self.delete_gen.encoding = "utf-8"
                 self.delete_gen.start = int((self.create_gen.end)
-                                            * (float)(100 - self._perc_del) / 100)
+                                              * (float)(100 - self._perc_del) / 100)
                 self.delete_gen.end = self.create_gen.end
                 self.delete_gen.delete()
             else:
@@ -6371,8 +6454,493 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
+    def generate_fuzzy_words(self, word: str, fuzziness: int):
+        """
+        Generate all possible words by applying up to `fuzziness` edit distance.
+        Allowed edits: Substitution, Insertion, Deletion
+        """
+        alphabet = string.ascii_lowercase
+        word_length = len(word)
+        fuzzy_words = set()
+
+        # 1. Substitutions:
+        for i in range(word_length):
+            for letter in alphabet:
+                if letter != word[i]:
+                    fuzzy_words.add(word[:i] + letter + word[i+1:])
+
+        # 2. Insertions:
+        for i in range(word_length + 1):
+            for letter in alphabet:
+                fuzzy_words.add(word[:i] + letter + word[i:])
+
+        # 3. Deletions:
+        for i in range(word_length):
+            fuzzy_words.add(word[:i] + word[i+1:])
+
+        if fuzziness > 1:
+            extra_words = set()
+            for fw in fuzzy_words:
+                extra_words.update(self.generate_fuzzy_words(fw, fuzziness - 1))
+            fuzzy_words.update(extra_words)
+    
+        for i in range(word_length - 1):
+            swapped = list(word)
+            swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
+            fuzzy_words.add("".join(swapped))
+        
+        fuzzy_words.add(word)
+
+        return list(fuzzy_words)
+
+    def run_synonym_query_and_compare(self,index_name=None,rawmap=None,wordmap=None):
+
+        map = list(wordmap.items())
+
+        for itr in range(self.num_queries):
+            word,groundtruth = map[int(random.randint(0,len(map)-1))]
+            query =  {"match": word}
+
+            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index_name,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+            
+            ids = []
+            for hit in hit_list:
+                ids.append(hit['id'])
+
+            if total_hits != len(groundtruth):
+                self.fail("Total hits : {}. Expected hits : {}".format(total_hits,len(groundtruth)))
+            else:
+                self.log.info("SUCCESS. Total hits : {}. Expected hits : {}".format(total_hits,len(groundtruth)))
+            
+            is_passed = True
+
+            for id in ids:
+                if id not in groundtruth:
+                    is_passed = False
+                    break
+
+            if not is_passed:
+                self.fail("Mismatch in hits. Expected : {}. Actual : {}".format(groundtruth,ids))
+            else:
+                self.log.info("SUCCESS. Expected : {}. Actual : {}".format(groundtruth,ids))
+    
+    def run_wildcard_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
+        
+        wordlist = list(synmap.keys())
+
+        self.log.info(f"Wildcard operator : ?")
+
+        for itr in range(self.num_queries):
+            self.log.info(f"Running QUERY {itr}\n")
+
+            word = wordlist[int(random.randint(0,len(wordlist)-1))]
+            word_ = list(word)
+            insert_pos = random.randint(0, len(word) - 1)
+            word_[insert_pos] = '?'
+            term = "".join(word_)
+
+            query = {"wildcard": term}
+
+            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=synonym_index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+            ids = []
+            try:
+                for hit in hit_list:
+                    ids.append(hit['id'])
+            except Exception as ex:
+                pass
+            self.log.info(f"Document Hits for the synonym query : {ids}\n")
+            ex_res = []
+
+            self.log.info("Running expanded queries")
+            for letter in string.ascii_lowercase:
+                word_ = list(word)
+                word_[insert_pos] = letter
+                word = "".join(word_)
+                query = {"wildcard": word}
+
+                total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+
+                try:
+                    for hit in hit_list:
+                        ex_res.append(hit['id'])
+                except Exception as ex:
+                    pass
+                
+                if format==1:
+                    if word in wordmap:
+                        for syn in synmap[word]:
+                            query = {"wildcard": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+                else:
+                    hash_map = {}
+                    for k,v in synmap.items():
+                        if word in v:
+                            for item in v:
+                                if item in hash_map:
+                                    continue
+                                hash_map[item] = 1 
+                                query = {"wildcard": item}
+                                total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                                try:
+                                    for hit in hit_list:
+                                        ex_res.append(hit['id'])
+                                except Exception as ex:
+                                    pass
+
+
+            result_set = sorted(set(ex_res))            
+            self.log.info(f"Document Hits for the expanded queries : {result_set}")
+
+            if len(ids) != len(result_set):
+                self.fail(f"Length mismatch. Expected : {len(result_set)}. Actual : {len(ids)}")
+            else:
+                if sorted(ids) != result_set:
+                    self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
+                else:
+                    self.log.info("SUCCESS. Document Hits match")
+        
+
+        self.log.info(f"Wildcard operator : *")
+
+        for itr in range(self.num_queries):
+            self.log.info(f"Running QUERY {itr}\n")
+            
+            word = ""
+            while len(word) < 2:
+                word = wordlist[int(random.randint(0,len(wordlist)-1))]
+            term = word[:-1] + "*"
+
+            query = {"wildcard": term}
+
+            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=synonym_index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+            ids = []
+            try:
+                for hit in hit_list:
+                    ids.append(hit['id'])
+            except Exception as ex:
+                pass
+            self.log.info(f"Document Hits for the synonym query : {ids}\n")
+            
+            ex_res = []
+
+            self.log.info("Running expanded queries")
+            if format == 1:
+                for k,v in synmap.items():
+                    if len(k) >= len(term)-1 and k[:len(term)-1] == term[:-1]:
+                        query = {"wildcard": k}
+                        total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                        try:
+                            for hit in hit_list:
+                                ex_res.append(hit['id'])
+                        except Exception as ex:
+                            pass
+
+                        for syn in v:
+                            query = {"wildcard": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+                    else:
+                        for syn in v:
+                            if len(syn) >= len(term)-1 and syn[:len(term)-1] == term[:-1]:
+                                query = {"wildcard": syn}
+                                total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                                try:
+                                    for hit in hit_list:
+                                        ex_res.append(hit['id'])
+                                except Exception as ex:
+                                    pass
+            else:
+                hash_map = {}
+                for k,v in synmap.items():
+                    temp_itr = False
+                    for syn in v:
+                        if len(syn) >= len(term)-1 and syn[:len(term)-1] == term[:-1]:
+                            temp_itr = True
+                            break
+                    if temp_itr:
+                        for syn in v:
+                            if syn in hash_map:
+                                continue
+                            hash_map[syn] = 1
+                            query = {"wildcard": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+
+            result_set = sorted(set(ex_res))            
+            self.log.info(f"Document Hits for the expanded queries : {result_set}")
+
+            if len(ids) != len(result_set):
+                self.fail(f"Length mismatch. Expected : {len(result_set)}. Actual : {len(ids)}")
+            else:
+                if sorted(ids) != result_set:
+                    self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
+                else:
+                    self.log.info("SUCCESS. Document Hits match")
+    
+    def run_fuzzy_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
+        
+        wordlist = list(synmap.keys())
+
+        for itr in range(self.num_queries):
+            self.log.info(f"Running QUERY {itr}\n")
+
+            word = wordlist[int(random.randint(0,len(wordlist)-1))]
+
+            word_net = self.generate_fuzzy_words(word, 1)
+
+            query = {"match": word, "fuzziness": 1}
+
+            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=synonym_index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+            ids = []
+            try:
+                for hit in hit_list:
+                    ids.append(hit['id'])
+            except Exception as ex:
+                pass
+            self.log.info(f"Document Hits for the synonym query : {ids}\n")
+
+            ex_res = []
+
+            self.log.info("Running expanded queries")
+
+            if format==1:
+                for k,v in synmap.items():
+                    if k in word_net:
+                        query = {"match": k}
+                        total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                        try:
+                            for hit in hit_list:
+                                ex_res.append(hit['id'])
+                        except Exception as ex:
+                            pass
+
+                        for syn in v:
+                            query = {"match": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+                    else:
+                        for syn in v:
+                            if syn in word_net:
+                                query = {"match": syn}
+                                total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                                try:
+                                    for hit in hit_list:
+                                        ex_res.append(hit['id'])
+                                except Exception as ex:
+                                    pass
+
+            else:
+                hash_map = {}
+                for k,v in synmap.items():
+                    temp_itr = False
+                    for syn in v:
+                        if syn in word_net:
+                            temp_itr = True
+                            break
+                    if temp_itr:
+                        for syn in v:
+                            if syn in hash_map:
+                                continue
+                            hash_map[syn] = 1
+                            query = {"match": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+
+            result_set = sorted(set(ex_res))  
+
+            self.log.info(f"Document Hits for the expanded queries : {result_set}")
+
+            if len(ids) != len(result_set):
+                self.fail(f"Length mismatch. Expected : {len(result_set)}. Actual : {len(ids)}")
+            else:
+                if sorted(ids) != result_set:
+                    self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
+                else:
+                    self.log.info("SUCCESS. Document Hits match")
+    
+
+    def run_match_phrase_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
+        
+        wordlist = list(synmap.keys())
+
+        for itr in range(self.num_queries):
+            self.log.info(f"Running QUERY {itr}\n")
+
+            word1, word2 = random.sample(wordlist, 2)
+
+            query = {"match_phrase": word1 + " " + word2}
+
+            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=synonym_index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+            ids = []
+            try:
+                for hit in hit_list:
+                    ids.append(hit['id'])
+            except Exception as ex:
+                pass
+            self.log.info(f"Document Hits for the synonym query : {ids}\n")
+
+            ex_res = []
+
+            self.log.info("Running expanded queries")
+
+            if format==1:
+                syn1 = synmap[word1]
+                syn2 = synmap[word2]
+
+                syn1.append(word1)
+                syn2.append(word2)
+
+                import itertools
+                pairs = [f"{w1} {w2}" for w1, w2 in itertools.product(syn1, syn2)]
+
+                for pair in pairs:
+                    query = {"match_phrase": pair}
+                    total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                    try:
+                        for hit in hit_list:
+                            ex_res.append(hit['id'])
+                    except Exception as ex:
+                        pass
+
+            else:
+                syn1 = synmap[word1]
+                syn2 = synmap[word2]
+
+                import itertools
+                pairs = [f"{w1} {w2}" for w1, w2 in itertools.product(syn1, syn2)]
+
+                for pair in pairs:
+                    query = {"match_phrase": pair}
+                    total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                    try:
+                        for hit in hit_list:
+                            ex_res.append(hit['id'])
+                    except Exception as ex:
+                        pass
+
+            result_set = sorted(set(ex_res))  
+
+            self.log.info(f"Document Hits for the expanded queries : {result_set}")
+
+            if len(ids) != len(result_set):
+                self.fail(f"Length mismatch. Expected : {len(result_set)}. Actual : {len(ids)}")
+            else:
+                if sorted(ids) != result_set:
+                    self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
+                else:
+                    self.log.info("SUCCESS. Document Hits match")
+    
+    def run_prefix_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
+        
+        wordlist = list(synmap.keys())
+
+        for itr in range(self.num_queries):
+            self.log.info(f"Running QUERY {itr}\n")
+
+            word = ""
+            while len(word) <= 3:
+                word = wordlist[int(random.randint(0,len(wordlist)-1))]
+            
+            word = word[:3]
+
+            query = {"prefix": word}
+
+            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=synonym_index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+            ids = []
+            try:
+                for hit in hit_list:
+                    ids.append(hit['id'])
+            except Exception as ex:
+                pass
+            self.log.info(f"Document Hits for the synonym query : {ids}\n")
+
+            ex_res = []
+
+            self.log.info("Running expanded queries")
+
+            if format==1:
+                for k,v in synmap.items():
+                    if k[:3] == word:
+                        query = {"term": k}
+                        total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                        try:
+                            for hit in hit_list:
+                                ex_res.append(hit['id'])
+                        except Exception as ex:
+                            pass
+
+                        for syn in v:
+                            query = {"term": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+                    else:
+                        for syn in v:
+                            if syn[:3] == word:
+                                query = {"term": syn}
+                                total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                                try:
+                                    for hit in hit_list:
+                                        ex_res.append(hit['id'])
+                                except Exception as ex:
+                                    pass
+
+            else:
+                for k,v in synmap.items():
+                    temp_itr = False
+                    for syn in v:
+                        if syn[:3] == word:
+                            temp_itr = True
+                            break
+                    if temp_itr:
+                        for syn in v:
+                            query = {"term": syn}
+                            total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
+                            try:
+                                for hit in hit_list:
+                                    ex_res.append(hit['id'])
+                            except Exception as ex:
+                                pass
+
+
+            result_set = sorted(set(ex_res))  
+
+            self.log.info(f"Document Hits for the expanded queries : {result_set}")
+
+            if len(ids) != len(result_set):
+                self.fail(f"Length mismatch. Expected : {len(result_set)}. Actual : {len(ids)}")
+            else:
+                if sorted(ids) != result_set:
+                    self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
+                else:
+                    self.log.info("SUCCESS. Document Hits match")
+
     def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,
-                              dataset=None):
+                              dataset=None,fts_nodes=None, fts_target_node=None,validation_data=None,ignore_wiki=False):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -6388,7 +6956,11 @@ class FTSBaseTest(unittest.TestCase):
                 query_index=count,
                 n1ql_executor=n1ql_executor,
                 use_collections=use_collections,
-                dataset=dataset))
+                dataset=dataset,
+                fts_nodes=fts_nodes,
+                fts_target_node=fts_target_node,
+                validation_data=validation_data,
+                ignore_wiki=ignore_wiki))
 
         num_queries = len(tasks)
 
@@ -6406,6 +6978,7 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
+            
 
     def grab_fts_diag(self):
         """
@@ -6875,7 +7448,13 @@ class FTSBaseTest(unittest.TestCase):
                                 self._input.membase_settings.rest_password, bucket_name, scope_name,
                                 collection_name,prefix)
         return loader.load_data(container_name)
+    
+    def synonym_datagen(self):
 
+        container_name = self.generate_random_container_name()
+        self.docker_containers.append(container_name)
+        synonym_obj = SynonymDatagen().start_server(container_name=container_name)
+    
     def get_query_vectors(self, dataset_name, dimension=None):
         ds = VectorDataset(dataset_name)
         use_hdf5_datasets = True

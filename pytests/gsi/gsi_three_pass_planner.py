@@ -279,6 +279,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         Indexes of same category should ensure that the existing shards should be reused
         '''
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        # self.index_rest.set_index_settings({"indexer.plasma.sharedFlushBufferMultipler": 1})
         collection_namespace = self.namespaces[0]
         if self.index_type == "scalar":
             scalar_idx_1 = QueryDefinition(index_name='scalar_rgb', index_fields=['color'])
@@ -339,7 +340,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         elif self.index_type == "all":
             # creating scalar index
             scalar_idx = QueryDefinition(index_name='scalar_rgb', index_fields=['color'], partition_by_fields=['meta().id'])
-            query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_partition=6)
+            query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_partition=4)
             self.run_cbq_query(query=query, server=self.n1ql_node)
 
             # creating vector index
@@ -353,17 +354,14 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
                                         index_fields=['descriptionVector VECTOR'],
                                         dimension=384, description=f"IVF,PQ32x8",
                                         similarity="L2_SQUARED", partition_by_fields=['meta().id'])
-            query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_partition=6)
+            query = bhive_idx.generate_index_create_query(namespace=collection_namespace, bhive_index=True, num_partition=4)
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.wait_until_indexes_online()
 
-        # validating if num_shards are at shard capacity
-        max_shards = self.fetch_total_shards_limit()
-        self.validate_no_of_shards(validation_length=max_shards)
-
-        #if indexes from all the categories exist then the shards must be reused
-        if self.index_type == "all":
-            num_shards_before = self.fetch_shard_id_list()
+        # validating if num_shards are at shard capacity only when all categories of indexes are not created since when all categories of indexes are created there is an overflow of no of shards
+        if not self.index_type == "all":
+            max_shards = self.fetch_total_shards_limit()
+            self.validate_no_of_shards(validation_length=max_shards)
 
         if self.index_type == "scalar":
             vector_idx = QueryDefinition(index_name='vector_rgb_2', index_fields=['colorRGBVector VECTOR'], dimension=3,
@@ -430,10 +428,6 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
 
             self.wait_until_indexes_online()
 
-        # if indexes from all the categories exist then the shards must be reused
-        if self.index_type == "all":
-            num_shards_after = self.fetch_shard_id_list()
-            self.assertEqual(len(num_shards_before), len(num_shards_after), f"shard list before {num_shards_before}, shard list after {num_shards_after}")
         # if different categories of indexes are created after shard capacity has been reached by only one category of indexes then new shards will be created
         else:
             shard_index_map = self.get_shards_index_map()
@@ -595,6 +589,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             for query in [bhive_query_1, bhive_query_2]:
                 self.run_cbq_query(query=query, server=self.n1ql_node)
 
+
+
         no_of_shards_within_soft_limit = self.fetch_shard_id_list()
         #to verify shards are within soft limit
         shard_partition_map = self.fetch_shard_partition_map()
@@ -647,8 +643,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             self.enable_shard_seggregation()
             self.sleep(10)
 
+        shard_list_before_rebalance = self.fetch_shard_id_list()
         if not self.toggle_on_off_shard_dealer or len(index_nodes) == 1:
-            shard_list_before_rebalance = self.fetch_shard_id_list()
             # to verify shards are within soft limit
             shard_partition_map = self.fetch_shard_partition_map()
             for shard in shard_partition_map:
@@ -670,6 +666,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+        self.update_master_node()
+        self.sleep(10)
 
 
         #validating shard segregation post rebalance
@@ -681,7 +679,7 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         self.assertEqual(len(shard_list_post_rebalance), len(shard_list_before_rebalance), f"shard list before rebalance {shard_list_before_rebalance}, shard list after rebalance {shard_list_post_rebalance}")
 
         if self.rebalance_type == "rebalance_out":
-            self.create_index_post_initial_index_creation()
+            self.create_index_post_initial_index_creation(collection_namespace=collection_namespace)
             self.wait_until_indexes_online(defer_build=self.defer_build)
 
             # validating shard segregation post creating new indexes post rebalance

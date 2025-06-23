@@ -1,9 +1,21 @@
 from .xdcrnewbasetests import XDCRNewBaseTest
 from membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
 import random
 
 
 class XDCRCollectionsTests(XDCRNewBaseTest):
+
+    def setUp(self):
+        super().setUp()
+        self.src_cluster = self.get_cb_cluster_by_name("C1")
+        self.dest_cluster = self.get_cb_cluster_by_name("C2")
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_master = self.dest_cluster.get_master_node()
+        self.src_rest = RestConnection(self.src_master)
+        self.dest_rest = RestConnection(self.dest_master)
+
+
     DEFAULT_SCOPE = "_default"
     DEFAULT_COLLECTION = "_default"
     NEW_SCOPE = "new_scope"
@@ -235,3 +247,113 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         self.perform_update_delete()
         if not skip_verify:
             self.verify_results()
+
+
+    def test_collections_migration_multi_target(self):
+        self.src_rest.load_sample("beer-sample")
+        self.sleep(20) 
+
+        self.dest_rest.create_bucket("beer-sample")
+
+        self.dest_rest.create_scope("beer-sample", "S3")
+        self.dest_rest.create_collection("beer-sample", "S3", ["col1", "col2", "col3"])
+
+        us_filter = '(country == \\"United States\\" OR country = \\"Canada\\") AND type=\\"brewery\\"'
+        non_us_filter = 'country != \\"United States\\" AND country != \\"Canada\\" AND type=\\"brewery\\"'
+        brewery_filter = 'type=\\"brewery\\"'
+        
+        mapping_rule = '{' + f'"{us_filter}":"S3.col1","{non_us_filter}":"S3.col2","{brewery_filter}":"S3.col3"' + '}'
+
+        # Set up replication with collections migration mode
+        repl_params = {
+            "replicationType": "continuous",
+            "checkpointInterval": 60,
+            "statsInterval": 500,
+            "collectionsMigrationMode": True,
+            "colMappingRules": mapping_rule
+        }
+
+        self.src_rest.add_remote_cluster(self.dest_master.ip, self.dest_master.port,
+                                       self.dest_master.rest_username,
+                                       self.dest_master.rest_password,
+                                       "C2")
+        
+        self.src_rest.start_replication("continuous", "beer-sample", "C2",
+                                      toBucket="beer-sample",
+                                      xdcr_params=repl_params)
+
+        self._wait_for_replication_to_catchup()
+
+        us_breweries = self.dest_rest.query_tool(
+            'SELECT COUNT(*) as count FROM `beer-sample`.S3.col1')['results'][0]['count']
+        non_us_breweries = self.dest_rest.query_tool(
+            'SELECT COUNT(*) as count FROM `beer-sample`.S3.col2')['results'][0]['count']
+        all_breweries = self.dest_rest.query_tool(
+            'SELECT COUNT(*) as count FROM `beer-sample`.S3.col3')['results'][0]['count']
+
+        self.log.info(f"US/Canada breweries (col1): {us_breweries}")
+        self.log.info(f"Non-US/Canada breweries (col2): {non_us_breweries}")
+        self.log.info(f"All breweries (col3): {all_breweries}")
+
+        self.assertEqual(all_breweries, us_breweries + non_us_breweries,
+                        "Total breweries in col3 should equal sum of US and non-US breweries")
+
+    def test_migration_mode_with_xattrs(self):
+        """Test XDCR with migration mode enabled and documents with xattrs"""
+        # Test parameters
+        num_docs = self._input.param("num_docs", 1000)
+        num_xattrs = self._input.param("num_xattrs", 3)
+        scope_name = self._input.param("scope_name", "test_scope")
+        collection_name = self._input.param("collection_name", "test_collection")
+        try:
+            # Setup source and destination buckets with collections
+            for bucket in self.src_rest.get_buckets():
+                # Create scope and collection on source
+                self.src_rest.create_scope(bucket.name, scope_name)
+                self.src_rest.create_collection(bucket.name, scope_name, collection_name)
+
+                # Create matching scope and collection on destination  
+                self.dest_rest.create_scope(bucket.name, scope_name)
+                self.dest_rest.create_collection(bucket.name, scope_name, collection_name)
+
+            self.sleep(10, "Waiting for collections to be created")
+
+            # Setup XDCR with migration mode enabled
+            self.setup_xdcr()
+
+            # Enable migration mode on the replication
+            setting_val_map = {
+                "collectionsMigrationMode": "true",
+                "colMappingRules": f'{{"{self.DEFAULT_SCOPE}.{self.DEFAULT_COLLECTION}":"{scope_name}.{collection_name}"}}'
+            }
+
+            self.src_rest.set_xdcr_params("default", "default", setting_val_map)
+            self.log.info("Migration mode enabled with mapping from default to test collection")
+
+            # Insert documents with xattrs into the default collection (source)
+            self.log.info(f"Inserting {num_docs} documents with {num_xattrs} xattrs each")
+
+            xattr_key_values = {
+                "txn":"txn_value"
+            }
+
+            self.insert_docs_with_xattr(
+                server=self.src_master,
+                bucket_name="default", 
+                num_docs=num_docs,
+                num_xattrs=num_xattrs,
+                xattr_key_values=xattr_key_values
+            )
+
+            self.log.info("Documents with xattrs inserted successfully")
+
+            # Wait for replication to complete
+            self._wait_for_replication_to_catchup()
+
+            # Verify documents are replicated to the target collection with xattrs
+            self._wait_for_replication_to_catchup(timeout=120)
+
+            self.log.info("Migration mode with xattrs test completed successfully")
+
+        except Exception as e:
+            self.fail(f"Migration mode with xattrs test failed: {str(e)}")

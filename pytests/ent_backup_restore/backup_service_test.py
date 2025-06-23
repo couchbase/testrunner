@@ -3321,3 +3321,37 @@ class BackupServiceTest(BackupServiceBase):
             test()
             self.tearDown()
             self.setUp()
+
+    def test_change_plan_for_active_repository(self):
+        self.log.info("Test to change the plan for active repository")
+
+        repo_name, task_name = "my_repo", "my_task"
+
+        body = Body2(plan=self.default_plans[0], archive=self.backupset.directory)
+
+        if self.objstore_provider:
+            body = self.set_cloud_credentials(body)
+            self.chown(self.objstore_provider.staging_directory)
+
+        # Add repositories and tie plan to repository
+        data = self.create_repository(repo_name, body=body)
+
+        self.log.info("The type of data is - {}".format(type(data)))
+        self.log.info("The create repository response is - {}".format(data))
+
+        self.pause_repository(repo_name)
+
+        self.get_repository("active", repo_name)
+
+        plan_name = self.default_plans[1]
+        success, content, response = self.modify_plan_for_active_repository(repo_name, plan_name)
+        if response.status_code != 200:
+            self.fail("The request to change plan has failed. The response is - {}, The content "
+                      "is - {}".format(response.status_code, content))
+
+        response = self.get_repository("active", repo_name)
+        self.log.info("the get repository response is - {}".format(response))
+
+        if plan_name != response._plan_name:
+            self.fail("Expected Plan Name- {} not found in Received Plan Name - {}".format(
+                plan_name, response))

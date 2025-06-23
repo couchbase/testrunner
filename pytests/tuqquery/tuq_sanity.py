@@ -4709,3 +4709,330 @@ class QuerySanityTests(QueryTests):
         result = self.run_cbq_query(unnest_query, query_params={'memory_quota': 1000})
         expected_result = [{"sa1": [{"id": 300, "type": "doc"}]}]
         self.assertEqual(result['results'], expected_result)
+
+    # MB-65862
+    def test_array_distinct_null_values(self):
+        self.fail_if_no_buckets()
+        # insert data into default collection
+        upsert_query = 'UPSERT INTO default(KEY k, VALUE v) SELECT "k"||TO_STR(d) AS k, {"cc1":IMOD(d,2), "cc2":null} AS v FROM ARRAY_RANGE(0,4) AS d'
+        self.run_cbq_query(upsert_query)
+        # query the data with array_distinct
+        query = 'SELECT  d1.cc1, ARRAY_DISTINCT(ARRAY_AGG(d1)) AS aa FROM (SELECT d.* FROM default AS d WHERE cc1 = 0) AS d1 GROUP BY d1.cc1'
+        result = self.run_cbq_query(query)
+        expected_result = [{"cc1": 0, "aa": [{"cc1": 0, "cc2": None}]}]
+        self.assertEqual(result['results'], expected_result)
+
+    def test_unnest_aggregate(self):
+        self.fail_if_no_buckets()
+        # create collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_unnest_aggregate IF NOT EXISTS')
+        self.run_cbq_query('UPSERT INTO default._default.test_unnest_aggregate VALUES("k001", {"id":100, "a1" : [{"c1":10}, {"c1":10}, {"c1":20}]})')
+
+        # create index on collection
+        self.run_cbq_query('CREATE INDEX ix11 IF NOT EXISTS ON default._default.test_unnest_aggregate(ALL ARRAY u.c1 FOR u IN a1 END,id)')
+
+        # query the data with array_distinct
+        query = 'SELECT  d.id, SUM(u.c1) as c1_cnt FROM default._default.test_unnest_aggregate AS d UNNEST d.a1 AS u WHERE u.c1 > 0 GROUP BY d.id ORDER BY d.id'
+        result = self.run_cbq_query(query)
+        expected_result = [{"id": 100, "c1_cnt": 40}]
+        self.assertEqual(result['results'], expected_result)
+
+    # MB-66660
+    def test_prepared_cte(self):
+        self.fail_if_no_buckets()
+
+        # prepare the query
+        prepare = '''
+            PREPARE p66660 FROM
+            WITH w1 AS ( [{"a":"f1", "b":10}]),
+                 w2 AS (SELECT RAW OBJECT v.a:v.b FOR v IN (SELECT x.* FROM w1 AS x) END)
+            SELECT w2
+        '''
+        self.run_cbq_query(prepare)
+
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+
+        # execute the query
+        result_node1 = self.run_cbq_query('execute p66660', server=node1)
+        result_node2 = self.run_cbq_query('execute p66660', server=node2)
+        self.log.info(result_node1['results'])
+        self.log.info(result_node2['results'])
+        expected_result = [
+            {"w2": [{"f1": 10}]}
+        ]
+        self.assertEqual(result_node1['results'], expected_result)
+        self.assertEqual(result_node2['results'], expected_result)
+
+    # MB-66691
+    def test_join_memory_quota(self):
+        self.fail_if_no_buckets()
+        # create collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_join_memory_quota IF NOT EXISTS')
+
+        with self.subTest("Test case 1: join with memory quota 1000"):
+            # insert data into collection
+            upsert_query = '''
+            UPSERT INTO test_join_memory_quota VALUES ("k01", { "a1": ARRAY { "id": TO_STR(d1), "type": RPAD("a",100,"b") } FOR d1 IN ARRAY_RANGE(1,5000) END })
+            '''
+            self.run_cbq_query(upsert_query, query_context='default._default')
+
+            # run query with memory quota 1000
+            query = 'SELECT b.* FROM test_join_memory_quota AS a USE KEYS "k01" UNNEST a1 AS b JOIN test_join_memory_quota AS c ON KEYS b.id'
+            self.log.info("Test case 1: join with memory quota 1000")
+            result = self.run_cbq_query(query, query_params={'memory_quota': 1000}, query_context='default._default')
+            self.log.info(f"Memory used: {result['metrics']['usedMemory']}")
+            self.assertEqual(result['status'], 'success')
+
+        with self.subTest("Test case 2: join with memory quota 1000 and cbo disabled"):
+            # DELETE documents from collection
+            self.run_cbq_query('DELETE FROM test_join_memory_quota', query_context='default._default')
+
+            # create index on collection
+            self.run_cbq_query('CREATE INDEX ix111 IF NOT EXISTS ON test_join_memory_quota(purchaseId)', query_context='default._default')
+
+            # insert data into collection
+            upsert_query1 = '''
+            UPSERT INTO test_join_memory_quota values("kkk01",{ "customerId": "customer905", "lineItems": [ { "count": 3, "product": "product233" }, { "count": 1, "product": "product344" }, { "count": 4, "product": "product669" }, { "count": 3, "product": "product204" }, { "count": 5, "product": "product847" } ], "purchaseId": "purchase6555", "purchasedAt": "2013-12-07T15:52:41Z", "test_id": "ansijoin", "type": "purchase" })
+            '''
+            upsert_query2 = '''
+            UPSERT into test_join_memory_quota values("customer905_ansijoin",{"id":"customer905_ansijoin"})
+            '''
+            self.run_cbq_query(upsert_query1, query_context='default._default')
+            self.run_cbq_query(upsert_query2, query_context='default._default')
+
+            # run query with memory quota 1000 and cbo disabled
+            query = 'SELECT c.firstName, c.lastName, c.customerId, p.purchaseId FROM test_join_memory_quota p JOIN test_join_memory_quota c ON meta(c).id = p.customerId || "_" || p.test_id WHERE p.purchaseId LIKE "purchase6555%" ORDER BY p.purchaseId'
+            self.log.info("Test case 2: join with memory quota 1000 and cbo disabled")
+            result = self.run_cbq_query(query, query_params={'memory_quota': 1000, 'use_cbo': False}, query_context='default._default')
+            self.log.info(f"Memory used: {result['metrics']['usedMemory']}")
+            self.assertEqual(result['status'], 'success')
+
+    def test_prepared_nested_subquery(self):
+        self.fail_if_no_buckets()
+
+        # prepare query
+        prepare_query = 'PREPARE p66660b FROM SELECT a, (SELECT RAW (SELECT RAW a) ) AS b FROM [1,2,3] a'      
+        self.run_cbq_query(prepare_query)
+
+        node1 = self.servers[0]
+        node2 = self.servers[1]
+
+        expected_result = [
+            {"a": 1, "b": [[1]]},
+            {"a": 2, "b": [[2]]},
+            {"a": 3, "b": [[3]]}
+        ]
+        # execute query
+        result_node1 = self.run_cbq_query('EXECUTE p66660b', server=node1)
+        result_node2 = self.run_cbq_query('EXECUTE p66660b', server=node2)  
+        self.log.info(f"result_node1: {result_node1['results']}")
+        self.log.info(f"result_node2: {result_node2['results']}")
+        self.assertEqual(result_node1['results'], expected_result)
+        self.assertEqual(result_node2['results'], expected_result)
+
+    def test_prepared_ismissing_correlated(self):
+        """
+        MB-64086: Ensure that prepared statements with correlated subqueries are correctly marked as correlated on all nodes.
+        """
+        self.fail_if_no_buckets()
+        # Create a collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_ismissing_correlated IF NOT EXISTS')
+
+        # Insert data into the collection
+        upsert_query = 'UPSERT INTO default._default.test_prepared_ismissing_correlated VALUES ("k01", {"sdate": "2024-10-31"})'
+        self.run_cbq_query(upsert_query)
+
+        # Create indexes on the collection
+        self.run_cbq_query('CREATE INDEX ix20 IF NOT EXISTS ON test_prepared_ismissing_correlated(sdate DESC, edate, pid)', query_context='default._default')
+        self.run_cbq_query('CREATE INDEX ix21 IF NOT EXISTS ON test_prepared_ismissing_correlated( ALL ARRAY (ALL ARRAY FLATTEN_KEYS(ee.id, ee.flags) FOR ee IN e.aa1 END) FOR e IN a1 END, c1,c2,c3,c4)', query_context='default._default')
+
+        # Clean system:prepareds
+        self.run_cbq_query('DELETE FROM system:prepareds')
+
+        # Prepare a statement with a correlated subquery
+        prepare_query = '''
+        PREPARE p64086 FROM
+        SELECT ees
+        FROM test_prepared_ismissing_correlated d
+        LET ees = ( SELECT d1.c3, ee.flags, d1.c2
+                    FROM test_prepared_ismissing_correlated d1
+                    UNNEST d1.a1 AS e
+                    UNNEST e.aa1 AS ee
+                    WHERE ee.id = META(d).id AND d1.c1 NOT IN [1,2,3]
+                        AND d1.c2 IS NOT MISSING AND d1.c4 <= 5)
+        WHERE d.sdate = "2024-10-31"
+        '''
+        self.run_cbq_query(prepare_query, query_context='default._default')
+
+        # Query system:prepareds to check for correlated marker in bindings
+        system_query = '''
+        SELECT p.node, META().plan.`~child`.`~children`[0].`~children`[1].`~child`.`~children`[1].bindings
+        FROM system:prepareds AS p WHERE p.name like "%64086%"
+        '''
+        result = self.run_cbq_query(system_query)
+        self.log.info(f"system:prepareds result: {result['results']}")
+        self.assertTrue(len(result['results']) > 0, "No prepared statement found in system:prepareds")
+        for row in result['results']:
+            bindings = row['bindings']
+            self.assertTrue('correlated' in str(bindings[0]['expr']),
+                            f"Correlated marker missing in bindings for node {row['node']}: {bindings}")
+            
+    def test_prepared_star_expression(self):
+        """
+        MB-62932: Ensure that prepared statements containing * expressions in the projection return correct results.
+        """
+        self.fail_if_no_buckets()
+        # Create a collection
+        self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_star IF NOT EXISTS')
+
+        # Insert test data
+        upsert_query = 'UPSERT INTO default._default.test_prepared_star (KEY, VALUE) VALUES ("key::1", {"type": "document", "id": 1}), ("key::2", {"type": "document", "id": 2}), ("key::3", {"type": "document", "name": "Raj", "timezone": "Local", "id": 3})'
+        self.run_cbq_query(upsert_query)
+
+        # Prepare a statement with * in the projection
+        prepare_query = 'PREPARE p_mb62932 FROM SELECT d.* FROM test_prepared_star as d ORDER BY id'
+        self.run_cbq_query(prepare_query, query_context='default._default')
+
+        # Expected result
+        expected_result = [
+            {"id": 1, "type": "document"},
+            {"id": 2, "type": "document"}, 
+            {"id": 3, "name": "Raj", "timezone": "Local", "type": "document"}
+        ]
+
+        # Execute the prepared statement on node1
+        result1 = self.run_cbq_query('EXECUTE p_mb62932', query_context='default._default', server=self.servers[0])
+        self.log.info(f"Result from node1: {result1['results']}")
+        # Execute the prepared statement on node2 
+        result2 = self.run_cbq_query('EXECUTE p_mb62932', query_context='default._default', server=self.servers[1])
+        self.log.info(f"Result from node2: {result2['results']}")
+        
+        # Extract only the fields for comparison (since result may include meta fields)
+        self.assertEqual(result1['results'], expected_result)
+        self.assertEqual(result2['results'], expected_result)
+
+    # MB-66658
+    def test_prepare_force_no_name(self):
+        """
+        MB-66658: Ensure that PREPARE FORCE does not create a duplicate prepared entry when extra spaces are present.
+        Steps:
+        1. Clean system:prepareds
+        2. PREPARE select 1; (with one space)
+        3. PREPARE FORCE select 1; (with one space)
+        4. SELECT * FROM system:prepareds; should return only one entry per node for the statement
+        """
+        self.run_cbq_query('DELETE FROM system:prepareds')
+
+        # PREPARE and PREPARE FORCE both with one space
+        self.run_cbq_query('PREPARE select 1')
+        self.run_cbq_query('PREPARE FORCE select 1')
+        result = self.run_cbq_query('SELECT * FROM system:prepareds')
+        self.log.info(f"system:prepareds after one-space and force: {result['results']}")
+        # Check number of statements is same as number of nodes
+        self.assertEqual(len(result['results']), len(self.servers))
+        # Check each prepared statement entry
+        for prepared in result['results']:
+            statement = prepared['prepareds']['statement']
+            self.assertEqual('prepare select 1', statement.lower())
+
+    def test_prepared_mb66699(self):
+        """
+        Test case for MB-66699: Remote execution of prepared statement not covered when WITH alias referenced
+        
+        This test verifies that prepared statements with WITH clauses use covering index scans
+        when executed on different nodes in a cluster.
+        
+        Steps:
+        1. Create a separate collection for this test
+        2. Insert test data using query_context
+        3. Create a covering index
+        4. Prepare a statement with WITH clause that references an alias
+        5. Execute the prepared statement with profiling and verify it uses covering index scan
+        6. Clean up the test collection
+        """
+        # Create separate collection for this test
+        collection_name = "mb66699_test"
+        scope_name = "_default"
+        self.run_cbq_query(f'CREATE COLLECTION default.{scope_name}.{collection_name}')
+        
+        try:
+            bucket_name = self.bucket_name
+            query_context = f"`{bucket_name}`.`{scope_name}`"
+            
+            # Insert test data using query_context
+            upsert_query = f"""UPSERT INTO `{collection_name}` (KEY,VALUE) VALUES
+                ("test11_withs", {{"c11": 1, "c12": 10, "a11": [1, 2, 3, 4], "type": "left", "test_id": "withs"}}),
+                ("test12_withs", {{"c11": 2, "c12": 20, "a11": [3, 3, 5, 10], "type": "left", "test_id": "withs"}}),
+                ("test13_withs", {{"c11": 3, "c12": 30, "a11": [3, 4, 20, 40], "type": "left", "test_id": "withs"}}),
+                ("test14_withs", {{"c11": 4, "c12": 40, "a11": [30, 30, 30], "type": "left", "test_id": "withs"}})"""
+            
+            self.run_cbq_query(upsert_query, query_context=query_context)
+            
+            # Create covering index using query_context
+            index_name = f"idx_mb66699_{collection_name}"
+            create_index_query = f"CREATE INDEX `{index_name}` ON `{collection_name}`(c11, c12) WHERE type = 'left'"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.sleep(10)
+
+            # Prepare statement with WITH clause using query_context
+            prepare_query = f"""PREPARE p_mb66699 FROM
+                WITH w1 AS ([10, 20]),
+                     w2 AS (SELECT c11, c12 FROM `{collection_name}` d WHERE c11 IS NOT MISSING AND c12 IN w1 AND type = "left")
+                SELECT w2"""
+            
+            self.run_cbq_query(prepare_query, query_context=query_context)
+            self.sleep(10)
+
+            # Execute prepared statement on different query nodes with profiling enabled
+            execute_query = f"EXECUTE p_mb66699"
+            
+            # Get available query nodes
+            query_nodes = []
+            if hasattr(self, 'n1ql_nodes') and self.n1ql_nodes:
+                query_nodes = self.n1ql_nodes
+            elif hasattr(self, 'servers') and len(self.servers) > 1:
+                query_nodes = self.servers[:2]  # Use first two servers as query nodes
+            else:
+                # Fallback to single node execution
+                query_nodes = [self.master]
+                        
+            # Execute on each available query node
+            for i, node in enumerate(query_nodes[:2]):  # Limit to 2 nodes max
+                node_name = f"node_{i+1}"
+                self.log.info(f"Executing prepared statement on {node_name} ({node.ip}:{node.port})")
+                
+                result = self.run_cbq_query(execute_query, server=node, query_context=query_context, 
+                                          query_params={'profile': 'timings'})
+                
+                # Verify correct results are returned
+                self.assertTrue('results' in result, f"Query should return results on {node_name}")
+                self.assertEqual(len(result['results']), 1, f"Should return one result on {node_name}")
+                
+                w2_result = result['results'][0]['w2']
+                self.assertEqual(len(w2_result), 2, f"Should return 2 matching documents on {node_name}")
+                
+                # Verify the returned data
+                expected_results = [
+                    {"c11": 1, "c12": 10},
+                    {"c11": 2, "c12": 20}
+                ]
+                
+                self.assertEqual(w2_result, expected_results, f"Results do not match expected on {node_name}")
+                
+                # Analyze profiling information
+                if 'profile' in result:
+                    profile = result['profile']
+                    self.assertTrue('phaseOperators' in profile,
+                                  f"Profile should contain phase operators information on {node_name}")
+                    
+                    # Check that there is no fetch operation in phaseOperators
+                    self.assertNotIn('fetch', profile['phaseOperators'],
+                                  f"Query should not use fetch operation on {node_name}")
+                    
+                    self.log.info(f"MB-66699: No fetch operation detected on {node_name} - using covering index")
+                    self.log.debug(f"MB-66699 Full profile on {node_name}: {profile}")            
+        finally:
+            # Clean up
+            self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
+            self.run_cbq_query("DELETE FROM system:prepareds WHERE name = 'p_mb66699'", query_context=query_context)

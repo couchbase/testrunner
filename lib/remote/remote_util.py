@@ -1094,8 +1094,13 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.execute_command("rm -rf /etc/localtime", debug=False)
                     self.execute_command("ln -s /usr/share/zoneinfo/America/Los_Angeles "
                                          "/etc/localtime", debug=False)
-            elif "debian 10" in self.info.distribution_version.lower():
-                os_version = "debian 10"
+            elif "debian" in self.info.distribution_version.lower():
+                if "debian 10" in self.info.distribution_version.lower():
+                    os_version = "debian 10"
+                elif "debian 11" in self.info.distribution_version.lower():
+                    os_version = "debian 11"
+                else:
+                    os_version = "debian 12"
                 output, e = self.execute_command("systemctl status ntp")
                 if not output:
                     log.info("ntp was not installed on {0} server yet.  "\

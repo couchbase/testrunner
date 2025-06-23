@@ -5,7 +5,7 @@ import copy
 from TestInput import TestInputSingleton
 
 EMP_FIELDS = {
-    'text': ["name", "dept", "languages_known", "email"],
+    'text': ["name", "dept", "languages_known", "email", "type"],
     'number': ["mutated", "salary"],
     'boolean': ["is_manager"],
     'datetime': ["join_date"],
@@ -97,7 +97,8 @@ CUSTOM_ANALYZER_TEMPLATE = {
             "filler": "",
             "max": 5,
             "min": 2,
-            "output_original": "false",
+            "output_original": True,
+            "output_unigrams": True,
             "separator": "",
             "type": "shingle"
         },
@@ -205,7 +206,7 @@ class CustomMapGenerator:
                                         "fields": [],
                                         "properties": {}
                                     }
-            self.es_map[dataset] = {
+            self.es_map = {
                         "dynamic": False,
                         "properties": {}
                     }
@@ -224,7 +225,7 @@ class CustomMapGenerator:
                                         "fields": [],
                                         "properties": {}
                                     }
-            self.es_map[dataset] = {
+            self.es_map = {
                         "dynamic": False,
                         "properties": {}
                     }
@@ -243,7 +244,7 @@ class CustomMapGenerator:
                                         "fields": [],
                                         "properties": {}
                                     }
-            self.es_map['emp'] = {
+            self.es_map = {
                         "dynamic": False,
                         "properties": {}
                     }
@@ -262,22 +263,10 @@ class CustomMapGenerator:
                                         "fields": [],
                                         "properties": {}
                                     }
-                self.es_map['wiki'] = {
-                        "dynamic": False,
-                        "properties": {}
-                    }
                 if collection_index:
                     self.build_custom_map("wiki", type_mapping)
                 else:
                     self.build_custom_map("wiki")
-            else:
-                if not TestInputSingleton.input.param("default_map", False):
-                    # if doc_maps=1 and default map is disabled, force single
-                    # map on ES by disabling wiki map
-                    self.es_map['wiki'] = {
-                            "dynamic": False,
-                            "properties": {}
-                        }
 
     def get_random_value(self, list):
         return list[random.randint(0, len(list)-1)]
@@ -302,15 +291,15 @@ class CustomMapGenerator:
             self.queryable_fields[field_type].append(field)
 
     def build_custom_map(self, dataset, collection_type=None):
-        for x in range(0, self.num_field_maps):
-            field, _type = self.get_random_field_name_and_type(self.fields)
+        field_map = self.field_map(self.fields)
+        for field, _type in field_map.items():
             type_val = collection_type + "." + dataset if collection_type else dataset
             if field not in iter(list(self.nested_fields.keys())):
                 fts_child, es_child = self.get_child_field(field, _type)
             else:
                 fts_child, es_child = self.get_child_map(field, type_val, dataset)
             self.fts_map['types'][type_val]['properties'][field] = fts_child
-            self.es_map[dataset]['properties'][field] = es_child
+            self.es_map['properties'][field] = es_child
 
         if self.custom_map_add_non_indexed_fields:
             self.add_non_indexed_field_to_query()
@@ -362,7 +351,7 @@ class CustomMapGenerator:
             es_child_map['properties'] = {}
         else:
             fts_child_map = self.fts_map['types'][dataset]['properties'][field]
-            es_child_map = self.es_map[es_dataset]['properties'][field]
+            es_child_map = self.es_map['properties'][field]
 
         field, type = self.get_nested_child_field(field)
         fts_child, es_child = self.get_child_field(field, type)
@@ -419,26 +408,38 @@ class CustomMapGenerator:
 
         es_field_map = {}
         es_field_map['type'] = field_type
-        if field_type == "number" or field_type == "vector":
+        
+        # Update numeric and vector types
+        if field_type in ["number", "vector"]:
             es_field_map['type'] = "float"
+
+        # Update date type
         if field_type == "datetime":
             es_field_map['type'] = "date"
-        es_field_map['store'] = False
-        #if is_indexed:
-        es_field_map['index'] = 'analyzed'
-        if field_type == "boolean":
-            es_field_map['index'] = 'not_analyzed'
-        #else:
-        #    es_field_map['index'] = 'no'
-        if field_type == "text":
-            es_field_map['type'] = "string"
-            es_field_map['term_vector'] = "yes"
 
-            es_field_map['analyzer'] = analyzer
+        # Boolean fields should use keyword for exact matching
+        if field_type == "boolean":
+            es_field_map['type'] = "boolean"
+
+        # Default Elasticsearch 8.x behavior: "store" should be False unless needed
+        es_field_map['store'] = False
+
+        # Handle text fields correctly
+        if field_type == "text":
+            es_field_map['type'] = "text"  # Use "text" instead of "string"
+            es_field_map['term_vector'] = "with_positions_offsets"  # Update term vector syntax
+
+            # Handle analyzer settings properly
             if analyzer == "en":
                 es_field_map['analyzer'] = "english"
-            if analyzer == "standard":
-                es_field_map['analyzer'] = "default"
+            elif analyzer == "standard":
+                es_field_map['analyzer'] = "standard"
+            else:
+                es_field_map['analyzer'] = analyzer  # Keep custom analyzers unchanged
+
+        # If exact matching is required, use "keyword"
+        if field_type == "keyword":
+            es_field_map['type'] = "keyword"
 
         # add to list of queryable fields
         self.add_to_queryable_fields(field, field_type)
@@ -449,6 +450,13 @@ class CustomMapGenerator:
         type = self.get_random_value(list(fields.keys()))
         field = self.get_random_value(fields[type])
         return field, type
+    
+    def field_map(self, fields):
+        map = {}
+        for k,v in fields.items():
+            for j in v:
+                map[j] = k
+        return map
 
     def get_nested_child_field(self, nested_field):
         if nested_field in iter(list(self.nested_fields.keys())):

@@ -1312,7 +1312,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return False, output, "Compacting backup failed."
         remote_client.disconnect()
 
-    def backup_remove(self, backup_range=None, verify_cluster_stats=True):
+    def backup_remove(self, backup_range=None, verify_cluster_stats=True,
+                      disable_safe_remove_check=False):
         args = (
             f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
@@ -1321,6 +1322,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         if backup_range is not None:
             args += " --backups {0}".format(backup_range)
+
+        if disable_safe_remove_check:
+            args += " --disable-safe-remove-check"
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
@@ -3223,6 +3227,47 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         output, error = remote_client.execute_command("{}cbbackupmgr {}".format(
              self.cli_command_location, subcomand))
+
+        return output, error
+
+    def pause_active_repository(self):
+        rest = RestConnection(self.master)
+        params = {}
+        api = rest.baseUrl + f"/api/v1/cluster/self/repository/active/{self.backupset.name}/pause"
+        params = urllib.parse.urlencode(params)
+        return rest._http_request(api, "POST", params)
+
+    def create_bucket_for_continuous_backup(self, bucket_name, interval_time, history_retention_seconds=86400,
+                                            history_retention_bytes=16106127360):
+
+        command = f"curl -v http://{self.master.ip}:8091/pools/default/buckets \
+                          -u {self.master.rest_username}:{self.master.rest_password} \
+                          -d name={bucket_name} \
+                          -d ramQuota=256 \
+                          -d storageBackend=magma \
+                          -d continuousBackupEnabled=true \
+                          -d continuousBackupLocation=/tmp/continuous_backup \
+                          -d historyRetentionSeconds={history_retention_seconds} \
+                          -d historyRetentionBytes={history_retention_bytes} \
+                          -d durabilityMinLevel=majority \
+                          -d replicaNumber=0 \
+                          -d continuousBackupInterval={interval_time} \
+                          -d historyRetentionCollectionDefault=true"
+
+        remote_client = RemoteMachineShellConnection(self.master)
+        output, error = remote_client.execute_command(command)
+
+        return output, error
+
+    def restore_continuous_backup(self, time):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        command = "{}cbcontbk restore -c {} -u {} -p {} -l /tmp/continuous_backup -T {} -a {} -r " \
+                  "{} -d /tmp/restoreContBk".format(self.cli_command_location, self.master.ip,
+                              self.master.rest_username, self.master.rest_password, time,
+                              self.backupset.directory, self.backupset.name)
+
+        output, error = remote_client.execute_command(command)
 
         return output, error
 

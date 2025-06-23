@@ -367,6 +367,32 @@ class QueryUDFTests(QueryTests):
                 self.run_cbq_query("DROP FUNCTION celsius".format(self.scope), query_context='default:default.test')
             except Exception as e:
                 self.log.error(str(e))
+    
+    def test_MB66219(self):
+        try:
+            self.run_cbq_query('UPSERT INTO default VALUES("airline_001", {"type": "airline", "c10":10, "c11":11})')
+            self.run_cbq_query('CREATE INDEX ix66219 ON default (c10,c11) WHERE type = "airline"')
+            self.sleep(5)
+            self.wait_for_all_indexes_online()
+            self.run_cbq_query('CREATE OR REPLACE FUNCTION func2(param) { (WITH w1 AS ( (SELECT RAW f1 FROM param.f AS f1)[0]) SELECT a.* FROM default AS a WHERE a.type = "airline" AND a.c10 = w1)}')
+
+            results = self.run_cbq_query('EXECUTE FUNCTION func2({"f":10})')
+            self.assertEqual(results['results'], [[{'c10': 10, 'c11': 11, 'type': 'airline'}]])
+
+            self.run_cbq_query('DROP INDEX default.ix66219')
+            self.run_cbq_query('CREATE INDEX ix66219 ON default (c10,c11) WHERE type = "airline"')
+            self.sleep(5)
+            self.wait_for_all_indexes_online()
+
+            results = self.run_cbq_query('EXECUTE FUNCTION func2({"f":10})')
+            self.assertEqual(results['results'], [[{'c10': 10, 'c11': 11, 'type': 'airline'}]])
+
+        finally:
+            try:
+                self.run_cbq_query('DROP INDEX default.ix66219')
+                self.run_cbq_query('DROP FUNCTION func2')
+            except Exception as e:
+                self.log.error(str(e))
 
     def test_inline_join(self):
         try:

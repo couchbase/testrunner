@@ -380,6 +380,8 @@ class RestConnection(object):
         http_url = "http://%s:%s/"
         https_url = "https://%s:%s/"
         generic_url = http_url
+        synonym_host = "localhost"
+        synonym_port = 5100
         if CbServer.use_https:
             generic_url = https_url
         url_host = "%s" % self.ip
@@ -387,6 +389,7 @@ class RestConnection(object):
             url_host = "%s" % self.hostname
         self.baseUrl = generic_url % (url_host, self.port)
         self.fts_baseUrl = generic_url % (url_host, self.fts_port)
+        self.synonym_baseUrl = http_url % (synonym_host, synonym_port)
         self.index_baseUrl = generic_url % (url_host, self.index_port)
         self.query_baseUrl = generic_url % (url_host, self.query_port)
         self.capiBaseUrl = generic_url % (url_host, self.capi_port)
@@ -2972,7 +2975,7 @@ class RestConnection(object):
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
 
-    def get_fts_stats(self, index_name=None, bucket_name=None, stat_name=None):
+    def get_fts_stats(self, index_name=None, bucket_name=None, stat_name=None, node=None):
         """
         List of fts stats available as of 03/16/2017 -
         default:default_idx3:avg_queries_latency: 0,
@@ -3013,7 +3016,14 @@ class RestConnection(object):
         :param stat_name: any of the above
         :return:
         """
-        api = "{0}{1}".format(self.fts_baseUrl, 'api/nsstats')
+
+        if node is None:
+            api = "{0}{1}".format(self.fts_baseUrl, 'api/nsstats')
+        else:
+            protocol = self.fts_baseUrl.split('://')[0]
+            port = self.fts_baseUrl.split(':')[2]
+            api = f"{protocol}://{node.ip}:{port}api/nsstats"
+
         attempts = 0
         while attempts < 5:
             status, content, header = self._http_request(api)
@@ -3030,7 +3040,8 @@ class RestConnection(object):
             log.info("Stat {0} not available yet".format(stat_name))
             time.sleep(1)
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
-                  format(stat_name, index_name, bucket_name))
+                  format(stat_name, index_name, bucket_name)) 
+             
     def get_specific_nsstats(self, node, creds):
         try:
             endpoint = f"https://{node}:18094/api/nsstats"
@@ -3819,7 +3830,29 @@ class RestConnection(object):
         status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
-        return status
+        return status 
+
+    def load_synonyms(self,bucket="default",scope="_default",collection="_default",workers=100,host="localhost",user="Administrator",password="password",format=1,analyzer="simple"):
+        params = {'bucket': bucket,'scope':scope,'collection':collection,'workers':workers,'host':host,'user':user,'pass':password,'format':format,'analyzer':analyzer}
+        
+        """ generate and push the synonyms to kv"""
+        json_parsed = {}
+        api = self.synonym_baseUrl + "run/syn-loader"
+        status, content, header = self.urllib_request(api, verb='POST', params=json.dumps(params, ensure_ascii=False))
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
+    
+    def load_synonym_source(self,bucket="default",scope="_default",collection="_default",workers=100,host="localhost",user="Administrator",password="password",numDocs=50000,analyzer="simple"):
+        params = {"bucket":bucket,"scope":scope,"collection":collection,"workers":workers,"host":host,"user":user,"pass":password,"numDocs":numDocs,"analyzer":analyzer}
+
+        """ generate and push the source data for synonym testing and returns the groundtruth"""
+        json_parsed = {}
+        api = self.synonym_baseUrl + "run/src-loader"
+        status, content, header = self.urllib_request(api, verb='POST', params=json.dumps(params, ensure_ascii=False))
+        if status:
+            json_parsed = json.loads(content)
+        return status, json_parsed
 
     def create_fts_index(self, index_name, params, bucket="_default", scope="_default",mode =None):
         """create or edit fts index , returns {"status":"ok"} on success"""
@@ -4035,9 +4068,11 @@ class RestConnection(object):
             verb='POST')
         return status
 
-    def run_fts_query(self, index_name, query_json, timeout=100, bucket="_default", scope="_default"):
+    def run_fts_query(self, index_name, query_json, timeout=100, bucket="_default", scope="_default",node=None):
         """Method run an FTS query through rest api"""
         api = self.fts_baseUrl + "api/index/{0}/query".format(index_name)
+        if node:
+            api = "http://{0}:8094/api/index/{1}/query".format(node.ip,index_name)
         if self.is_elixir:
             if scope is None:
                 scope = "_default"
@@ -4049,8 +4084,9 @@ class RestConnection(object):
             verb="POST",
             params=json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             timeout=timeout)
-
+        
         content = json.loads(content)
+        
         if status:
             return content['total_hits'], content['hits'], content['took'], content['status']
         else:
@@ -6016,7 +6052,23 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return json.loads(content)
-
+    '''
+    Get eventing stats of a single function
+    '''
+    def get_eventing_stats_per_function(self, name, function_scope=None, seqs_processed=False):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/stats/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        if seqs_processed:
+            url = url + "&type=full"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
     '''
             Cleanup eventing
     '''

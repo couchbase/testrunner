@@ -44,6 +44,7 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         :return: status and message
         """
         expected_meta_json = self.generate_backup_meta_json()
+        expected_meta_json['auto_resolve_conflicts'] = [False]
         if self.backupset.exclude_buckets:
             exclude_data = {}
             exclude_data["bucket"] = self.backupset.exclude_buckets[0]

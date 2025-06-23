@@ -640,8 +640,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         queries_to_run = []
         index = "CREATE INDEX idx1 on `travel-sample`(id)"
         idx_list.append((index, ("`travel-sample`", "idx1")))
-        query = "select * from default d1 OUTER JOIN `travel-sample` t on (d1.join_day == t.id)"
-        queries_to_run.append((query, 288)) # 288 for doc-per-day=1
+        query = "select * from default d1 RIGHT OUTER JOIN `travel-sample` t on (d1.join_day == t.id)"
+        queries_to_run.append((query, 31875)) # 31875 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
     def run_test_cte(self):
@@ -666,18 +666,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 {'id': 'testgrant', 'name': 'testgrant', 'roles': f'{full_permissions}', 'password': 'password'}
             ]
             RbacBase().add_user_role(role_list, self.rest, 'builtin')
-        test_query = "SELECT * FROM DEFAULT LIMIT 1"
+        test_query = "SELECT * FROM default LIMIT 1"
         try:
             self.run_cbq_query(test_query)
             self.fail("User does not have permissions")
         except Exception as e:
             pass
-        query = "GRANT Query_Select on default TO testgrant"
+        query = "GRANT Query_Select on `default` TO testgrant"
         results = self.run_cbq_query(query)
         self.assertEqual(results['status'], "success")
         test_results = self.run_cbq_query(test_query)
         self.assertEqual(test_results['status'], "success")
-        query = "REVOKE Query_Select on default TO testgrant"
+        query = "REVOKE Query_Select on `default` FROM testgrant"
         results = self.run_cbq_query(query)
         self.assertEqual(results['status'], "success")
         try:
@@ -818,7 +818,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if int(self.initial_version[0]) < 7:
+                if int(self.initial_version[0]) < 7 or phase == "post-upgrade":
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
@@ -828,20 +828,20 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade" or int(self.initial_version[0]) < 7:
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nested_funcgs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
-                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nested_funcgs2(a,b,c) { (SELECT RAW default._default.nested_funcgs(a,b,c)) }")
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nested_funcgs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nested_funcgs2(a,b,c) { (SELECT RAW default:default._default.nested_funcgs(a,b,c)) }")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nested_funcss(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
-                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nested_funcss2(a,b,c) { (SELECT RAW default._default.nested_funcss(a,b,c)) }")
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nested_funcss(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default:default._default.nested_funcss2(a,b,c) { (SELECT RAW default:default._default.nested_funcss(a,b,c)) }")
                 else:
                     #global calling global 
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION nested_funcgg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nested_funcgg2(a,b,c) { (SELECT RAW nested_funcgg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
-                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nested_funcss2(10,20,30)")
-                    results_select = self.run_cbq_query("SELECT default._default.nested_funcss2(10,20,30)")
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default:default._default.nested_funcss2(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default:default._default.nested_funcss2(10,20,30)")
                 elif scoping == "global_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION nested_funcgs2(10,20,30)")
                     results_select = self.run_cbq_query("SELECT nested_funcgs2(10,20,30)")
@@ -855,13 +855,13 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if int(self.initial_version[0]) < 7:
+                if int(self.initial_version[0]) < 7 or phase == "post-upgrade":
                     if scoping == "global_scoped":
-                        self.run_cbq_query("DROP FUNCTION default._default.nested_funcgs")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nested_funcgs")
                         self.run_cbq_query("DROP FUNCTION nested_funcgs2")
                     elif scoping == "scoped_scoped":
-                        self.run_cbq_query("DROP FUNCTION default._default.nested_funcss")
-                        self.run_cbq_query("DROP FUNCTION default._default.nested_funcss2")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nested_funcss")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nested_funcss2")
                     else:
                         self.run_cbq_query("DROP FUNCTION nested_funcgg")
                         self.run_cbq_query("DROP FUNCTION nested_funcgg2")
@@ -893,20 +893,20 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.create_library("n1ql", functions, function_names)
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION default._default.nestedjslibrarygs(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
-                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegs3(a,b,c) { (SELECT RAW default._default.nestedjslibrarygs(a,b,c)) }")
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibrarygs(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegs3(a,b,c) { (SELECT RAW default:default._default.nestedjslibrarygs(a,b,c)) }")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION default._default.nestedjslibraryss(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
-                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedinliness3(a,b,c) { (SELECT RAW default._default.nestedjslibraryss(a,b,c)) }")
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql"')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION default:default._default.nestedinliness3(a,b,c) { (SELECT RAW default:default._default.nestedjslibraryss(a,b,c)) }")
                 else:
                     #global calling global 
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql"')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg3(a,b,c) { (SELECT RAW nestedjsinlinegg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
-                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedinliness3(10,20,30)")
-                    results_select = self.run_cbq_query("SELECT default._default.nestedinliness3(10,20,30)")
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default:default._default.nestedinliness3(10,20,30)")
+                    results_select = self.run_cbq_query("SELECT default:default._default.nestedinliness3(10,20,30)")
                 elif scoping == "global_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedinlinegs3(10,20,30)")
                     results_select = self.run_cbq_query("SELECT nestedinlinegs3(10,20,30)")
@@ -920,17 +920,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjslibrarygs")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegs3")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjslibraryss")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedinliness3")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
-                self.log.info("Delete n1ql library")
-                self.delete_library("n1ql")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibrarygs")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegs3")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinliness3")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
+                    self.log.info("Delete n1ql library")
+                    self.delete_library("n1ql")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -967,15 +968,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegs2")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedinliness2")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegs2")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedinliness2")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
             except Exception as e:
                 self.log.error(str(e))
     
@@ -985,16 +987,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inlinegs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs(a,b,c);}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inliness(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness(a,b,c);}'")
                 else:
-                    #global calling global 
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg(a,b,c);}'")
+                    #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION inlinegg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg(a,b,c);}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness2(10,20,30)")
@@ -1012,15 +1014,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs2")
-                    self.run_cbq_query("DROP FUNCTION inlinegs")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness2")
-                    self.run_cbq_query("DROP FUNCTION default._default.inliness")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg2")
-                    self.run_cbq_query("DROP FUNCTION inlinegg")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs2")
+                        self.run_cbq_query("DROP FUNCTION inlinegs")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness2")
+                        self.run_cbq_query("DROP FUNCTION default._default.inliness")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg2")
+                        self.run_cbq_query("DROP FUNCTION inlinegg")
             except Exception as e:
                 self.log.error(str(e))
     
@@ -1030,16 +1033,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 if scoping == "global_scoped":
                     #global calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinlinegs(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {SELECT RAW default._default.nestedjsinlinegs(a,b,c);}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness(a,b,c);}'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness3(a,b,c) {SELECT RAW default._default.nestedjsinliness(a,b,c);}'")
                 else:
-                    #global calling global 
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg(a,b,c);}'")
+                    #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg(a,b,c) { return a+b+c-40; }'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg3(a,b,c) {SELECT RAW nestedjsinlinegg(a,b,c);}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness3(10,20,30)")
@@ -1057,15 +1060,16 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs3")
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegs")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness3")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg3")
-                    self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinlinegs3")
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegs")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness3")
+                        self.run_cbq_query("DROP FUNCTION default._default.nestedjsinliness")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg3")
+                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
             except Exception as e:
                 self.log.error(str(e))
     
@@ -1103,19 +1107,19 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if scoping == "global_scoped":
                     #global calling scoped
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygs2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalscopedinline" AT "n1ql"')
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nestedinlinegslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname;) }')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinegslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql"')
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname;) }')
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql"')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 else:
                     #global calling global 
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalinline" AT "n1ql"')
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION nestedinlinegglibrary(doctype,cityname) { (SELECT airportname FROM `travel-sample` WHERE type = doctype AND city = cityname ORDER BY airportname;)  }')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION nestedinlinegglibrary(doctype,cityname) { (SELECT airportname FROM `travel-sample` WHERE type = doctype AND city = cityname ORDER BY airportname)  }')
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
-                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjslibrarygg2('airport','Lyon')")
-                    results_select = self.run_cbq_query("SELECT default._default.nestedjslibrarygg2('airport','Lyon')")
+                    results_execute = self.run_cbq_query("EXECUTE FUNCTION default:default._default.nestedjslibrarygg2('airport','Lyon')")
+                    results_select = self.run_cbq_query("SELECT default:default._default.nestedjslibrarygg2('airport','Lyon')")
                 elif scoping == "global_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjslibrarygs2('airport','Lyon')")
                     results_select = self.run_cbq_query("SELECT nestedjslibrarygs2('airport','Lyon')")
@@ -1129,17 +1133,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail()
         finally:
             try:
-                if scoping == "global_scoped":
-                    self.run_cbq_query("DROP FUNCTION nestedjslibrarygs2")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedinlinegslibrary")
-                elif scoping == "scoped_scoped":
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedjslibraryss2")
-                    self.run_cbq_query("DROP FUNCTION default._default.nestedinlinesslibrary")
-                else:
-                    self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
-                    self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
-                self.log.info("Delete n1ql library")
-                self.delete_library("n1ql")
+                if phase == "post-upgrade":
+                    if scoping == "global_scoped":
+                        self.run_cbq_query("DROP FUNCTION nestedjslibrarygs2")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinlinegslibrary")
+                    elif scoping == "scoped_scoped":
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss2")
+                        self.run_cbq_query("DROP FUNCTION default:default._default.nestedinlinesslibrary")
+                    else:
+                        self.run_cbq_query("DROP FUNCTION nestedjslibrarygg2")
+                        self.run_cbq_query("DROP FUNCTION nestedinlinegglibrary")
+                    self.log.info("Delete n1ql library")
+                    self.delete_library("n1ql")
             except Exception as e:
                 self.log.error(str(e))
 
@@ -1174,7 +1179,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             if phase == "pre-upgrade":
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { return a; }'")
                 self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.jsudfrecursive(a) LANGUAGE JAVASCRIPT as 'function jsudfrecursive(a) { if (a >= 10) { return a;} else { return jsudfrecursive(a+2); } }'")
-            if phase == "mixed-mode" or phase == "post-upgrade":
+            if (phase == "mixed-mode" or phase == "post-upgrade") and self.initial_version:
                 results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.jsudfrecursive(2)")
                 self.assertEqual(results['results'], [10])
                 results = self.run_cbq_query("SELECT `travel-sample`.inventory.jsudfrecursive(2)")
@@ -1186,12 +1191,21 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def run_test_udf_inline_recursive(self, phase):
         try:
             if phase == "pre-upgrade":
-                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.udfrecursive(a) { a }")
-                self.run_cbq_query("CREATE or REPLACE FUNCTION `travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
-            if phase == "mixed-mode" or phase == "post-upgrade":
-                results = self.run_cbq_query("EXECUTE FUNCTION `travel-sample`.inventory.udfrecursive(2)")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) { a }")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
+                # If initial version is 7.2.8 or greater we need can use the original udf
+            if (phase == "mixed-mode" or phase == "post-upgrade") and (int(self.initial_version[0]) == 7 and int(self.initial_version[1]) >= 1):
+                results = self.run_cbq_query("EXECUTE FUNCTION default:`travel-sample`.inventory.udfrecursive(2)")
                 self.assertEqual(results['results'], [10])
-                results = self.run_cbq_query("SELECT `travel-sample`.inventory.udfrecursive(2)")
+                results = self.run_cbq_query("SELECT default:`travel-sample`.inventory.udfrecursive(2)")
+                self.assertEqual(results['results'], [{'$1': 10}])
+            else:
+                # If initial version is 7.1.x we need to create the udf again
+                self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) { a }")
+                self.run_cbq_query("CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.udfrecursive(a) {( CASE WHEN a >= 10 THEN a ELSE udfrecursive(a+2) END )}")
+                results = self.run_cbq_query("EXECUTE FUNCTION default:`travel-sample`.inventory.udfrecursive(2)")
+                self.assertEqual(results['results'], [10])
+                results = self.run_cbq_query("SELECT default:`travel-sample`.inventory.udfrecursive(2)")
                 self.assertEqual(results['results'], [{'$1': 10}])
         except Exception as e:
             self.log.error(str(e))
@@ -1735,7 +1749,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             "system:buckets",
             "system:completed_requests",
             "system:completed_requests_history",
-            "system:database_info"
+            "system:database_info",
             "system:datastores",
             "system:dictionary",
             "system:dictionary_cache",
@@ -1851,6 +1865,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if phase == "pre-upgrade":
             self.run_cbq_query(f"DROP SEQUENCE `default`.`_default`.{sequence_name} IF EXISTS")
             self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name}")
+        elif phase in ["post-upgrade", "mixed-mode"]:
+            self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name} IF NOT EXISTS")
         result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
         self.assertEqual(result['results'], expected_default)
 
@@ -1935,7 +1951,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'] or 'Errorevaluatingprojection' in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
@@ -1944,7 +1960,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query="select curl("+ url +", %s" % options + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
+        self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'] or 'Errorevaluatingprojection' in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.google_error_msg))
 
