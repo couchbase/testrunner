@@ -1365,8 +1365,19 @@ class VectorSearchTests(QueryTests):
                 if self.distance == 'DOT':
                     self.assertEqual(item['distance'], 0)
                 if self.distance == 'COSINE':
-                    self.assertEqual(item['distance'], 1)
+                    self.fail("Expected exception for cosine distance with zero vector")
                 self.assertTrue(item['id'] > 0)
+        except Exception as ex:
+            self.log.info(f"Exception occurred: {ex}")
+            if self.distance == 'COSINE':
+                self.log.info("Processing COSINE distance exception")
+                error = self.process_CBQE(ex)
+                self.log.info(f"Error code: {error['code']}, Error message: {error['msg']}")
+                self.assertEqual(error['code'], 5000)
+                self.assertEqual(error['msg'], 'cosine distance type requires a non-zero vector')
+            else:
+                self.log.warn(f"Unexpected exception for distance type {self.distance}: {ex}")
+                raise ex
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
