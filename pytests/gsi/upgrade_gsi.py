@@ -2535,8 +2535,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         for node in self.servers:
             if node not in nodes_in_cluster:
                 rebalance_nodes.append(node)
-                if len(rebalance_nodes) == 1:
-                    break
 
         existing_indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         nodes_for_installation = []
@@ -2562,7 +2560,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.log.info("==== installation Complete ====")
 
 
-        node_in = rebalance_nodes[0]
+        node_in = rebalance_nodes[-1]
         node_out = existing_indexer_node
         self.log.info(f"Node to be rebalanced in {node_in}")
         self.log.info(f"Node to be rebalanced out {node_out}")
@@ -2588,7 +2586,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         self.enable_shard_based_rebalance()
         self.update_master_node()
-        self.sleep(10)
+        self.sleep(20)
 
 
 
@@ -2596,7 +2594,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         # swap rebalance with file based rebalance enabled
         self.log.info("Swapping servers...")
         rebalance = self.cluster.async_rebalance(nodes_in_cluster, [node_in], [node_out],
-                                                 services=services)
+                                                 services=services, master=self.master)
         self.log.info(f"Rebalance task triggered. Wait in loop until the rebalance starts")
         self.sleep(3)
 
@@ -2623,17 +2621,25 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
     def test_upgrade_downgrade_upgrade(self):
         self.rest.delete_all_buckets()
         self.sleep(30)
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                        enable_replica_index=self.enable_replica_index,
-                                                        eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket(name=self.test_bucket+"_hotel", port=11222,
-                                            bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
-                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
-                                             json_template=self.json_template,
-                                             load_default_coll=True)
+        if self.upgrade_to < "8.0":
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.test_bucket = self.test_bucket + '_hotel'
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template,
+                                                 load_default_coll=True)
+            self.sleep(10)
+            scalar = False
+        else:
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+            self.json_template = "Cars"
+            scalar = True
         self.sleep(10)
         scan_results_check = True
         with ThreadPoolExecutor() as executor_main:
@@ -2642,7 +2648,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.continuous_mutations:
                     future = executor_main.submit(self.perform_continuous_kv_mutations, event)
                     scan_results_check = False
-                select_queries = self.create_index_in_batches(replica_count=2)
+                select_queries = self.create_index_in_batches(replica_count=2, scalar=scalar, dataset=self.json_template, bhive=False)
                 self.wait_until_indexes_online()
                 node_position = random.randint(0, self.nodes_init-1)
                 node_to_upgrade = node_to_downgrade = self.servers[node_position]
@@ -2800,6 +2806,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 if self.upgrade_to >= "8.0":
                     scalar_indexes = self.get_all_indexes_in_the_cluster()
                     self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
+                    indexes_created_post_vector = []
+                    self.log.info(f'indexes created before upgrade {index_names_before_upgrade}')
+                    self.log.info(f'indexes created post vector {indexes_created_post_vector}')
+                    for name in indexes_created_post_vector:
+                        if name not in index_names_before_upgrade:
+                            indexes_created_post_vector.append(name)
+                    self.validate_shard_affinity(specific_indexes=indexes_created_post_vector)
                     self.drop_index_node_resources_utilization_validations()
 
             finally:

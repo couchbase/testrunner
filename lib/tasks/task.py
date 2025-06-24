@@ -768,7 +768,7 @@ class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[],
                  do_stop=False, progress=30,
                  use_hostnames=False, services=None,
-                 sleep_before_rebalance=None):
+                 sleep_before_rebalance=None, master=None):
         Task.__init__(self, "rebalance_task")
         self.servers = servers
         self.to_add = to_add
@@ -779,9 +779,13 @@ class RebalanceTask(Task):
         self.services = services
         self.monitor_vbuckets_shuffling = False
         self.sleep_before_rebalance = sleep_before_rebalance
+        self.master = master
 
         try:
-            self.rest = RestConnection(self.servers[0])
+            if self.master is None:
+                self.rest = RestConnection(self.servers[0])
+            else:
+                self.rest = RestConnection(self.master)
         except ServerUnavailableException as e:
             self.log.error(e)
             self.state = FINISHED
@@ -794,7 +798,12 @@ class RebalanceTask(Task):
     def execute(self, task_manager):
         try:
             if len(self.to_add) and len(self.to_add) == len(self.to_remove):
-                node_version_check = self.rest.check_node_versions()
+                try:
+                    node_version_check = self.rest.check_node_versions()
+                except Exception as e:
+                    self.log.info("sleeping for 120 secs while finding nodes version during a swap rebalance")
+                    time.sleep(120)
+                    node_version_check = self.rest.check_node_versions()
                 non_swap_servers = (node for node in self.servers if node not in self.to_add and node not in self.to_remove)
                 self.old_vbuckets = RestHelper(self.rest)._get_vbuckets(non_swap_servers, None)
                 if self.old_vbuckets:

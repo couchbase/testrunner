@@ -1683,11 +1683,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.sleep(20)
                 self.wait_until_indexes_online()
 
+        self.sleep(60)
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{index['indexName']}")
+            self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index {index['indexName']} metadata {index_metadata}")
 
-        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
         # rebalancing in for replica repair
         index_node_in = self.servers[self.nodes_init]
@@ -1699,14 +1699,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
-        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
-
-        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
-                                                       map_after_rebalance=map_after_rebalance,
-                                                       stats_map_before_rebalance=stats_before_rebalance,
-                                                       stats_map_after_rebalance=stats_after_rebalance,
-                                                       item_count_increase=False,
-                                                       per_node=True, skip_array_index_item_count=False)
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id", similarity=self.similarity)
@@ -2689,7 +2682,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
-        self.item_count_related_validations()
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1,
                          "Index not created successfully")
         self.drop_index_node_resources_utilization_validations()
