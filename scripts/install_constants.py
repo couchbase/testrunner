@@ -137,7 +137,9 @@ CMDS = {
             "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
             "&& service procps restart) ; "
 
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + ";" +
+            "rm -rf /opt/couchbase;" +
+            "du -ch /data | grep total; rm -rf /data/*;",
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
@@ -192,7 +194,8 @@ CMDS = {
             "yes | yum remove 'enterprise-analytics*' > /dev/null; " +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
-            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;" +
+            "du -ch /data | grep total; rm -rf /data/*;",
         "pre_install": None,
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         "set_vm_swappiness_and_thp":
