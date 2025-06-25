@@ -157,7 +157,7 @@ sleep 60
 # wget  --user "jake.rawsthorne@couchbase.com" --password $SDK_JENKINS_TOKEN "http://sdkbuilds.sc.couchbase.com/view/GO/job/sdk-go-situational-release/job/go-sdk-situational-all/buildWithParameters?token=sdkbuilds&cluster_version=$version_number&run_regular=true&run_n1ql=true&run_subdoc=true" -O trigger.log
 
 echo "### Triggering Windows jobs ###"
-wget "http://qa.sc.couchbase.com/job/test_suite_dispatcher_dynvm/buildWithParameters?token=extended_sanity&version_number=$version_number&suite=mustpass&serverPoolId=regression&branch=$branch&extraParameters=get-cbcollect-info=True" -O trigger.log
+wget "http://qa.sc.couchbase.com/job/test_suite_dispatcher_dynvm/buildWithParameters?token=extended_sanity&version_number=$version_number&suite=mustpass&serverPoolId=regression&branch=$branch&extraParameters=get-cbcollect-info=True,bucket_storage=magma" -O trigger.log
 
 # Following block is from 'trigger_upgrade_jobs' job
 if [ 0 == 1 ]; then
@@ -174,7 +174,7 @@ if [ 0 == 1 ]; then
   ## Upgrade for specific components - analytics,cli,backup_recovery,fts,query,xdcr
   echo "analytics,cli,backup_recovery,fts,query,xdcr,2i"
   wget -O dispatcher.out "http://qa.sc.couchbase.com/job/test_suite_dispatcher/buildWithParameters?token=extended_sanity&OS=debian&version_number=$version_number&suite=12hr_upgrade&component=2i,analytics,cli,backup_recovery,fts,query,xdcr&subcomponent=None&url=$url&serverPoolId=$serverPoolId&addPoolId=elastic-fts&branch=$branch&extraParameters=$extraParameters"
-  wget -O dispatcher.out  "http://qa.sc.couchbase.com/job/test_suite_dispatcher_dynvm/buildWithParameters?token=extended_sanity&OS=windows22&version_number=$version_number&suite=12hr_upgrade&component=fts&subcomponent=None&url=$url&serverPoolId=$serverPoolId&addPoolId=elastic-fts&branch=$branch&extraParameters=$extraParameters"
+  wget -O dispatcher.out  "http://qa.sc.couchbase.com/job/test_suite_dispatcher_dynvm/buildWithParameters?token=extended_sanity&OS=windows22&version_number=$version_number&suite=12hr_upgrade&component=fts&subcomponent=None&url=$url&serverPoolId=$serverPoolId&addPoolId=elastic-fts&branch=$branch&extraParameters=$extraParameters,bucket_storage=magma"
 
   # Triggering all upgrades with couchstore
   echo "All upgrades with couchstore are being triggered"
