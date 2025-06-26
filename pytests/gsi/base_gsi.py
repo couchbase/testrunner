@@ -3352,8 +3352,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains bhive indexing syntax like VECTOR
-            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
-            if 'definition' in index and ('VECTOR' in index['definition'][:14]):
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed(done)
+            if 'definition' in index and index['indexType'] == "bhive":
                 bhive_index.append(index['indexName'])
         return bhive_index
 
@@ -3366,8 +3366,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains composite indexing syntax like dimension
-            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
-            if 'definition' in index and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'distance' in index['definition']):
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed(done)
+            if 'definition' in index and index['indexType'] == "plasma" and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'similarity' in index['definition']) :
                 composite_index.append(index['indexName'])
         return composite_index
 
