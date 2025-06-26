@@ -913,7 +913,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             query=self.query, n1ql_helper=self.n1ql_helper,
             expected_result=expected_result, index_name=query_definition.index_name,
             scan_consistency=scan_consistency, scan_vector=scan_vector,
-            verify_results=True)
+            verify_results=self.verify_query_result)
         return query_with_index_task
 
     def query_using_index_with_emptyset(self, bucket, query_definition):
