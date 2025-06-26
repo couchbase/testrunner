@@ -297,7 +297,7 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def ssh_connect_with_retries(self, ip, ssh_username, ssh_password, ssh_key,
                                  exit_on_failure = False, max_attempts_connect = 5,
-                                 backoff_time = 10):
+                                 backoff_time = 30):
         # Retries with exponential backoff delay
         attempt = 0
         is_ssh_ok = False
