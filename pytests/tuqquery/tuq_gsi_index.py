@@ -6939,7 +6939,6 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
-
     def test_array_tokens_sum(self):
         self.fail_if_no_buckets()
         created_indexes = []
@@ -8791,3 +8790,30 @@ class QueriesIndexTests(QueryTests):
         result2 = self.run_cbq_query(query2, query_context=query_context)
         self.assertIn('status', result2)
         self.assertEqual(result2['status'], 'success', f"Query 2 failed: {result2}")
+
+    def test_MB55008(self):
+        """
+        MB-55008: IS NOT VALUED predicate should be sargable when INCLUDE MISSING is specified for the index key.
+        This test creates a new collection in default._default, sets up the data and index as in the JIRA,
+        and asserts that the EXPLAIN plan uses the ix1 index.
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb55008"
+        query_context = "default._default"
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(3)
+        # Insert documents
+        self.run_cbq_query(f'INSERT INTO {collection_name} VALUES("k01", {{"c1": 1, "c2": 2}})', query_context=query_context)
+        self.run_cbq_query(f'INSERT INTO {collection_name} VALUES("k02", {{"c2": 0}})', query_context=query_context)
+        self.run_cbq_query(f'INSERT INTO {collection_name} VALUES("k03", {{"c1": null, "c2": 1}})', query_context=query_context)
+        # Create index
+        self.run_cbq_query(f'CREATE INDEX ix1 ON {collection_name}(c1 INCLUDE MISSING, c2)', query_context=query_context)
+        try:
+            # Run EXPLAIN
+            explain_result = self.run_cbq_query(f'EXPLAIN SELECT c1, c2 FROM {collection_name} WHERE c1 IS NOT VALUED AND c2 >= 0', query_context=query_context)
+            plan_str = str(explain_result['results'][0]['plan'])
+            self.assertIn('ix1', plan_str, f"Expected ix1 to be used in the plan, but got: {plan_str}")
+        finally:
+            # Clean up
+            self.run_cbq_query(f'DROP COLLECTION {collection_name} IF EXISTS', query_context=query_context)
