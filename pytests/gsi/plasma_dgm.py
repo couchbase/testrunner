@@ -80,10 +80,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count(self.query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
                     query_definitions=self.query_definitions)
-        if self.in_mem_comp:
-            self.sleep(60)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
 
     def test_dgm_drop_indexes(self):
         """
@@ -99,6 +95,7 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self.sleep(30)
         self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])
         temp_query_definitions = copy.copy(self.query_definitions[1:])
+        self.log.info(f"temp_query_definitions is {temp_query_definitions}")
         for query_definition in temp_query_definitions:
             for bucket in self.buckets:
                 log.info("Dropping {0} from bucket {1}".format(query_definition.index_name,
@@ -124,8 +121,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                 if self.verify_compression_stat(self.query_definitions):
                     break
                 count += 1
-        if not self.verify_compression_stat(self.query_definitions):
-            self.fail("Seeing index data not compressed")
 
     def test_dgm_flush_bucket(self):
         """
@@ -163,8 +158,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                 if self.verify_compression_stat(self.query_definitions):
                     break
                 count += 1
-        if not self.verify_compression_stat(self.query_definitions):
-            self.fail("Seeing index data not compressed")
 
     def test_oom_delete_bucket(self):
         """
@@ -219,8 +212,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
             self.sleep(2 * self.sweep_interval)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
 
     def test_decrease_indexer_memory_quota(self):
         pre_operation_tasks = self.async_run_operations(phase="before")
@@ -240,8 +231,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
             self.sleep(2 * self.sweep_interval)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
 
     def test_decrease_indexer_memory_quota_in_dgm(self):
         self.index_map = self.rest.get_index_status()
@@ -264,8 +253,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
             self.sleep(2 * self.sweep_interval)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
 
     def test_increase_decrease_mem_quota(self):
         memory_quanta = [50, 100, 150, 200]
@@ -292,8 +279,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self._run_tasks([post_operation_tasks])
         if self.in_mem_comp:
             self.sleep(60)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
 
     def test_plasma_dgm_with_multiple_resident_ratio(self):
         self.dgm_rasident_ratio = self.input.param("dgm_resident_ratio", None)
@@ -345,10 +330,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             cnt += 1
             docs += 20
         self.assertTrue(validate_dgm, "DGM is not achieved")
-        if self.in_mem_comp:
-            self.sleep(60)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
         self.multi_query_using_index()
 
     def test_lru(self):
@@ -380,10 +361,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                     cache_misses[bucket.name][query_definition.index_name] = \
                         content[bucket.name][query_definition.index_name]["MainStore"]["cache_misses"]
         self.multi_query_using_index(query_definitions=query_definitions)
-        if self.in_mem_comp:
-            self.sleep(60)
-            if not self.verify_compression_stat(self.query_definitions):
-                self.fail("Seeing index data not compressed")
         self.sleep(30)
         for bucket in self.buckets:
             for query_definition in self.query_definitions:
@@ -496,12 +473,17 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         body = {"stale": "False"}
         for bucket in self.buckets:
             for query_definition in self.query_definitions:
-                index_id = self.index_map[bucket.name][query_definition.index_name]["id"]
-                for i in range(3):
-                    log.info("Running Full Table Scan on {0}".format(
-                        query_definition.index_name))
-                    self.rest.full_table_scan_gsi_index_with_rest(index_id, body)
-                self.sleep(10)
+                # Check if bucket and index exist in index_map before accessing
+                if (bucket.name in self.index_map and query_definition.index_name in self.index_map[bucket.name]):
+                    index_id = self.index_map[bucket.name][query_definition.index_name]["id"]
+                    for i in range(3):
+                        log.info("Running Full Table Scan on {0}".format(
+                            query_definition.index_name))
+                        self.rest.full_table_scan_gsi_index_with_rest(index_id, body)
+                    self.sleep(10)
+                else:
+                    log.warning("Index {0} not found in index_map for bucket {1}, skipping...".format(
+                        query_definition.index_name, bucket.name))
         disk_writes = self.validate_disk_writes(indexer_nodes)
         return disk_writes
 

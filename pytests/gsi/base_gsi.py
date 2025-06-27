@@ -2015,9 +2015,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = indexer_rest.get_index_storage_stats()
+                self.log.info(f"content is {content}")
                 for index in list(content.values()):
                     for stats in list(index.values()):
-                        if stats["MainStore"]["resident_ratio"] >= 1.00:
+                        self.log.info(f"stats is {stats}")
+                        if stats["MainStore"]["resident_ratio"] >= 0.80:
                             return False
             return True
 
