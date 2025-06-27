@@ -4838,6 +4838,7 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         # Create a collection
         self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_ismissing_correlated IF NOT EXISTS')
+        self.sleep(5)
 
         # Insert data into the collection
         upsert_query = 'UPSERT INTO default._default.test_prepared_ismissing_correlated VALUES ("k01", {"sdate": "2024-10-31"})'
