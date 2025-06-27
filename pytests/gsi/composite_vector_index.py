@@ -43,7 +43,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.multi_move = self.input.param("multi_move", False)
         self.build_phase = self.input.param("build_phase", "create")
         self.skip_default = self.input.param("skip_default", True)
-        self.post_rebalance_action = self.input.param("post_rebalance_action", "data_load")
+        self.post_rebalance_action = self.input.param("post_rebalance_action", None)
         self.partitioned_index_action = self.input.param("partitioned_index_action", "rebalance_out")
         # the below setting will be reversed post the resolving of MB-63697
         self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
@@ -709,11 +709,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(30)
             code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
             index_names = self.get_all_indexes_in_the_cluster()
-            for index in index_names:
-                if "primary" in index:
-                    continue
-                self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
-                                 f"Codebook memory has changed for index {index}")
+            if self.shard_based_rebalance:
+                for index in index_names:
+                    if "primary" in index:
+                        continue
+                    self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
+                                     f"Codebook memory has changed for index {index}")
 
             # Todo: Add metadata validation
             if self.post_rebalance_action == "data_load":
@@ -729,7 +730,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
                 self.sleep(60)
                 _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
                 index_item_count_map = {}
@@ -756,7 +757,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     collection=collection, json_template="Cars", timeout=2000,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
                     self.sleep(60)
                     _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
                     index_item_count_map = {}
@@ -775,7 +776,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(30)
             if not self.check_gsi_logs_for_shard_transfer():
                 raise Exception("Shard based rebalance not triggered")
-        self.validate_scans_for_recall_and_accuracy(select_query=select_queries)
+
+        for select_query in select_queries:
+            # Skipping validation for recall and accuracy against primary index
+            if "DISTINCT" in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance(self):
@@ -840,7 +846,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
             if self.post_rebalance_action == "mutations":
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
@@ -850,7 +856,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     collection=collection, json_template="Cars", timeout=2000,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
             self.sleep(60)
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
@@ -1351,7 +1357,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
             if self.post_rebalance_action == "mutations":
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
@@ -1361,7 +1367,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     collection=collection, json_template="Cars", timeout=2000,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
             self.sleep(60)
             partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
@@ -2015,11 +2021,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
 
         if self.memory_fill:
-            for node in index_node:
-                node_rest = RemoteMachineShellConnection(node)
-                cmd = "stress --vm 1 --vm-bytes $(awk '/MemTotal/ {printf \"%d\n\", $2;}' /proc/meminfo)k"
-                node_rest.execute_command(command=cmd)
-                node_rest.disconnect()
+            self.run_stress_tool(timeout=600)
+            self.sleep(30)
         try:
             # rebalancing in indexer node
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node[0]], [],

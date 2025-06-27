@@ -2654,7 +2654,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 node_to_upgrade = node_to_downgrade = self.servers[node_position]
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_upgrade, select_queries=select_queries)
                 self.sleep(10)
-                if self.initial_version[:3] == "7.6":
+                if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] == "8.0":
                     provisoned = False
                     self.post_upgrade_with_nodes_clause(provisioned=provisoned)
                 else:
@@ -2779,7 +2779,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 index_names_after_upgrade = self.get_all_indexes_in_the_cluster()
                 indexes_created_post_upgrade = []
                 self.log.info(f'indexes created before upgrade {index_names_before_upgrade}')
-                self.log.info(f'indexes created after upgrade {index_names_after_upgrade}')
                 for name in index_names_after_upgrade:
                     if name not in index_names_before_upgrade:
                         indexes_created_post_upgrade.append(name)
@@ -2807,9 +2806,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     scalar_indexes = self.get_all_indexes_in_the_cluster()
                     self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
                     indexes_created_post_vector = []
+                    index_names_post_vector = self.get_all_indexes_in_the_cluster()
                     self.log.info(f'indexes created before upgrade {index_names_before_upgrade}')
                     self.log.info(f'indexes created post vector {indexes_created_post_vector}')
-                    for name in indexes_created_post_vector:
+                    for name in index_names_post_vector:
                         if name not in index_names_before_upgrade:
                             indexes_created_post_vector.append(name)
                     self.validate_shard_affinity(specific_indexes=indexes_created_post_vector)

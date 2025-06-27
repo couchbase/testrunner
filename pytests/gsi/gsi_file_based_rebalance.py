@@ -1835,24 +1835,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             shell.execute_command(command='apt-get install -qq -y iptables > /dev/null && echo 1 || echo 0',
                                   get_pty=True)
 
-    def run_stress_tool(self, stress_factor=0.25, timeout=1800):
-        nodes_all = self.servers
-        shell = RemoteMachineShellConnection(nodes_all[0])
-        free_mem_cmd = "free -m | awk 'NR==2 {print $4}'"
-        output, error = shell.execute_command(free_mem_cmd)
-        free_mem_in_mb = int(output[0])
-        ram = math.floor(free_mem_in_mb * stress_factor)
-        num_cpu_cmd = "grep -c ^processor /proc/cpuinfo"
-        output, error = shell.execute_command(num_cpu_cmd)
-        num_cpu = int(output[0])
-        cpu = math.floor(num_cpu * stress_factor)
-        cmd = f'stress --cpu {cpu} --vm-bytes {ram}M --vm 1 --timeout {timeout} -d 1 & > /dev/null && echo 1 || echo 0'
-        self.log.info(f"Will run this command to simulate CPU and memory stress {cmd}")
-        with ThreadPoolExecutor() as executor_main:
-            for node in nodes_all:
-                shell = RemoteMachineShellConnection(node)
-                executor_main.submit(shell.execute_command, cmd)
-
     def fill_up_disk(self, disk_fill_percent=10):
         self.log.info("Will check the disk usage on all indexer nodes")
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

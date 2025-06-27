@@ -175,6 +175,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             if self.num_index_replica == 0:
                 self.num_index_replica = 1
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.set_empty_shard_destroy_interval()
         if self.use_https:
             self.node_port = '18091'
         else:
@@ -632,6 +633,24 @@ class BaseSecondaryIndexingTests(QueryTests):
             shell = RemoteMachineShellConnection(node)
             shell.execute_command('pkill stress')
             shell.execute_command('pkill iotop')
+
+    def run_stress_tool(self, stress_factor=0.25, timeout=1800):
+        nodes_all = self.servers
+        shell = RemoteMachineShellConnection(nodes_all[0])
+        free_mem_cmd = "free -m | awk 'NR==2 {print $4}'"
+        output, error = shell.execute_command(free_mem_cmd)
+        free_mem_in_mb = int(output[0])
+        ram = math.floor(free_mem_in_mb * stress_factor)
+        num_cpu_cmd = "grep -c ^processor /proc/cpuinfo"
+        output, error = shell.execute_command(num_cpu_cmd)
+        num_cpu = int(output[0])
+        cpu = math.floor(num_cpu * stress_factor)
+        cmd = f'stress --cpu {cpu} --vm-bytes {ram}M --vm 1 --timeout {timeout} -d 1 & > /dev/null && echo 1 || echo 0'
+        self.log.info(f"Will run this command to simulate CPU and memory stress {cmd}")
+        with ThreadPoolExecutor() as executor_main:
+            for node in nodes_all:
+                shell = RemoteMachineShellConnection(node)
+                executor_main.submit(shell.execute_command, cmd)
 
     def _return_maps(self, perNode=False, map_from_index_nodes=False):
         if map_from_index_nodes:
@@ -2367,13 +2386,18 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def drop_index_node_resources_utilization_validations(self):
         self.drop_all_indexes()
-        self.sleep(120)
-        # self.check_storage_directory_cleaned_up()
+        self.sleep(360, "sleeping to destroy empty shards")
+        self.check_storage_directory_cleaned_up()
         # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        if not self.validate_memory_released():
+            raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
             raise AssertionError("CPU not normalized despite dropping all the indexes")
+
+    def set_empty_shard_destroy_interval(self, interval_min=5):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.empty_shard_destroy_interval": interval_min})
     def update_master_node(self):
         for server in self.servers:
             try:
@@ -3342,7 +3366,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for index in index_metadata:
             # Check if index definition contains primary indexing syntax like PRIMARY
             if 'definition' in index and ('isPrimary' in index):
-                primary_index.append(index['indexName'])
+                primary_index.append(index['name'])
         return primary_index
 
     def get_all_bhive_index_names(self):
@@ -3356,7 +3380,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             # Check if index definition contains bhive indexing syntax like VECTOR
             # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed(done)
             if 'definition' in index and index['indexType'] == "bhive":
-                bhive_index.append(index['indexName'])
+                bhive_index.append(index['name'])
         return bhive_index
 
     def get_all_composite_index_names(self):
@@ -3486,6 +3510,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             try:
                 if 'bucket_id' not in index:
                     bucket = index['keyspace_id']
+                    scope = '_default'
                     collection = '_default'
                 else:
                     bucket = index['bucket_id']

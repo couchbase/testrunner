@@ -2222,7 +2222,7 @@ class GSIUtils(object):
         return tasks
 
     def run_continous_query_load(self, select_queries, database=None, capella_run=False,
-                                 query_node=False, sleep_timer=30, timeout=1200):
+                                 query_node=False, sleep_timer=30, timeout=600):
         start_time = datetime.datetime.now()
         while self.query_event.is_set():
             try:
@@ -2231,7 +2231,6 @@ class GSIUtils(object):
                 if (curr_time - start_time).total_seconds() > timeout:
                     self.log.info(f"Query load timeout reached after {timeout} seconds. Exiting continuous query load.")
                     break
-                
                 tasks = self.aysnc_run_select_queries(select_queries=select_queries, database=database,
                                                       capella_run=capella_run, query_node=query_node)
                 for task in tasks:
@@ -2239,6 +2238,7 @@ class GSIUtils(object):
             except Exception as err:
                 self.log.error(f"Error occurred during query load: {err}")
             time.sleep(sleep_timer)
+            
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """
