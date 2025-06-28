@@ -964,6 +964,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 data_node.start_server()
             self.gsi_util_obj.query_event.clear()
 
+            partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
             for node in stats:
@@ -974,7 +975,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_index_list:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
         self.drop_index_node_resources_utilization_validations()
@@ -1149,6 +1150,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_failover_and_recovery_sequentially(self):
+        self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -1209,6 +1211,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                message="results after failover and recovery operation", similarity=self.similarity)
 
     def test_kv_and_indexing_failover_and_rebalance_out_sequentially(self):
+        self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
