@@ -949,7 +949,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             select_queries=select_queries, query_node=query_node)
 
             # perform auto failover of KV node
-            data_node = RemoteMachineShellConnection(data_nodes[1])
+            data_node = RemoteMachineShellConnection(data_nodes[0])
             data_node.stop_server()
             self.sleep(40, "Wait for autofailover")
             try:
