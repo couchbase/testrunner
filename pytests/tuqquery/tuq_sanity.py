@@ -2353,6 +2353,25 @@ class QuerySanityTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
+    def test_array_replace_max_int(self):
+        # Replace 2 with 100, 2 times
+        self.query = "select array_replace([1,2,3,2,2], 2, 100, 2) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num": [1, 100, 3, 100, 2]}]
+        self._verify_results(actual_result['results'], expected_result)
+
+        # Replace 2 with 100, 0 times
+        self.query = "select array_replace([1,2,3,2,2], 2, 100, 0) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num": [1, 2, 3, 2, 2]}]
+        self._verify_results(actual_result['results'], expected_result)
+
+        # Replace 2 with 100, 4 times
+        self.query = "select array_replace([1,2,3,2,2], 2, 100, 4) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num": [1, 100, 3, 100, 100]}]
+        self._verify_results(actual_result['results'], expected_result)
+
     def test_array_repeat(self):
         self.query = "select ARRAY_REPEAT(2, 2) as num"
         actual_result = self.run_cbq_query()
