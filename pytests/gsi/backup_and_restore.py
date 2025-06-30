@@ -2463,7 +2463,11 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
                 self.log.info(f"indexes before backup {indexes_before_backup}")
-                backup_result = backup_client.backup(bucket_collection_namespaces, use_https=self.use_https)
+                if self.x509enable:
+                    use_cert = True
+                else:
+                    use_cert = False
+                backup_result = backup_client.backup(bucket_collection_namespaces, use_https=self.use_https, use_certs=use_cert)
                 self.assertTrue(
                     backup_result[0],
                     "backup failed for {0} with {1}".format(
@@ -2499,7 +2503,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     reached = RestHelper(self.rest).rebalance_reached()
                     self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                     rebalance.result()
-                restore_result = backup_client.restore(use_https=self.use_https, restore_args="--auto-create-buckets")
+                restore_result = backup_client.restore(use_https=self.use_https, restore_args="--auto-create-buckets", use_cert=use_cert)
                 self.assertTrue(
                     restore_result[0],
                     "restore failed for {0} with {1}".format(

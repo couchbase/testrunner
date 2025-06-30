@@ -573,15 +573,17 @@ class BaseSecondaryIndexingTests(QueryTests):
         else:
             pattern = r"ANN_DISTANCE\(\s*(.*?),\s*(\[(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?:,\s*)?)+\])"
         matches = re.search(pattern, query)
+        self.log.info(f"Matchesy: {matches}")
 
         if matches:
             vector_field = matches.group(1)
             vector = matches.group(2)
-            # self.log.info(f"vector_field: {vector_field}")
+            self.log.info(f"vector_field: {vector_field}")
             self.log.info(f"Vector : {vector}")
             vector = ast.literal_eval(vector)
             return vector_field, vector
         else:
+            self.log.info(f"No vector field found in the query: {query}")
             raise Exception("no fields extracted")
 
     def get_per_index_codebook_memory_usage(self):

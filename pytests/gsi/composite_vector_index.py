@@ -172,6 +172,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             raise Exception(f"Failed to deploy eventing function: {response.status_code}, {response.text}")
 
     def test_composite_vector_sanity(self):
+        self.single_distance_function = self.input.param("single_distance_function", False)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         self.bhive_composite_comparison = self.input.param("bhive_composite_comparison", False)
         query_stats_map = {}
@@ -187,6 +188,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.bhive_index = True
             similarity = random.choice(simlarity_list)
             simlarity_list = [similarity] * 2
+        if self.single_distance_function:
+            similarity = random.choice(simlarity_list)
+            simlarity_list = [similarity]
         for similarity in simlarity_list:
             for namespace in self.namespaces:
                 if self.bhive_index:

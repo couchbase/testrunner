@@ -1,4 +1,6 @@
 import json
+import time
+
 import logger
 import random
 
@@ -61,7 +63,7 @@ class IndexBackupClient(object):
                    self.restore_buckets)
         return obj
 
-    def _backup_with_tool(self, namespaces, include, config_args, backup_args, use_https=False):
+    def _backup_with_tool(self, namespaces, include, config_args, backup_args, use_https=False, use_certs=False):
         remote_client = RemoteMachineShellConnection(self.backup_node)
         os_platform = remote_client.extract_remote_info().type.lower()
         if os_platform == 'linux':
@@ -103,10 +105,19 @@ class IndexBackupClient(object):
             if "`backup_" + str(self.rand) + "` exists" in x]:
             self.is_backup_exists = False
             return self.is_backup_exists, output
-        if use_https:
+        if use_https and not use_certs:
             cmd = f"cbbackupmgr backup --archive {self.backup_path} --repo backup_{self.rand} " \
                   f"--cluster couchbases://{self.backup_node.ip} --username {self.backup_node.rest_username} " \
                   f"--password {self.backup_node.rest_password} --no-ssl-verify"
+        elif use_certs:
+            output, error = remote_client.execute_command(command="find /opt/couchbase/var/lib/couchbase/inbox/CA* -maxdepth 1 -type d")
+            self.log.info(f"output is {output}")
+            certpath = output[0]
+            cmd = f"cbbackupmgr backup --archive {self.backup_path} --repo backup_{self.rand} " \
+                  f"--cluster couchbases://{self.backup_node.ip} --username {self.backup_node.rest_username} " \
+                  f"--password {self.backup_node.rest_password} --cacert {certpath}/ca.pem"
+            self.log.info(f"cmd is {cmd}")
+
         else:
             cmd = f"cbbackupmgr backup --archive {self.backup_path} --repo backup_{self.rand} " \
                   f"--cluster couchbase://{self.backup_node.ip} --username {self.backup_node.rest_username} " \
@@ -124,16 +135,26 @@ class IndexBackupClient(object):
         self.is_backup_exists = True
         return self.is_backup_exists, output
 
-    def _restore_with_tool(self, mappings, namespaces, include, restore_args, use_https=False):
+    def _restore_with_tool(self, mappings, namespaces, include, restore_args, use_https=False, use_certs=False):
         if not self.is_backup_exists:
             return self.is_backup_exists, "Backup not found"
         remote_client = RemoteMachineShellConnection(self.backup_node)
-        if use_https:
+        if use_https and not use_certs:
             command = "{0}cbbackupmgr restore --archive {1} --repo backup_{2} --cluster couchbases://{3}" \
                       " --username {4} --password {5} --force-updates {6} --no-ssl-verify".format(
                 self.cli_command_location, self.backup_path, self.rand,
                 self.restore_node.ip, self.restore_node.rest_username,
                 self.restore_node.rest_password, self.disabled_services)
+        elif use_certs:
+            output, error = remote_client.execute_command(
+                command="find /opt/couchbase/var/lib/couchbase/inbox/CA* -maxdepth 1 -type d")
+            self.log.info(f"output is {output}")
+            certpath = output[0]
+            command = "{0}cbbackupmgr restore --archive {1} --repo backup_{2} --cluster couchbases://{3}" \
+                      " --username {4} --password {5} --force-updates {6} --cacert {7}/ca.pem".format(
+                self.cli_command_location, self.backup_path, self.rand,
+                self.restore_node.ip, self.restore_node.rest_username,
+                self.restore_node.rest_password, self.disabled_services, certpath)
         else:
             command = "{0}cbbackupmgr restore --archive {1} --repo backup_{2} --cluster couchbase://{3}" \
                       " --username {4} --password {5} --force-updates {6}".format(
@@ -179,17 +200,17 @@ class IndexBackupClient(object):
         return True, output
 
     def backup(
-            self, namespaces=[], include=True, config_args="", backup_args="", use_https=False):
+            self, namespaces=[], include=True, config_args="", backup_args="", use_https=False, use_certs=False):
         if self.use_cbbackupmgr:
             return self._backup_with_tool(
-                namespaces, include, config_args, backup_args, use_https)
+                namespaces, include, config_args, backup_args, use_https, use_certs)
         return self._backup_with_rest(namespaces, include, config_args)
 
     def restore(
-            self, mappings=[], namespaces=[], include=True, restore_args="", use_https=False):
+            self, mappings=[], namespaces=[], include=True, restore_args="", use_https=False, use_cert=False):
         if self.use_cbbackupmgr:
             return self._restore_with_tool(
-                mappings, namespaces, include, restore_args, use_https)
+                mappings, namespaces, include, restore_args, use_https, use_cert)
         return self._restore_with_rest(
             mappings, namespaces, include, restore_args)
 

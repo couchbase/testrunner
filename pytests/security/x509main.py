@@ -330,6 +330,13 @@ class x509main:
         rest.load_trusted_CAs()
         rest.reload_certificate()
 
+    # def _move_file_to_inbox(self, file_name):
+    #     cmd  = f"scp {file_name} root@{self.host.ip}:{self.LININSTALLPATH}/{self.CACERTFILEPATH}/CA/{file_name}"
+    #     return_code = subprocess.call(cmd, shell=True)
+    #     if return_code != 0:
+    #         raise Exception(f"Failed to move file to inbox: {return_code}")
+    #     log.info(f"Moved file to inbox: {file_name}")
+
     # Upload security setting for client cert
     def _upload_cluster_ca_settings(self, username, password):
         temp = self.host
