@@ -801,8 +801,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online(timeout=600)
         self.item_count_related_validations()
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
@@ -864,8 +866,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance_failure_or_rebalance_stop_and_retry_with_indexes(self):
@@ -1063,8 +1067,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online(timeout=600)
         self.sleep(10)
         self.item_count_related_validations()
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         for namespace in self.namespaces:
             keyspace = namespace.split(":")[-1]
@@ -1146,8 +1152,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_failover_and_recovery_sequentially(self):
@@ -1172,8 +1180,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -1208,8 +1218,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_kv_and_indexing_failover_and_rebalance_out_sequentially(self):
         self.recovery_type = self.input.param('recovery_type', 'full')
@@ -1233,8 +1245,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -1269,8 +1283,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_kv_and_indexing_rebalance_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
@@ -1293,8 +1309,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
@@ -1356,8 +1374,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_kv_and_indexing_failover_and_recovery_concurrently(self):
         self.recovery_type = self.input.param('recovery_type', 'full')
@@ -1381,8 +1401,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -1419,8 +1441,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_drop_build_indexes_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
