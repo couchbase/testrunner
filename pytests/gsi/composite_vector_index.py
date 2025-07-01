@@ -1138,6 +1138,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
 
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1148,8 +1149,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if "Partial" in index:
-                    continue
+            if index in partial_index_list:
+                continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         for select_query in select_queries:
@@ -1204,6 +1205,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.query_event.clear()
 
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1214,7 +1216,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
@@ -1269,6 +1271,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.query_event.clear()
 
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1279,7 +1282,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
@@ -1320,14 +1323,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.rebalance_type == 'rebalance_in':
                 add_nodes = [self.servers[3]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                    to_remove=[], services=['kv:n1ql', 'index'])
+                                                    to_remove=[], services=['kv,n1ql', 'index'])
             elif self.rebalance_type == 'rebalance_swap':
                 add_nodes = [self.servers[3]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv:n1ql', 'index'])
+                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv,n1ql', 'index'])
             elif self.rebalance_type == 'rebalance_out':
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
-                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv:n1ql', 'index'])
+                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv,n1ql', 'index'])
             task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
@@ -1360,6 +1363,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
                     self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
             self.sleep(60)
+            partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
             for node in stats:
@@ -1370,7 +1374,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_index_list:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
@@ -1427,6 +1431,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.query_event.clear()
 
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1437,7 +1442,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
