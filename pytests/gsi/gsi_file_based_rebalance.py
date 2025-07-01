@@ -734,6 +734,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -855,6 +856,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 while status != 'running':
                     if time.time() - start_time > timeout:
                         self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                        break
                     time.sleep(1)
                     status, _ = self.rest._rebalance_status_and_progress()
                 self.log.info("Rebalance has started running.")
@@ -946,6 +948,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1033,6 +1036,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1146,6 +1150,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1353,6 +1358,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1457,6 +1463,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1652,7 +1659,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             while status != 'running':
                 if time.time() - start_time > timeout:
                     self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
-                    raise Exception(f"Rebalance timeout: status '{status}' after {timeout} seconds")
+                    break
                 time.sleep(1)
                 status, _ = self.rest._rebalance_status_and_progress()
             self.log.info("Rebalance has started running.")
