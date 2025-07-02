@@ -5056,3 +5056,58 @@ class QuerySanityTests(QueryTests):
             # Clean up
             self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
             self.run_cbq_query("DELETE FROM system:prepareds WHERE name = 'p_mb66699'", query_context=query_context)
+
+    # MB-39569
+    def test_like_new_line(self):
+        self.fail_if_no_buckets()
+
+        # Create a separate collection for this test
+        collection_name = "test_like_newline"
+        query_context = f"default._default"
+
+        try:
+            # Create the collection
+            self.run_cbq_query(f"CREATE COLLECTION `{collection_name}` IF NOT EXISTS", query_context=query_context)
+            self.sleep(3)
+
+            # Test 1: Without index - should not return results
+            self.log.info("Testing LIKE query without index")
+
+            # Insert test document
+            insert_query = f'INSERT INTO `{collection_name}` VALUES("kk20", {{"text": "[[File:River \\nFile Thames"}})'
+            self.run_cbq_query(insert_query, query_context=query_context)
+
+            # Query without index using USE KEYS
+            select_query = f'SELECT * FROM `{collection_name}` USE KEYS "kk20" WHERE text LIKE "Fil%"'
+            result = self.run_cbq_query(select_query, query_context=query_context)
+
+            # Verify no results are returned
+            self.assertEqual(result['results'], [], 
+                           "Query without index should not return results for LIKE 'Fil%'")
+
+            # Test 2: With index - should not return results
+            self.log.info("Testing LIKE query with index")
+
+            # Create index on text field
+            index_query = f"CREATE INDEX ix20 IF NOT EXISTS ON `{collection_name}`(text)"
+            self.run_cbq_query(index_query, query_context=query_context)
+            self.sleep(3)
+
+            # Query with index
+            select_with_index_query = f'SELECT * FROM `{collection_name}` WHERE text LIKE "Fil%"'
+            result_with_index = self.run_cbq_query(select_with_index_query, query_context=query_context)
+
+            # Verify no results are returned even with index
+            self.assertEqual(result_with_index['results'], [], 
+                           "Query with index should not return results for LIKE 'Fil%'")
+
+            # Additional verification - query should return the document when using exact match
+            exact_match_query = f'SELECT * FROM `{collection_name}` WHERE text LIKE "%File%"'
+            exact_result = self.run_cbq_query(exact_match_query, query_context=query_context)
+
+            # Should return the document when using %File% pattern
+            self.assertEqual(len(exact_result['results']), 1, 
+                           "Query with %File% pattern should return the document")            
+        finally:
+            # Clean up
+            self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
