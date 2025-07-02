@@ -1096,7 +1096,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 2))
-            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -1129,7 +1129,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             update_start=0,
                                             update_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 2))
-            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_update)
+            self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_update)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
