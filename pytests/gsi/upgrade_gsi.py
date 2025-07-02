@@ -2654,7 +2654,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 node_to_upgrade = node_to_downgrade = self.servers[node_position]
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_upgrade, select_queries=select_queries)
                 self.sleep(10)
-                if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] == "8.0":
+                if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] >= "8.0":
                     provisoned = False
                     self.post_upgrade_with_nodes_clause(provisioned=provisoned)
                 else:
