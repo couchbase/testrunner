@@ -3495,6 +3495,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             output, error = shell.execute_command(f"du -s --block-size=1M {storage_dir} | cut -f1")
             if error or not output:
                 self.log.error(f"Error getting disk space for {storage_dir}: {error}")
+            # Get detailed file sizes in the storage directory
+            detailed_output, detailed_error = shell.execute_command(f"du -ah {storage_dir} 2>/dev/null | sort -hr")
+            if detailed_error:
+                self.log.info(f"Could not get detailed file sizes for {storage_dir}: {detailed_error}")
+            else:
+                self.log.info(f"Storage directory {storage_dir} file sizes:")
+                for line in detailed_output:
+                    self.log.info(f"  {line}")
             used_space_mb = int(output[0])  # Size in MB
             used_space = used_space_mb / 1024.0  # Convert MB to GB
         except Exception as e:

@@ -4906,7 +4906,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     if self.gsi_type == "memory_optimized":
                         num_partitions = random.randint(4, 20)
                     else:
-                        max_num_partitions = self.gsi_util_obj.get_max_num_partitions()
+                        max_num_partitions = self.get_max_num_partitions()
                         num_partitions = random.randint(4, max_num_partitions)
                     with_statement.append(
                         "'num_partition':{0}".format(num_partitions))
