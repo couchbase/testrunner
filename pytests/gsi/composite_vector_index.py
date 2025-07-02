@@ -695,12 +695,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.cancel_rebalance:
                 self.rest.stop_rebalance()
             if self.fail_rebalance:
-                self.stop_server(self.servers[self.nodes_init])
-            task.result()
-            rebalance_status = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-            if self.cancel_rebalance or self.fail_rebalance:
-                self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                server = random.choice(indexer_nodes)
+                self.sleep(5)
+                self._kill_all_processes_index(server=server)
+            try:
+                task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            except Exception as e:
+                self.log.info(f"Rebalance failed as expected: {e}")
+                if self.cancel_rebalance or self.fail_rebalance:
+                    self.sleep(300, "Waiting for cleanup to complete")
+                    self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                              to_remove=[], services=[])
                 rebalance_status = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")

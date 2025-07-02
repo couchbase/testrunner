@@ -5482,10 +5482,8 @@ class RemoteUtilHelper(object):
             command_2 = "/sbin/iptables -A OUTPUT -p tcp -o " + o[0] + " --sport 1000:65535 -j REJECT"
             command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
             command_4 = "nft add table ip filter"
-            command_5 = "nft add chain ip filter INPUT '{ type filter hook "
-            "input priority 0; }'"
-            command_6 = "nft add rule ip filter input tcp dport 1000-65535 " \
-                        "reject"
+            command_5 = "nft add chain ip filter INPUT '{ type filter hook input priority 0; }'"
+            command_6 = "nft add rule ip filter input tcp dport 1000-65535 reject"
             if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
                              and server.ssh_username != "root":
                 copy_server.ssh_username = "root"

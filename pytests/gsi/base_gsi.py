@@ -2965,6 +2965,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                 shard_affinity = rest.get_index_settings()["indexer.settings.enable_shard_affinity"]
         return shard_affinity
 
+    def get_max_num_partitions(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        max_num_partitions = rest.get_index_settings()["indexer.settings.maxNumPartitions"]
+        return max_num_partitions
+
     def set_max_instances_per_shard(self, instance_count):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
