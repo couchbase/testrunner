@@ -79,7 +79,7 @@ class QUERY_TYPE:
 class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def __init__(self, num_queries=1, query_type=None, seed=0, dataset="emp",
-                 fields=None):
+                 fields=None,doc_map_count=1):
         """
         FTS(Bleve) and equivalent ES(Lucene) query generator for employee dataset
         (JsonDocGenerator in couchbase_helper/documentgenerator.py)
@@ -93,6 +93,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         self.query_types = query_type
         self.dataset = dataset
         self.smart_queries = False
+        self.doc_map_count = doc_map_count
         if fields and query_type == ['N1QL_MATCH_PHRASE']:
             self.fields = {}
             add_only_match = False
@@ -184,6 +185,39 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             query_str = query_str.replace(key, val)
         return json.loads(query_str, encoding='utf-8')
 
+
+    def inject_type_filter(self, query_dict, type_value):
+        if "bool" in query_dict:
+            filters = query_dict["bool"].get("filter", [])
+            
+            # If filter is a dict, convert it into a list
+            if isinstance(filters, dict):
+                filters = [filters]
+            
+            # If filter is missing, start with an empty list
+            if not isinstance(filters, list):
+                filters = []
+
+            # Add the type filter
+            filters.append({"term": {"type": type_value}})
+            
+            # Update back the filters
+            query_dict["bool"]["filter"] = filters
+
+        else:
+            # If not a bool query, wrap it
+            original_query = query_dict.copy()
+            query_dict.clear()
+            query_dict["bool"] = {
+                "must": original_query,
+                "filter": [
+                    {"term": {"type": type_value}}
+                ]
+            }
+
+        return query_dict
+
+
     def construct_queries(self):
         while self.iterator < self.queries_to_generate:
             fieldname = self.get_random_value(self.query_types)
@@ -216,7 +250,10 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             fts_match_query["field"] = fieldname
             fts_match_query["match"] = match_str
 
-            es_match_query['match'][fieldname] = match_str
+            field_key = 'match'
+
+            es_match_query = {field_key: {}}
+            es_match_query[field_key][fieldname] = match_str
 
             if not ret_list:
                 return fts_match_query, es_match_query
@@ -282,6 +319,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_disj_query = {"disjuncts": fts_query}
         es_disj_query = {'bool': {}}
         es_disj_query['bool']['should'] = es_query
+        es_disj_query['bool']['minimum_should_match'] = 1
         return fts_disj_query, es_disj_query
 
     def construct_match_phrase_query(self):
@@ -334,18 +372,18 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_date_query['start'] = start
         fts_date_query['end'] = end
 
-        es_date_query['filtered']['filter']['range'] = {fieldname: {}}
+        es_date_query['bool']['filter']['range'] = {fieldname: {}}
 
         if bool(random.getrandbits(1)):
             fts_date_query['inclusive_start'] = True
             fts_date_query['inclusive_end'] = True
-            es_date_query['filtered']['filter']['range'][fieldname]['gte'] = start
-            es_date_query['filtered']['filter']['range'][fieldname]['lte'] = end
+            es_date_query['bool']['filter']['range'][fieldname]['gte'] = start
+            es_date_query['bool']['filter']['range'][fieldname]['lte'] = end
         else:
             fts_date_query['inclusive_start'] = False
             fts_date_query['inclusive_end'] = False
-            es_date_query['filtered']['filter']['range'][fieldname]['gt'] = start
-            es_date_query['filtered']['filter']['range'][fieldname]['lt'] = end
+            es_date_query['bool']['filter']['range'][fieldname]['gt'] = start
+            es_date_query['bool']['filter']['range'][fieldname]['lt'] = end
 
         return fts_date_query, es_date_query
 
@@ -364,21 +402,21 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_numeric_query['min'] = low
         fts_numeric_query['max'] = high
 
-        es_numeric_query['filtered']['filter']['range'] = {fieldname: {}}
+        es_numeric_query['bool']['filter']['range'] = {fieldname: {}}
 
         if bool(random.getrandbits(1)):
             fts_numeric_query['inclusive_min'] = True
             fts_numeric_query['inclusive_max'] = True
-            es_numeric_query['filtered']['filter']['range'][fieldname]['gte'] = \
+            es_numeric_query['bool']['filter']['range'][fieldname]['gte'] = \
                 low
-            es_numeric_query['filtered']['filter']['range'][fieldname]['lte'] = \
+            es_numeric_query['bool']['filter']['range'][fieldname]['lte'] = \
                 high
         else:
             fts_numeric_query['inclusive_min'] = False
             fts_numeric_query['inclusive_max'] = False
-            es_numeric_query['filtered']['filter']['range'][fieldname]['gt'] = \
+            es_numeric_query['bool']['filter']['range'][fieldname]['gt'] = \
                 low
-            es_numeric_query['filtered']['filter']['range'][fieldname]['lt'] = \
+            es_numeric_query['bool']['filter']['range'][fieldname]['lt'] = \
                 high
         return fts_numeric_query, es_numeric_query
 
@@ -411,64 +449,67 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_term_range_query['min'] = str1
         fts_term_range_query['max'] = str2
 
-        es_term_range_query['filtered']['filter']['range'] = {fieldname: {}}
+        es_term_range_query['bool']['filter']['range'] = {fieldname: {}}
 
         if bool(random.getrandbits(1)):
             fts_term_range_query['inclusive_min'] = True
             fts_term_range_query['inclusive_max'] = True
-            es_term_range_query['filtered']['filter']['range'][fieldname]['gte'] = \
+            es_term_range_query['bool']['filter']['range'][fieldname]['gte'] = \
                 str1
-            es_term_range_query['filtered']['filter']['range'][fieldname]['lte'] = \
+            es_term_range_query['bool']['filter']['range'][fieldname]['lte'] = \
                 str2
         else:
             fts_term_range_query['inclusive_min'] = False
             fts_term_range_query['inclusive_max'] = False
-            es_term_range_query['filtered']['filter']['range'][fieldname]['gt'] = \
+            es_term_range_query['bool']['filter']['range'][fieldname]['gt'] = \
                 str1
-            es_term_range_query['filtered']['filter']['range'][fieldname]['lt'] = \
+            es_term_range_query['bool']['filter']['range'][fieldname]['lt'] = \
                 str2
         return fts_term_range_query, es_term_range_query
 
     def construct_es_empty_filter_query(self):
-        return {'filtered': {'filter': {}}}
+        return {'bool': {'filter': {}}}
+
 
     def construct_terms_query_string_query(self):
         """
-        Generates disjunction, boolean query string queries
+        Generates disjunction, boolean query string queries.
+        Returns a tuple: (with_keyword_suffix, without_keyword_suffix)
         """
 
         if bool(random.getrandbits(1)):
             # text/str terms
-            fieldname = self.get_random_value(self.fields['str'] +
-                                              self.fields['text'])
-            match_str = eval("self.get_queryable_%s" % fieldname + "()")
-            if ':' or ' ' in match_str:
-                match_str = '\"' + match_str + '\"'
+            fieldname = self.get_random_value(self.fields['str'] + self.fields['text'])
+            match_str = eval(f"self.get_queryable_{fieldname}()")
+            if ':' in match_str or ' ' in match_str:
+                match_str = f'"{match_str}"'
+
+            term_string_query = f"{fieldname}:{match_str}"
+
             if bool(random.getrandbits(1)) and not self.smart_queries:
+                # Return just the match string (used in some fuzzy or free-text modes)
                 return match_str
             else:
-                return fieldname + ':' + match_str
+                return term_string_query
+
         else:
             # numeric range
             operators = ['>', '>=', '<', '<=']
             fieldname = self.get_random_value(self.fields['num'])
-            val = eval("self.get_queryable_%s" % fieldname + "()")
-            if bool(random.getrandbits(1)):
-                # upper or lower bound specified
-                end_point = fieldname + ':' + \
-                            self.get_random_value(operators) + str(val)
-                return end_point
-            else:
-                # both upper and lower bounds specified
-                # +age:>=10 +age:<20
-                high_val = val + random.randint(2, 10000)
-                range_str = fieldname + ':' + \
-                            self.get_random_value(operators[:1]) + str(val) + \
-                            ' +' + fieldname + ':' + \
-                            self.get_random_value(operators[2:]) + \
-                            str(high_val)
-                return range_str
+            val = eval(f"self.get_queryable_{fieldname}()")
 
+            if bool(random.getrandbits(1)):
+                # single range condition
+                query = f"{fieldname}:{self.get_random_value(operators)}{val}"
+                return query
+            else:
+                # compound range condition (e.g. +age:>=10 +age:<20)
+                high_val = val + random.randint(2, 10000)
+                lower = f"{fieldname}:{self.get_random_value(operators[:1])}{val}"
+                upper = f"+{fieldname}:{self.get_random_value(operators[2:])}{high_val}"
+                query = f"{lower} {upper}"
+                return query
+            
     def construct_query_string_query(self):
         """
         Returns an fts and es query string query
@@ -477,24 +518,24 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query = {'query': ""}
         es_query = {"query_string": {'query': ""}}
         connectors = [' ', ' +', ' -']
-        match_str = ""
 
         try:
             # search term
             term = self.construct_terms_query_string_query()
+
+            connector = self.get_random_value(connectors)
+            
+            match_str = connector + term
+
+            # another term
+            term = self.construct_terms_query_string_query()
             connector = self.get_random_value(connectors)
             match_str += connector + term
 
-            if bool(random.getrandbits(1)):
-                # another term
-                term = self.construct_terms_query_string_query()
-                connector = self.get_random_value(connectors)
-                match_str += connector + term
-
-                # another term
-                term = self.construct_terms_query_string_query()
-                connector = self.get_random_value(connectors)
-                match_str += connector + term
+            # another term
+            term = self.construct_terms_query_string_query()
+            connector = self.get_random_value(connectors)
+            match_str += connector + term
 
             fts_query['query'] = match_str.lstrip()
             es_query['query_string']['query'] = match_str.lstrip()
@@ -808,24 +849,26 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query =  {'field': 'location','geometry': {'shape': shape_dict,'relation': relation}}
 
         es_query = {
-                "from": 0,
-                "size": 10000, #default limit
-                "query": {
-                    "bool": {
-                        "must": {
-                            "match_all": {},
-                        },
-                        "filter": {
-                        "geo_shape": {
-                            "location": {
-                                "shape": shape_dict,
-                                "relation": relation 
+            "from": 0,
+            "size": 10000,
+            "query": {
+                "bool": {
+                    "must": [ 
+                        {"match_all": {}}
+                    ],
+                    "filter": [ 
+                        {
+                            "geo_shape": {
+                                "location": {
+                                    "shape": shape_dict,
+                                    "relation": relation
                                 }
                             }
                         }
-                    }
+                    ]
                 }
             }
+        }
 
         return fts_query,es_query
 
@@ -853,15 +896,17 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         }
 
         es_query = {
-            "query": {
-                "match_all": {}
-            },
-            "filter": {
-                "geo_distance": {
-                    "distance": str(distance) + dist_unit,
-                    "geo": {
-                        "lat": lat,
-                        "lon": lon
+            "query":{
+                "bool":{
+                    "filter":{
+                        "geo_distance":{
+                            "distance": str(distance) + dist_unit,
+                            "geo":{
+                                "lat": lat,
+                                "lon": lon
+                            },
+                            "distance_type": "arc"
+                        }
                     }
                 }
             }
@@ -872,18 +917,18 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         # Geo Location as array
         if case == 1:
             fts_query['location'] = [lon, lat]
-            es_query['filter']['geo_distance']['geo'] = [lon, lat]
+            es_query['query']['bool']['filter']['geo_distance']['geo'] = [lon, lat]
 
         # Geo Location as string
         if case == 2:
             fts_query['location'] = "{0},{1}".format(lat, lon)
-            es_query['filter']['geo_distance']['geo'] = "{0},{1}".format(lat, lon)
+            es_query['query']['bool']['filter']['geo_distance']['geo'] = "{0},{1}".format(lat, lon)
 
         # Geo Location as Geohash
         if case == 3:
             geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
             fts_query['location'] = geohash
-            es_query['filter']['geo_distance']['geo'] = geohash
+            es_query['query']['bool']['filter']['geo_distance']['geo'] = geohash
 
         # Geo Location as an object of lat and lon if case == 0
         return fts_query, es_query
@@ -1003,18 +1048,18 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         }
 
         es_query = {
-            "query": {
-                "match_all": {}
-            },
-            "filter": {
-                "geo_polygon": {
-                    "geo": {
-                        "points": []
+            "query":{
+                "bool":{
+                    "filter":{
+                        "geo_polygon":{
+                            "geo":{
+                                "points": []
+                            }
+                        }
                     }
                 }
             }
         }
-
         case = random.randint(0, 4)
         format = None
 
@@ -1027,7 +1072,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 verts_map_list.append(vert_map)
 
             fts_query['polygon_points'] = verts_map_list
-            es_query['filter']['geo_polygon']['geo']['points'] = verts_map_list
+            es_query['query']['bool']['filter']['geo_polygon']['geo']['points'] = verts_map_list
 
         # Geo Location as array
         if case == 1:
@@ -1036,7 +1081,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             for vert in verts:
                 verts_list.append([vert[1], vert[0]])
             fts_query['polygon_points'] = verts_list
-            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+            es_query['query']['bool']['filter']['geo_polygon']['geo']['points'] = verts_list
 
         # Geo Location as string
         if case == 2:
@@ -1046,7 +1091,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 verts_list.append(str(vert[0]) + "," + str(vert[1]))
 
             fts_query['polygon_points'] = verts_list
-            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+            es_query['query']['bool']['filter']['geo_polygon']['geo']['points'] = verts_list
+
 
         # Geo Location as Geohash
         if case == 3:
@@ -1057,7 +1103,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 verts_list.append(Geohash.encode(vert[0], vert[1], precision))
 
             fts_query['polygon_points'] = verts_list
-            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+            es_query['query']['bool']['filter']['geo_polygon']['geo']['points'] = verts_list
+
 
         # Geo Location as mixed
         if case == 4:
@@ -1082,7 +1129,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 verts_list.append(mixed_vert)
 
             fts_query['polygon_points'] = verts_list
-            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+            es_query['query']['bool']['filter']['geo_polygon']['geo']['points'] = verts_list
 
         # Geo Location as an object of lat and lon if case == 0
         return fts_query, es_query, ave_radius, num_vertices, format
@@ -1093,10 +1140,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         """
         Returns a geo bounding box query for Couchbase and Elastic search
         """
-        from lib.couchbase_helper.data import LON_LAT
+        from lib.couchbase_helper.data import LON_LAT,LON_LAT_MAP
         if not lon1:
-            lon_lat1 = random.choice(LON_LAT)
-            lon_lat2 = random.choice(LON_LAT)
+            lon_lat_ref = LON_LAT_MAP[random.randint(0, 7)]
+            lon_lat1 = lon_lat_ref[0]
+            lon_lat2  = lon_lat_ref[random.randint(1,len(lon_lat_ref)-1)]
             lon1 = lon_lat1[0]
             lat1 = lon_lat1[1]
             lon2 = lon_lat2[0]
@@ -1115,19 +1163,20 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         }
 
         es_query = {
-            "query": {
-                "match_all": {}
-            },
-            "filter": {
-                "geo_bounding_box": {
-                    "geo": {
-                        "top_left": {
-                            "lat": lat1,
-                            "lon": lon1
-                        },
-                        "bottom_right": {
-                            "lat": lat2,
-                            "lon": lon2
+            "query":{
+                "bool":{
+                    "filter":{
+                        "geo_bounding_box":{
+                            "geo":{
+                                "top_left": {
+                                "lat": lat1,
+                                "lon": lon1
+                                },
+                                "bottom_right": {
+                                    "lat": lat2,
+                                    "lon": lon2
+                                }
+                            }
                         }
                     }
                 }
@@ -1137,10 +1186,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         if bool(random.getrandbits(1)):
             fts_query['top_left'] = [lon1, lat1]
             fts_query['bottom_right'] = [lon2, lat2]
-            es_query['filter']['geo_bounding_box']['geo']['top_left'] = \
+            es_query['query']['bool']['filter']['geo_bounding_box']['geo']['top_left'] = \
                 [lon1, lat1]
-            es_query['filter']['geo_bounding_box']['geo']['bottom_right'] = \
+            es_query['query']['bool']['filter']['geo_bounding_box']['geo']['bottom_right'] = \
                 [lon2, lat2]
+
 
         return fts_query, es_query
 

@@ -1654,10 +1654,6 @@ class ESBulkLoadGeneratorTask(Task):
                     "_id": key,
                 }
             }
-            if self.dataset == "geojson":
-                es_doc[self.op_type]["_type"] = "_doc"
-            else:
-                es_doc[self.op_type]["_type"] = doc['type']
             
             es_bulk_docs.append(json.dumps(es_doc))
             if self.op_type == "create":
@@ -1685,7 +1681,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None):
+                 use_collections=False,dataset=None,ignore_wiki=False):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1701,6 +1697,7 @@ class ESRunQueryCompare(Task):
         self.score = TestInputSingleton.input.param("score",'')
         self.use_collections = use_collections
         self.dataset = dataset
+        self.ignore_wiki = ignore_wiki
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1779,7 +1776,7 @@ class ESRunQueryCompare(Task):
                 self.passed = False
             es_hits = 0
             if self.es and self.es_query:
-                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset)
+                es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset,ignore_wiki=self.ignore_wiki)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
                               (json.dumps(self.es_query, ensure_ascii=False),
                                self.es_index_name,
@@ -1901,8 +1898,8 @@ class ESRunQueryCompare(Task):
     def run_fts_query(self, query, score=''):
         return self.fts_index.execute_query(query, score=score)
 
-    def run_es_query(self, query,dataset=None):
-        return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset)
+    def run_es_query(self, query,dataset=None,ignore_wiki=False):
+        return self.es.search(index_name=self.es_index_name, query=query,dataset=dataset,ignore_wiki=ignore_wiki)
 
 
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
@@ -6517,9 +6514,7 @@ class SDKLoadDocumentsTask(Task):
                   f"-st {self.sdk_docloader.start+start_seq_num_shift} -en {self.sdk_docloader.end+start_seq_num_shift} -o {self.sdk_docloader.output} -sd {self.sdk_docloader.shuffle_docs} --secure {self.sdk_docloader.secure}"
         if self.sdk_docloader.es_compare:
             command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
-                self.sdk_docloader.es_port) + \
-                      " -es_login " + str(self.sdk_docloader.es_login) + " -es_password " + str(
-                self.sdk_docloader.es_password)
+                self.sdk_docloader.es_port)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = self.sdk_docloader.fields_to_update if self.sdk_docloader.fields_to_update else ""
             if len(arr_fields_to_update) > 0:

@@ -2036,6 +2036,7 @@ class CouchbaseCluster:
         self.__bypass_fts_nodes = []
         self.__bypass_n1ql_nodes = []
         self.__separate_nodes_on_services()
+        self.modify_memory_quotas = TestInputSingleton.input.param("modify_memory_quotas", False)
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
 
@@ -2045,8 +2046,15 @@ class CouchbaseCluster:
 
     def __set_fts_ram_quota(self):
         fts_quota = TestInputSingleton.input.param("fts_quota", None)
+        kv_quota = TestInputSingleton.input.param("kv_mem", None)
         if fts_quota:
-            RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
+            if self.modify_memory_quotas:
+                if kv_quota:
+                    RestConnection(self.__master_node).modify_memory_quota(kv_quota = int(kv_quota), fts_quota = fts_quota)
+                else:
+                    RestConnection(self.__master_node).modify_memory_quota(fts_quota = fts_quota)
+            else:
+                RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
 
     def get_node(self, ip, port):
         for node in self.__nodes:
@@ -3224,7 +3232,7 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False,dataset=None):
+                                    use_collections=False,dataset=None,ignore_wiki=False):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3235,7 +3243,8 @@ class CouchbaseCluster:
                                                             es_index_name=es_index_name,
                                                             n1ql_executor=n1ql_executor,
                                                             use_collections=use_collections,
-                                                            dataset=dataset)
+                                                            dataset=dataset,
+                                                            ignore_wiki=ignore_wiki)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4929,6 +4938,7 @@ class FTSBaseTest(unittest.TestCase):
                                         "conjunction", "disjunction"]
         """
         from .random_query_generator.rand_query_gen import FTSESQueryGenerator
+        self.doc_maps = int(TestInputSingleton.input.param("doc_maps", 1))
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
                                         seed=seed, dataset=self.dataset,
                                         fields=index.smart_query_fields)
@@ -5240,11 +5250,9 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("Creating a geo-index on Elasticsearch...")
             self.es.delete_indices()
             es_mapping = {
-                "earthquake": {
-                    "properties": {
-                        "geo": {
-                            "type": "geo_point"
-                        }
+                "properties": {
+                    "geo": {
+                        "type": "geo_point"
                     }
                 }
             }
@@ -5560,7 +5568,7 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
-    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,dataset=None):
+    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,dataset=None,ignore_wiki=False):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -5576,7 +5584,8 @@ class FTSBaseTest(unittest.TestCase):
                 query_index=count,
                 n1ql_executor=n1ql_executor,
                 use_collections=use_collections,
-                dataset=dataset))
+                dataset=dataset,
+                ignore_wiki=ignore_wiki))
 
         num_queries = len(tasks)
 

@@ -25,6 +25,7 @@ class StableTopFTS(FTSBaseTest):
 
     def setUp(self):
         super(StableTopFTS, self).setUp()
+        self.ignore_wiki = False
 
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
@@ -668,7 +669,12 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
-        self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index)
+            
+        if self.dataset == "all" and int(TestInputSingleton.input.param("doc_maps", 1)) == 1:
+            #ignoring wiki results from the elastic result to match couchbase behaviour
+            self.ignore_wiki = True
+        
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index,ignore_wiki=self.ignore_wiki)
 
     def test_collection_index_data_mutations(self):
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
@@ -2218,21 +2224,21 @@ class StableTopFTS(FTSBaseTest):
             ]
             es_query["sort"] = sort_fields_es
 
-            hits2, doc_ids2, _ = self.es.search(index_name="es_index",
-                           query=es_query)
+            if self.es:
+                hits2, doc_ids2, _ = self.es.search(index_name="es_index",
+                            query=es_query)
+                self.log.info("Hits from ES: {0}".format(hits2))
+                self.log.info("First 50 doc_ids: {0}".format(doc_ids2[:50]))
 
-            self.log.info("Hits from ES: {0}".format(hits2))
-            self.log.info("First 50 doc_ids: {0}".format(doc_ids2[:50]))
+                if doc_ids==doc_ids2:
+                    self.log.info("PASS: Sort order matches!")
+                else:
+                    msg = "FAIL: Sort order mismatch!"
+                    self.log.error(msg)
+                    testcase_failed = True
 
-            if doc_ids==doc_ids2:
-                self.log.info("PASS: Sort order matches!")
-            else:
-                msg = "FAIL: Sort order mismatch!"
-                self.log.error(msg)
-                testcase_failed = True
-
-            self.log.info("--------------------------------------------------"
-                          "--------------------------------------------------")
+                self.log.info("--------------------------------------------------"
+                            "--------------------------------------------------")
         if testcase_failed:
             self.fail(msg)
 
