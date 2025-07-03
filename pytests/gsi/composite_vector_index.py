@@ -764,7 +764,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     collection=collection, json_template="Cars", timeout=2000,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_update)
                     self.sleep(60)
                     _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
                     index_item_count_map = {}
