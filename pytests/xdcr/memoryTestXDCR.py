@@ -1,5 +1,6 @@
 import re
 from lib.couchbase_helper.documentgenerator import BlobGenerator
+from lib.membase.api.rest_client import RestConnection
 from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
 from lib.remote.remote_util import RemoteMachineShellConnection
 
@@ -13,6 +14,8 @@ class MemoryTestXDCR(XDCRNewBaseTest):
         self.iteration_count = self._input.param("iteration_count", 100)
         self.leak_threshold = self._input.param("leak_threshold", 15)
         self.pause_resume_interval = self._input.param("pause_resume_interval", 10)
+        self.src_rest = RestConnection(self.src_master)
+        self.dest_rest = RestConnection(self.dest_master)
     def get_goroutines(self, node):
         shell = RemoteMachineShellConnection(node)
         output, err, status_code = shell.execute_command(f"curl -s http://localhost:9998/debug/pprof/goroutine?debug=1",
@@ -68,3 +71,25 @@ class MemoryTestXDCR(XDCRNewBaseTest):
                 self.fail(f"Goroutine count increased {increase_count} times — leak detected")
             self.sleep(1, "Waiting after goroutine check")
         self.log.info("No goroutine leak detected")
+
+    def test_backfill_manager_manifest_restoration_after_restart(self):
+        "MB-65354: To ensure backfill manager's manifest cache is populated properly post restart"
+        bucket_name = "travel-sample"
+        self.src_rest.load_sample(bucket_name)
+        self.dest_rest.load_sample(bucket_name)
+        self.sleep(10, "Sleeping after loading sample bucket")
+        self.dest_rest.delete_collection(bucket_name, "inventory", "airport")
+        self.dest_rest.delete_collection(bucket_name, "inventory", "route")
+        self.src_rest.add_remote_cluster(self.dest_master.ip, 8091, self.dest_master.rest_username, self.dest_master.rest_password,"C2")
+        self.src_rest.start_replication("continuous", bucket_name,"C2", rep_type='xmem', toBucket=bucket_name)
+        self.sleep(30+self._checkpoint_interval, f"Waiting for checkpoint to be saved, checkpoint interval: {self._checkpoint_interval}")
+        self.src_cluster.pause_all_replications()
+        self.src_rest.delete_collection(bucket_name, "inventory", "airport")
+        self.src_rest.delete_collection(bucket_name, "inventory", "route")
+        shell_conn = RemoteMachineShellConnection(self.src_master)
+        shell_conn.kill_goxdcr()
+        self.sleep(30, "waiting for goxdcr process to restart")
+        errors = self.check_errors_in_goxdcr_logs()
+        self.log.info(f"errors in logs: {errors}")
+        if len(errors)>=1:
+            self.fail("Error in goxdcr")
