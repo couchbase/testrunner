@@ -2385,6 +2385,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.backstore_mainstore_check()
         self.validate_replica_indexes_item_counts()
 
+
     def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
         self.drop_all_indexes()
         if not skip_disk_cleared_check:
@@ -2394,6 +2395,24 @@ class BaseSecondaryIndexingTests(QueryTests):
             raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
             raise AssertionError("CPU not normalized despite dropping all the indexes")
+    
+    def validate_num_centroids_from_metadata(self):
+        self.log.info("Validating num centroids from metadata for vector indexes")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        composite_indexes_list = self.get_all_composite_index_names()
+        bhive_indexes_list = self.get_all_bhive_index_names()
+        self.log.info(f"composite_indexes_list: {composite_indexes_list}")
+        self.log.info(f"bhive_indexes_list: {bhive_indexes_list}")
+        vector_indexes_list = composite_indexes_list + bhive_indexes_list
+        rest = RestConnection(indexer_nodes[0])
+        indexer_metadata = rest.get_indexer_metadata()
+        for index in indexer_metadata['status']:
+            if index['name'] in vector_indexes_list and index['status'] in ['Ready', 'Training']:
+                if "numCentroids" not in index:
+                    self.log.info(f"Index {index['name']} does not have numCentroids in metadata")
+                    raise AssertionError(f"Index {index['name']} does not have numCentroids in metadata")
+                else:
+                    self.assertTrue(index['numCentroids'] > 0, f"Num centroids not greater than 0 for index {index['name']}")
 
     def set_empty_shard_destroy_interval(self, interval_min=5):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -2813,6 +2832,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
+
     def check_gsi_logs_for_shard_transfer(self, log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer", msg="File transfer based rebalance "):
         """ Checks if file transfer based rebalance is triggered.
         """
@@ -2834,7 +2854,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 count = int(count)
             shell.disconnect()
             if count > 0:
-                self.log.info(f"=====  {msg} triggered"
+                self.log.info(f"=====  {msg} triggered "
                               f"as validated from the log on {server.ip}=====. The no. of occurrences - {count}")
                 log_validated = True
                 break
@@ -3417,10 +3437,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(index_node)
         index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            # Check if index definition contains composite indexing syntax like dimension
-            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed(done)
             if 'definition' in index and index['indexType'] == "plasma" and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'similarity' in index['definition']) :
-                composite_index.append(index['indexName'])
+                composite_index.append(index['name'])
         return composite_index
 
     def get_storage_stats_map(self, node):
@@ -3531,6 +3549,30 @@ class BaseSecondaryIndexingTests(QueryTests):
         finally:
             shell.disconnect()
         return used_space
+
+    def get_staging_directory_contents(self, node, storage_dir):
+        """
+        Lists all files recursively in the storage directory
+        Returns:
+            List of file paths
+        """
+        shell = RemoteMachineShellConnection(node)
+        try:
+            # List all files recursively in the storage directory
+            storage_dir = f"{storage_dir}/staging2"
+            if not os.path.exists(storage_dir):
+                self.log.info(f"Storage directory {storage_dir} does not exist")
+                return []
+            output, error = shell.execute_command(f"find {storage_dir} -type f 2>/dev/null")
+            if error or not output:
+                self.log.error(f"Error listing files in {storage_dir}: {error}")
+            # Return the list of files
+            return output
+        except Exception as e:
+            self.log.error(f"Error listing files in storage directory: {str(e)}")
+            return None
+        finally:
+            shell.disconnect()
 
     def drop_all_indexes(self):
         """

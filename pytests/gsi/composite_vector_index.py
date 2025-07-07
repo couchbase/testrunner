@@ -218,7 +218,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.wait_until_indexes_online(timeout=3600)
                 self.sleep(60)
                 self.item_count_related_validations()
-
+                self.validate_num_centroids_from_metadata()
                 for query in select_queries:
                     # self.run_cbq_query(query=create)
                     if "DISTINCT" in query or "ANN_DISTANCE" not in query:
