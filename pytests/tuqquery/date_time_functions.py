@@ -436,3 +436,34 @@ class DateTimeFunctionClass(QueryTests):
         self.assertEqual(result['results'][0]['$1'], "Tue 28 January 14:37 PM 23", f"Failed to format date. We got {result['results'][0]['$1']} instead of Tue 28 January 14:37 PM 23")
         result = self.run_cbq_query(f"SELECT DATE_FORMAT_STR('{date}', 'Day DD Mon HH:mm:SS PP')")
         self.assertEqual(result['results'][0]['$1'], "Tuesday 28 Jan 02:37:23 PM", f"Failed to format date. We got {result['results'][0]['$1']} instead of Tuesday 28 Jan 02:37:23 PM")
+
+    def test_date_str_to_tz_format(self):
+        # Test STR_TO_UTC with custom input and output formats
+        date_custom = "10:10:10.0 2021-01-01 Asia/Tokyo"
+        result = self.run_cbq_query(f'SELECT STR_TO_TZ("{date_custom}", "Pacific/Samoa", "%T.%n %D %-Z", "YYYY-MM-DDTHH:mm:ss.sTZD")')
+        self.assertEqual(result['results'][0]['$1'], "2020-12-31T02:10:10.000-11:00", f"Failed to convert date to UTC with custom formats. We got {result['results'][0]['$1']} instead of 2020-12-31T02:10:10.000-11:00")
+        
+        # Test STR_TO_TZ with custom input and output formats
+        result = self.run_cbq_query(f'SELECT STR_TO_TZ("{date_custom}", "Pacific/Samoa", "%T.%n %D %-Z", "YYYY-MM-DDTHH:mm:ss.sTZN")')
+        self.assertEqual(result['results'][0]['$1'], "2020-12-31T02:10:10.000SST", f"Failed to convert date to timezone with custom formats. We got {result['results'][0]['$1']} instead of 2020-12-31T02:10:10.000-11:00")
+
+    def test_date_str_to_utc_format(self):
+        date_custom = "10:10:10.0 2021-01-01 Europe/Paris"
+        result = self.run_cbq_query(f'SELECT STR_TO_UTC("{date_custom}", "%T.%n %D %-Z", "YYYY-MM-DDTHH:mm:ss.sTZD")')
+        self.assertEqual(result['results'][0]['$1'], "2021-01-01T09:10:10.000Z", f"Failed to convert date to UTC with custom formats. We got {result['results'][0]['$1']} instead of 2020-12-31T02:10:10.000-11:00")
+        
+        # Test STR_TO_TZ with custom input and output formats
+        result = self.run_cbq_query(f'SELECT STR_TO_UTC("{date_custom}", "%T.%n %D %-Z", "YYYY-MM-DDTHH:mm:ss.sTZN")')
+        self.assertEqual(result['results'][0]['$1'], "2021-01-01T09:10:10.000UTC", f"Failed to convert date to timezone with custom formats. We got {result['results'][0]['$1']} instead of 2020-12-31T02:10:10.000-11:00")
+
+    def test_date_trunc_str_format(self):
+        # Test DATE_TRUNC_STR with custom input format and month truncation
+        date_custom = "03:59:10.0 2016-05-18 Asia/Tokyo"
+        result = self.run_cbq_query(f'SELECT DATE_TRUNC_STR("{date_custom}", "month", "%T.%n %D %-Z")')
+        self.assertEqual(result['results'][0]['$1'], "00:00:00.000 2016-05-01 JST", 
+                        f"Failed to truncate date to month with custom format. We got {result['results'][0]['$1']} instead of 00:00:00.000 2016-05-01 JST")
+        
+        # Test DATE_TRUNC_STR with custom input format and hour truncation
+        result = self.run_cbq_query(f'SELECT DATE_TRUNC_STR("{date_custom}", "hour", "%T.%n %D %-Z")')
+        self.assertEqual(result['results'][0]['$1'], "03:00:00.000 2016-05-18 JST", 
+                        f"Failed to truncate date to hour with custom format. We got {result['results'][0]['$1']} instead of 03:00:00.000 2016-05-18 JST")
