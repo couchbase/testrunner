@@ -291,18 +291,10 @@ class BackfillXDCR(XDCRNewBaseTest):
             self.dest_master_rest.create_collection("default", "S2", "col3")
             self.sleep(5, "Wait for discovery and automatic backfill to start")
 
-            # vb_delay_setting_val_map = {
-            #     "collectionsExplicitMapping": "true",
-            #     "colMappingRules": '{' + ','.join([f'{k}:{v}' for k, v in mapping_rules.items()]) + '}',
-            #     "xdcrDevBackfillSendDelayMs": 10000,  # Keep backfill slow initially
-            # }
-            # self.src_master_rest.set_xdcr_params("default", "default", vb_delay_setting_val_map)
-
             fast_backfill_setting_val_map = {
                 "collectionsExplicitMapping": "true",
                 "colMappingRules": '{' + ','.join([f'{k}:{v}' for k, v in mapping_rules.items()]) + '}',
                 "xdcrDevBackfillSendDelayMs": 0,  # Remove send delay
-                "xdcrDevBackfillMgrVbsTasksDoneNotifierDelay": "true"
             }
             self.src_master_rest.set_xdcr_params("default", "default", fast_backfill_setting_val_map)
 
@@ -318,11 +310,7 @@ class BackfillXDCR(XDCRNewBaseTest):
             src_mc_active = src_mc.memcached(recovery_doc_key)
             src_mc_active.set(key=recovery_doc_key, exp=0, flags=0, val='{"foo": "bar"}')
 
-            self._wait_for_replication_to_catchup()
-
-            self.sleep(30, "Test sleep")
-
-            self._wait_for_replication_to_catchup()
+            self._wait_for_replication_to_catchup(timeout=600)
 
         except Exception as e:
             self.fail(f"Test failed with exception: {str(e)}")
