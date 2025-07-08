@@ -687,7 +687,7 @@ def _parse_user_input():
             if len(tasks) > 0:
                 params["install_tasks"] = tasks
             log.info("INSTALL TASKS: {0}".format(params["install_tasks"]))
-            if "install" not in params["install_tasks"] and "init" not in params["install_tasks"]:
+            if "install" not in params["install_tasks"] and "init" not in params["install_tasks"] and "download_build" not in params["install_tasks"]:
                 return params  # No other parameters needed
         if key == 'v' or key == "version":
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
@@ -867,7 +867,7 @@ def pre_install_steps(node_helpers):
             admin_tools_name_url = __get_tools_url(node, admin_tools_name)
             node.admin_tools_name_url = admin_tools_name_url
 
-    if "install" in params["install_tasks"]:
+    if "download_build" in params["install_tasks"] or "install" in params["install_tasks"]:
         if params["url"] is not None:
             if node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True

@@ -201,8 +201,9 @@ def do_install(params, install_tasks):
 
     # Common validate for both regular and columnar install (useful in mixed profiles)
     log.info("-" * 100)
-    validate_install(params)
-    validate_columnar_install(params)
+    if "install" in params["install_tasks"] or "init" in params["install_tasks"]:
+        validate_install(params)
+        validate_columnar_install(params)
     install_utils.print_result_and_exit()
 
 
@@ -253,7 +254,7 @@ def main():
         if 'uninstall' in install_task:
             install_task.remove('uninstall')
 
-    if 'install' in params['install_tasks']:
+    if 'install' in params['install_tasks'] or "download_build" in params['install_tasks']:
         install_utils.download_build(node_helpers_to_install)
     if 'tools' in params['install_tasks']:
         install_utils.install_tools(node_helpers_to_install)
