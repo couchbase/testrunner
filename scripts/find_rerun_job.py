@@ -184,7 +184,8 @@ def find_rerun_job(args):
 def should_dispatch_job(os, component, sub_component, version,
                         parameters, only_pending_jobs=False,
                         only_failed_jobs=False,
-                        only_unstable_jobs=False):
+                        only_unstable_jobs=False,
+                        only_install_failed=False):
     """
     Finds if a job has to be dispatched for a particular os, component,
     subcomponent and version. The method finds if the job had run
@@ -199,6 +200,14 @@ def should_dispatch_job(os, component, sub_component, version,
     :type version: str
     :param parameters: Get the test parameters
     :type parameters: str
+    :param only_pending_jobs: Run only pending jobs
+    :type only_pending_jobs: bool
+    :param only_failed_jobs: Run only failed jobs
+    :type only_failed_jobs: bool
+    :param only_unstable_jobs: Run only unstable jobs
+    :type only_unstable_jobs: bool
+    :param only_install_failed: Run only install failed jobs
+    :type only_install_failed: bool
     :return: Boolean on whether to dispatch the job or not
     :rtype: bool
     """
@@ -226,10 +235,11 @@ def should_dispatch_job(os, component, sub_component, version,
         failed = False
         unstable = False
         successful = False
+        install_failed = False
         run_document = rerun_jobs.get(doc_id, quiet=True)
         if not run_document.success:
             # No run for this job has occured yet.
-            if only_failed_jobs or only_unstable_jobs:
+            if only_failed_jobs or only_unstable_jobs or only_install_failed:
                 pending = True
             else:
                 # Run job since it's not been run yet
@@ -280,6 +290,8 @@ def should_dispatch_job(os, component, sub_component, version,
                                 unstable = True
                             elif job_result == "SUCCESS":
                                 successful = True
+                            elif job_result == "INST_FAIL":
+                                install_failed = True
                         break
                 if not job_found:
                     pending = True
@@ -307,12 +319,22 @@ def should_dispatch_job(os, component, sub_component, version,
                     unstable = True
                 if job_result == "SUCCESS":
                     successful = True
+                if job_result == "INST_FAIL":
+                    install_failed = True
         if successful:
             # there was a successful run for this job. Don't dispatch
             # further jobs
             print("Job had run successfully previously.")
             print("{} is the successful job.".format(last_job_url))
             return False
+        if only_install_failed:
+            if (not successful and not unstable) and install_failed and not pending:
+                # Run only if the job had install failure
+                print("Job had install failure previously. Running only install failed jobs")
+                return True
+            else:
+                print("Job has run previously without install failure. Or is still pending")
+                return False
         if only_failed_jobs:
             if (not successful and not unstable) and failed and not pending:
                 # Run only if the job had failed
@@ -377,10 +399,12 @@ if __name__ == "__main__":
     failed = sys.argv[6] == "true"
     unstable = sys.argv[7] == "true"
     pending = sys.argv[8] == "true"
+    install_failed = sys.argv[9] == "true"
     #print(rerun.__str__())
     output = should_dispatch_job(os, component, subcomponent,
                                  version, parameters,
                                  only_pending_jobs=pending,
                                  only_failed_jobs=failed,
-                                 only_unstable_jobs=unstable)
+                                 only_unstable_jobs=unstable,
+                                 only_install_failed=install_failed)
     print(output)

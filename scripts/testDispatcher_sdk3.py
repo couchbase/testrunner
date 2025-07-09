@@ -835,11 +835,25 @@ def main():
                         else:
                             parameters = testsToLaunch[i][
                                              'parameters'] + ',' + runTimeTestRunnerParameters
+                    rerun_condition = options.rerun_condition
+                    only_failed = False
+                    only_pending = False
+                    only_unstable = False
+                    only_install_failed = False
+                    if rerun_condition == "FAILED":
+                        only_failed = True
+                    elif rerun_condition == "UNSTABLE":
+                        only_unstable = True
+                    elif rerun_condition == "PENDING":
+                        only_pending = True
+                    elif rerun_condition == "INST_FAIL":
+                        only_install_failed = True
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
                             options.os, testsToLaunch[i][
                                 'component'], dashboardDescriptor
-                            , options.version, parameters)
+                            , options.version, parameters,
+                            only_pending, only_failed, only_unstable, only_install_failed)
 
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
