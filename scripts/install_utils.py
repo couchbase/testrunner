@@ -42,7 +42,6 @@ params = {
     "fts_query_limit": 0,
     "cluster_version": None,
     "bkrs_client": None,
-    "ntp": False,
     "install_debug_info": False,
     "use_hostnames": False,
     "force_reinstall": True,
@@ -737,8 +736,6 @@ def _parse_user_input():
             params["variant"] = value
         if key == "cluster_version":
             params["cluster_version"] = value
-        if key == "ntp":
-            params["ntp"] = value
         if key == "init_clusters":
             params["init_clusters"] = True if value.lower() == "true" else False
         if key == "install_debug_info":
@@ -845,16 +842,6 @@ def pre_install_steps_columnar(node_helpers):
 def pre_install_steps(node_helpers):
     if not node_helpers:
         return
-
-    # CBQE-6402
-    if "ntp" in params and params["ntp"]:
-        ntp_threads = []
-        for node in node_helpers:
-            ntp_thread = threading.Thread(target=node.shell.is_ntp_installed)
-            ntp_threads.append(ntp_thread)
-            ntp_thread.start()
-        for ntpt in ntp_threads:
-            ntpt.join()
 
     if "tools" in params["install_tasks"]:
         for node in node_helpers:
