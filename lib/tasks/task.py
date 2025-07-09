@@ -1704,7 +1704,12 @@ class ESRunQueryCompare(Task):
         self.set_result(self.result)
     
     def is_geoshape_query(self):
-       return 'geo_shape' in self.es_query['query']['bool']['filter'].keys()  
+        res = False
+        try:
+            res = 'geo_shape' in self.es_query['query']['bool']['filter'].keys()
+        except Exception as e:
+            self.log.info(str(e))
+        return res
 
     def log_query_to_file(self,differing_hits):
         query_index = str(self.query_index)
