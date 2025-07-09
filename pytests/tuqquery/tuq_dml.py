@@ -1530,3 +1530,251 @@ class DMLQueryTests(QueryTests):
             error = self.process_CBQE(ex)
             self.assertEqual(error['code'], error_code)
             self.assertEqual(error['msg'], error_message)
+
+    ###################################################################################################################
+    # LET clauses in DML statements
+    ###################################################################################################################
+
+    def test_update_with_let(self):
+        """Test UPDATE statement with LET clause"""
+        # Create a collection in default._default
+        collection_name = "test_collection_let"
+        self.run_cbq_query(f'CREATE COLLECTION `{collection_name}` IF NOT EXISTS', query_context='default._default')
+        self.sleep(3)
+
+        # Insert test data
+        test_data = [
+            {"id": "doc1", "name": "John", "age": 30, "salary": 50000},
+            {"id": "doc2", "name": "Jane", "age": 25, "salary": 45000},
+            {"id": "doc3", "name": "Bob", "age": 35, "salary": 60000}
+        ]
+
+        for doc in test_data:
+            self.run_cbq_query(f'INSERT INTO default._default.{collection_name} (KEY, VALUE) VALUES ("{doc["id"]}", {json.dumps(doc)})')
+
+        # Test UPDATE with LET clause
+        self.query = f'''
+        UPDATE default._default.{collection_name} d
+        LET bonus = CASE
+                WHEN d.age > 30 THEN 5000
+                ELSE 2000
+            END,
+            old_salary = d.salary,
+            new_salary = d.salary + bonus
+        SET d.salary = new_salary,
+            d.bonus = bonus
+        WHERE d.age > 25
+        RETURNING d.id, d.name, d.salary, d.bonus, old_salary
+        '''
+
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'UPDATE with LET query was not run successfully')
+
+        # Verify results
+        expected_results = [
+            {"id": "doc1", "name": "John", "salary": 52000, "bonus": 2000, "old_salary": 50000},
+            {"id": "doc3", "name": "Bob", "salary": 65000, "bonus": 5000, "old_salary": 60000}
+        ]
+
+        actual_results = sorted(actual_result['results'], key=lambda x: x['id'])
+        expected_results = sorted(expected_results, key=lambda x: x['id'])
+
+        self.assertEqual(actual_results, expected_results, 'UPDATE with LET results do not match expected')
+
+        # Clean up
+        self.run_cbq_query(f'DROP COLLECTION `{collection_name}` IF EXISTS', query_context='default._default')
+
+    def test_delete_with_let(self):
+        """Test DELETE statement with LET clause"""
+        # Create a collection in default._default
+        collection_name = "test_collection_let_delete"
+        self.run_cbq_query(f'CREATE COLLECTION `{collection_name}` IF NOT EXISTS', query_context='default._default')
+        self.sleep(3)
+
+        # Insert test data
+        test_data = [
+            {"id": "doc1", "name": "John", "age": 30, "department": "Engineering"},
+            {"id": "doc2", "name": "Jane", "age": 25, "department": "Marketing"},
+            {"id": "doc3", "name": "Bob", "age": 35, "department": "Engineering"},
+            {"id": "doc4", "name": "Alice", "age": 28, "department": "Sales"}
+        ]
+
+        for doc in test_data:
+            self.run_cbq_query(f'INSERT INTO default._default.{collection_name} (KEY, VALUE) VALUES ("{doc["id"]}", {json.dumps(doc)})')
+
+        # Test DELETE with LET clause
+        self.query = f'''
+        DELETE FROM default._default.{collection_name} d
+        LET engineering_department = "Engineering",
+            senior_age = 30
+        WHERE d.department = engineering_department AND d.age > senior_age
+        RETURNING d.id, d.name, d.department, d.age
+        '''
+
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'DELETE with LET query was not run successfully')
+
+        # Verify deleted documents
+        expected_deleted = [
+            {"id": "doc3", "name": "Bob", "department": "Engineering", "age": 35}
+        ]
+
+        self.assertEqual(actual_result['results'], expected_deleted, 'DELETE with LET results do not match expected')
+
+        # Verify remaining documents
+        remaining_query = f'SELECT d.id, d.name, d.department, d.age FROM default._default.{collection_name} d ORDER BY d.id'
+        remaining_result = self.run_cbq_query(remaining_query)
+
+        expected_remaining = [
+            {"id": "doc1", "name": "John", "department": "Engineering", "age": 30},
+            {"id": "doc2", "name": "Jane", "department": "Marketing", "age": 25},
+            {"id": "doc4", "name": "Alice", "department": "Sales", "age": 28}
+        ]
+
+        self.assertEqual(remaining_result['results'], expected_remaining, 'Remaining documents do not match expected')
+
+        # Clean up
+        self.run_cbq_query(f'DROP COLLECTION `{collection_name}` IF EXISTS', query_context='default._default')
+
+    def test_merge_with_let(self):
+        """Test MERGE statement with LET clause"""
+        # Create collections in default._default
+        source_collection = "test_collection_let_merge_source"
+        target_collection = "test_collection_let_merge_target"
+
+        self.run_cbq_query(f'CREATE COLLECTION `{source_collection}` IF NOT EXISTS', query_context='default._default')
+        self.run_cbq_query(f'CREATE COLLECTION `{target_collection}` IF NOT EXISTS', query_context='default._default')
+        self.sleep(3)
+
+        # Insert source data
+        source_data = [
+            {"id": "emp1", "name": "John", "salary": 50000, "bonus_rate": 0.1},
+            {"id": "emp2", "name": "Jane", "salary": 45000, "bonus_rate": 0.15},
+            {"id": "emp3", "name": "Bob", "salary": 60000, "bonus_rate": 0.12}
+        ]
+
+        for doc in source_data:
+            self.run_cbq_query(f'INSERT INTO default._default.{source_collection} (KEY, VALUE) VALUES ("{doc["id"]}", {json.dumps(doc)})')
+
+        # Insert target data (some existing, some new)
+        target_data = [
+            {"id": "emp1", "name": "John", "salary": 48000, "total_comp": 52800},
+            {"id": "emp4", "name": "Alice", "salary": 55000, "total_comp": 60500}
+        ]
+
+        for doc in target_data:
+            self.run_cbq_query(f'INSERT INTO default._default.{target_collection} (KEY, VALUE) VALUES ("{doc["id"]}", {json.dumps(doc)})')
+
+        # Test MERGE with LET clause
+        self.query = f'''
+        MERGE INTO default._default.{target_collection} t
+        USING default._default.{source_collection} s
+        ON t.id = s.id
+        LET new_salary = s.salary,
+            bonus_amount = s.salary * s.bonus_rate,
+            total_compensation = new_salary + bonus_amount
+        WHEN MATCHED THEN
+            UPDATE SET t.salary = new_salary,
+                       t.bonus = bonus_amount,
+                       t.total_comp = total_compensation
+        WHEN NOT MATCHED THEN
+            INSERT (KEY s.id, VALUE {{
+                "id": s.id,
+                "name": s.name,
+                "salary": new_salary,
+                "bonus": bonus_amount,
+                "total_comp": total_compensation
+            }})
+        RETURNING t.id, t.name, t.salary, t.bonus, t.total_comp
+        '''
+
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'MERGE with LET query was not run successfully')
+
+        # Verify results
+        expected_results = [
+            {'id': 'emp1', 'name': 'John', 'salary': 50000, 'bonus': 5000, 'total_comp': 55000},
+            {'id': 'emp2', 'name': 'Jane'},
+            {'id': 'emp3', 'name': 'Bob'}
+        ]
+
+        actual_results = sorted(actual_result['results'], key=lambda x: x['id'])
+        expected_results = sorted(expected_results, key=lambda x: x['id'])
+
+        self.assertEqual(actual_results, expected_results, 'MERGE with LET results do not match expected')
+
+        # Verify final state of target collection
+        final_query = f'SELECT t.id, t.name, t.salary, t.bonus, t.total_comp FROM default._default.{target_collection} t ORDER BY t.id'
+        final_result = self.run_cbq_query(final_query)
+
+        expected_final = [
+            {"id": "emp1", "name": "John", "salary": 50000, "bonus": 5000, "total_comp": 55000},
+            {"id": "emp2", "name": "Jane"},
+            {"id": "emp3", "name": "Bob"},
+            {"id": "emp4", "name": "Alice", "salary": 55000, "total_comp": 60500}
+        ]
+
+        self.assertEqual(final_result['results'], expected_final, 'Final state of target collection does not match expected')
+
+        # Clean up
+        self.run_cbq_query(f'DROP COLLECTION `{source_collection}` IF EXISTS', query_context='default._default')
+        self.run_cbq_query(f'DROP COLLECTION `{target_collection}` IF EXISTS', query_context='default._default')
+
+    def test_update_with_let_complex(self):
+        """Test UPDATE statement with complex LET clause including array operations"""
+        # Create a collection in default._default
+        collection_name = "test_collection_let_complex"
+        self.run_cbq_query(f'CREATE COLLECTION `{collection_name}` IF NOT EXISTS', query_context='default._default')
+        self.sleep(3)
+
+        # Insert test data with arrays
+        test_data = [
+            {"id": "doc1", "name": "John", "scores": [85, 90, 78], "grades": ["B", "A", "C"]},
+            {"id": "doc2", "name": "Jane", "scores": [92, 88, 95], "grades": ["A", "B", "A"]},
+            {"id": "doc3", "name": "Bob", "scores": [75, 82, 79], "grades": ["C", "B", "C"]}
+        ]
+
+        for doc in test_data:
+            self.run_cbq_query(f'INSERT INTO default._default.{collection_name} (KEY, VALUE) VALUES ("{doc["id"]}", {json.dumps(doc)})')
+
+        # Test UPDATE with complex LET clause
+        self.query = f'''
+        UPDATE default._default.{collection_name} d
+        LET avg_score = ARRAY_AVG(d.scores),
+            max_score = ARRAY_MAX(d.scores),
+            min_score = ARRAY_MIN(d.scores),
+            score_range = max_score - min_score,
+            performance_level = CASE
+                WHEN avg_score >= 90 THEN "Excellent"
+                WHEN avg_score >= 80 THEN "Good"
+                WHEN avg_score >= 70 THEN "Average"
+                ELSE "Needs Improvement"
+            END,
+            grade_counts = ARRAY_LENGTH(ARRAY_REMOVE(d.grades, 'B', 'C'))
+        SET d.average_score = avg_score,
+            d.highest_score = max_score,
+            d.lowest_score = min_score,
+            d.score_range = score_range,
+            d.performance = performance_level,
+            d.a_grades_count = grade_counts
+        WHERE d.name IS NOT MISSING
+        RETURNING d.id, d.name, d.average_score, d.performance, d.a_grades_count
+        '''
+
+        actual_result = self.run_cbq_query()
+        self.assertEqual(actual_result['status'], 'success', 'UPDATE with complex LET query was not run successfully')
+
+        # Verify results
+        expected_results = [
+            {"id": "doc1", "name": "John", "average_score": 84.33333333333333, "performance": "Good", "a_grades_count": 1},
+            {"id": "doc2", "name": "Jane", "average_score": 91.66666666666667, "performance": "Excellent", "a_grades_count": 2},
+            {"id": "doc3", "name": "Bob", "average_score": 78.66666666666667, "performance": "Average", "a_grades_count": 0}
+        ]
+
+        actual_results = sorted(actual_result['results'], key=lambda x: x['id'])
+        expected_results = sorted(expected_results, key=lambda x: x['id'])
+
+        self.assertEqual(actual_results, expected_results, 'UPDATE with complex LET results do not match expected')
+
+        # Clean up
+        self.run_cbq_query(f'DROP COLLECTION `{collection_name}` IF EXISTS', query_context='default._default')
