@@ -3385,7 +3385,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for index in index_metadata:
             # Check if index definition contains bhive indexing syntax like VECTOR
             # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed(done)
-            if 'definition' in index and index['indexType'] == "bhive":
+            if 'definition' in index and index['indexType'] in ["bhive", "Hyperscale Vector Index"]:
                 bhive_index.append(index['name'])
         return bhive_index
 
