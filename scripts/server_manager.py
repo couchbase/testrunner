@@ -9,27 +9,17 @@ server_manager.js.
 import json
 import logging
 
-from couchbase.exceptions import KeyAlreadyExistsError
-
-# Configuration constants
-COUCHBASE_HOST = '172.23.98.136'
-COUCHBASE_USER = 'Administrator'
-COUCHBASE_PASSWORD = 'esabhcuoc'
-BUCKET_NAME = 'QE-server-pool'
-OPERATION_TIMEOUT = 120 * 1000  # 120 seconds
-
 
 class ServerManager:
     """Server Manager class for managing server allocation and deallocation."""
 
-    def __init__(self, sdk_cluster_obj, bucket_name=BUCKET_NAME, logger=None):
+    def __init__(self, sdk_cluster_obj, bucket_name, logger=None):
         """Initialize the server manager with Couchbase connection."""
         self.bucket_name = bucket_name
         self.cluster = sdk_cluster_obj
         self.bucket = self.cluster.bucket(bucket_name)
-        self.logger = logger
-        if self.logger is None:
-            self.logger = logging.getLogger(__name__)
+        self.default_collection = self.bucket.default_collection()
+        self.logger = logger or logging.getLogger(__name__)
 
     def get_dockers(self, username, count, pool_id='12hour'):
         """
@@ -162,37 +152,34 @@ class ServerManager:
         Returns:
             int: Available server count
         """
-        self.logger.info(f"get_available_count: os_type={os_type}, "
-                         f"pool_id={pool_id}")
+        self.logger.info(f"os_type={os_type}, pool_id={pool_id}, "
+                         f"docker={docker}")
 
         if not docker:
             # Regular server count
-            query_string =  \
-                f"SELECT count(*) FROM `QE-server-pool`" \
-                f" WHERE state='available'" \
-                f" AND os ='{os_type}' " \
-                f" AND (poolId='{pool_id}' OR '{pool_id}' IN poolId)"
-
-            self.logger.debug(f"get_available_count query: {query_string}")
+            query_string = (
+                f"SELECT count(*) FROM `QE-server-pool` "
+                f"WHERE state='available' AND os='{os_type}' "
+                f"AND (poolId='{pool_id}' OR '{pool_id}' IN poolId)")
+            self.logger.debug(f"Query: {query_string}")
 
             try:
                 results = self.cluster.query(query_string)
-                count = results.rows()[0]['$1']
-                self.logger.info(f"get_available_count result: {count}")
-                return count
+                # Access the first row and get the count value
+                for row in results.rows():
+                    count = row['$1']
+                    self.logger.info(f"Count: {count}")
+                    return count
             except Exception as e:
                 self.logger.error(f"Error in get_available_count: {str(e)}")
-                return 0
+            return 0
         else:
             # Docker server count
-            self.logger.info("have a docker request")
             query_string = (
                 f"SELECT ipaddr,availableServers,users FROM `QE-server-pool` "
                 f"WHERE serverType='docker' AND os='{os_type}' AND "
                 f"(poolId='{pool_id}' OR '{pool_id}' IN poolId)")
-
-            self.logger.debug(f"get_available_docker_count query: "
-                              f"{query_string}")
+            self.logger.debug(f"Query: {query_string}")
 
             try:
                 results = self.cluster.query(query_string)
@@ -256,7 +243,7 @@ class ServerManager:
     def get_servers(self, username, count=1, os_type='centos', expires_in=1,
                     pool_id='12hour', dont_reserve=False):
         """
-        Get servers from the pool.
+        Get servers from the pool using Couchbase transactions.
 
         Args:
             username: Username requesting servers
@@ -271,88 +258,63 @@ class ServerManager:
         """
         self.logger.info(f"get_servers: username={username}, count={count}, "
                          f"os={os_type}")
-
-        # Count available servers
-        count_query_string = (
-            f"SELECT count(*) FROM `QE-server-pool` WHERE state ='available' "
-            f"AND os = '{os_type}' AND (poolId = '{pool_id}' OR '{pool_id}' "
-            f"IN poolId)")
-
-        self.logger.debug(f"count query: {count_query_string}")
+        server_list = list()
 
         try:
-            count_results = self.cluster.query(count_query_string)
-            available_count = int(count_results.rows()[0]['$1'])
+            # Use Couchbase transaction for atomic server allocation
+            def allocate_servers(ctx):
+                # Count available servers within transaction
+                count_query = (
+                    f"SELECT count(*) FROM `QE-server-pool` "
+                    f"WHERE state='available' AND os='{os_type}' "
+                    f"AND (poolId='{pool_id}' OR '{pool_id}' IN poolId)")
 
-            self.logger.info(f"requested count: {count}, "
-                             f"available count: {available_count}")
+                count_result = ctx.query(count_query)
+                available_count = 0
+                for row in count_result.rows():
+                    available_count = row['$1']
+                    break
 
-            if count > available_count:
-                self.logger.warning("Not enough servers to serve the request")
-                return []
+                self.logger.info(f"requested count: {count}, "
+                                 f"available count: {available_count}")
 
-            # Get servers
-            get_servers_query_string = \
-                f"SELECT *, meta().id, TOSTRING(meta().cas) as cas" \
-                f" FROM `QE-server-pool`" \
-                f" WHERE state ='available' AND os='{os_type}'" \
-                f" AND (poolId = '{pool_id}' OR '{pool_id}' IN poolId)" \
-                f" ORDER BY to_number(memory) ASC LIMIT {count}"
+                if count > available_count:
+                    self.logger.warning("Not enough servers available")
+                    return []
 
-            self.logger.debug(f"get servers query: {get_servers_query_string}")
+                # Get servers within transaction
+                get_servers_query = (
+                    f"SELECT *, meta().id FROM `QE-server-pool` "
+                    f"WHERE state='available' AND os='{os_type}' "
+                    f"AND (poolId='{pool_id}' OR '{pool_id}' IN poolId) "
+                    f"ORDER BY to_number(memory) ASC LIMIT {count}")
 
-            get_results = self.cluster.query(get_servers_query_string)
+                self.logger.debug(f"Query: {get_servers_query}")
 
-            if count > len(get_results.rows()):
-                self.logger.warning("Not enough servers to serve the request")
-                return []
+                get_results = ctx.query(get_servers_query)
 
-            server_list = []
-            no_error = True
+                # Process results properly
+                for result in get_results.rows():
+                    # Extract the document data from the result
+                    doc_data = result['QE-server-pool']
 
-            for result in get_results.rows():
-                meta_id = result['id']
-                doc_value = result['QE-server-pool']
-                cas_value = result['cas']
+                    # Update document state
+                    doc_data['state'] = 'booked'
+                    doc_data['prevUser'] = doc_data.get('username', '')
+                    doc_data['username'] = username
 
-                doc_value['state'] = 'booked'
-                doc_value['prevUser'] = doc_value.get('username', '')
-                doc_value['username'] = username
+                    # Replace document within transaction
+                    target_id = ctx.get(self.default_collection, result['id'])
+                    ctx.replace(target_id, doc_data)
+                    server_list.append(doc_data['ipaddr'])
 
-                try:
-                    self.bucket.replace(meta_id, doc_value, cas=cas_value)
-                    server_list.append(doc_value['ipaddr'])
-                except KeyAlreadyExistsError:
-                    self.logger.critical("CAS mismatch: server booked by "
-                                         "another job")
-                    if no_error:
-                        no_error = False
-                        # Release servers that were successfully booked
-                        if server_list:
-                            update_string = \
-                                f"UPDATE `QE-server-pool`" \
-                                f" SET state='available'" \
-                                f" WHERE username='{username}'" \
-                                f" AND state='booked'"
-                            self.cluster.query(update_string)
-                            self.logger.info("Released booked servers")
-                except Exception as e:
-                    self.logger.error(f"Error while updating document: {e}")
-                    if no_error:
-                        no_error = False
-                        # Release servers that were successfully booked
-                        if server_list:
-                            update_string = \
-                                f"UPDATE `QE-server-pool`" \
-                                f" SET state='available'" \
-                                f" WHERE username='{username}'" \
-                                f" AND state='booked'"
-                            self.cluster.query(update_string)
-                            self.logger.info("Released booked servers")
+            # Execute the transaction
+            _ = self.cluster.transactions.run(allocate_servers)
+            self.logger.info(f"Allocated {len(server_list)} servers")
             return server_list
-
         except Exception as e:
-            self.logger.error(f"Error in get_servers: {str(e)}")
+            self.logger.error(f"Error in get_servers transaction: {str(e)}")
+            return list()
 
     def release_ip(self, ipaddr, state='available'):
         """
@@ -378,7 +340,7 @@ class ServerManager:
 
     def release_servers(self, username, state='available'):
         """
-        Release all servers for a specific username.
+        Release all servers for a specific username using transactions.
 
         Args:
             username: Username whose servers should be released
@@ -387,17 +349,49 @@ class ServerManager:
         self.logger.info(f"release_servers: username={username}, "
                          f"state={state}")
 
-        update_string = (
-            f"UPDATE `QE-server-pool` SET state='{state}' "
-            f"WHERE username='{username}' AND state='booked'")
-
-        self.logger.debug(f"update string: {update_string}")
-
         try:
-            self.cluster.query(update_string)
-            self.logger.info(f"Servers for user {username} released")
+            # Use Couchbase transaction for atomic server release
+            def release_servers_txn(ctx):
+                # Query to find all servers for this username
+                query = (
+                    f"SELECT *, meta().id FROM `QE-server-pool` "
+                    f"WHERE username='{username}' AND state='booked'")
+
+                self.logger.debug(f"Release servers query: {query}")
+
+                results = ctx.query(query)
+                released_count = 0
+
+                # Process each server document
+                for result in results.rows():
+                    # Extract the document data from the result
+                    doc_data = result['QE-server-pool']
+                    meta_id = result['id']
+
+                    # Update document state
+                    doc_data['state'] = state
+                    doc_data['prevUser'] = doc_data.get('username', '')
+                    doc_data['username'] = ''
+
+                    # Replace document within transaction
+                    target_doc = ctx.get(self.default_collection, meta_id)
+                    ctx.replace(target_doc, doc_data)
+                    released_count += 1
+
+                self.logger.info(
+                    f"Released {released_count} servers for user {username}")
+                return released_count
+
+            # Execute the transaction
+            result = self.cluster.transactions.run(release_servers_txn)
+            self.logger.info(
+                f"Successfully released {result} servers for user {username}")
+            return result
+
         except Exception as e:
-            self.logger.error(f"Error in release_servers: {str(e)}")
+            self.logger.error(
+                f"Error in release_servers transaction: {str(e)}")
+            return 0
 
     def show_all(self):
         """
