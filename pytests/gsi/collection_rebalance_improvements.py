@@ -54,6 +54,8 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()
         self.gsi_util_obj.set_encoder(encoder=self.encoder)
+        if self.bhive_index:
+            self.num_of_docs_per_collection_mutation = 0
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.log.info("==============  RebalanceImprovement setup has completed ==============")
 
@@ -715,7 +717,8 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                 except Exception as e:
                     self.fail(f'test failed due to {str(e)}')
 
-            self.sleep(75)
+            if not self.wait_until_rebalance_cleanup():
+                self.fail(f"Rebalance tokens not cleared")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
                                                      [out_node], services=services_in)
             rebalance.result()
@@ -821,6 +824,8 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                         self.fail(f'test failed due to {str(e)}')
 
             self.sleep(75)
+            if not self.wait_until_rebalance_cleanup():
+                self.fail(f"Rebalance tokens not cleared")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
                                                      [], services=services_in)
             rebalance.result()
@@ -925,6 +930,8 @@ class RebalanceImprovement(BaseSecondaryIndexingTests):
                     self.fail(f'test failed due to {str(e)}')
 
             self.sleep(75)
+            if not self.wait_until_rebalance_cleanup():
+                self.fail(f"Rebalance tokens not cleared")
             rebalance_out = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
                                                          [out_node], services=services_in)
             rebalance_out.result()

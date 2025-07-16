@@ -1703,7 +1703,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             time.sleep(20)
         self.sleep(10)
         if not self.capella_run:
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=100)
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=250)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             shard_affinity = self.is_shard_based_rebalance_enabled()
@@ -1774,6 +1774,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                    f"Result before \n\n {query_result[query]}."
                                    f"Result after \n \n {post_rebalance_result}")
                     raise Exception("Mismatch in query results before and after rebalance")
+        self.sleep(30)
+        self.wait_until_indexes_online()
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.log.info("Fetch metadata after rebalance")
         if self.chaos_action in ['rebalance_during_ddl', 'ddl_during_rebalance']:

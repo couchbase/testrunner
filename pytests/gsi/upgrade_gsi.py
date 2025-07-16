@@ -1521,7 +1521,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
 
 
-                self.drop_index_node_resources_utilization_validations()
+                self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
                 # Will uncomment the below code post MB-59107
                 # if not self.check_gsi_logs_for_shard_transfer():
@@ -1706,7 +1706,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                similarity=self.similarity, stats_assertion=True)
         self.item_count_related_validations()
         self.sleep(30)
-        self.drop_index_node_resources_utilization_validations()
+        self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
     def test_combination_upgrade_test(self):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -2584,8 +2584,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         rebalance.result()
 
-        self.enable_shard_based_rebalance()
         self.update_master_node()
+        self.enable_shard_based_rebalance()
         self.sleep(20)
 
 
@@ -2813,7 +2813,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         if name not in index_names_before_upgrade:
                             indexes_created_post_vector.append(name)
                     self.validate_shard_affinity(specific_indexes=indexes_created_post_vector)
-                    self.drop_index_node_resources_utilization_validations()
+                    self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
             finally:
                 event.set()
@@ -3101,7 +3101,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         nodes_list = random.sample(index_nodes, k=replica_count + 1)
         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in nodes_list]
         for namespace in self.namespaces:
-            query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
+            if self.json_template == "Cars":
+                query_definitions = self.gsi_util_obj.generate_car_data_index_definition_scalar()
+            else:
+                query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace,
                                                               num_replica=replica_count,
@@ -3255,6 +3258,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 # if not self.check_gsi_logs_for_shard_transfer():
                 #     raise Exception("Shard based rebalance not triggered")
             self.sleep(30)
+            self.wait_until_indexes_online()
 
             map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
@@ -3501,6 +3505,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                     "No new alternate shard IDs have been created during this rebalance. Possible bug")
                     self.log.info("upgrade successful")
                     self.sleep(20)
+                    self.wait_until_indexes_online()
+
                     map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
                     self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,

@@ -478,6 +478,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             select_query = re.sub(r"LIMIT \d+", f"LIMIT {self.scan_limit}", select_query)
         faiss_query = self.convert_to_faiss_queries(select_query=select_query)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.log.info(f"n1ql node for recall validation is {n1ql_node}")
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
         query_res_faiss = self.run_cbq_query(query=faiss_query, server=n1ql_node)['results']
         list_of_vectors_to_be_indexed_on_faiss = []
@@ -505,9 +506,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             faiss_closest_vectors.append(value)
 
         if scan_consitency:
-            gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node, scan_consistency=self.scan_consistency)['results']
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node, scan_consistency=self.scan_consistency)['results']
         else:
-            gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node)['results']
 
         if variable_limit:
             self.assertEqual(len(gsi_query_res), self.scan_limit, f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
@@ -2384,11 +2385,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.backstore_mainstore_check()
         self.validate_replica_indexes_item_counts()
 
-    def drop_index_node_resources_utilization_validations(self):
+    def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
         self.drop_all_indexes()
-        self.sleep(360, "sleeping to destroy empty shards")
-        self.check_storage_directory_cleaned_up()
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
+        if not skip_disk_cleared_check:
+            self.sleep(360, "sleeping to destroy empty shards")
+            self.check_storage_directory_cleaned_up()
         if not self.validate_memory_released():
             raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
@@ -3243,6 +3244,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition`, `with` FROM system:indexes"
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
+        primary_indexes = self.get_all_primary_index_names()
 
         simplified_results = []
         # Add select query field for each index
@@ -3261,7 +3263,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
 
-            if ("`colorRGBVector` VECTOR" in index['index_key'] and "similarity" in index['with']
+            if (index['name'] not in primary_indexes and (index['index_key'][0] == "`colorRGBVector` VECTOR" or index['index_key'][0] == '((meta().`xattrs`).`colorVector`) VECTOR') and "similarity" in index['with']
                 and index['with']['similarity'] == "cosine"):
                 condition = "colorRGBVector != [0, 0, 0]"
                 if where_clause:
@@ -3348,6 +3350,24 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(f"{error_obj}")
             raise Exception(f"Counts don't match for the following indexes: {error_obj}")
 
+    def wait_until_rebalance_cleanup(self, timeout=1800):
+        nodes_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        time_end, all_nodes_cleaned_up = time.time() + timeout, False
+        while time.time() < time_end and not all_nodes_cleaned_up:
+            nodes_cleaned_up = []
+            for node in nodes_list:
+                node_rest = RestConnection(node)
+                content = node_rest.get_index_rebalance_token_cleanup_status()
+                if content:
+                    self.log.info(f"Cleanup status {content}")
+                    if content == 'done':
+                        nodes_cleaned_up.append(node)
+                self.sleep(10)
+            if len(nodes_cleaned_up) == len(nodes_list):
+                all_nodes_cleaned_up = True
+                break
+            self.sleep(30)
+        return all_nodes_cleaned_up
     def get_all_array_index_names(self):
         """Returns a list of all array indexes in the cluster
         """

@@ -2370,6 +2370,13 @@ class RestConnection(object):
         else:
             return index_map
 
+    def get_index_rebalance_token_cleanup_status(self):
+        api = self.index_baseUrl + 'rebalanceCleanupStatus'
+        status, content, header = self.urllib_request(api)
+        if status:
+            return str(content).split('b')[1].split('\'')[1]
+
+
     def get_index_aggregate_metadata(self):
         api = self.index_baseUrl + 'getIndexMetadata'
         status, content, header = self.urllib_request(api)
