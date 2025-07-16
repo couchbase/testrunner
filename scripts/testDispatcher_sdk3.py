@@ -464,6 +464,8 @@ def main():
     parser.add_option('-i', '--retries', dest='retries', default='1')
     parser.add_option('-q', '--fresh_run', dest='fresh_run',
                       default=True, action='store_false')
+    parser.add_option('--rerun_condition', dest="rerun_condition",
+                      default="all")
     parser.add_option('-k', '--include_tests', dest='include_tests', default=None)
     parser.add_option('-x', '--server_manager', dest='SERVER_MANAGER',
                       default='172.23.104.162:8081')
