@@ -1,5 +1,6 @@
 
 from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from .tuq import QueryTests
 import time
 from deepdiff import DeepDiff
@@ -2137,3 +2138,42 @@ class QueryUDFTests(QueryTests):
         self.run_cbq_query(udf)
         result = self.run_cbq_query('execute function mb()')
         self.assertEqual(result['results'], [[{"c": 15}]])
+
+    # MB-67389: Test that query_external_access privilege is required for CURL in UDF
+    def test_curl_requires_query_external_access(self):
+        """
+        MB-67389: Ensure that executing a UDF with CURL fails for users without query_external_access privilege.
+        """
+        # Create the UDF that uses CURL
+        udf = '''
+        create or replace function i1() {
+            curl("http://127.0.0.1:8091/settings/querySettings",
+                {"user":"Administrator:password"})
+        }
+        '''
+        self.run_cbq_query(udf)
+
+        # Enable curl whitelist for all access via REST API
+        self.rest = RestConnection(self.master)
+        self.rest.create_whitelist(self.master, {"all_access": True})
+
+        # Create a user with only query_execute_function and query_select on default
+        test_username = "udf_user"
+        test_password = "password"
+        self.users = [{"id": test_username, "name": test_username, "password": test_password}]
+        self.create_users()
+        # Grant only the required privileges (query_execute_function and query_select on default) using run_cbq_query
+        self.run_cbq_query(f'GRANT query_execute_global_functions TO `{test_username}`')
+        self.run_cbq_query(f'GRANT query_select ON default TO `{test_username}`')
+
+        try:
+            # Attempt to execute the function as the restricted user
+            with self.assertRaises(Exception) as cm:
+                self.run_cbq_query('execute function i1()', username=test_username, password=test_password)
+            the_exception = cm.exception
+            # Check that the error code and message are as expected
+            self.assertIn("13014", str(the_exception))
+            self.assertIn("User does not have credentials to run queries using the CURL() function", str(the_exception))
+            self.assertIn("query_external_access", str(the_exception))
+        finally:
+            self.delete_role(user_ids=[test_username])
