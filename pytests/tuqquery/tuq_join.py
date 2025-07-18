@@ -1112,3 +1112,84 @@ class JoinTests(QuerySanityTests):
             self.assertTrue('ix1' in str(explain_result), "ix1 is not in explain result")
         finally:
             self.run_cbq_query("DROP COLLECTION mb65746 IF EXISTS", query_context='default._default')
+
+    def test_MB67432(self):
+        """
+        Test for MB-67432: Ensure the queries do not panic.
+        """
+        queries = [
+            # Original query
+            '''
+                SELECT n.*
+                FROM (SELECT a1
+                        FROM {"c10":1, "a1":[{"c20":"xyz"}]} AS d
+                        UNNEST d.a1) AS n
+                JOIN [{"c1":1}, {"c1":1},{"c1":1},{"c1":1},{"c1":1}] AS r1 ON true;
+            ''',
+            # Second query: join on r1.c1 = n.c10
+            '''
+                SELECT n.*
+                FROM (SELECT d.c10, a1
+                      FROM {"c10":1, "a1":[{"c20":"xyz"}]} AS d
+                      UNNEST d.a1) AS n
+                JOIN [{"c1":1}, {"c1":1},{"c1":1},{"c1":1},{"c1":1}] AS r1 ON r1.c1 = n.c10;
+            ''',
+            # Third query: WITH, LEFT JOIN
+            '''
+                SELECT r.*
+                FROM (WITH w1 AS (ARRAY {"c1":1} FOR v IN ARRAY_RANGE(0,5) END),
+                           w2 AS (SELECT d.c10, a1 FROM {"c10":1, "a1":[{"c20":"xyz"}]} AS d UNNEST d.a1)
+                      SELECT n.* FROM w2 AS n LEFT JOIN w1 AS r1 ON r1.c1 = n.c10
+                  ) AS r;
+            ''',
+            # Fourth query: UNNEST with LEFT JOIN and ON true
+            '''
+                SELECT n.*, r1.c1 AS r1_c1
+                FROM (SELECT d.c10, a1
+                      FROM {"c10":1, "a1":[{"c20":"xyz"}, {"c20":"abc"}]} AS d
+                      UNNEST d.a1) AS n
+                LEFT JOIN [{"c1":1}, {"c1":2}] AS r1 ON true;
+            ''',
+            # Fifth query: JOIN with array of objects, ON with complex expression
+            '''
+                SELECT n.*, r1.c1
+                FROM (SELECT d.c10, a1
+                      FROM {"c10":1, "a1":[{"c20":"xyz"}, {"c20":"abc"}]} AS d
+                      UNNEST d.a1) AS n
+                JOIN [{"c1":1}, {"c1":2}] AS r1 ON r1.c1 = n.c10 AND n.a1.c20 = "xyz";
+            ''',
+            # Sixth query: UNNEST, JOIN, and WHERE clause
+            '''
+                SELECT n.*, r1.c1
+                FROM (SELECT d.c10, a1
+                      FROM {"c10":1, "a1":[{"c20":"xyz"}, {"c20":"abc"}]} AS d
+                      UNNEST d.a1) AS n
+                JOIN [{"c1":1}, {"c1":2}] AS r1 ON r1.c1 = n.c10
+                WHERE n.a1.c20 = "abc";
+            ''',
+            # Seventh query: WITH, multiple UNNESTs, and JOIN
+            '''
+                WITH w1 AS (ARRAY {"c1":1, "c2":v} FOR v IN ARRAY_RANGE(0,2) END),
+                     w2 AS (SELECT d.c10, a1 FROM {"c10":1, "a1":[{"c20":"xyz"}, {"c20":"abc"}]} AS d UNNEST d.a1)
+                SELECT n.*, r1.c2
+                FROM w2 AS n
+                JOIN w1 AS r1 ON r1.c1 = n.c10 AND r1.c2 = 1;
+            ''',
+            # Eighth query: UNNEST, JOIN, and subquery in FROM
+            '''
+                SELECT n.*, r1.c1
+                FROM (SELECT d.c10, a1
+                      FROM {"c10":1, "a1":[{"c20":"xyz"}, {"c20":"abc"}]} AS d
+                      UNNEST d.a1) AS n
+                JOIN (SELECT RAW {"c1":1} UNION SELECT RAW {"c1":2}) AS r1 ON r1.c1 = n.c10;
+            '''
+        ]
+        for idx, query in enumerate(queries):
+            try:
+                result = self.run_cbq_query(query)
+                self.log.info(f"MB-67432 query {idx+1} result: {result}")
+                # Ensure the query returns results and does not panic
+                self.assertIsInstance(result, dict)
+                self.assertIn('results', result)
+            except Exception as e:
+                self.fail(f"MB-67432 query {idx+1} caused an exception: {e}")
