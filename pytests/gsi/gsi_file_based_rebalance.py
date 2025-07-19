@@ -1699,13 +1699,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             else:
                 self.log.info(f"Rebalance was stopped by the user. Verifying that the staging directory has been emptied")
                 self.sleep(60)
-                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                for node in index_nodes:
-                    rest = RestConnection(node)
-                    storage_dir = rest.get_indexer_internal_stats()["indexer.storage_dir"]
-                    staging_dir_contents = self.get_staging_directory_contents(node=node, storage_dir=storage_dir)
-                    self.log.info(f"Staging directory contents for node {node.ip}: {staging_dir_contents}")
-                    self.assertTrue(len(staging_dir_contents) == 0, "Staging directory is not empty")
+                self._validate_staging_directories_cleaned()
             self.enable_redistribute_indexes()
             time.sleep(120)
             if nodes_in_list:

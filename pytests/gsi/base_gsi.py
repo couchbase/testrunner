@@ -3536,6 +3536,45 @@ class BaseSecondaryIndexingTests(QueryTests):
         else:
             self.log.info("backstore_mainstore_check passed. No discrepancies seen.")
 
+    def _validate_staging_directories_cleaned(self):
+        """
+        Validates staging directories cleanup semantics after a cancelled rebalance.
+        
+        Rules:
+        - Check both paths under the indexer storage directory on each index node:
+          1) <storage_dir>/@bhive/staging2
+          2) <storage_dir>/staging2
+        - For each path:
+          - If directory does not exist -> OK
+          - If directory exists -> must be empty (no files or subdirectories)
+        """
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            rest = RestConnection(node)
+            storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
+            shell = RemoteMachineShellConnection(node)
+            try:
+                for rel_path in ["@bhive/staging2", "staging2"]:
+                    abs_path = f"{storage_dir}/{rel_path}"
+                    # Check if directory exists
+                    out, err = shell.execute_command(f"[ -d '{abs_path}' ] && echo EXISTS || echo MISSING")
+                    exists = (len(out) > 0 and out[0].strip() == 'EXISTS')
+                    if not exists:
+                        self.log.info(f"Node {node.ip}: {abs_path} MISSING -> OK")
+                        continue
+                    # If exists, ensure it's empty
+                    out, err = shell.execute_command(f"sh -c 'ls -A \"{abs_path}\" 2>/dev/null | wc -l'")
+                    try:
+                        count = int(out[0].strip()) if out else 0
+                    except Exception:
+                        count = 0
+                    if count == 0:
+                        self.log.info(f"Node {node.ip}: {abs_path} exists but EMPTY -> OK")
+                    else:
+                        raise Exception(f"Node {node.ip}: {abs_path} not cleaned. Entries count={count}")
+            finally:
+                shell.disconnect()
+
     def check_storage_directory_cleaned_up(self, threshold_gb=0.025):
         """
         Checks if storage directory is cleaned up

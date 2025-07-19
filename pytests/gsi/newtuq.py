@@ -256,6 +256,55 @@ class QueryTests(BaseTestCase):
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
 
+    def check_gsi_logs_for_missing_partitions(self):
+        """Checks indexer logs for lost/missing partitions fatal errors.
+
+        Looks for entries like:
+        [Fatal] Indexer::checkForLostPartitions ... has only X(...) partitions while it is expected to have Y partitions
+        """
+        self.generate_map_nodes_out_dist()
+        fail_test = False
+        indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not indexers:
+            return None
+
+        # Patterns to detect missing partitions conditions
+        patterns = [
+            "[Fatal] Indexer::checkForLostPartitions",
+            "checkForLostPartitions.*partitions while it is expected to have"
+        ]
+
+        for server in indexers:
+            if server in getattr(self, 'nodes_out_list', []):
+                continue
+            shell = RemoteMachineShellConnection(server)
+            _, dir = RestConnection(server).diag_eval(
+                'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+            indexer_log = str(dir) + '/indexer.log*'
+            try:
+                for patt in patterns:
+                    # Use extended regex for the second pattern; zgrep supports -E on most systems
+                    if "*" in patt or "." in patt:
+                        cmd = "zgrep -E \"{0}\" {1} | wc -l".format(patt, indexer_log)
+                    else:
+                        cmd = "zgrep \"{0}\" {1} | wc -l".format(patt, indexer_log)
+                    count, err = shell.execute_command(cmd)
+                    if isinstance(count, list):
+                        try:
+                            count_val = int(count[0])
+                        except Exception:
+                            count_val = 0
+                    else:
+                        count_val = int(count)
+                    if count_val > 0:
+                        self.log.info("===== MISSING PARTITIONS DETECTED ('{0}') IN INDEXER LOGS ON {1} =====".format(patt, server.ip))
+                        fail_test = True
+            finally:
+                shell.disconnect()
+
+        if fail_test:
+            raise Exception("Missing/lost index partitions detected in indexer logs")
+
     def check_gsi_logs_for_panic(self):
         """ Checks for panics/other errors in indexer and projector logs
         """

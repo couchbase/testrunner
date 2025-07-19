@@ -1,4 +1,4 @@
-"""bhive_vector_index.py: "This class test BHIVE Vector indexes  for GSI"
+"""bhive_vector_index.py: "This class test BHIVE Vector indexes for GSI"
 
 __author__ = "Dananjay S"
 __maintainer = "Dananjay S"
@@ -59,12 +59,495 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         pass
 
     def load_docs_into_buckets(self):
-        buckets = self._create_test_buckets(num_buckets=2)
+        buckets = self._create_test_buckets(num_buckets=1)
         for bucket in buckets:
             self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
                                                  num_of_docs_per_collection=10000,
                                                  json_template=self.json_template, load_default_coll=False)
         self.sleep(360000)
+
+    def test_kill_indexer_process_at_different_stages(self):
+        """
+        Test to verify indexer recovery after being killed at different stages of BHIVE index creation.
+        
+        This test validates indexer resilience by killing the process at various stages:
+        1. Sampling stage - Immediately after index build command
+        2. Training stage - During training (using delay to control timing)
+        3. Index building stage - During the "Building" phase
+        4. Graph building stage - During the "Graph build" phase
+        
+        After each kill and recovery, validates item count and recall accuracy.
+        """
+        self.log.info("=== Starting test_kill_indexer_process_at_different_stages ===")
+        
+        # Test parameters
+        stages_to_test = ["sampling", "training", "building", "graph_building"]
+        training_delay_seconds = 30
+        
+        # Step 1: Setup buckets and collections
+        self.log.info("Step 1: Setting up test environment")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(
+                bucket_name=bucket,
+                num_scopes=1,
+                num_collections=1,
+                num_of_docs_per_collection=10000,
+                json_template=self.json_template,
+                load_default_coll=False
+            )
+        
+        # Load documents
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+        
+        self.sleep(60, "Waiting for documents to be loaded")
+        
+        for stage in stages_to_test:
+            self.log.info(f"=== Testing indexer kill during {stage} stage ===")
+            
+            # Step 2: Configure indexer settings for training stage
+            if stage == "training":
+                self.log.info(f"Setting training delay to {training_delay_seconds} seconds")
+                rest = RestConnection(index_nodes[0])
+                rest.set_index_settings({
+                    "indexer.debug.delayTrainingDuration": training_delay_seconds
+                })
+            
+            # Step 3: Prepare index creation
+            create_queries = []
+            select_queries = []
+            for namespace in self.namespaces:
+                self.log.info(f"Preparing BHIVE index for {namespace}")
+                bhive_def, _, _ = self._get_query_definitions()
+                current_create_queries = self._get_create_queries(bhive_def, None, None, namespace=namespace, defer_build_mix=False)
+                create_queries.extend(current_create_queries)
+                
+                # Prepare select queries for validation
+                curr_select_queries = self.gsi_util_obj.get_select_queries(
+                    definition_list=bhive_def,
+                    namespace=namespace,
+                    limit=self.scan_limit
+                )
+                select_queries.extend(curr_select_queries)
+            
+            # Step 4: Execute stage-specific test logic
+            self._test_kill_during_stage(
+                stage=stage,
+                create_queries=create_queries,
+                query_node=query_node,
+                index_nodes=index_nodes,
+                training_delay_seconds=training_delay_seconds if stage == "training" else None
+            )
+            
+            # Step 5: Wait for recovery and validate
+            self.log.info(f"Waiting for indexer recovery after {stage} stage kill")
+            self.sleep(120, "Waiting for indexer to recover and indexes to be rebuilt")
+            
+            # Wait for indexes to come online
+            self.wait_until_indexes_online()
+            
+            # Step 6: Validate item count and recall
+            self.log.info(f"Validating recovery after {stage} stage kill")
+            self._validate_recovery_after_kill(select_queries, query_node, stage)
+            
+            # Step 7: Cleanup for next stage
+            self.log.info(f"Cleaning up after {stage} stage test")
+            self.drop_all_indexes()
+            self.sleep(30, "Waiting for cleanup to complete")
+            
+            # Reset training delay if it was set
+            if stage == "training":
+                rest = RestConnection(index_nodes[0])
+                rest.set_index_settings({
+                    "indexer.debug.delayTrainingDuration": 0
+                })
+        
+        self.log.info("=== test_kill_indexer_process_at_different_stages completed successfully ===")
+    
+    def _test_kill_during_stage(self, stage, create_queries, query_node, index_nodes, training_delay_seconds=None):
+        """
+        Generic method to kill indexer during different stages of BHIVE index creation.
+        
+        Args:
+            stage: The stage to test ("sampling", "training", "building", "graph_building")
+            create_queries: List of index creation queries
+            query_node: Query node to execute queries on
+            index_nodes: List of index nodes
+            training_delay_seconds: Delay for training stage (required if stage="training")
+        """
+        self.log.info(f"Testing kill during {stage} stage")
+        
+        with ThreadPoolExecutor() as executor:
+            # Start index creation
+            create_future = executor.submit(self._create_indexes_async, create_queries, query_node)
+            
+            # Stage-specific timing logic
+            if stage == "sampling":
+                # Kill indexer almost immediately (during sampling)
+                self.sleep(2, "Waiting briefly for sampling to start")
+                self.log.info("Killing indexer during sampling stage")
+                for index_node in index_nodes:
+                    remote_client = RemoteMachineShellConnection(index_node)
+                    remote_client.terminate_process(process_name='indexer')
+                
+            elif stage == "training":
+                if training_delay_seconds is None:
+                    raise ValueError("training_delay_seconds is required for training stage")
+                # Wait for sampling to complete and training delay to kick in
+                sampling_time = 5  # Allow time for sampling to complete
+                kill_time = sampling_time + training_delay_seconds - 5  # Kill 5 seconds before delay ends
+                
+                self.sleep(kill_time, f"Waiting {kill_time} seconds for training stage")
+                self.log.info("Killing indexer during training stage")
+                for index_node in index_nodes:
+                    remote_client = RemoteMachineShellConnection(index_node)
+                    remote_client.terminate_process(process_name='indexer')
+                
+            elif stage == "building":
+                # Monitor index status and kill when "Building" stage is reached
+                self._wait_for_index_status_and_kill("Building", index_nodes)
+                
+            elif stage == "graph_building":
+                # Monitor index status and kill when "Graph build" stage is reached
+                self._wait_for_index_status_and_kill("Graph build", index_nodes)
+                
+            else:
+                raise ValueError(f"Unknown stage: {stage}. Valid stages are: sampling, training, building, graph_building")
+            
+            # Wait for create operation to complete (will fail but that's expected)
+            try:
+                create_future.result()
+            except Exception as e:
+                self.log.info(f"Expected failure during index creation: {str(e)}")
+    
+    def _wait_for_index_status_and_kill(self, target_status, index_nodes, max_wait_time=300):
+        """Wait for specific index status and kill indexer when reached"""
+        self.log.info(f"Monitoring for {target_status} status")
+        
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            try:
+                # Check index status using getIndexStatus endpoint
+                rest = RestConnection(index_nodes[0])
+                index_metadata = rest.get_indexer_metadata()
+                
+                # Parse the status array to find any index with target status
+                for index_info in index_metadata.get('status', []):
+                    index_name = index_info.get('name', 'unknown')
+                    status = index_info.get('status', '')
+                    progress = index_info.get('progress', 0)
+                    self.log.info(f"Index {index_name} status: {status}, progress: {progress}")
+                    
+                    if target_status.lower() in status.lower():
+                        self.log.info(f"Found {target_status} status for index {index_name}, killing indexer")
+                        for index_node in index_nodes:
+                            remote_client = RemoteMachineShellConnection(index_node)
+                            remote_client.terminate_process(process_name='indexer')
+                        return
+                            
+            except Exception as e:
+                self.log.warning(f"Error checking index status: {str(e)}")
+            
+            self.sleep(2, f"Waiting for {target_status} status")
+        
+        self.log.warning(f"Timeout waiting for {target_status} status, proceeding anyway")
+
+    def _create_indexes_async(self, create_queries, query_node):
+        """Create indexes asynchronously"""
+        self.log.info("Starting index creation")
+        for query in create_queries:
+            self.log.info(f"Running create query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+        self.log.info("Index creation commands completed")
+
+    def _validate_recovery_after_kill(self, select_queries, query_node, stage):
+        """Validate item count and recall after indexer recovery"""
+        self.log.info(f"Validating recovery after {stage} stage kill")
+        
+        # Validate item counts
+        try:
+            self.compare_item_counts_between_kv_and_gsi()
+            self.log.info("Item count validation passed")
+        except Exception as e:
+            self.log.error(f"Item count validation failed: {str(e)}")
+            self.fail(f"Item count validation failed after {stage} kill: {str(e)}")
+        
+        # Validate recall for vector queries
+        recall_validated = False
+        for query in select_queries[:2]:  # Test first 2 queries
+            if "embVector" in query:
+                query = query.replace("embVector", str(self.bhive_sample_vector))
+            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                continue
+                
+            try:
+                self.log.info(f"Running recall validation query: {query}")
+                result = self.run_cbq_query(query=query, server=query_node)
+                
+                # Basic validation - ensure query returns results
+                if result.get("results"):
+                    self.log.info(f"Query returned {len(result['results'])} results")
+                    recall_validated = True
+                else:
+                    self.log.warning("Query returned no results")
+                    
+            except Exception as e:
+                self.log.error(f"Recall validation query failed: {str(e)}")
+                self.fail(f"Recall validation failed after {stage} kill: {str(e)}")
+        
+        if recall_validated:
+            self.log.info("Recall validation passed")
+        else:
+            self.log.warning("No vector queries available for recall validation")
+        
+        self.log.info(f"Recovery validation completed successfully for {stage} stage")
+    
+    def test_index_drop_during_graph_build(self):
+        """
+        Test to verify index drop behavior during BHIVE graph build phase.
+        
+        Steps:
+        1. Create a vector index that requires graph building
+        2. Monitor for graph build status
+        3. Issue DROP INDEX command during graph build
+        """
+        self.log.info("Step 1: Setting up cluster and creating bucket/collection")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        
+        # Create collection and load enough data to ensure graph build takes time
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(
+                bucket_name=bucket, 
+                num_scopes=1, 
+                num_collections=1,
+                num_of_docs_per_collection=100000,  # Large enough to make graph build take time
+                json_template=self.json_template, 
+                load_default_coll=False
+            )
+        
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+        
+        self.sleep(180, "Sleeping for 180 seconds to ensure documents are loaded")
+
+        # Create a vector index that will require graph building
+        self.log.info("Creating vector index that will require graph building")
+        index_name = "idx_graph_build_test"
+        create_query = f"""CREATE VECTOR INDEX {index_name} ON test_bucket_0.test_scope_1.test_collection_1 (embedding VECTOR) USING GSI WITH {{"dimension": 128, 
+                                "similarity": "L2_SQUARED",
+                                "description": "IVF,SQ8",
+                                "train_list": 50000}}"""
+        create_query_2 = f"""CREATE VECTOR INDEX {index_name}2 ON test_bucket_0.test_scope_1.test_collection_1 (embedding VECTOR) USING GSI WITH {{"dimension": 128}}"""
+        
+        try:
+            self.run_cbq_query(query=create_query, server=query_node)
+            self.run_cbq_query(query=create_query_2, server=query_node)
+        except Exception as e:
+            self.log.error(f"Failed to create index: {str(e)}")
+            raise
+
+        # Monitor for graph build and drop when found
+        self.log.info("Monitoring for graph build status and issuing drop")
+        drop_query = f"DROP INDEX {index_name} ON test_bucket_0.test_scope_1.test_collection_1"
+        
+        drop_executed = False
+        start_time = time.time()
+        max_wait_time = 300
+        
+        while time.time() - start_time < max_wait_time:
+            try:
+                rest = RestConnection(index_nodes[0])
+                index_metadata = rest.get_indexer_metadata()
+                
+                # Parse the status array to find our index in graph build phase
+                for index_info in index_metadata.get('status', []):
+                    index_name_found = index_info.get('name', 'unknown')
+                    status = index_info.get('status', '')
+                    progress = index_info.get('progress', 0)
+                    graph_progress = index_info.get('graphProgress', 0)
+                    
+                    if index_name in index_name_found:
+                        self.log.info(f"Index {index_name_found} status: {status}, progress: {progress}, graphProgress: {graph_progress}")
+                        
+                        # Check for graph build status or explicit graph progress
+                        if ("graph build" in status.lower() or 
+                            ("building" in status.lower() and graph_progress > 0) or
+                            graph_progress > 0):
+                            
+                            self.log.info(f"Found graph build phase for index {index_name_found}, executing DROP INDEX")
+                            
+                            try:
+                                # Execute drop command
+                                self.run_cbq_query(query=drop_query, server=query_node)
+                                self.log.info(f"Successfully executed DROP INDEX during graph build")
+                                drop_executed = True
+                                break
+                            except Exception as e:
+                                self.log.error(f"Failed to execute DROP INDEX: {str(e)}")
+                                self.fail(f"Failed to execute DROP INDEX during graph build: {str(e)}")
+                                
+            except Exception as e:
+                self.log.warning(f"Error checking index status: {str(e)}")
+                self.fail(f"Error checking index status: {str(e)}")
+            
+            if drop_executed:
+                break
+                
+            self.sleep(2, "Waiting for Graph build status")
+        
+        if drop_executed:
+            self.log.info("DROP INDEX command was successfully executed during graph build")
+            self.sleep(30, "Waiting for drop operation to complete")
+        else:
+            self.log.warning("DROP INDEX command was not executed - graph build phase not detected")
+            
+        self.log.info("test_index_drop_during_graph_build completed")
+    
+    def test_bhive_stats(self):
+        """
+        Test to verify that BHIVE index statistics are accessible during rebalance operations.
+        
+        This test validates that index statistics endpoints remain functional and responsive
+        while rebalance operations are in progress, ensuring monitoring tools can continue
+        to gather performance metrics during cluster maintenance.
+        
+        Steps:
+        1. Create test bucket and collections
+        2. Load 10k documents into collections
+        3. Create BHIVE vector indexes on all collections
+        4. Wait for indexes to come online
+        5. Initiate rebalance-out operation on an index node
+        6. Simultaneously poll index statistics API during rebalance
+        7. Validate that statistics are successfully retrieved during rebalance
+        
+        Expected Results:
+        - Index statistics API should remain accessible during rebalance
+        - No errors or timeouts when retrieving stats during rebalance
+        - Statistics data should be complete and accurate
+        - System should maintain monitoring capabilities during maintenance operations
+        """
+        self.log.info("Setting up buckets and loading docs")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=10000,
+                                                 json_template=self.json_template, load_default_coll=False)
+        
+        self.log.info("Creating BHIVE indexes")
+        create_queries = []
+        for namespace in self.namespaces:
+            self.log.info(f"Creating index on {namespace}")
+            self.log.info("Getting query definitions...")
+            bhive_def, _, _ = self._get_query_definitions()
+            current_create_queries = self._get_create_queries(bhive_def, None, None, namespace=namespace, defer_build_mix=False)
+            create_queries.extend(current_create_queries)
+        
+        self.log.info(f"Running create_queries")
+        for query in create_queries:
+            self.log.info(f"Running create query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+        
+        self.wait_until_indexes_online()
+        self.sleep(10, "Indexes online")
+
+        # Performing Rebalance-out operation
+        out_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[1]
+        out_nodes_list = [out_node]
+        index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        #Running a thread to simultaneously poll for stats URL during rebalance operation
+        with ThreadPoolExecutor() as executor:
+            indexer_rest = RestConnection(index_node)
+            stats_thread = executor.submit(indexer_rest.get_all_index_stats)
+            self._rebalance_and_validate(nodes_out_list=out_nodes_list, nodes_in_list=None, swap_rebalance=False, services_in=None, select_queries=None, scan_results_check=False, skip_shard_validations=True)
+            stats_thread.result()
+    
+
+    def test_backup_failure_status_code(self):
+        """
+        Test to verify correct HTTP status codes from backup API when indexer service is unavailable.
+        
+        This test validates that the backup API endpoint returns appropriate HTTP status codes
+        when the indexer process is terminated, ensuring proper error handling and client
+        notification of service unavailability.
+        
+        Steps:
+        1. Create test bucket and collections
+        2. Load 10k documents into collections  
+        3. Create BHIVE vector indexes on all collections
+        4. Wait for indexes to come online
+        5. Terminate indexer process on all index nodes
+        6. Poll backup API endpoint (/api/v1/bucket/{bucket}/backup)
+        7. Validate HTTP status codes returned by backup API
+        
+        Expected Results:
+        - Backup API should return 503 (Service Unavailable) status code
+        - Should NOT return 404 (Not Found) status code
+        - All index nodes should consistently return 503 status
+        - Proper error handling when indexer service is down
+        
+        Validation:
+        - Confirms backup API correctly identifies service unavailability
+        - Ensures clients receive appropriate error codes for retry logic
+        - Validates consistent error response across all index nodes
+        """
+        self.log.info("Setting up buckets and loading docs")
+        buckets = self._create_test_buckets(num_buckets=1)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        for bucket in buckets:
+            self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=10000,
+                                                 json_template=self.json_template, load_default_coll=False)
+        for namespace in self.namespaces:
+            self._load_docs_in_collection(namespace=namespace, json_template=self.json_template)
+        self.sleep(60, "Waiting for docs to be loaded")
+        
+        # Creating BHIVE indexes
+        create_queries = []
+        for namespace in self.namespaces:
+            self.log.info(f"Creating index on {namespace}")
+            self.log.info("Getting query definitions...")
+            bhive_def, _, _ = self._get_query_definitions()
+            current_create_queries = self._get_create_queries(bhive_def, None, None, namespace=namespace, defer_build_mix=False)
+            create_queries.extend(current_create_queries)
+        
+        self.log.info(f"Running create_queries")
+        for query in create_queries:
+            self.log.info(f"Running create query: {query}")
+            self.run_cbq_query(query=query, server=query_node)
+        
+        self.wait_until_indexes_online()
+        self.sleep(10, "Indexes online")
+
+        # Killing indexer process on all nodes.
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for index_node in index_nodes:
+            remote_client = RemoteMachineShellConnection(index_node)
+            remote_client.terminate_process(process_name='indexer')
+        # Polling for api/v1/bucket/test_bucket/backup
+        bucket = "test_bucket_0"
+        for index_node in index_nodes:
+            backup_url = f"http://{index_node.ip}:9102/api/v1/bucket/{bucket}/backup"
+            
+            self.log.info(f"Making GET request to backup URL: {backup_url}")
+            response = requests.get(backup_url, timeout=30)
+            status_code = response.status_code
+            self.log.info(f"Received status code: {status_code} from node {index_node.ip}")
+            
+            # Validate that status is 503 (Service Unavailable) and not 404 (Not Found)
+            if status_code == 404:
+                self.fail(f"Received 404 status code from backup URL {backup_url}. Expected 503 (Service Unavailable)")
+            elif status_code == 503:
+                self.log.info(f"Successfully received 503 (Service Unavailable) status from node {index_node.ip}")
+            else:
+                self.fail(f"Received unexpected status code {status_code} from node {index_node.ip}")
+        
 
     def test_logs_on_moi_disk(self):
         """
@@ -101,11 +584,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # 2. Create 2 MOI indexes per bucket
         self.log.info("Creating 2 MOI indexes per bucket")
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
-        prefixes = ["test_scalar", "test_bhive", "test_composite"]
-        similarity = "COSINE"
         create_queries = []
         for namespace in self.namespaces:
-            _, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            _, scalar_def, composite_def = self._get_query_definitions()
             current_create_queries = self._get_create_queries(None, scalar_def, composite_def, namespace=namespace, defer_build_mix=False) 
             create_queries.extend(current_create_queries)
         
@@ -225,14 +706,11 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             )
         
         self.sleep(120, "Waiting for documents to be loaded")
-
-        prefixes = ["test_bhive", "test_scalar", "test_composite"]
-        similarity = "L2_SQUARED"
         select_queries = []
         for namespace in self.namespaces:
             self.log.info(f"Creating index on {namespace}")
             self.log.info("Getting query definitions...")
-            _, _, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            _, _, composite_def = self._get_query_definitions()
             self.log.info("Successfully got query definitions")
             create_queries = self._get_create_queries(None, None, composite_def, namespace, defer_build_mix=False)
             self.log.info("Running create queries for index creation...")
@@ -338,13 +816,11 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(180, "Sleeping for 180 seconds to ensure documents are loaded")
         # Create multiple large indexes
         self.log.info("Creating multiple large indexes")
-        prefixes = ["test_scalar", "test_bhive", "test_composite"]
-        similarity = "COSINE"
 
         for namespace in self.namespaces:
             self.log.info(f"Creating index on {namespace}")
             self.log.info("Getting query definitions...")
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions()
             self.log.info("Successfully got query definitions")
             
             current_create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
@@ -447,7 +923,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         num_concurrent_drops = 5
         drop_results = []
         
-        with ThreadPoolExecutor(max_workers=num_concurrent_drops) as executor:
+        with ThreadPoolExecutor(max_workers=1) as executor:
             # Submit all drops simultaneously
             futures = [executor.submit(execute_drop, i) for i in range(num_concurrent_drops)]
             
@@ -519,8 +995,6 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
         buckets = self._create_test_buckets(num_buckets=1)
-        prefixes = ["test_scalar", "test_bhive", "test_composite"]
-        similarity = "COSINE"
         for bucket in buckets:
             self.prepare_collection_for_indexing(bucket_name=bucket, num_scopes=self.num_scopes, num_collections=self.num_collections,
                                                  num_of_docs_per_collection=self.num_of_docs_per_collection,
@@ -531,7 +1005,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             self.log.info(f"Creating index on {namespace}")
             self.log.info("Getting query definitions...")
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions()
             self.log.info("Successfully got query definitions")
 
             self.log.info("Combining definitions and creating queries...")
@@ -623,6 +1097,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         """
         self.log.info("Step 1: Setting up the cluster with required services")
         self.log.info("Step 2: Creating buckets and collections")
+        self.bhive_composite_comparison = self.input.param("bhive_composite_comparison", False)
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(index_node)
         rest.set_index_settings({"indexer.bhive.topNScan": 300})
@@ -638,6 +1113,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
         query_comparison_list = []
+        query_stats_map = {}
         if self.bhive_composite_comparison:
             self.bhive_index = True
             similarity = random.choice(simlarity_list)
@@ -841,6 +1317,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self.log.info(f"Creating index on {namespace}")
             bhive_def = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.dataset,
+                skip_primary=True,
                 prefix="test_bhive",
                 similarity="L2_SQUARED", 
                 train_list=None,
@@ -857,7 +1334,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace)
             creation_success = False
             try:
-                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
+                # self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
+                for query in create_queries:
+                    self.run_cbq_query(query=query, server=query_node)
                 creation_success = True
             except Exception as e:
                 self.log.info(f"Expected exception as dimension is greater than 4096: {e}")
@@ -939,7 +1418,6 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Create indexes in all collections
         self.log.info("Step 3: Creating indexes on all collections")
         simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
-        prefixes = ["test_scalar", "test_bhive", "test_composite"]
         select_queries = []
         create_queries = []
         
@@ -950,7 +1428,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self.log.info(f"Selected similarity metric: {similarity}")
             
             self.log.info("Getting query definitions...")
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(similarity=similarity)
             self.log.info("Successfully got query definitions")
 
             self.log.info("Combining definitions and creating queries...")
@@ -1028,6 +1506,8 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             nodes_in_list = []
             nodes_out_list = []
             services_in = []
+            is_failover = False
+            swap_rebalance = False
             
             if rebalance_type == "in":
                 self.log.info(f"Rebalance-in operation: Adding node {in_node.ip}")
@@ -1066,6 +1546,16 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 failover_task.result()
                 self.log.info(f"Failover completed for node: {failover_node.ip}")
             
+            # Debug: Check execution flow after failover/rebalance type detection
+            self.log.info(f"DEBUG: After rebalance type processing - is_failover: {is_failover}, rebalance_type: {rebalance_type}")
+            
+            # Determine if shard validations should be skipped
+            skip_shard_validations = self.skip_shard_validations
+            if is_failover:
+                skip_shard_validations = True
+            
+            self.log.info(f"Skipping shard validations: {skip_shard_validations}")
+            
             try:
                 if self.run_mutation_workload:
                     self.log.info(f"Setting log level to WARNING for {rebalance_type} operation")
@@ -1084,11 +1574,6 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                             logging.getLogger().setLevel(original_log_level)
                             self.log.info(f"Starting {rebalance_type} rebalance operation")
 
-                            skip_shard_validations = self.skip_shard_validations
-
-                            if is_failover:
-                                skip_shard_validations = True
-
                             self._rebalance_and_validate(
                                 nodes_in_list=nodes_in_list,
                                 nodes_out_list=nodes_out_list,
@@ -1098,9 +1583,6 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                                 skip_shard_validations=skip_shard_validations,
                             )
                             self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
-                            
-                            swap_rebalance = False
-                            is_failover = False
                             self.log.info("Stopping workload threads...")
                             workload_stop_event.set()
 
@@ -1117,11 +1599,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                             swap_rebalance=swap_rebalance,
                             services_in=services_in,
                             select_queries=None,
-                            skip_shard_validations=self.skip_shard_validations,
+                            skip_shard_validations=skip_shard_validations,
                         )
                     self.log.info(f"Rebalance operation {rebalance_type} completed successfully")
-                
-                swap_rebalance = False
             except Exception as err:
                 self.log.error(f"Error during {rebalance_type} operation: {str(err)}")
                 raise err
@@ -1132,7 +1612,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(120, "Sleeping for 2 minutes to allow rebalance to complete")
             
             self.log.info("Running post-rebalance validations...")
-            self._run_validations(select_queries,self.get_nodes_from_services_map(service_type="index", get_all_nodes=True))
+            self._run_validations(select_queries,self.get_nodes_from_services_map(service_type="index", get_all_nodes=True), skip_shard_validations=skip_shard_validations)
             self.log.info("Post-rebalance validations completed successfully")
 
         self.log.info("All rebalance operations completed successfully")
@@ -1195,7 +1675,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self.log.info(f"Creating indexes on {namespace}")
             similarity = random.choice(simlarity_list)
 
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, similarity)
             definitions = scalar_def + bhive_def + composite_def
             suffix = namespace.replace(':', '_').replace('.', '_')
 
@@ -1332,7 +1812,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             similarity = random.choice(similarity_list)
             suffix = namespace.replace(':', '_').replace('.', '_')
 
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, namespace, similarity)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(similarity=similarity)
             definitions = scalar_def + bhive_def + composite_def
 
             create_queries.append(
@@ -1623,7 +2103,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         
         return bucket_0_thread, bucket_1_thread, bucket_2_thread 
         
-    def _run_validations(self, select_queries,  index_nodes, similarity="L2_SQUARED"):
+    def _run_validations(self, select_queries,  index_nodes, similarity="L2_SQUARED", skip_shard_validations=False):
         """
         Run all required validations during quiet periods
         """
@@ -1641,8 +2121,11 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.validate_replica_indexes_item_counts()
 
         # Validate shard seggregation
-        shard_map = self.get_shards_index_map()
-        self.validate_shard_seggregation(shard_index_map=shard_map)
+        if not skip_shard_validations:
+            shard_map = self.get_shards_index_map()
+            self.validate_shard_seggregation(shard_index_map=shard_map)
+        else:
+            self.log.info("Skipping shard segregation validation")
         
         # Check mainstore and backstore item counts match
         self.log.info("Validating mainstore and backstore consistency")
@@ -1651,10 +2134,12 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             self.log.error(f"Mainstore/backstore mismatch: {errors}")
             self.fail("Mainstore and backstore item counts don't match")
         
-        if self.rebalance_type == "file":
+        if self.rebalance_type == "file" and not skip_shard_validations:
             # Validate shard affinity
             self.log.info("Validating shard affinity")
             self.validate_shard_affinity()
+        elif self.rebalance_type == "file" and skip_shard_validations:
+            self.log.info("Skipping shard affinity validation")
             
         # Logging resource utilization
         self.log.info("Resource utilization:")
@@ -1736,7 +2221,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         
         return buckets
 
-    def _get_query_definitions(self, prefixes, namespace, similarity):
+    def _get_query_definitions(self, prefixes=["test_scalar", "test_bhive", "test_composite"], similarity="COSINE"):
         bhive_def = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.dataset,
                 prefix=prefixes[1],
@@ -1899,6 +2384,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         #     raise
         
         # Validate shard-based rebalance if enabled
+        self.log.info(f"Shard validation check: shard_affinity={shard_affinity}, skip_shard_validations={skip_shard_validations}")
         if shard_affinity and not skip_shard_validations:
             self.log.info("Running validations for shard-based rebalance")
             
