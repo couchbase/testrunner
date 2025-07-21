@@ -41,20 +41,19 @@ class ServerManager:
             f"WHERE serverType='docker' AND poolId='{pool_id}'"
 
         docker_ip_list = list()
-        self.logger.debug(f"get_dockers query: {query_string}")
+        self.logger.debug(f"Query: {query_string}")
 
         try:
             results = self.cluster.query(query_string)
 
-            self.logger.debug(f"get_dockers result: {results}")
+            self.logger.debug(f"Result: {results}")
 
             for result in results.rows():
                 self.logger.debug(
-                    f"Processing result: {result},"
                     f"Available servers: {result['availableServers']}")
 
                 if result['availableServers'] >= count:
-                    self.logger.debug(f"incoming users are {result['users']}")
+                    self.logger.debug(f"Incoming users are {result['users']}")
 
                     users = result['users'] if result['users'] else {}
                     users[username] = count
@@ -71,8 +70,7 @@ class ServerManager:
                         f" users='{json.dumps(users)}'"
                         f" WHERE ipaddr='{result['ipaddr']}'")
 
-                    self.logger.debug(f"update string: {update_string}")
-
+                    self.logger.debug(f"Query: {update_string}")
                     self.cluster.query(update_string)
 
                     docker_ip_list.append(result['ipaddr'])
@@ -95,18 +93,17 @@ class ServerManager:
         Returns:
             bool: True if successful, False if server not found
         """
-        self.logger.info(f"start release_dockers: {username}")
+        self.logger.info(f"release_dockers: username={username}, "
+                         f"ipaddr={ipaddr}")
 
         query_string = (
             f"SELECT ipaddr,availableServers,users FROM `QE-server-pool` "
             f"WHERE ipaddr = '{ipaddr}'")
-
-        self.logger.debug(f"release_dockers query: {query_string}")
+        self.logger.debug(f"Query: {query_string}")
 
         try:
             results = self.cluster.query(query_string)
-
-            self.logger.debug(f"release_dockers result: {results}")
+            self.logger.debug(f"Result: {results}")
 
             if len(results.rows()) > 0:
                 result = results.rows()[0]
@@ -128,10 +125,11 @@ class ServerManager:
                         f"availableServers={new_count}, "
                         f"users='{json.dumps(users)}' WHERE ipaddr='{ipaddr}'")
 
-                    self.logger.debug(f"Update query: {update_string}")
+                    self.logger.debug(f"Query: {update_string}")
                     self.cluster.query(update_string)
 
-                    self.logger.info(f"end release_dockers: {username}")
+                    self.logger.info(f"release_dockers: username={username}, "
+                                     f"ipaddr={ipaddr}")
                     return True
             else:
                 self.logger.error("Unknown server")
@@ -310,7 +308,8 @@ class ServerManager:
 
             # Execute the transaction
             _ = self.cluster.transactions.run(allocate_servers)
-            self.logger.info(f"Allocated {len(server_list)} servers")
+            self.logger.info(
+                f"Allocated {len(server_list)} servers: {server_list}")
             return server_list
         except Exception as e:
             self.logger.error(f"Error in get_servers transaction: {str(e)}")
@@ -330,7 +329,7 @@ class ServerManager:
             f"UPDATE `QE-server-pool` SET state='{state}'"
             f" WHERE ipaddr='{ipaddr}' AND state='booked'")
 
-        self.logger.debug(f"update string: {update_string}")
+        self.logger.debug(f"Query: {update_string}")
 
         try:
             self.cluster.query(update_string)
@@ -357,7 +356,7 @@ class ServerManager:
                     f"SELECT *, meta().id FROM `QE-server-pool` "
                     f"WHERE username='{username}' AND state='booked'")
 
-                self.logger.debug(f"Release servers query: {query}")
+                self.logger.debug(f"Query: {query}")
 
                 results = ctx.query(query)
                 released_count = 0

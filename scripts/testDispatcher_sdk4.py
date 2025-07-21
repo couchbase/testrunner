@@ -1,33 +1,30 @@
 import base64
+import configparser
+import ipaddress
 import json
 import logging
+import os as OS
+import subprocess
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
-
 from copy import deepcopy
+from optparse import OptionParser
 from uuid import uuid4
 
-import httplib2
-from optparse import OptionParser
-import traceback
-import os as OS
 import paramiko
-import ipaddress
-import subprocess
-import configparser
-
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions
 
-import get_jenkins_params
-import find_rerun_job
-
-import cloud_provision
 import capella
+import cloud_provision
+import find_rerun_job
+import httplib2
 from server_manager import ServerManager
+import get_jenkins_params
 from table_view import TableView
 
 # takes an ini template as input, standard out is populated with the server pool
@@ -96,7 +93,8 @@ def getNumberOfAddpoolServers(iniFile, addPoolId):
     f.close()
     try:
         return contents.count(addPoolId)
-    except:
+    except Exception as e:
+        log.error(f"Error in getNumberOfAddpoolServers: {str(e)}")
         return 0
 
 
@@ -135,21 +133,28 @@ def get_available_servers_count(options=None, is_addl_pool=False,
     return count
 
 
-def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, pool_id):
+def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version,
+                      pool_id):
     descriptor = urllib.parse.unquote(descriptor)
     type = "couchbase"
     if is_addl_pool:
         type = pool_id
     if options.serverType == AWS:
         ssh_key_path = OS.environ.get("AWS_SSH_KEY")
-        return cloud_provision.aws_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
+        return cloud_provision.aws_get_servers(
+            descriptor, how_many, os_version, type, ssh_key_path,
+            options.architecture), None
     elif options.serverType == GCP:
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
-        return cloud_provision.gcp_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture), None
+        return cloud_provision.gcp_get_servers(
+            descriptor, how_many, os_version, type, ssh_key_path,
+            options.architecture), None
     elif options.serverType == AZURE:
         """ Azure uses template with pw enable login.  No need key """
         ssh_key_path = ""
-        return cloud_provision.az_get_servers(descriptor, how_many, os_version, type, ssh_key_path, options.architecture)
+        return cloud_provision.az_get_servers(
+            descriptor, how_many, os_version, type, ssh_key_path,
+            options.architecture)
     elif options.serverType == SERVERLESS_ONCLOUD:
         return [], []
     elif options.serverType == PROVISIONED_ONCLOUD:
@@ -158,7 +163,8 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version, p
         return [], []
 
 
-def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version="", pool_id=None):
+def get_servers(options=None, descriptor="", test=None, how_many=0,
+                is_addl_pool=False, os_version="", pool_id=None):
     if options.serverType in CLOUD_SERVER_TYPES:
         return get_servers_cloud(options, descriptor, how_many, is_addl_pool,
                                  os_version, pool_id)
@@ -198,7 +204,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
         if '[' in server or ']' in server:
             server = server.replace('[', '')
             server = server.replace(']','')
-        ip_version = ipaddress.ip_address(server).version
+        _ = ipaddress.ip_address(server).version
     except ValueError as e:
         log.critical(f"Invalid address for {server}: {str(e)}")
         return False
@@ -221,7 +227,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
                 f"Exception occured while trying to ssh {server}: {str(e)}")
             continue
 
-    log.critical(f"{server} is unreachable. Tried to establish ssh connection {num_retries-1} times")
+    log.critical(f"{server} is unreachable. Tried {num_retries-1} times")
     return False
 
 
