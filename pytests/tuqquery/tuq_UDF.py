@@ -2234,3 +2234,52 @@ class QueryUDFTests(QueryTests):
             self.assertIn("query_external_access", str(the_exception))
         finally:
             self.delete_role(user_ids=[test_username])
+
+    # MB-67425: Test that sort_projection query parameter does not impacts UDF execution time
+    def test_sort_projection_udf(self):
+        """
+        MB-67425: Test that sort_projection query parameter impacts the UDF execution time.
+        Uses a dedicated collection in default._default for isolation.
+        """
+        collection_name = "mb67425"
+        fq_coll = f"default._default.{collection_name}"
+
+        # 1. Create collection if not exists
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context="default._default")
+
+        try:
+            # 2. Upsert 1000 docs into the new collection
+            upsert_query = f'''
+                UPSERT INTO {fq_coll}(KEY doc.k, VALUE doc)
+                SELECT {{"k": TO_STR(d)}} AS doc FROM ARRAY_RANGE(0,1000) AS d;
+            '''
+            self.run_cbq_query(upsert_query)
+
+            # 3. Create primary index if not exists
+            self.run_cbq_query(f'CREATE PRIMARY INDEX IF NOT EXISTS ON {fq_coll}')
+
+            # 4. Create the UDF to select from the new collection
+            udf = f'CREATE OR REPLACE FUNCTION func4() {{ (SELECT RAW t1 FROM {fq_coll} t1) }};'
+            self.run_cbq_query(udf)
+
+            # 5. Run the SELECT array_length(func4()) FROM <collection> with timeout 2s, with and without sort_projection
+            # Without sort_projection
+            self.run_cbq_query(
+                f'SELECT array_length(func4()) FROM {fq_coll}',
+                query_params={'timeout': '2s'}
+            )
+
+            # With sort_projection=true
+            self.run_cbq_query(
+                f'SELECT array_length(func4()) FROM {fq_coll}',
+                query_params={'timeout': '2s', 'sort_projection': True}
+            )
+            # With sort_projection=false
+            self.run_cbq_query(
+                f'SELECT array_length(func4()) FROM {fq_coll}',
+                query_params={'timeout': '2s', 'sort_projection': False}
+            )
+
+        finally:
+            # Cleanup: Drop the collection
+            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context="default._default")
