@@ -19,6 +19,7 @@ import logger
 import traceback
 log = logger.Logger.get_logger()
 import socket
+import os
 
 class audit:
     AUDITLOGFILENAME = 'current-audit.log'
@@ -52,6 +53,7 @@ class audit:
                                                     host.ssh_username != "root":
             self.nonroot = True
         shell.disconnect()
+        self.cli_location = "/opt/couchbase/bin/"
         self.pathDescriptor = self.getAuditConfigElement("descriptors_path") + "/"
         self.pathLogFile = self.getAuditLogPath()
         self.defaultFields = ['id', 'name', 'description']
@@ -207,8 +209,17 @@ class audit:
     def getAuditConfigElement(self, element):
         data = []
         self.readFile(self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
-        json_data = open (audit.DOWNLOADPATH + audit.AUDITCONFIGFILENAME)
-        data = json.load(json_data)
+        shell = RemoteMachineShellConnection(self.host)
+        command = "{0}cbcat {1}{2}".format(self.cli_location, self.getAuditConfigPathInitial(), audit.AUDITCONFIGFILENAME)
+        output, error = shell.execute_command(command)
+        data = ""
+        for part in output:
+            data += part
+        try:
+            data = json.loads(data)
+        except:
+            print("Not able to convert the data from shell command to json")
+        # data = json.load(json_data)
         if (element == 'all'):
             return data
         else:
