@@ -593,7 +593,6 @@ def main():
             splitSubcomponents = options.subcomponent.split(',')
             subcomponentString = ''
             for i in range(len(splitSubcomponents)):
-                log.info(f'subcomponentString is {subcomponentString}')
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
