@@ -676,15 +676,16 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         with ThreadPoolExecutor() as executor:
-            self.gsi_util_obj.query_event.set()
-            executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+            # todo will uncomment out below post - https://jira.issues.couchbase.com/browse/MB-67778
+            # self.gsi_util_obj.query_event.set()
+            # executor.submit(self.gsi_util_obj.run_continous_query_load,
+            #                 select_queries=select_queries, query_node=query_node)
             if self.rebalance_type == 'rebalance_in':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[self.nodes_init]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[], services=['index', 'index'])
             elif self.rebalance_type == 'rebalance_swap':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[self.nodes_init]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[index_nodes[0]], services=['index'])
             elif self.rebalance_type == 'rebalance_out':
@@ -711,7 +712,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                              to_remove=[], services=[])
                 rebalance_status = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-            self.gsi_util_obj.query_event.clear()
+            # self.gsi_util_obj.query_event.clear()
             data_nodes = self.get_nodes_from_services_map(service_type="kv")
             self.sleep(30)
             code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
@@ -790,6 +791,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if "DISTINCT" in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        self.sleep(3600)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance(self):
