@@ -102,7 +102,11 @@ def select_bucket(cluster, bucket_name, scope_name=None, collection_name=None):
                 .scope(scope_name).collection(collection_name)
     except Exception:
         # Fall back to prev. behavior (Running on old slaves)
-        return cluster.bucket(bucket_name)
+        try:
+            return cluster.bucket(bucket_name)
+        except AttributeError:
+            # For SDK-2 slaves
+            return cluster.open_bucket(bucket_name)
 
 
 def run_query(cluster, bucket, query):
