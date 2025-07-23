@@ -921,3 +921,77 @@ class QuerySelectTests(QueryTests):
         }
         ]
         self.assertEqual(expected_result, result['results'], f"We expected {expected_result} but got {result['results']}")
+
+    def test_empty_array_bracket(self):
+        """Test empty array bracket functionality with various scenarios"""
+        result = self.run_cbq_query('''
+            SELECT
+                d.nonarrayfield[] as nonarray_result,
+                d.schedule[] as schedule_result,
+                d.schedule[].day as day_array,
+                d.schedule[].special_flights[].a as special_flight_a,
+                d.schedule[][].day IS MISSING as nested_day_array
+            FROM [{
+                "nonarrayfield": "not_an_array",
+                "schedule": [
+                    {
+                        "day": 0,
+                        "flight": "AF198",
+                        "utc": "10:13:00"
+                    },
+                    {
+                        "day": 1,
+                        "flight": "AF250",
+                        "utc": "12:59:00"
+                    },
+                    {
+                        "day": 2,
+                        "flight": "AF223",
+                        "special_flights": [
+                            {
+                                "a": "SA"
+                            },
+                            {
+                                "b": "SB"
+                            }
+                        ],
+                        "utc": "19:41:00"
+                    }
+                ]
+            }] d
+        ''')
+
+        expected_result = [{
+            "nonarray_result": None,
+            "schedule_result": [
+                {
+                    "day": 0,
+                    "flight": "AF198",
+                    "utc": "10:13:00"
+                },
+                {
+                    "day": 1,
+                    "flight": "AF250",
+                    "utc": "12:59:00"
+                },
+                {
+                    "day": 2,
+                    "flight": "AF223",
+                    "special_flights": [
+                        {
+                            "a": "SA"
+                        },
+                        {
+                            "b": "SB"
+                        }
+                    ],
+                    "utc": "19:41:00"
+                }
+            ],
+            "day_array": [0, 1, 2],
+            "special_flight_a": ["SA"],
+            "nested_day_array": True
+        }]
+
+        self.assertEqual(expected_result, result['results'],
+                        f"We expected {expected_result} but got {result['results']}")
