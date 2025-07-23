@@ -791,7 +791,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if "DISTINCT" in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
-        self.sleep(3600)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance(self):
