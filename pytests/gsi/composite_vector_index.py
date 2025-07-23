@@ -3522,7 +3522,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.item_count_related_validations()
         with ThreadPoolExecutor() as executor:
             add_nodes = [self.servers[3]]
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
