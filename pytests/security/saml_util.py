@@ -8,6 +8,7 @@ from couchbase.bucket import Bucket
 
 class SAMLUtils:
     def __init__(self, logger):
+        self.qe_server_ip = "172.23.104.162"
         self.log = logger
         self.saml_resources = None
         self.idp_metadata = None
@@ -16,7 +17,7 @@ class SAMLUtils:
 
     def initialize_file_paths(self):
         bucket_name = "saml_tests_resources"
-        ip = "172.23.124.12"
+        ip = self.qe_server_ip
         username = "saml_test_user"
         password = "password"
         url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
@@ -27,7 +28,7 @@ class SAMLUtils:
 
     def upload_idp_metadata(self, idp_id, idp_metadata):
         bucket_name = "saml_tests_resources"
-        ip = "172.23.124.12"
+        ip = self.qe_server_ip
         username = "saml_test_user"
         password = "password"
         url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
