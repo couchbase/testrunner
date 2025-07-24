@@ -3082,11 +3082,15 @@ class BaseSecondaryIndexingTests(QueryTests):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
         settings = rest.get_indexer_internal_stats()
-        max_shard_count = settings['indexer.plasma.shardLimitPerTenant']
+        max_shard_count = settings['indexer.plasma.shardLimitPerNode']
         flush_buffer_quota = settings['indexer.plasma.flushBufferQuota']
         min_shards_per_node = settings['indexer.plasma.minShardsPerNode']
-        mem_quota = self.get_indexer_mem_quota()
-        shard_limit = int(int(mem_quota * 0.9 * flush_buffer_quota // 100) // flush_buffer_quota)
+        flush_buffer_size = settings['indexer.plasma.sharedFlushBufferSize']
+        flush_buffer_multiplier = settings['indexer.plasma.sharedFlushBufferMultipler']
+        flush_buffer_size = flush_buffer_size * flush_buffer_multiplier
+
+        mem_quota = settings['indexer.settings.memory_quota']
+        shard_limit = int(int(mem_quota * 0.9 * flush_buffer_quota // 100) // flush_buffer_size)
         if shard_limit % 2 != 0:
             shard_limit += 1
         shard_count = min(max_shard_count, shard_limit)
