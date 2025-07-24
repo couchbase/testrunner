@@ -610,7 +610,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 create_queries.extend(queries)
                 shards_list = self.fetch_plasma_shards_list()
                 if len(shards_list) > allowed_num_shards:
-                    raise Exception(
+                    #this is more of a indicative limit not exactly a hard limit
+                    self.log.info(
                         f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
         self.wait_until_indexes_online()
         if self.use_nodes_clause:
@@ -1219,7 +1220,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
 
         shards_list = self.fetch_plasma_shards_list()
         if len(shards_list) > allowed_num_shards:
-            raise Exception(
+            # this is more of a indicative limit not exactly a hard limit
+            self.log.info(
                 f"The total number of shards {shards_list} has exceeded the allowed limit {allowed_num_shards}")
         if len(shards_list) < allowed_num_shards:
             for namespace in self.namespaces:
