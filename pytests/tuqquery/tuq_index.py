@@ -1223,6 +1223,336 @@ class QueriesViewsTests(QuerySanityTests):
                     except:
                         pass
 
+    def test_index_order_partial_sort_pruning(self):
+        """
+        Test that index order can prune sort size when the first sort term matches index order.
+        Creates index: (c1, c2 desc, c3)
+        Query: ORDER BY c1, c2 desc, c3 desc
+        Should show partial_sort_term_count: 2 and reduced sortCount.
+        """
+        self.fail_if_no_buckets()
+        for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+            created_indexes = []
+            try:
+                # Create test data with multiple distinct c1 values
+                self._create_test_data_for_sort_pruning(query_bucket)
+
+                # Create index with mixed order: (c1, c2 desc, c3)
+                index_name = "ix1"
+                self.query = f"CREATE INDEX {index_name} ON {query_bucket}(c1, c2 DESC, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+
+                # Test query with ORDER BY that matches index order for first term
+                self.query = f"EXPLAIN SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+
+                # Verify Order operator exists and has partial_sort_term_count
+                order_operator = self._find_order_operator(plan)
+                self.assertIsNotNone(order_operator, "Order operator not found in plan")
+                self.assertEqual(order_operator.get('partial_sort_term_count'), 2, 
+                                "Expected partial_sort_term_count to be 2")
+                self.assertEqual(order_operator.get('limit'), "2")
+                self.assertEqual(order_operator.get('offset'), "9")
+
+                # Verify sort terms
+                sort_terms = order_operator.get('sort_terms', [])
+                self.assertEqual(len(sort_terms), 3, "Expected 3 sort terms")
+                self.assertEqual(sort_terms[0]['expr'], f"_index_key ((`{query_bucket}`.`c1`))")
+                self.assertEqual(sort_terms[1]['expr'], f"_index_key ((`{query_bucket}`.`c2`))")
+                self.assertEqual(sort_terms[1]['desc'], '"desc"')
+                self.assertEqual(sort_terms[2]['expr'], f"_index_key ((`{query_bucket}`.`c3`))")
+                self.assertEqual(sort_terms[2]['desc'], '"desc"')
+
+                # Run the actual query and verify sortCount metric
+                self.query = f"SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query(query_params={'profile': 'phases'})
+
+                # Verify sortCount is reduced (should be around 6 for 5 distinct c1 values)
+                sort_count = res['profile'].get('phaseCounts', {}).get('sort', 0)
+                self.log.info(f"Sort count: {sort_count}")
+                self.assertLess(sort_count, 125, f"Expected reduced sortCount, got {sort_count}")
+                self.assertGreater(sort_count, 0, f"Expected positive sortCount, got {sort_count}")
+
+            finally:
+                for index_name in created_indexes:
+                    self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+
+    def test_index_order_no_partial_sort_desc_first(self):
+        """
+        Test that when first sort term is DESC and doesn't match index order,
+        no partial_sort_term_count is used.
+        Creates index: (c1, c2 desc, c3)
+        Query: ORDER BY c1 DESC, c2 DESC, c3 DESC
+        Should NOT show partial_sort_term_count and full sortCount.
+        """
+        self.fail_if_no_buckets()
+        for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+            created_indexes = []
+            try:
+                # Create test data with multiple distinct c1 values
+                self._create_test_data_for_sort_pruning(query_bucket)
+
+                # Create index with mixed order: (c1, c2 desc, c3)
+                index_name = "ix1"
+                self.query = f"CREATE INDEX {index_name} ON {query_bucket}(c1, c2 DESC, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+
+                # Test query with ORDER BY that has DESC first term (doesn't match index)
+                self.query = f"EXPLAIN SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1 DESC, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+
+                # Verify Order operator exists but NO partial_sort_term_count
+                order_operator = self._find_order_operator(plan)
+                self.assertIsNotNone(order_operator, "Order operator not found in plan")
+                self.assertNotIn('partial_sort_term_count', order_operator, 
+                                "Should not have partial_sort_term_count when first sort term is DESC")
+
+                # Run the actual query and verify full sortCount
+                self.query = f"SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1 DESC, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query(query_params={'profile': 'phases'})
+
+                # Verify sortCount is full (should be around 125 for 5*5*5 documents)
+                sort_count = res['profile'].get('phaseCounts', {}).get('sort', 0)
+                self.log.info(f"Sort count: {sort_count}")
+                self.assertGreaterEqual(sort_count, 100, f"Expected full sortCount, got {sort_count}")
+
+            finally:
+                for index_name in created_indexes:
+                    self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+
+    def test_index_order_partial_sort_with_equality_filter(self):
+        """
+        Test that equality filter on first index column re-enables partial sorting
+        even when first sort term is DESC.
+        Creates index: (c1, c2 desc, c3)
+        Query: WHERE c1 = 1 ORDER BY c1 DESC, c2 DESC, c3 DESC
+        Should show partial_sort_term_count: 2 due to equality filter.
+        """
+        self.fail_if_no_buckets()
+        for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+            created_indexes = []
+            try:
+                # Create test data with multiple distinct c1 values
+                self._create_test_data_for_sort_pruning(query_bucket)
+
+                # Create index with mixed order: (c1, c2 desc, c3)
+                index_name = "ix1"
+                self.query = f"CREATE INDEX {index_name} ON {query_bucket}(c1, c2 DESC, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+
+                # Test query with equality filter and DESC first sort term
+                self.query = f"EXPLAIN SELECT noncover FROM {query_bucket} WHERE c1 = 1 ORDER BY c1 DESC, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+
+                # Verify Order operator exists and has partial_sort_term_count due to equality filter
+                order_operator = self._find_order_operator(plan)
+                self.assertIsNotNone(order_operator, "Order operator not found in plan")
+                self.assertEqual(order_operator.get('partial_sort_term_count'), 1, 
+                                "Expected partial_sort_term_count to be 1 due to equality filter")
+
+                # Run the actual query and verify reduced sortCount
+                self.query = f"SELECT noncover FROM {query_bucket} WHERE c1 = 1 ORDER BY c1 DESC, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query(query_params={'profile': 'phases'})
+
+                # Verify sortCount is reduced (should be around 16 for 5*5 documents with c1=1)
+                sort_count = res['profile'].get('phaseCounts', {}).get('sort', 0)
+                self.log.info(f"Sort count: {sort_count}")
+                self.assertLess(sort_count, 125, f"Expected reduced sortCount with equality filter, got {sort_count}")
+                self.assertGreater(sort_count, 0, f"Expected positive sortCount, got {sort_count}")
+
+            finally:
+                for index_name in created_indexes:
+                    self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+
+    def test_index_order_partial_sort_complex_scenarios(self):
+        """
+        Test various complex scenarios for partial sort pruning:
+        1. Index: (c1, c2, c3) with ORDER BY c1, c2, c3 (full match)
+        2. Index: (c1, c2, c3) with ORDER BY c1, c2 DESC, c3 (partial match)
+        3. Index: (c1 DESC, c2, c3) with ORDER BY c1 DESC, c2, c3 (full match)
+        """
+        self.fail_if_no_buckets()
+        for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+            created_indexes = []
+            try:
+                # Create test data
+                self._create_test_data_for_sort_pruning(query_bucket)
+
+                # Test Case 1: Full match - all ASC
+                index_name1 = "ix1_asc"
+                self.query = f"CREATE INDEX {index_name1} ON {query_bucket}(c1, c2, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name1)
+                created_indexes.append(index_name1)
+
+                self.query = f"EXPLAIN SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1, c2, c3 OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.log.info(f"Plan: {plan}")
+
+                order_operator = self._find_order_operator(plan)
+                self.assertIsNone(order_operator, "Order operator should not be found in plan")
+
+                # Test Case 2: Partial match - mixed order
+                index_name2 = "ix2_mixed"
+                self.query = f"CREATE INDEX {index_name2} ON {query_bucket}(c1, c2, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name2)
+                created_indexes.append(index_name2)
+
+                self.query = f"EXPLAIN SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1, c2 DESC, c3 OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.log.info(f"Plan: {plan}")
+
+                order_operator = self._find_order_operator(plan)
+                self.assertIsNotNone(order_operator, "Order operator not found in plan")
+                self.assertEqual(order_operator.get('partial_sort_term_count'), 1, 
+                                "Expected partial_sort_term_count to be 1 for partial match")
+
+                # Test Case 3: Full match - first DESC
+                index_name3 = "ix3_desc"
+                self.query = f"CREATE INDEX {index_name3} ON {query_bucket}(c1 DESC, c2, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name3)
+                created_indexes.append(index_name3)
+
+                self.query = f"EXPLAIN SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1 DESC, c2, c3 OFFSET 9 LIMIT 2"
+                res = self.run_cbq_query()
+                plan = self.ExplainPlanHelper(res)
+                self.log.info(f"Plan: {plan}")
+
+                order_operator = self._find_order_operator(plan)
+                self.assertIsNone(order_operator, "Order operator should not be found in plan")
+
+            finally:
+                for index_name in created_indexes:
+                    self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+
+    def test_index_order_partial_sort_metrics_validation(self):
+        """
+        Test that the sortCount metrics are correctly reported for partial sort scenarios.
+        Validates that partial sorting reduces the actual number of items sorted.
+        """
+        self.fail_if_no_buckets()
+        for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+            created_indexes = []
+            try:
+                # Create test data with known distribution
+                self._create_test_data_for_sort_pruning(query_bucket)
+
+                # Create index: (c1, c2 desc, c3)
+                index_name = "ix1"
+                self.query = f"CREATE INDEX {index_name} ON {query_bucket}(c1, c2 DESC, c3) USING {self.index_type}"
+                self.run_cbq_query()
+                self._wait_for_index_online(bucket, index_name)
+                created_indexes.append(index_name)
+
+                # Test 1: Partial sort enabled (should have lower sortCount)
+                self.query = f"SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res_partial = self.run_cbq_query(query_params={'profile': 'phases'})
+                sort_count_partial = res_partial['profile'].get('phaseCounts', {}).get('sort', 0)
+                self.log.info(f"Sort count partial: {sort_count_partial}")
+
+                # Test 2: No partial sort (should have higher sortCount)
+                self.query = f"SELECT noncover FROM {query_bucket} WHERE c1 IS VALUED ORDER BY c1 DESC, c2 DESC, c3 DESC OFFSET 9 LIMIT 2"
+                res_full = self.run_cbq_query(query_params={'profile': 'phases'})
+                sort_count_full = res_full['profile'].get('phaseCounts', {}).get('sort', 0)
+                self.log.info(f"Sort count full: {sort_count_full}")
+
+                # Verify that partial sort has lower sortCount
+                self.assertLess(sort_count_partial, sort_count_full, 
+                               f"Partial sort should have lower sortCount. Partial: {sort_count_partial}, Full: {sort_count_full}")
+
+                # Verify reasonable ranges
+                self.assertGreater(sort_count_partial, 0, "Partial sortCount should be positive")
+                self.assertLess(sort_count_partial, 50, "Partial sortCount should be significantly less than total documents")
+                self.assertGreater(sort_count_full, 100, "Full sortCount should be close to total documents")
+
+            finally:
+                for index_name in created_indexes:
+                    self.query = f"DROP INDEX {index_name} ON {query_bucket} USING {self.index_type}"
+                    try:
+                        self.run_cbq_query()
+                    except:
+                        pass
+
+    def _create_test_data_for_sort_pruning(self, query_bucket):
+        """
+        Create test data with 5 distinct c1 values, each with 5 distinct c2 values, 
+        each with 5 distinct c3 values (total 125 documents).
+        """
+        # Clear existing data first
+        self.query = f"DELETE FROM {query_bucket}"
+        self.run_cbq_query()
+
+        # Insert test data with controlled distribution
+        for c1 in range(1, 6):  # 5 distinct c1 values
+            for c2 in range(1, 6):  # 5 distinct c2 values  
+                for c3 in range(1, 6):  # 5 distinct c3 values
+                    doc_id = f"doc_{c1}_{c2}_{c3}"
+                    self.query = (
+                        f"INSERT INTO {query_bucket} (KEY, VALUE) VALUES ('{doc_id}', "
+                        f"{{'c1': {c1}, 'c2': {c2}, 'c3': {c3}, 'noncover': 'value_{c1}_{c2}_{c3}'}})"
+                    )
+                    self.run_cbq_query()
+
+        # Verify data was inserted
+        self.query = f"SELECT COUNT(*) as cnt FROM {query_bucket}"
+        res = self.run_cbq_query()
+        self.assertEqual(res['results'][0]['cnt'], 125, "Expected 125 documents")
+
+    def _find_order_operator(self, plan):
+        """
+        Recursively find the Order operator in the explain plan.
+        """
+        if isinstance(plan, dict):
+            if plan.get('#operator') == 'Order':
+                return plan
+
+            # Check children
+            for key, value in plan.items():
+                if key == '~children' and isinstance(value, list):
+                    for child in value:
+                        result = self._find_order_operator(child)
+                        if result:
+                            return result
+                elif isinstance(value, dict):
+                    result = self._find_order_operator(value)
+                    if result:
+                        return result
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            result = self._find_order_operator(item)
+                            if result:
+                                return result
+        return None
 
 class QueriesJoinViewsTests(JoinTests):
 
@@ -1251,16 +1581,15 @@ class QueriesJoinViewsTests(JoinTests):
 
     def test_run_query(self):
         indexes = []
-        index_name_prefix = "my_index_" + str(uuid.uuid4())[:4]
+        index_name_prefix = f"my_index_{str(uuid.uuid4())[:4]}"
         method_name = self.input.param('to_run', 'test_simple_join_keys')
         index_fields = self.input.param("index_field", '').split(';')
         self.fail_if_no_buckets()
         for query_bucket, bucket in zip(self.query_buckets, self.buckets):
             try:
                 for field in index_fields:
-                    index_name = '%s%s' % (index_name_prefix, field.split('.')[0].split('[')[0])
-                    self.query = "CREATE INDEX %s ON %s(%s) USING %s" % (
-                        index_name, query_bucket, ','.join(field.split(';')), self.index_type)
+                    index_name = f"{index_name_prefix}{field.split('.')[0].split('[')[0]}"
+                    self.query = f"CREATE INDEX {index_name} ON {query_bucket}({','.join(field.split(';'))}) USING {self.index_type}"
                     # if self.gsi_type:
                     #     self.query += " WITH {'index_type': 'memdb'}"
                     self.run_cbq_query()
@@ -1270,7 +1599,7 @@ class QueriesJoinViewsTests(JoinTests):
                 fn()
             finally:
                 for indx in indexes:
-                    self.query = "DROP INDEX %s ON %s USING %s" % (indx, query_bucket, self.index_type)
+                    self.query = f"DROP INDEX {indx} ON {query_bucket} USING {self.index_type}"
                     try:
                         self.run_cbq_query()
                     except:
