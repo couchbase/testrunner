@@ -3554,6 +3554,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             executor.submit(self.gsi_util_obj.run_continous_query_load,
                             select_queries=select_queries, query_node=query_node)
 
+            partial_indexes = self.get_partial_indexes_name_list()
             # perform index item count check to validate that indexer has processed all mutations
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
@@ -3565,7 +3566,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_indexes:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
