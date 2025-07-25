@@ -1366,3 +1366,110 @@ class QueryBucketDDLTests(QueryTests):
 
         finally:
             self.run_cbq_query(f"DROP DATABASE {db_name} IF EXISTS")
+
+    def test_bucket_uuid_in_system_catalog(self):
+        """
+        Test that bucket UUID is correctly set and consistent across system catalogs.
+        """
+        bucket_name = "uuid_test_bucket"
+        bucket_name2 = "uuid_test_bucket2"
+        scope_name = "uuid_test_scope"
+        collection_name = "uuid_test_collection"
+
+        try:
+            # Create bucket
+            self.run_cbq_query(f"CREATE BUCKET {bucket_name} WITH {{'storageBackend': 'couchstore'}}")
+            self.sleep(2)
+
+            # Create scope
+            self.run_cbq_query(f"CREATE SCOPE {bucket_name}.{scope_name}")
+            self.sleep(2)
+
+            # Create collection
+            self.run_cbq_query(f"CREATE COLLECTION {bucket_name}.{scope_name}.{collection_name}")
+            self.sleep(2)
+
+            # Get bucket UUID from system:buckets
+            result = self.run_cbq_query(f"SELECT uuid FROM system:buckets WHERE name = '{bucket_name}'")
+            self.assertEqual(len(result['results']), 1, "Bucket should exist in system:buckets")
+            bucket_uuid = result['results'][0]['uuid']
+            self.assertIsNotNone(bucket_uuid, "Bucket UUID should not be null")
+            self.assertIsInstance(bucket_uuid, str, "Bucket UUID should be a string")
+            self.assertGreater(len(bucket_uuid), 0, "Bucket UUID should not be empty")
+
+            # Verify UUID format (should be a 32-character hex string)
+            import re
+            uuid_pattern = re.compile(r'^[a-f0-9]{32}$')
+            self.assertTrue(uuid_pattern.match(bucket_uuid), f"Bucket UUID should be a 32-character hex string, got: {bucket_uuid}")
+
+            # Verify UUID in system:scopes
+            result = self.run_cbq_query(f"SELECT bucket_uuid FROM system:scopes WHERE `bucket` = '{bucket_name}' AND name = '{scope_name}'")
+            self.assertEqual(len(result['results']), 1, "Scope should exist in system:scopes")
+            scope_bucket_uuid = result['results'][0]['bucket_uuid']
+            self.assertEqual(scope_bucket_uuid, bucket_uuid, "Scope bucket_uuid should match bucket UUID")
+
+            # Verify UUID in system:keyspaces for the bucket
+            result = self.run_cbq_query(f"SELECT bucket_uuid FROM system:keyspaces WHERE name = '{bucket_name}'")
+            self.assertEqual(len(result['results']), 1, "Bucket should exist in system:keyspaces")
+            keyspace_bucket_uuid = result['results'][0]['bucket_uuid']
+            self.assertEqual(keyspace_bucket_uuid, bucket_uuid, "Keyspace bucket_uuid should match bucket UUID")
+
+            # Verify UUID in system:keyspaces for the collection
+            result = self.run_cbq_query(f"SELECT bucket_uuid FROM system:keyspaces WHERE name = '{collection_name}' AND `scope` = '{scope_name}'")
+            self.assertEqual(len(result['results']), 1, "Collection should exist in system:keyspaces")
+            collection_bucket_uuid = result['results'][0]['bucket_uuid']
+            self.assertEqual(collection_bucket_uuid, bucket_uuid, "Collection bucket_uuid should match bucket UUID")
+
+            # Test with multiple buckets to ensure UUIDs are unique
+            self.run_cbq_query(f"CREATE BUCKET {bucket_name2} WITH {{'storageBackend': 'couchstore'}}")
+            self.sleep(2)
+
+            result = self.run_cbq_query(f"SELECT uuid FROM system:buckets WHERE name = '{bucket_name2}'")
+            self.assertEqual(len(result['results']), 1, "Second bucket should exist in system:buckets")
+            bucket_uuid2 = result['results'][0]['uuid']
+
+            # UUIDs should be different
+            self.assertNotEqual(bucket_uuid, bucket_uuid2, "Different buckets should have different UUIDs")
+
+            # Verify both UUIDs are valid
+            self.assertTrue(uuid_pattern.match(bucket_uuid2), f"Second bucket UUID should be a 32-character hex string, got: {bucket_uuid2}")
+
+        finally:
+            # Clean up
+            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET {bucket_name2} IF EXISTS")
+
+    def test_bucket_uuid_persistence(self):
+        """
+        Test that bucket UUID remains consistent after bucket operations.
+        """
+        bucket_name = "uuid_persistence_test_bucket"
+
+        try:
+            # Create bucket
+            self.run_cbq_query(f"CREATE BUCKET {bucket_name} WITH {{'storageBackend': 'couchstore'}}")
+            self.sleep(2)
+
+            # Get initial UUID
+            result = self.run_cbq_query(f"SELECT uuid FROM system:buckets WHERE name = '{bucket_name}'")
+            initial_uuid = result['results'][0]['uuid']
+
+            # Alter bucket
+            self.run_cbq_query(f"ALTER BUCKET {bucket_name} WITH {{'ramQuota': 256}}")
+            self.sleep(2)
+
+            # Verify UUID remains the same
+            result = self.run_cbq_query(f"SELECT uuid FROM system:buckets WHERE name = '{bucket_name}'")
+            altered_uuid = result['results'][0]['uuid']
+            self.assertEqual(altered_uuid, initial_uuid, "Bucket UUID should remain consistent after ALTER")
+
+            # Insert some data
+            self.run_cbq_query(f"INSERT INTO {bucket_name} (KEY, VALUE) VALUES ('test_key', {{'test': 'value'}})")
+
+            # Verify UUID still remains the same
+            result = self.run_cbq_query(f"SELECT uuid FROM system:buckets WHERE name = '{bucket_name}'")
+            data_uuid = result['results'][0]['uuid']
+            self.assertEqual(data_uuid, initial_uuid, "Bucket UUID should remain consistent after data operations")
+
+        finally:
+            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
