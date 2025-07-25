@@ -1193,3 +1193,70 @@ class JoinTests(QuerySanityTests):
                 self.assertIn('results', result)
             except Exception as e:
                 self.fail(f"MB-67432 query {idx+1} caused an exception: {e}")
+
+    def test_left_join_between_non_existing_field(self):
+        """
+        MB-51736: LEFT JOIN with BETWEEN operator on non-existing field.
+        This test verifies that queries with BETWEEN vs >= and <= operators
+        on non-existing fields return correct results.
+        """
+        scope_name = "s1_leftjoin_nonexist"
+        try:
+            # Create scope and collections in default bucket
+            self.run_cbq_query(f"CREATE SCOPE default.{scope_name} IF NOT EXISTS")
+            self.sleep(3)
+            self.run_cbq_query(f"CREATE COLLECTION default.{scope_name}.c1 IF NOT EXISTS")
+            self.run_cbq_query(f"CREATE COLLECTION default.{scope_name}.c2 IF NOT EXISTS")
+
+            # Insert documents with {"id": 1} in both collections
+            self.run_cbq_query(f'INSERT INTO default.{scope_name}.c1 (key, value) VALUES ("doc1", {{"id": 1}})')
+            self.run_cbq_query(f'INSERT INTO default.{scope_name}.c2 (key, value) VALUES ("doc2", {{"id": 1}})')
+
+            # Create indexes as specified
+            self.run_cbq_query(f"CREATE PRIMARY INDEX ON `default`.`{scope_name}`.`c1`")
+            self.run_cbq_query(f"CREATE INDEX `idx1` ON `default`.`{scope_name}`.`c2`(`id`)")
+
+            # Wait for indexes to be ready
+            self.sleep(5)
+
+            # Test query 1: LEFT JOIN with BETWEEN operator on non-existing field
+            query1 = f"""
+            SELECT lhs.id
+            FROM default.{scope_name}.c1 lhs
+            LEFT JOIN default.{scope_name}.c2 rhs 
+            ON lhs.id = rhs.id
+                AND rhs.x between 1 and 10
+            """
+            result1 = self.run_cbq_query(query1)
+            self.log.info(f"Query 1 (BETWEEN) result: {result1}")
+
+            # Test query 2: LEFT JOIN with >= and <= operators on non-existing field
+            query2 = f"""
+            SELECT lhs.id
+            FROM default.{scope_name}.c1 lhs
+            LEFT JOIN default.{scope_name}.c2 rhs 
+            ON lhs.id = rhs.id
+                AND rhs.x >= 1 and rhs.x <= 10
+            """
+            result2 = self.run_cbq_query(query2)
+            self.log.info(f"Query 2 (>= and <=) result: {result2}")
+
+            # Both queries should return the same result: 1 document with id: 1
+            # The LEFT JOIN should preserve the left side document even when the right side
+            # condition fails due to non-existing field
+            expected_result = [{"id": 1}]
+
+            self.assertEqual(result1['results'], expected_result, 
+                           f"Query 1 (BETWEEN) should return {expected_result}, but got {result1['results']}")
+            self.assertEqual(result2['results'], expected_result, 
+                           f"Query 2 (>= and <=) should return {expected_result}, but got {result2['results']}")
+
+            # Verify both queries return the same result
+            self.assertEqual(result1['results'], result2['results'], 
+                           "Both queries should return the same result")
+        finally:
+            # Clean up
+            try:
+                self.run_cbq_query(f"DROP SCOPE `default`.`{scope_name}` IF EXISTS")
+            except Exception as e:
+                self.log.warning(f"Cleanup failed: {e}")
