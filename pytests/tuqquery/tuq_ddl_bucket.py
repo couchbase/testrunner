@@ -284,18 +284,12 @@ class QueryBucketDDLTests(QueryTests):
         finally:
             self.run_cbq_query("DROP BUCKET test_bucket11 IF EXISTS")
 
-    def test_create_bucket_with_num_vbuckets(self):
-        """Test CREATE BUCKET with numVBuckets option"""
-        try:
-            # Test with numVBuckets
-            self.run_cbq_query("CREATE BUCKET test_bucket12 WITH {'storageBackend': 'couchstore', 'numVBuckets': 1024}")
-
-            # Verify bucket was created with correct number of vbuckets
-            bucket_info = self.rest.get_bucket_json("test_bucket12")
-            self.assertEqual(bucket_info['numVBuckets'], 256, "numVBuckets should be 256")
-
-        finally:
-            self.run_cbq_query("DROP BUCKET test_bucket12 IF EXISTS")
+    def test_create_bucket_with_invalid_num_vbuckets(self):
+        """Test CREATE BUCKET with invalid numVBuckets option (256 is not allowed, only 128 and 1024 are valid)"""
+        with self.assertRaises(CBQError, msg="Should fail for invalid numVBuckets value 256"):
+            self.run_cbq_query("CREATE BUCKET test_bucket12 WITH {'storageBackend': 'couchstore', 'numVBuckets': 256}")
+        # Clean up in case bucket was created (should not be)
+        self.run_cbq_query("DROP BUCKET test_bucket12 IF EXISTS")
 
     def test_create_bucket_with_bucket_type(self):
         """Test CREATE BUCKET with bucketType option"""
@@ -1045,7 +1039,8 @@ class QueryBucketDDLTests(QueryTests):
                     'conflictResolutionType': 'seqno',
                     'bucketType': 'couchbase',
                     'replicaIndex': 0,
-                    'threadsNumber': 3
+                    'threadsNumber': 3,
+                    'numVBuckets': 1024
                 }
             """)
 
@@ -1082,7 +1077,8 @@ class QueryBucketDDLTests(QueryTests):
                     'maxTTL': 2147483647,
                     'conflictResolutionType': 'lww',
                     'bucketType': 'ephemeral',
-                    'threadsNumber': 8
+                    'threadsNumber': 8,
+                    'numVBuckets': 128
                 }
             """)
 
@@ -1095,7 +1091,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['compressionMode'], 'active', "compressionMode should be active")
             self.assertEqual(bucket_info['maxTTL'], 2147483647, "maxTTL should be 2147483647")
             self.assertEqual(bucket_info['conflictResolutionType'], 'lww', "conflictResolutionType should be lww")
-            self.assertEqual(bucket_info['numVBuckets'], 1024, "numVBuckets should be 1024")
+            self.assertEqual(bucket_info['numVBuckets'], 128, "numVBuckets should be 128")
             self.assertEqual(bucket_info['bucketType'], 'ephemeral', "bucketType should be ephemeral")
             self.assertEqual(bucket_info['threadsNumber'], 8, "threadsNumber should be 8")
 
