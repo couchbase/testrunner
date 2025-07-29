@@ -8757,3 +8757,70 @@ class QueriesIndexTests(QueryTests):
         result2 = self.run_cbq_query(query2, query_context=query_context)
         self.assertIn('status', result2)
         self.assertEqual(result2['status'], 'success', f"Query 2 failed: {result2}")
+
+    def test_MB67549(self):
+        """
+        MB-67549: Index aggregation test for DATE_TRUNC_STR function
+        This test creates a new collection in default._default, sets up the indexes and data as in the JIRA,
+        and asserts that the query uses idx_created_v2 index with both use_cbo false and true.
+        """
+        self.fail_if_no_buckets()
+        collection_name = "mb67549"
+        query_context = "default._default"
+        
+        # Create collection
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context=query_context)
+        self.sleep(2)
+        
+        # Insert test data with created_at timestamps
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('doc1', {{'created_at': '2025-03-18T10:30:00Z'}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('doc2', {{'created_at': '2025-03-18T15:45:00Z'}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('doc3', {{'created_at': '2025-03-19T09:20:00Z'}})", query_context=query_context)
+        self.run_cbq_query(f"INSERT INTO {collection_name} (KEY, VALUE) VALUES ('doc4', {{'created_at': '2025-03-20T14:10:00Z'}})", query_context=query_context)
+        
+        # Create indexes
+        self.run_cbq_query(f"CREATE INDEX idx_created ON {collection_name}(created_at,date_trunc_str(created_at, 'day'))", query_context=query_context)
+        self.run_cbq_query(f"CREATE INDEX idx_created_v2 ON {collection_name}(date_trunc_str(created_at, 'day'))", query_context=query_context)
+        
+        # Wait for indexes to be online
+        self.wait_for_all_indexes_online()
+        
+        # Query to test
+        test_query = f"""
+        SELECT DATE_TRUNC_STR(created_at,'day') AS d,
+        COUNT(1) AS c
+        FROM {collection_name}
+        WHERE DATE_TRUNC_STR(created_at, 'day') >= "2025-03-18"
+        GROUP BY DATE_TRUNC_STR(created_at, 'day')
+        ORDER BY d
+        """
+        
+        # Test with use_cbo = false
+        explain_query = f"EXPLAIN {test_query}"
+        explain_result_cbo_false = self.run_cbq_query(explain_query, query_context=query_context, query_params={'use_cbo': False})
+        self.log.info(f"EXPLAIN result with use_cbo=false: {explain_result_cbo_false}")
+        
+        # Check that idx_created_v2 is used in the plan
+        plan_str_cbo_false = str(explain_result_cbo_false['results'][0]['plan'])
+        self.assertIn('idx_created_v2', plan_str_cbo_false, 
+                     f"Expected idx_created_v2 to be used in the plan with use_cbo=false, but got: {plan_str_cbo_false}")
+        
+        # Test with use_cbo = true
+        explain_result_cbo_true = self.run_cbq_query(explain_query, query_context=query_context, query_params={'use_cbo': True})
+        self.log.info(f"EXPLAIN result with use_cbo=true: {explain_result_cbo_true}")
+        
+        # Check that idx_created_v2 is used in the plan
+        plan_str_cbo_true = str(explain_result_cbo_true['results'][0]['plan'])
+        self.assertIn('idx_created_v2', plan_str_cbo_true, 
+                     f"Expected idx_created_v2 to be used in the plan with use_cbo=true, but got: {plan_str_cbo_true}")
+        
+        # Also run the actual query to ensure it works
+        result = self.run_cbq_query(test_query, query_context=query_context)
+        self.assertIn('status', result)
+        self.assertEqual(result['status'], 'success', f"Query failed: {result}")
+        
+        # Verify the results are as expected
+        self.assertEqual(len(result['results']), 3, f"Expected 3 results, got {len(result['results'])}")
+        
+        # Clean up
+        self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
