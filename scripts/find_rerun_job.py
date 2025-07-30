@@ -277,7 +277,12 @@ def should_dispatch_job(os, component, sub_component, version,
         if not jobs_doc.success and pending:
             print("No jobs found for this build yet. Run the job")
             return True
-        jobs_doc = jobs_doc.value
+
+        try:
+            jobs_doc = jobs_doc.value
+        except AttributeError:
+            jobs_doc = jobs_doc.content_as[dict]
+
         jobs_name = "{0}-{1}_{2}".format(os, component, sub_component)
         last_job_url = ""
         # Change all windows versions to windows as os param to search
