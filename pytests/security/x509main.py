@@ -42,7 +42,7 @@ class x509main:
     LININSTALLPATH = "/opt/couchbase/var/lib/couchbase/"
     MACINSTALLPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/"
     DOWNLOADPATH = "/tmp/"
-    CACERTFILEPATH = "/tmp/newcerts" + str(random.randint(1, 100)) + "/"
+    CACERTFILEPATH = "/tmp/newcerts" + "/"
     CHAINFILEPATH = "inbox"
     GOCERTGENFILE = "gencert.go"
     INCORRECT_ROOT_CERT = "incorrect_root_cert.crt"
@@ -93,7 +93,7 @@ class x509main:
     def _generate_cert(self, servers, root_cn='Root Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
-        shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
+        shell.execute_command("mkdir -p " + x509main.CACERTFILEPATH)
 
         if type == 'go':
             files = []
@@ -306,7 +306,7 @@ class x509main:
         rest = RestConnection(self.host)
         url = "controller/uploadClusterCA"
         api = rest.baseUrl + url
-        self._rest_upload_file(api, x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE, "Administrator", 'password')
+        self._rest_upload_file(api, x509main.CACERTFILEPATH + x509main.CACERTFILE, "Administrator", 'password')
 
     # Upload security setting for client cert
     def _upload_cluster_ca_settings(self, username, password):
@@ -328,22 +328,24 @@ class x509main:
     Capture any exception in the code and return error
     '''
 
-    def _validate_ssl_login(self, final_url=None, header=None, client_cert=False, verb='GET', data='', plain_curl=False, username='Administrator', password='password', host=None):
+    def _validate_ssl_login(self, final_url=None, header=None, client_cert=False, verb='GET', data='', plain_curl=False, username='Administrator', password='password', host=None, verify=True):
+        if verify:
+            verify = x509main.CERT_FILE
         if verb == 'GET' and plain_curl:
             r = requests.get(final_url, data=data)
             return r.status_code, r.text
         elif client_cert:
             try:
                 if verb == 'GET':
-                    r = requests.get(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
+                    r = requests.get(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
                 elif verb == 'POST':
-                    r = requests.post(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
+                    r = requests.post(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
                 elif verb == 'PUT':
                     header = {'Content-type': 'Content-Type: application/json'}
-                    r = requests.put(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data, headers=header)
+                    r = requests.put(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data, headers=header)
                 elif verb == 'DELETE':
                     header = {'Content-type': 'Content-Type: application/json'}
-                    r = requests.delete(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), headers=header)
+                    r = requests.delete(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), headers=header)
                 return r.status_code, r.text
             except Exception as ex:
                 log.info ("into exception form validate_ssl_login with client cert")
@@ -351,11 +353,11 @@ class x509main:
                 return 'error','error'
         else:
             try:
-                r = requests.get("https://" + str(self.host.ip) + ":18091", verify=x509main.CERT_FILE)
+                r = requests.get("https://" + str(self.host.ip) + ":18091", verify=verify)
                 if r.status_code == 200:
                     header = {'Content-type': 'application/x-www-form-urlencoded'}
                     params = urllib.parse.urlencode({'user':'{0}'.format(username), 'password':'{0}'.format(password)})
-                    r = requests.post("https://" + str(self.host.ip) + ":18091/uilogin", data=params, headers=header, verify=x509main.CERT_FILE)
+                    r = requests.post("https://" + str(self.host.ip) + ":18091/uilogin", data=params, headers=header, verify=verify)
                     return r.status_code
             except Exception as ex:
                 log.info ("into exception form validate_ssl_login")

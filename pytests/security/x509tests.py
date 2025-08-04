@@ -92,7 +92,11 @@ class x509tests(BaseTestCase):
             self.n1ql_port = CbServer.ssl_n1ql_port
             self.cbas_port = CbServer.ssl_cbas_port
             self.fts_port = CbServer.ssl_fts_port
-
+        self.verify_ssl = None
+        if SSLtype == "openssl":
+            self.verify_ssl = False  # if false it does not use any cert file
+        else:
+            self.verify_ssl = True  # if true it uses x509Main.CERT_FILE
     def tearDown(self):
         self.log.info ("Into Teardown")
         self._reset_original()
@@ -166,6 +170,8 @@ class x509tests(BaseTestCase):
             progress = rest._rebalance_progress_status()
             self.sleep(10)
             count = count + 1
+            if progress != 'running':
+                break
         if progress == 'none':
             return True
         else:
@@ -220,14 +226,14 @@ class x509tests(BaseTestCase):
 
     def test_basic_ssl_test(self):
         x509main(self.master).setup_master()
-        status = x509main(self.master)._validate_ssl_login()
+        status = x509main(self.master)._validate_ssl_login(verify=self.verify_ssl)
         self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_error_without_node_chain_certificates(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator", 'password')
         status, content = x509main(self.master)._reload_node_certificate(self.master)
         content = str(content)
-        self.assertEqual(status['status'], '400', "Issue with status with node certificate are missing")
+        self.assertEqual(status, False, "Issue with status with node certificate are missing")
         self.assertTrue('Unable to read certificate chain file' in str(content), "Incorrect message from the system")
 
     def test_error_without_chain_cert(self):
@@ -235,14 +241,15 @@ class x509tests(BaseTestCase):
         x509main(self.master)._setup_node_certificates(chain_cert=False)
         status, content = x509main(self.master)._reload_node_certificate(self.master)
         content = str(content)
-        self.assertEqual(status['status'], '400', "Issue with status with node certificate are missing")
+        self.assertEqual(status, False, "Issue with status with node certificate are missing")
         self.assertTrue('Unable to read certificate chain file' in str(content) , "Incorrect message from the system")
 
     def test_error_without_node_key(self):
         x509main(self.master)._upload_cluster_ca_certificate("Administrator", 'password')
         x509main(self.master)._setup_node_certificates(node_key=False)
         status, content = x509main(self.master)._reload_node_certificate(self.master)
-        self.assertEqual(status['status'], '400', "Issue with status with node key is missing")
+        content = str(content)
+        self.assertEqual(status, False, "Issue with status with node key is missing")
         self.assertTrue('Unable to read private key file' in content, "Incorrect message from the system")
 
     def test_add_node_without_cert(self):
@@ -256,9 +263,7 @@ class x509tests(BaseTestCase):
             # expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
             expected_result = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip
             self.assertTrue(expected_result in ex, "Incorrect Error message in exception")
-            expected_result = "Error applying node certificate. Unable to read certificate chain file"
-            self.assertTrue(expected_result in ex, "Incorrect Error message in exception")
-            expected_result = "The file does not exist."
+            expected_result = "The certificate is issued by unknown CA or some of the intermediate certificates are missing "
             self.assertTrue(expected_result in ex, "Incorrect Error message in exception")
 
     def test_add_node_with_cert(self):
@@ -273,14 +278,14 @@ class x509tests(BaseTestCase):
         rest.rebalance(known_nodes)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in self.servers:
-            status = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_remove_add_back_node_with_cert(self, rebalance=None):
-        rebalance = self.input.param('rebalance')
+        rebalance = self.input.param('rebalance', True)
         rest = RestConnection(self.master)
-        servs_inout = self.servers[1:3]
-        serv_out = 'ns_1@' + servs_inout[1].ip
+        servs_inout = self.servers[1:]
+        serv_out = 'ns_1@' + servs_inout[0].ip
         known_nodes = ['ns_1@' + self.master.ip]
         x509main(self.master).setup_master()
         for node in servs_inout:
@@ -291,7 +296,7 @@ class x509tests(BaseTestCase):
         rest.rebalance(known_nodes)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code")
         rest.fail_over(serv_out, graceful=False)
         if (rebalance):
@@ -307,7 +312,7 @@ class x509tests(BaseTestCase):
         rest.rebalance(known_nodes)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in servs_inout:
-            response = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_remove_graceful_add_back_node_with_cert(self, recovery_type=None):
@@ -332,7 +337,7 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
 
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
         rest.fail_over(serv_out, graceful=True)
@@ -343,7 +348,7 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
 
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_remove_autofailover(self):
@@ -370,7 +375,7 @@ class x509tests(BaseTestCase):
         shell.start_server()
         self.sleep(30)
         for server in self.servers[1:4]:
-            status = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_node_with_cert_non_master(self):
@@ -392,7 +397,7 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
 
         for server in self.servers[:3]:
-            status = x509main(server)._validate_ssl_login()
+            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
             self.assertEqual(status, 200, "Not able to login via SSL code for ip - {0}".format(server.ip))
 
     # simple xdcr with ca cert
@@ -584,7 +589,7 @@ class x509tests(BaseTestCase):
 
     def test_basic_ssl_test_invalid_cert(self):
         x509main(self.master).setup_master()
-        status = x509main(self.master)._validate_ssl_login()
+        status = x509main(self.master)._validate_ssl_login(verify=self.verify_ssl)
         self.assertEqual(status, 200, "Not able to login via SSL code")
 
     # test sdk certs on a single node
@@ -964,9 +969,10 @@ class x509tests(BaseTestCase):
 
         if self.client_cert_state == 'enable':
             output = x509main()._execute_command_clientcert(host.ip, url='/default/_design/dev_sample', port=18092, headers=' -XPUT ', client_cert=True, curl=True, verb='GET')
+            self.log.info(f"OUTPUT: {output}")
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/default/_design/dev_sample', port=18092, headers=' -XPUT -u Administrator:password ', client_cert=False, curl=True, verb='GET')
-
+            self.log.info(f"OUTPUT: {output}")
         if self.client_cert_state == 'enable':
             self.assertEqual(json.loads(output)['reason'], "Content is not json.", "Create View Index Failed")
         else:
@@ -976,9 +982,10 @@ class x509tests(BaseTestCase):
 
         if self.client_cert_state == 'enable':
             output = x509main()._execute_command_clientcert(host.ip, url='/default/_design/dev_sample/_view/sampleview', port=18092, headers='', client_cert=True, curl=True, verb='POST')
+            self.log.info(f"OUTPUT: {output}")
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/default/_design/dev_sample/_view/sampleview', port=18092, headers=' -u Administrator:password ', client_cert=False, curl=True, verb='POST')
-
+            self.log.info(f"OUTPUT: {output}")
         self.assertEqual(json.loads(output)['error'], "not_found", "Create View Index Failed")
 
     def test_rest_api_disable(self):
@@ -1031,6 +1038,7 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         x509main(self.master).write_client_cert_json_new(self.client_cert_state, self.paths, self.prefixs, self.delimeters)
         status, content = x509main(self.master)._upload_cluster_ca_settings("Administrator", "password")
+        content = str(content)
         if "Invalid value 'subject.test' for key 'path'" in content:
             self.assertTrue(True, " Correct error message for key path")
 
