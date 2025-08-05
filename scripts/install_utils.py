@@ -638,7 +638,7 @@ def print_result_and_exit(err=None):
         log.info("INSTALL COMPLETED ON: \t{0}".format(server.ip))
     log.info("-" * 100)
     if len(fail) > 0 or len(install_not_started) > 0:
-        sys.exit(1)
+        sys.exit(2)
 
 
 def process_user_input():
@@ -778,7 +778,7 @@ def __check_servers_reachable():
             # Marking this node as "completed" so it is not moved to failedInstall state
             log.info("INSTALL COMPLETED ON: \t{0}".format(_))
         log.info("-" * 100)
-        sys.exit(1)
+        sys.exit(2)
 
 
 def _params_validation():
