@@ -6750,7 +6750,7 @@ class MagmaDocLoader(Task):
                       f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
                       f"-valueType {self.sdk_docloader.json_template} -dim {self.sdk_docloader.dim} " \
                       f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
-                      f"-model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} -maxTTL 1800"
+                      f"-model {self.sdk_docloader.model} -base64 {self.sdk_docloader.base64} "
 
         self.log.info(command)
         try:
