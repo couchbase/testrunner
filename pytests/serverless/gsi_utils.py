@@ -890,7 +890,7 @@ class GSIUtils(object):
                                                      scan_nprobes=1,
                                                      limit=10, quantization_algo_color_vector=None,
                                                      quantization_algo_description_vector=None, is_base64=False,
-                                                     description_dimension=384):
+                                                     description_dimension=384, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
             index_name_prefix = "hotel" + str(uuid.uuid4()).replace("-", "")
@@ -1400,6 +1400,14 @@ class GSIUtils(object):
                   1.5966797, 1.0058594, 0.54003906, -0.22290039]
         vec_1 = f"ANN_DISTANCE(emb, {vector}, '{similarity}', {scan_nprobes})"
 
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[],
+                                query_template=RANGE_SCAN_TEMPLATE.format("*", "rating > 3"),
+                                is_primary=True))
+
         # single vector field
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'emb', index_fields=['emb VECTOR'],
@@ -1446,20 +1454,6 @@ class GSIUtils(object):
                                                                                f" emb, {vec_1}",
                                                                                "avg_rating > 3 and "
                                                                                "free_breakfast = true ",
-                                                                               vec_1)))
-
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'includeMissing',
-
-                            index_fields=['country', 'emb Vector', 'avg_rating'],
-                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, is_base64=is_base64, missing_indexes=True,
-                            missing_field_desc=True,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"avg_rating, free_breakfast,"
-                                                                               f" emb, {vec_1}",
-                                                                               'avg_rating = 3 and '
-                                                                               'country == "Greece"',
                                                                                vec_1)))
 
         # Partial Indexes
@@ -2038,20 +2032,6 @@ class GSIUtils(object):
                                                                                vec_1),
                             include_fields=['avg_rating', 'free_breakfast']))
 
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'includeBhive2',
-
-                            index_fields=['emb VECTOR'],
-                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"avg_rating, free_breakfast,"
-                                                                               f" emb, {vec_1}",
-                                                                               'avg_rating = 3 and '
-                                                                               'country == "Greece"',
-                                                                               vec_1),
-                            include_fields=['avg_rating', 'country']))
-
         # Partial Indexes
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'PartialIndexBhive',
@@ -2222,7 +2202,7 @@ class GSIUtils(object):
         return tasks
 
     def run_continous_query_load(self, select_queries, database=None, capella_run=False,
-                                 query_node=False, sleep_timer=30, timeout=1200):
+                                 query_node=False, sleep_timer=30, timeout=600):
         start_time = datetime.datetime.now()
         while self.query_event.is_set():
             try:
@@ -2231,7 +2211,6 @@ class GSIUtils(object):
                 if (curr_time - start_time).total_seconds() > timeout:
                     self.log.info(f"Query load timeout reached after {timeout} seconds. Exiting continuous query load.")
                     break
-                
                 tasks = self.aysnc_run_select_queries(select_queries=select_queries, database=database,
                                                       capella_run=capella_run, query_node=query_node)
                 for task in tasks:
@@ -2239,6 +2218,7 @@ class GSIUtils(object):
             except Exception as err:
                 self.log.error(f"Error occurred during query load: {err}")
             time.sleep(sleep_timer)
+            
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """

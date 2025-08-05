@@ -175,6 +175,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             if self.num_index_replica == 0:
                 self.num_index_replica = 1
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)[0]
+        self.set_empty_shard_destroy_interval()
         if self.use_https:
             self.node_port = '18091'
         else:
@@ -477,6 +478,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             select_query = re.sub(r"LIMIT \d+", f"LIMIT {self.scan_limit}", select_query)
         faiss_query = self.convert_to_faiss_queries(select_query=select_query)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.log.info(f"n1ql node for recall validation is {n1ql_node}")
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
         query_res_faiss = self.run_cbq_query(query=faiss_query, server=n1ql_node)['results']
         list_of_vectors_to_be_indexed_on_faiss = []
@@ -504,9 +506,9 @@ class BaseSecondaryIndexingTests(QueryTests):
             faiss_closest_vectors.append(value)
 
         if scan_consitency:
-            gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node, scan_consistency=self.scan_consistency)['results']
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node, scan_consistency=self.scan_consistency)['results']
         else:
-            gsi_query_res = self.run_cbq_query(query=select_query, server=self.n1ql_node)['results']
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node)['results']
 
         if variable_limit:
             self.assertEqual(len(gsi_query_res), self.scan_limit, f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
@@ -632,6 +634,24 @@ class BaseSecondaryIndexingTests(QueryTests):
             shell = RemoteMachineShellConnection(node)
             shell.execute_command('pkill stress')
             shell.execute_command('pkill iotop')
+
+    def run_stress_tool(self, stress_factor=0.25, timeout=1800):
+        nodes_all = self.servers
+        shell = RemoteMachineShellConnection(nodes_all[0])
+        free_mem_cmd = "free -m | awk 'NR==2 {print $4}'"
+        output, error = shell.execute_command(free_mem_cmd)
+        free_mem_in_mb = int(output[0])
+        ram = math.floor(free_mem_in_mb * stress_factor)
+        num_cpu_cmd = "grep -c ^processor /proc/cpuinfo"
+        output, error = shell.execute_command(num_cpu_cmd)
+        num_cpu = int(output[0])
+        cpu = math.floor(num_cpu * stress_factor)
+        cmd = f'stress --cpu {cpu} --vm-bytes {ram}M --vm 1 --timeout {timeout} -d 1 & > /dev/null && echo 1 || echo 0'
+        self.log.info(f"Will run this command to simulate CPU and memory stress {cmd}")
+        with ThreadPoolExecutor() as executor_main:
+            for node in nodes_all:
+                shell = RemoteMachineShellConnection(node)
+                executor_main.submit(shell.execute_command, cmd)
 
     def _return_maps(self, perNode=False, map_from_index_nodes=False):
         if map_from_index_nodes:
@@ -913,7 +933,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             query=self.query, n1ql_helper=self.n1ql_helper,
             expected_result=expected_result, index_name=query_definition.index_name,
             scan_consistency=scan_consistency, scan_vector=scan_vector,
-            verify_results=True)
+            verify_results=self.verify_query_result)
         return query_with_index_task
 
     def query_using_index_with_emptyset(self, bucket, query_definition):
@@ -2015,9 +2035,11 @@ class BaseSecondaryIndexingTests(QueryTests):
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = indexer_rest.get_index_storage_stats()
+                self.log.info(f"content is {content}")
                 for index in list(content.values()):
                     for stats in list(index.values()):
-                        if stats["MainStore"]["resident_ratio"] >= 1.00:
+                        self.log.info(f"stats is {stats}")
+                        if stats["MainStore"]["resident_ratio"] >= 0.80:
                             return False
             return True
 
@@ -2363,15 +2385,39 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.backstore_mainstore_check()
         self.validate_replica_indexes_item_counts()
 
-    def drop_index_node_resources_utilization_validations(self):
+
+    def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
         self.drop_all_indexes()
-        self.sleep(120)
-        # self.check_storage_directory_cleaned_up()
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
+        if not skip_disk_cleared_check:
+            self.sleep(360, "sleeping to destroy empty shards")
+            self.check_storage_directory_cleaned_up()
+        if not self.validate_memory_released():
+            raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
             raise AssertionError("CPU not normalized despite dropping all the indexes")
+    
+    def validate_num_centroids_from_metadata(self):
+        self.log.info("Validating num centroids from metadata for vector indexes")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        composite_indexes_list = self.get_all_composite_index_names()
+        bhive_indexes_list = self.get_all_bhive_index_names()
+        self.log.info(f"composite_indexes_list: {composite_indexes_list}")
+        self.log.info(f"bhive_indexes_list: {bhive_indexes_list}")
+        vector_indexes_list = composite_indexes_list + bhive_indexes_list
+        rest = RestConnection(indexer_nodes[0])
+        indexer_metadata = rest.get_indexer_metadata()
+        for index in indexer_metadata['status']:
+            if index['name'] in vector_indexes_list and index['status'] in ['Ready', 'Training']:
+                if "numCentroids" not in index:
+                    self.log.info(f"Index {index['name']} does not have numCentroids in metadata")
+                    raise AssertionError(f"Index {index['name']} does not have numCentroids in metadata")
+                else:
+                    self.assertTrue(index['numCentroids'] > 0, f"Num centroids not greater than 0 for index {index['name']}")
+
+    def set_empty_shard_destroy_interval(self, interval_min=5):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.empty_shard_destroy_interval": interval_min})
     def update_master_node(self):
         for server in self.servers:
             try:
@@ -2786,6 +2832,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                         self.log.info(f"Index metadata is {index_map}")
                                         raise AssertionError(
                                             f"Partition replicas reside on the same host. Metadata 1 {index_metadata} Metadata 2 {index_metadata_2}")
+
     def check_gsi_logs_for_shard_transfer(self, log_string = "ShardTransferToken(v2) generated token.*BuildSource: Peer", msg="File transfer based rebalance "):
         """ Checks if file transfer based rebalance is triggered.
         """
@@ -2807,7 +2854,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 count = int(count)
             shell.disconnect()
             if count > 0:
-                self.log.info(f"=====  {msg} triggered"
+                self.log.info(f"=====  {msg} triggered "
                               f"as validated from the log on {server.ip}=====. The no. of occurrences - {count}")
                 log_validated = True
                 break
@@ -2938,6 +2985,12 @@ class BaseSecondaryIndexingTests(QueryTests):
             else:
                 shard_affinity = rest.get_index_settings()["indexer.settings.enable_shard_affinity"]
         return shard_affinity
+
+    def get_max_num_partitions(self):
+        indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        rest = RestConnection(indexer_node)
+        max_num_partitions = rest.get_index_settings()["indexer.settings.maxNumPartitions"]
+        return max_num_partitions
 
     def set_max_instances_per_shard(self, instance_count):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -3211,6 +3264,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         query = "SELECT bucket_id, scope_id, keyspace_id, name, index_key, `condition`, `with` FROM system:indexes"
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
+        primary_indexes = self.get_all_primary_index_names()
 
         simplified_results = []
         # Add select query field for each index
@@ -3229,7 +3283,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
 
-            if ("`colorRGBVector` VECTOR" in index['index_key'] and "similarity" in index['with']
+            if (index['name'] not in primary_indexes and (index['index_key'][0] == "`colorRGBVector` VECTOR" or index['index_key'][0] == '((meta().`xattrs`).`colorVector`) VECTOR') and "similarity" in index['with']
                 and index['with']['similarity'] == "cosine"):
                 condition = "colorRGBVector != [0, 0, 0]"
                 if where_clause:
@@ -3316,6 +3370,24 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.log.info(f"{error_obj}")
             raise Exception(f"Counts don't match for the following indexes: {error_obj}")
 
+    def wait_until_rebalance_cleanup(self, timeout=1800):
+        nodes_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        time_end, all_nodes_cleaned_up = time.time() + timeout, False
+        while time.time() < time_end and not all_nodes_cleaned_up:
+            nodes_cleaned_up = []
+            for node in nodes_list:
+                node_rest = RestConnection(node)
+                content = node_rest.get_index_rebalance_token_cleanup_status()
+                if content:
+                    self.log.info(f"Cleanup status {content}")
+                    if content == 'done':
+                        nodes_cleaned_up.append(node)
+                self.sleep(10)
+            if len(nodes_cleaned_up) == len(nodes_list):
+                all_nodes_cleaned_up = True
+                break
+            self.sleep(30)
+        return all_nodes_cleaned_up
     def get_all_array_index_names(self):
         """Returns a list of all array indexes in the cluster
         """
@@ -3340,7 +3412,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         for index in index_metadata:
             # Check if index definition contains primary indexing syntax like PRIMARY
             if 'definition' in index and ('isPrimary' in index):
-                primary_index.append(index['indexName'])
+                primary_index.append(index['name'])
         return primary_index
 
     def get_all_bhive_index_names(self):
@@ -3352,9 +3424,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
             # Check if index definition contains bhive indexing syntax like VECTOR
-            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
-            if 'definition' in index and ('VECTOR' in index['definition'][:14]):
-                bhive_index.append(index['indexName'])
+            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed(done)
+            if 'definition' in index and index['indexType'] in ["bhive", "Hyperscale Vector Index"]:
+                bhive_index.append(index['name'])
         return bhive_index
 
     def get_all_composite_index_names(self):
@@ -3365,10 +3437,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(index_node)
         index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            # Check if index definition contains composite indexing syntax like dimension
-            # TODO to make tweak to validation once https://jira.issues.couchbase.com/browse/MB-66285 is fixed
-            if 'definition' in index and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'distance' in index['definition']):
-                composite_index.append(index['indexName'])
+            if 'definition' in index and index['indexType'] == "plasma" and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'similarity' in index['definition']) :
+                composite_index.append(index['name'])
         return composite_index
 
     def get_storage_stats_map(self, node):
@@ -3463,6 +3533,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             output, error = shell.execute_command(f"du -s --block-size=1M {storage_dir} | cut -f1")
             if error or not output:
                 self.log.error(f"Error getting disk space for {storage_dir}: {error}")
+            # Get detailed file sizes in the storage directory
+            detailed_output, detailed_error = shell.execute_command(f"du -ah {storage_dir} 2>/dev/null | sort -hr")
+            if detailed_error:
+                self.log.info(f"Could not get detailed file sizes for {storage_dir}: {detailed_error}")
+            else:
+                self.log.info(f"Storage directory {storage_dir} file sizes:")
+                for line in detailed_output:
+                    self.log.info(f"  {line}")
             used_space_mb = int(output[0])  # Size in MB
             used_space = used_space_mb / 1024.0  # Convert MB to GB
         except Exception as e:
@@ -3471,6 +3549,30 @@ class BaseSecondaryIndexingTests(QueryTests):
         finally:
             shell.disconnect()
         return used_space
+
+    def get_staging_directory_contents(self, node, storage_dir):
+        """
+        Lists all files recursively in the storage directory
+        Returns:
+            List of file paths
+        """
+        shell = RemoteMachineShellConnection(node)
+        try:
+            # List all files recursively in the storage directory
+            storage_dir = f"{storage_dir}/staging2"
+            if not os.path.exists(storage_dir):
+                self.log.info(f"Storage directory {storage_dir} does not exist")
+                return []
+            output, error = shell.execute_command(f"find {storage_dir} -type f 2>/dev/null")
+            if error or not output:
+                self.log.error(f"Error listing files in {storage_dir}: {error}")
+            # Return the list of files
+            return output
+        except Exception as e:
+            self.log.error(f"Error listing files in storage directory: {str(e)}")
+            return None
+        finally:
+            shell.disconnect()
 
     def drop_all_indexes(self):
         """
@@ -3484,6 +3586,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             try:
                 if 'bucket_id' not in index:
                     bucket = index['keyspace_id']
+                    scope = '_default'
                     collection = '_default'
                 else:
                     bucket = index['bucket_id']

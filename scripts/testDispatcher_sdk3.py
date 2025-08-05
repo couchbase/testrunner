@@ -34,7 +34,7 @@ ADDL_SERVER_MANAGER = '172.23.104.162:8081'
 TEST_SUITE_DB = '172.23.104.162'
 SERVER_MANAGER_USER_NAME = 'Administrator'
 SERVER_MANAGER_PASSWORD = "esabhcuoc"
-TIMEOUT = 60
+TIMEOUT = 120
 SSH_NUM_RETRIES = 3
 SSH_POLL_INTERVAL = 20
 
@@ -464,6 +464,8 @@ def main():
     parser.add_option('-i', '--retries', dest='retries', default='1')
     parser.add_option('-q', '--fresh_run', dest='fresh_run',
                       default=True, action='store_false')
+    parser.add_option('--rerun_condition', dest="rerun_condition",
+                      default="all")
     parser.add_option('-k', '--include_tests', dest='include_tests', default=None)
     parser.add_option('-x', '--server_manager', dest='SERVER_MANAGER',
                       default='172.23.104.162:8081')
@@ -582,7 +584,6 @@ def main():
             splitSubcomponents = options.subcomponent.split(',')
             subcomponentString = ''
             for i in range(len(splitSubcomponents)):
-                print('subcomponentString is', subcomponentString)
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
@@ -835,11 +836,25 @@ def main():
                         else:
                             parameters = testsToLaunch[i][
                                              'parameters'] + ',' + runTimeTestRunnerParameters
+                    rerun_condition = options.rerun_condition
+                    only_failed = False
+                    only_pending = False
+                    only_unstable = False
+                    only_install_failed = False
+                    if rerun_condition == "FAILED":
+                        only_failed = True
+                    elif rerun_condition == "UNSTABLE":
+                        only_unstable = True
+                    elif rerun_condition == "PENDING":
+                        only_pending = True
+                    elif rerun_condition == "INST_FAIL":
+                        only_install_failed = True
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
                             options.os, testsToLaunch[i][
                                 'component'], dashboardDescriptor
-                            , options.version, parameters)
+                            , options.version, parameters,
+                            only_pending, only_failed, only_unstable, only_install_failed)
 
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version

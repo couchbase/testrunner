@@ -90,6 +90,7 @@ class FlexIndexTests(QueryTests):
         diffs = DeepDiff(flex_result, gsi_result, ignore_order=True)
 
         if diffs:
+            self.log.info(diffs)
             self.log.info("There are differences in the results b/w flex and GSI results")
             return False
 

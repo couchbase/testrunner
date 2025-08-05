@@ -1301,7 +1301,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_details["index_name"] = index_name_prefix
         index_details["num_partitions"] = self.num_index_partitions
         index_details["defer_build"] = True
-
+        self.log.info(f"index_details is {index_details}. Index map is {index_map}. Index metadata is {index_metadata}")
         self.assertTrue(
             self.validate_partitioned_indexes(index_details, index_map,
                                               index_metadata),
@@ -4906,7 +4906,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     if self.gsi_type == "memory_optimized":
                         num_partitions = random.randint(4, 20)
                     else:
-                        num_partitions = random.randint(4, 100)
+                        max_num_partitions = self.get_max_num_partitions()
+                        num_partitions = random.randint(4, max_num_partitions)
                     with_statement.append(
                         "'num_partition':{0}".format(num_partitions))
                 if "num_replica" in index_variations:

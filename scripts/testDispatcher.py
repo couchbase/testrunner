@@ -832,18 +832,21 @@ def main():
                     only_failed = False
                     only_pending = False
                     only_unstable = False
+                    only_install_failed = False
                     if rerun_condition == "FAILED":
                         only_failed = True
                     elif rerun_condition == "UNSTABLE":
                         only_unstable = True
                     elif rerun_condition == "PENDING":
                         only_pending = True
+                    elif rerun_condition == "INST_FAIL":
+                        only_install_failed = True
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
                             options.os, testsToLaunch[i][
                                 'component'], dashboardDescriptor
                             , options.version, parameters,
-                            only_pending, only_failed, only_unstable)
+                            only_pending, only_failed, only_unstable, only_install_failed)
                     if not dispatch_job:
                         print("Not dispatching job. Job didn't "
                               "satisfy run condition")

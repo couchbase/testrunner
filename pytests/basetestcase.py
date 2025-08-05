@@ -177,9 +177,12 @@ class OnPremBaseTestCase(unittest.TestCase):
 
             self.set_alternate_address_all_nodes()
             if self.bucket_storage == 'magma':
-                if self.bucket_size < 512:
-                    self.bucket_size = 512
+                RestConnection(self.master).set_internalSetting("magmaMinMemoryQuota", 256)
+                if self.bucket_size < 256:
+                    self.bucket_size = 256
                 self.eviction_policy = "fullEviction"
+            if self.bucket_type == 'ephemeral' and self.eviction_policy not in ['noEviction', 'nruEviction']:
+                self.eviction_policy = 'nruEviction'
 
             shared_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                        replicas=self.num_replicas,

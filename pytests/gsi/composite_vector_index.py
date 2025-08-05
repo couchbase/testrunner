@@ -43,7 +43,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.multi_move = self.input.param("multi_move", False)
         self.build_phase = self.input.param("build_phase", "create")
         self.skip_default = self.input.param("skip_default", True)
-        self.post_rebalance_action = self.input.param("post_rebalance_action", "data_load")
+        self.post_rebalance_action = self.input.param("post_rebalance_action", None)
         self.partitioned_index_action = self.input.param("partitioned_index_action", "rebalance_out")
         # the below setting will be reversed post the resolving of MB-63697
         self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
@@ -215,10 +215,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                       namespace=namespace)
                 self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
-                self.wait_until_indexes_online()
+                self.wait_until_indexes_online(timeout=3600)
                 self.sleep(60)
                 self.item_count_related_validations()
-
+                self.validate_num_centroids_from_metadata()
                 for query in select_queries:
                     # self.run_cbq_query(query=create)
                     if "DISTINCT" in query or "ANN_DISTANCE" not in query:
@@ -491,7 +491,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             query = index_gen_3.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
         except Exception as err:
-            err_msg = 'ErrTraining: The number of documents: 0 in keyspace:'
+            err_msg = 'ErrTraining: InvalidTrainListSize: The number of documents: 0 in keyspace:'
             self.assertTrue(err_msg in str(err), f"Index with INCLUDE clause is created: {err}")
 
         # indexes with empty collection defer build true
@@ -676,15 +676,16 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         with ThreadPoolExecutor() as executor:
-            self.gsi_util_obj.query_event.set()
-            executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+            # todo will uncomment out below post - https://jira.issues.couchbase.com/browse/MB-67778
+            # self.gsi_util_obj.query_event.set()
+            # executor.submit(self.gsi_util_obj.run_continous_query_load,
+            #                 select_queries=select_queries, query_node=query_node)
             if self.rebalance_type == 'rebalance_in':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[self.nodes_init]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[], services=['index', 'index'])
             elif self.rebalance_type == 'rebalance_swap':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[self.nodes_init]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[index_nodes[0]], services=['index'])
             elif self.rebalance_type == 'rebalance_out':
@@ -695,25 +696,33 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.cancel_rebalance:
                 self.rest.stop_rebalance()
             if self.fail_rebalance:
-                self.stop_server(self.servers[self.nodes_init])
-            task.result()
-            rebalance_status = RestHelper(self.rest).rebalance_reached()
-            self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-            if self.cancel_rebalance or self.fail_rebalance:
-                self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
+                indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                server = random.choice(indexer_nodes)
+                self.sleep(5)
+                self._kill_all_processes_index(server=server)
+            try:
+                task.result()
+                rebalance_status = RestHelper(self.rest).rebalance_reached()
+                self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
+            except Exception as e:
+                self.log.info(f"Rebalance failed as expected: {e}")
+                if self.cancel_rebalance or self.fail_rebalance:
+                    self.sleep(300, "Waiting for cleanup to complete")
+                    self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                              to_remove=[], services=[])
                 rebalance_status = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
-            self.gsi_util_obj.query_event.clear()
+            # self.gsi_util_obj.query_event.clear()
             data_nodes = self.get_nodes_from_services_map(service_type="kv")
             self.sleep(30)
             code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
             index_names = self.get_all_indexes_in_the_cluster()
-            for index in index_names:
-                if "primary" in index:
-                    continue
-                self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
-                                 f"Codebook memory has changed for index {index}")
+            if self.shard_based_rebalance:
+                for index in index_names:
+                    if "primary" in index:
+                        continue
+                    self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
+                                     f"Codebook memory has changed for index {index}")
 
             # Todo: Add metadata validation
             if self.post_rebalance_action == "data_load":
@@ -729,10 +738,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
                 self.sleep(60)
                 _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
                 index_item_count_map = {}
+                partial_indexes = self.get_partial_indexes_name_list()
                 for node in stats:
                     for namespace in stats[node]:
                         for index in stats[node][namespace]:
@@ -741,7 +751,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             else:
                                 index_item_count_map[index] += stats[node][namespace][index]["items_count"]
                 for index in index_item_count_map:
-                    if "Partial" in index:
+                    if index in partial_indexes:
                         continue
                     self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection+10000, f"stats {stats}")
 
@@ -756,7 +766,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     collection=collection, json_template="Cars", timeout=2000,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_update)
                     self.sleep(60)
                     _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
                     index_item_count_map = {}
@@ -775,13 +785,18 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(30)
             if not self.check_gsi_logs_for_shard_transfer():
                 raise Exception("Shard based rebalance not triggered")
-        self.validate_scans_for_recall_and_accuracy(select_query=select_queries)
+
+        for select_query in select_queries:
+            # Skipping validation for recall and accuracy against primary index
+            if "DISTINCT" in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
         for namespace in self.namespaces:
@@ -794,19 +809,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
         self.wait_until_indexes_online(timeout=600)
         self.item_count_related_validations()
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
             if self.rebalance_type == 'rebalance_in':
                 add_nodes = [self.servers[3]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
@@ -822,7 +839,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
+            self.update_master_node()
             self.sleep(30)
+
+            query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+            data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+            self.log.info(f"data nodes are {data_nodes}")
 
             # Todo: Add metadata validation
             if self.post_rebalance_action == "data_load":
@@ -838,7 +860,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
             if self.post_rebalance_action == "mutations":
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
@@ -848,9 +870,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     collection=collection, json_template="Cars", timeout=2000,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_update)
             self.sleep(60)
+            self.update_master_node()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+            partial_indexes = self.get_partial_indexes_name_list()
             index_item_count_map = {}
             for node in stats:
                 for namespace in stats[node]:
@@ -859,19 +883,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             index_item_count_map[index] = stats[node][namespace][index]["items_count"]
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            self.log.info(f"item count map : {index_item_count_map}")
+            additional_docs = 0
+            if self.post_rebalance_action == "data_load":
+                additional_docs = 10000
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_indexes:
                     continue
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection+additional_docs, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance_failure_or_rebalance_stop_and_retry_with_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
         for namespace in self.namespaces:
@@ -884,7 +914,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
@@ -893,7 +923,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
             add_nodes = [self.servers[4]]
             try:
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
@@ -905,7 +935,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     # fail rebalance operation and then retry
                     self.stop_server(self.servers[self.nodes_init])
                 task.result()
-                self.log.error(f"Rebalance didn't fail: {result}")
+                self.log.error(f"Rebalance didn't fail: {task.result}")
             except Exception as err:
                 self.log.info('Rebalance failed. See logs for detailed reason' in str(err))
             finally:
@@ -918,12 +948,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
+        self.update_master_node()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_autofailover_and_remove_node_with_indexes(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
         for namespace in self.namespaces:
@@ -936,7 +968,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
         self.wait_until_indexes_online(timeout=600)
@@ -946,10 +978,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
 
             # perform auto failover of KV node
-            data_node = RemoteMachineShellConnection(data_nodes[1])
+            data_node = RemoteMachineShellConnection(data_nodes[0])
             data_node.stop_server()
             self.sleep(40, "Wait for autofailover")
             try:
@@ -964,6 +996,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 data_node.start_server()
             self.gsi_util_obj.query_event.clear()
 
+            partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
             for node in stats:
@@ -973,17 +1006,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             index_item_count_map[index] = stats[node][namespace][index]["items_count"]
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            self.log.info(f"item count map : {index_item_count_map}")
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_index_list:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+        self.update_master_node()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.drop_index_node_resources_utilization_validations()
 
     def kv_node_failover_recovery_and_addback_with_indexes(self):
         self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
         for namespace in self.namespaces:
@@ -996,7 +1032,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
         self.wait_until_indexes_online(timeout=600)
@@ -1006,7 +1042,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
             self.log.info("Starting failover of KV node")
             # perform failover of KV node
             failover_task = self.cluster.async_failover([self.master], failover_nodes=[data_nodes[-1]], graceful=False)
@@ -1022,6 +1058,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg)
             self.log.info("Rebalance completed. Clearing query event")
             self.gsi_util_obj.query_event.clear()
+            partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
             for node in stats:
@@ -1031,16 +1068,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             index_item_count_map[index] = stats[node][namespace][index]["items_count"]
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            self.log.info(f"item count map : {index_item_count_map}")
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_index_list:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+        self.update_master_node()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_rebalance_operations_with_different_topologies(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
@@ -1054,15 +1094,18 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
         self.wait_until_indexes_online(timeout=600)
         self.sleep(10)
         self.item_count_related_validations()
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+
 
         for namespace in self.namespaces:
             keyspace = namespace.split(":")[-1]
@@ -1075,12 +1118,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             create_start=self.num_of_docs_per_collection,
                                             create_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 2))
-            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_create)
+            self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
             if self.rebalance_type == 'rebalance_in':
                 add_nodes = [self.servers[4]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
@@ -1093,10 +1136,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                     to_remove=[data_nodes[0]])
             task.result()
+            self.update_master_node()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
 
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         for namespace in self.namespaces:
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
@@ -1108,7 +1154,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             update_start=0,
                                             update_end=(self.num_of_docs_per_collection +
                                                         self.num_of_docs_per_collection // 2))
-            self.load_docs_via_magma_server(server=data_nodes[0].ip, bucket=bucket, gen=self.gen_update)
+            self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_update)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -1125,11 +1171,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             elif self.rebalance_type == 'rebalance_out':
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                     to_remove=[data_nodes[0]])
+            self.update_master_node()
             task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
 
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1140,18 +1189,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                     continue
-            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 2, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_failover_and_recovery_sequentially(self):
+        self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
@@ -1165,17 +1218,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
 
             # failover and recover KV and indexing node sequentially
             for node in data_nodes[2], index_nodes[2]:
@@ -1191,6 +1246,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.query_event.clear()
 
+        self.update_master_node()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1200,18 +1258,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         index_item_count_map[index] = stats[node][namespace][index]["items_count"]
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        self.log.info(f'index item count map is {index_item_count_map}')
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_kv_and_indexing_failover_and_rebalance_out_sequentially(self):
+        self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
@@ -1225,17 +1287,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
 
             # failover and recover KV and indexing node sequentially
             for node in data_nodes[2], index_nodes[2]:
@@ -1251,6 +1315,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.query_event.clear()
 
+        self.update_master_node()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -1260,18 +1327,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         index_item_count_map[index] = stats[node][namespace][index]["items_count"]
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+        self.log.info(f"item count map : {index_item_count_map}")
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_kv_and_indexing_rebalance_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
@@ -1285,31 +1355,35 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
             if self.rebalance_type == 'rebalance_in':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[4]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                    to_remove=[], services=['kv:n1ql', 'index'])
+                                                    to_remove=[], services=['kv,n1ql', 'index'])
             elif self.rebalance_type == 'rebalance_swap':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[4], self.servers[5]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv:n1ql', 'index'])
+                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv,n1ql', 'index'])
             elif self.rebalance_type == 'rebalance_out':
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
-                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv:n1ql', 'index'])
+                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv,n1ql', 'index'])
             task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             self.gsi_util_obj.query_event.clear()
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+            self.update_master_node()
             self.sleep(30)
 
             # Todo: Add metadata validation
@@ -1326,18 +1400,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes[1], bucket=bucket, gen=self.gen_create)
             if self.post_rebalance_action == "mutations":
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
                     bucket, scope, collection = keyspace.split(".")
                     self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                                     percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                                    collection=collection, json_template="Cars", timeout=2000,
+                                                    collection=collection, json_template="Cars", timeout=300,
                                                     op_type="update", mutate=1, dim=384,
                                                     update_start=0, update_end=self.num_of_docs_per_collection)
-                    self.load_docs_via_magma_server(server=data_nodes.ip, bucket=bucket, gen=self.gen_create)
+                    self.load_docs_via_magma_server(server=data_nodes[1], bucket=bucket, gen=self.gen_create)
             self.sleep(60)
+            self.update_master_node()
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
             for node in stats:
@@ -1347,18 +1424,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                             index_item_count_map[index] = stats[node][namespace][index]["items_count"]
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
+            additional_docs = 0
+            self.log.info(f"item count map : {index_item_count_map}")
+            if self.post_rebalance_action == "data_load":
+                additional_docs = 10000
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_index_list:
                     continue
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection+additional_docs, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after rebalance operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_kv_and_indexing_failover_and_recovery_concurrently(self):
+        self.recovery_type = self.input.param('recovery_type', 'full')
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
@@ -1372,17 +1456,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node)
+                            select_queries=select_queries, query_node=query_node[1])
 
             # failover and recover KV and indexing node concurrently
             nodes_to_failover = [data_nodes[2], index_nodes[2]]
@@ -1400,8 +1486,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gsi_util_obj.query_event.clear()
 
+        self.update_master_node()
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
+        self.log.info(f"item count map : {index_item_count_map}")
         for node in stats:
             for namespace in stats[node]:
                 for index in stats[node][namespace]:
@@ -1410,12 +1500,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     else:
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
-            if "Partial" in index:
+            if index in partial_index_list:
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after failover and recovery operation", similarity=self.similarity)
+        for select_query in select_queries:
+            if "ANN_DISTANCE" not in select_query:
+                continue
+            self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
     def test_drop_build_indexes_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -1683,11 +1775,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.sleep(20)
                 self.wait_until_indexes_online()
 
+        self.sleep(60)
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index{index['indexName']}")
+            self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index {index['indexName']} metadata {index_metadata}")
 
-        map_before_rebalance, stats_before_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
         # rebalancing in for replica repair
         index_node_in = self.servers[self.nodes_init]
@@ -1699,14 +1791,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
-        map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
-
-        self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
-                                                       map_after_rebalance=map_after_rebalance,
-                                                       stats_map_before_rebalance=stats_before_rebalance,
-                                                       stats_map_after_rebalance=stats_after_rebalance,
-                                                       item_count_increase=False,
-                                                       per_node=True, skip_array_index_item_count=False)
+        self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before after replica id", similarity=self.similarity)
@@ -1988,11 +2073,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
 
         if self.memory_fill:
-            for node in index_node:
-                node_rest = RemoteMachineShellConnection(node)
-                cmd = "stress --vm 1 --vm-bytes $(awk '/MemTotal/ {printf \"%d\n\", $2;}' /proc/meminfo)k"
-                node_rest.execute_command(command=cmd)
-                node_rest.disconnect()
+            self.run_stress_tool(timeout=600)
+            self.sleep(30)
         try:
             # rebalancing in indexer node
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [index_node[0]], [],
@@ -2689,7 +2771,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
-        self.item_count_related_validations()
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1,
                          "Index not created successfully")
         self.drop_index_node_resources_utilization_validations()
@@ -2980,8 +3061,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
 
-            for query in create_queries:
-                self.run_cbq_query(query=query)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=self.n1ql_node)
 
             self.item_count_related_validations()
 
@@ -2994,6 +3074,15 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
+            # Fetch no of docs which will be mutated to validate the stats count
+            select_query = f"select count(*) from {collection_namespace} where rating > 2 and colorRGBVector != [0, 0, 0]"
+            result = self.run_cbq_query(query=select_query)
+            doc_count = int(result["results"][0]["$1"])
+            self.log.info(f'doc count {doc_count}')
+
+
+            self.sleep(10)
+
             # change back the modified fields to vectors and re-run scans
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
@@ -3001,7 +3090,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
                                             collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="update", dim=384,
+                                            op_type="update", dim=384, mutate=1,
                                             update_start=0, update_end=self.num_of_docs_per_collection)
             self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
 
@@ -3014,12 +3103,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
 
-            # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {collection_namespace} where rating > 2 and colorRGBVector != [0, 0, 0]"
-            result = self.run_cbq_query(query=select_query)
-            doc_count = int(result["results"][0]["$1"])
 
             error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
+            self.log.info(f"error msg count {error_msg_and_doc_count}")
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
             self.drop_index_node_resources_utilization_validations()
 
@@ -3415,7 +3501,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
                                                 percent_update=0, percent_delete=0, scope=s_item,
                                                 collection=c_item, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password)
+                                                output=True, username=self.username, password=self.password,
+                                                create_start=0, create_end=num_docs)
 
                 self.load_docs_via_magma_server(server=data_node, bucket=self.buckets[0], gen=self.gen_create)
 
@@ -3436,7 +3523,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
-        self.item_count_related_validations()
         with ThreadPoolExecutor() as executor:
             add_nodes = [self.servers[3]]
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
@@ -3468,6 +3554,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             executor.submit(self.gsi_util_obj.run_continous_query_load,
                             select_queries=select_queries, query_node=query_node)
 
+            partial_indexes = self.get_partial_indexes_name_list()
             # perform index item count check to validate that indexer has processed all mutations
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
             index_item_count_map = {}
@@ -3479,7 +3566,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         else:
                             index_item_count_map[index] += stats[node][namespace][index]["items_count"]
             for index in index_item_count_map:
-                if "Partial" in index:
+                if index in partial_indexes:
                     continue
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 

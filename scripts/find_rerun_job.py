@@ -76,30 +76,53 @@ def build_args(build_version, executor_jenkins_job=False,
     """
     return locals()
 
+
 def get_cluster():
     try:
+        # SDK 4 way of creating a cluster connection
+        auth = ClusterOptions(PasswordAuthenticator('Administrator',
+                                                    'esabhcuoc'))
+        return Cluster('couchbase://{}'.format(host), auth)
+    except Exception:
+        # Fall back to prev. behavior (Running on old slaves)
         cluster = Cluster('couchbase://{}'.format(host))
-        authenticator = PasswordAuthenticator('Administrator',
-                                              'esabhcuoc')
+        authenticator = PasswordAuthenticator('Administrator', 'esabhcuoc')
         cluster.authenticate(authenticator)
         return cluster
-    except Exception:
-        cluster = Cluster('couchbase://{}'.format(host),
-                          ClusterOptions(PasswordAuthenticator(
-                              'Administrator', 'esabhcuoc')))
-        return cluster
 
-def get_bucket(cluster, name):
-    try:
-        return cluster.open_bucket(name)
-    except Exception:
-        return cluster.bucket(name)
 
-def run_query(bucket, query):
+def select_bucket(cluster, bucket_name, scope_name=None, collection_name=None):
     try:
-        return bucket.n1ql_query(N1QLQuery(query))
+        if collection_name is None:
+            # Select default collection for all operations
+            return cluster.bucket(bucket_name).default_collection()
+        else:
+            # Select a specific collection
+            return cluster.bucket(bucket_name)\
+                .scope(scope_name).collection(collection_name)
     except Exception:
-        return bucket.query(query)
+        # Fall back to prev. behavior (Running on old slaves)
+        try:
+            return cluster.bucket(bucket_name)
+        except AttributeError:
+            # For SDK-2 slaves
+            return cluster.open_bucket(bucket_name)
+
+
+def run_query(cluster, bucket, query):
+    print(f"Running query: {query}")
+    try:
+        # SDK 4 way of running and fetching the result rows
+        res = cluster.query(query)
+        # Return the rows as a list since we are checking for row length
+        return [row for row in res.rows()]
+    except Exception:
+        # Fall back to prev. behavior (Running on old slaves)
+        try:
+            return bucket.n1ql_query(N1QLQuery(query))
+        except Exception:
+            return bucket.query(query)
+
 
 def find_rerun_job(args):
     """
@@ -146,7 +169,7 @@ def find_rerun_job(args):
     if not name or not version_build:
         return False, {}
     cluster = get_cluster()
-    rerun_jobs = get_bucket(cluster, bucket_name)
+    rerun_jobs = select_bucket(cluster, bucket_name)
     rerun = False
     doc_id = "{}_{}".format(name, version_build)
     try:
@@ -184,7 +207,8 @@ def find_rerun_job(args):
 def should_dispatch_job(os, component, sub_component, version,
                         parameters, only_pending_jobs=False,
                         only_failed_jobs=False,
-                        only_unstable_jobs=False):
+                        only_unstable_jobs=False,
+                        only_install_failed=False):
     """
     Finds if a job has to be dispatched for a particular os, component,
     subcomponent and version. The method finds if the job had run
@@ -199,6 +223,14 @@ def should_dispatch_job(os, component, sub_component, version,
     :type version: str
     :param parameters: Get the test parameters
     :type parameters: str
+    :param only_pending_jobs: Run only pending jobs
+    :type only_pending_jobs: bool
+    :param only_failed_jobs: Run only failed jobs
+    :type only_failed_jobs: bool
+    :param only_unstable_jobs: Run only unstable jobs
+    :type only_unstable_jobs: bool
+    :param only_install_failed: Run only install failed jobs
+    :type only_install_failed: bool
     :return: Boolean on whether to dispatch the job or not
     :rtype: bool
     """
@@ -211,14 +243,15 @@ def should_dispatch_job(os, component, sub_component, version,
             doc_id = "{0}_{1}".format(doc_id, gsi_type)
         doc_id = "{0}_{1}".format(doc_id, version)
         cluster = get_cluster()
-        rerun_jobs = get_bucket(cluster, bucket_name)
+        rerun_jobs = select_bucket(cluster, bucket_name)
         rerun_jobs.timeout = 60
         user_name = "{0}-{1}%{2}".format(component, sub_component, version)
         query = "select * from `QE-server-pool` where username like " \
-                "'{0}' and state = 'booked' and os = '{1}'".format(user_name, os)
-        qe_server_pool = get_bucket(cluster, "QE-server-pool")
-        rerun_jobs.timeout = 60
-        n1ql_result = run_query(qe_server_pool, query)
+                "'{0}' and state = 'booked' and os = '{1}'" \
+                .format(user_name, os)
+        qe_server_pool = select_bucket(cluster, "QE-server-pool")
+        qe_server_pool.timeout = 60
+        n1ql_result = run_query(cluster, qe_server_pool, query)
         if list(n1ql_result):
             print("Tests are already running. Not dispatching another job")
             return False
@@ -226,24 +259,30 @@ def should_dispatch_job(os, component, sub_component, version,
         failed = False
         unstable = False
         successful = False
+        install_failed = False
         run_document = rerun_jobs.get(doc_id, quiet=True)
         if not run_document.success:
             # No run for this job has occured yet.
-            if only_failed_jobs or only_unstable_jobs:
+            if only_failed_jobs or only_unstable_jobs or only_install_failed:
                 pending = True
             else:
                 # Run job since it's not been run yet
                 pending = True
         # Check if the collected jobs had required results to run the job
-        greenboard = get_bucket(cluster, "greenboard")
+        greenboard = select_bucket(cluster, "greenboard")
         greenboard.timeout = 60
         job_doc_id = "{0}_server".format(version)
         jobs_doc = greenboard.get(job_doc_id, quiet=True)
+
         if not jobs_doc.success and pending:
-            # No jobs were run or collected for this build yet. Run the job
-            print("No jobs were run or collected for this build yet. Run the job")
+            print("No jobs found for this build yet. Run the job")
             return True
-        jobs_doc = jobs_doc.value
+
+        try:
+            jobs_doc = jobs_doc.value
+        except AttributeError:
+            jobs_doc = jobs_doc.content_as[dict]
+
         jobs_name = "{0}-{1}_{2}".format(os, component, sub_component)
         last_job_url = ""
         # Change all windows versions to windows as os param to search
@@ -280,6 +319,8 @@ def should_dispatch_job(os, component, sub_component, version,
                                 unstable = True
                             elif job_result == "SUCCESS":
                                 successful = True
+                            elif job_result == "INST_FAIL":
+                                install_failed = True
                         break
                 if not job_found:
                     pending = True
@@ -307,12 +348,22 @@ def should_dispatch_job(os, component, sub_component, version,
                     unstable = True
                 if job_result == "SUCCESS":
                     successful = True
+                if job_result == "INST_FAIL":
+                    install_failed = True
         if successful:
             # there was a successful run for this job. Don't dispatch
             # further jobs
             print("Job had run successfully previously.")
             print("{} is the successful job.".format(last_job_url))
             return False
+        if only_install_failed:
+            if (not successful and not unstable) and install_failed and not pending:
+                # Run only if the job had install failure
+                print("Job had install failure previously. Running only install failed jobs")
+                return True
+            else:
+                print("Job has run previously without install failure. Or is still pending")
+                return False
         if only_failed_jobs:
             if (not successful and not unstable) and failed and not pending:
                 # Run only if the job had failed
@@ -343,7 +394,7 @@ def should_dispatch_job(os, component, sub_component, version,
         return True
     except Exception as e:
         print("Exception occured while finding if job has to be "
-              "dispatched")
+              "dispatched: %s" % e)
         traceback.print_exc()
         return True
 
@@ -366,9 +417,10 @@ def get_bucket_gsi_types(parameters):
             gsi_type = parameter.split("=")[1]
     return bucket_type, gsi_type
 
+
 if __name__ == "__main__":
-    #args = parse_args()
-    #rerun, document = find_rerun_job(args)
+    # args = parse_args()
+    # rerun, document = find_rerun_job(args)
     os = sys.argv[1]
     component = sys.argv[2]
     subcomponent = sys.argv[3]
@@ -377,10 +429,12 @@ if __name__ == "__main__":
     failed = sys.argv[6] == "true"
     unstable = sys.argv[7] == "true"
     pending = sys.argv[8] == "true"
-    #print(rerun.__str__())
+    install_failed = sys.argv[9] == "true"
+    # print(rerun.__str__())
     output = should_dispatch_job(os, component, subcomponent,
                                  version, parameters,
                                  only_pending_jobs=pending,
                                  only_failed_jobs=failed,
-                                 only_unstable_jobs=unstable)
+                                 only_unstable_jobs=unstable,
+                                 only_install_failed=install_failed)
     print(output)

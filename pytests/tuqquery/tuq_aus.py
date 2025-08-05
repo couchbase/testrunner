@@ -235,6 +235,53 @@ class QueryAUSTests(QueryTests):
 
         self.sleep(120)
 
+    def test_create_missing_statistics(self):
+        # Enable AUS and set schedule within next 2 minutes for today
+        start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=2)).strftime('%H:%M')
+        end_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=32)).strftime('%H:%M')
+        today = datetime.now(pytz.timezone('America/Los_Angeles')).strftime('%A')
+        tomorrow = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(days=1)).strftime('%A')
+        after_tomorrow = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(days=2)).strftime('%A')
+
+        aus_update = f'UPDATE system:aus SET schedule = {{"start_time": "{start_time}", "end_time": "{end_time}", "timezone": "America/Los_Angeles", "days": ["{today}", "{tomorrow}", "{after_tomorrow}"]}}, enable = true, change_percentage = 50, all_buckets = true, create_missing_statistics = true'
+        self.run_cbq_query(aus_update)
+
+        # wait 3 seconds for task to be scheduled
+        self.sleep(3)
+
+        # Check histogram for airport collection
+        histogram_query = "SELECT histogramKey FROM `travel-sample`._system._query WHERE `scope` = 'inventory' AND `collection` = 'airport' AND `type` = 'histogram'"
+        histogram_result = self.run_cbq_query(histogram_query)
+        self.log.info(f"Histogram result: {histogram_result}")
+
+        expected_histogram_keys = [
+            {"histogramKey": "(meta().id)"},
+            {"histogramKey": "airportname"},
+            {"histogramKey": "city"},
+            {"histogramKey": "faa"}
+        ]
+        self.assertEqual(histogram_result['results'], expected_histogram_keys)
+
+        # delete histogram for city field from airport collection
+        delete_histogram_query = "UPDATE STATISTICS FOR `travel-sample`.inventory.airport DELETE(city)"
+        self.run_cbq_query(delete_histogram_query)
+
+        # check histogram for city field is deleted
+        histogram_query = "SELECT histogramKey FROM `travel-sample`._system._query WHERE `scope` = 'inventory' AND `collection` = 'airport' AND `type` = 'histogram' AND `histogramKey` = 'city'"
+        histogram_result = self.run_cbq_query(histogram_query)
+        self.log.info(f"Histogram result: {histogram_result}")
+        self.assertEqual(histogram_result['results'], [])
+
+        # wait 140 seconds for AUS task to be scheduled
+        self.sleep(140)
+
+        # Check histogram for airport collection are now created
+        histogram_query = "SELECT histogramKey FROM `travel-sample`._system._query WHERE `scope` = 'inventory' AND `collection` = 'airport' AND `type` = 'histogram'"
+        histogram_result = self.run_cbq_query(histogram_query)
+        self.log.info(f"Histogram result: {histogram_result}")
+     
+        self.assertEqual(histogram_result['results'], expected_histogram_keys)
+
     def test_check_completed_task(self):
         # Enable AUS and set schedule within next 1 minutes for today
         start_time = (datetime.now(pytz.timezone('America/Los_Angeles')) + timedelta(minutes=1)).strftime('%H:%M')

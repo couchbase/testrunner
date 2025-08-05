@@ -191,9 +191,11 @@ class CouchbaseCLI:
         remote_client.disconnect()
         return stdout, stderr, self._was_success(stdout)
 
-    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0", admin_tools_package=False):
+    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0", max_ttl=None, admin_tools_package=False):
         remote_client = RemoteMachineShellConnection(self.server)
         options = f" --bucket {str(bucket)} --create-collection {str(scope)}.{str(collection)}"
+        if max_ttl is not None:
+            options += f" --max-ttl {str(max_ttl)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
                                                              options,
                                                              admin_tools_package=admin_tools_package)

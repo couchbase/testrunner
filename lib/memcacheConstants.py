@@ -420,12 +420,14 @@ FEATURE_TLS = 0x2
 FEATURE_TCPNODELAY = 0x03
 FEATURE_MUTATION_SEQNO = 0x04
 
-
-# LWW related - these are documented here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/set_with_meta.md
-SKIP_CONFLICT_RESOLUTION_FLAG = 0x1
-FORCE_ACCEPT_WITH_META_OPS = 0x2
-REGENERATE_CAS = 0x4
-
 # Datatypes
 DATATYPE_XATTR = 0x4
 DURABILITY_LEVEL_MAJORITY = 0x1
+
+# MB-51744: SetWithMeta options
+# LWW related - these are documented here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/set_with_meta.md
+FORCE_WITH_META_OP = 0x1
+FORCE_ACCEPT_WITH_META_OPS = 0x2
+REGENERATE_CAS = 0x4
+SKIP_CONFLICT_RESOLUTION_FLAG = 0x08
+IS_EXPIRATION = 0x10

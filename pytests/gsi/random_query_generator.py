@@ -53,7 +53,7 @@ class RandomQueryGenerator(BaseTestCase):
             ps_output = subprocess.run(['ps', '-ef', '|', 'grep', 'docker'],
                                         shell=True, capture_output=True, text=True)
             docker_status = ps_output.stdout
-            self.log.info(f"Docker daemon status: {docker_status}")
+            logging.info(f"Docker daemon status: {docker_status}")
             if 'dockerd' not in docker_status:
                 raise Exception("Docker daemon is not running")
             else:

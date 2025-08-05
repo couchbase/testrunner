@@ -42,7 +42,6 @@ params = {
     "fts_query_limit": 0,
     "cluster_version": None,
     "bkrs_client": None,
-    "ntp": False,
     "install_debug_info": False,
     "use_hostnames": False,
     "force_reinstall": True,
@@ -639,7 +638,7 @@ def print_result_and_exit(err=None):
         log.info("INSTALL COMPLETED ON: \t{0}".format(server.ip))
     log.info("-" * 100)
     if len(fail) > 0 or len(install_not_started) > 0:
-        sys.exit(1)
+        sys.exit(2)
 
 
 def process_user_input():
@@ -687,7 +686,7 @@ def _parse_user_input():
             if len(tasks) > 0:
                 params["install_tasks"] = tasks
             log.info("INSTALL TASKS: {0}".format(params["install_tasks"]))
-            if "install" not in params["install_tasks"] and "init" not in params["install_tasks"]:
+            if "install" not in params["install_tasks"] and "init" not in params["install_tasks"] and "download_build" not in params["install_tasks"]:
                 return params  # No other parameters needed
         if key == 'v' or key == "version":
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
@@ -737,8 +736,6 @@ def _parse_user_input():
             params["variant"] = value
         if key == "cluster_version":
             params["cluster_version"] = value
-        if key == "ntp":
-            params["ntp"] = value
         if key == "init_clusters":
             params["init_clusters"] = True if value.lower() == "true" else False
         if key == "install_debug_info":
@@ -781,7 +778,7 @@ def __check_servers_reachable():
             # Marking this node as "completed" so it is not moved to failedInstall state
             log.info("INSTALL COMPLETED ON: \t{0}".format(_))
         log.info("-" * 100)
-        sys.exit(1)
+        sys.exit(2)
 
 
 def _params_validation():
@@ -846,16 +843,6 @@ def pre_install_steps(node_helpers):
     if not node_helpers:
         return
 
-    # CBQE-6402
-    if "ntp" in params and params["ntp"]:
-        ntp_threads = []
-        for node in node_helpers:
-            ntp_thread = threading.Thread(target=node.shell.is_ntp_installed)
-            ntp_threads.append(ntp_thread)
-            ntp_thread.start()
-        for ntpt in ntp_threads:
-            ntpt.join()
-
     if "tools" in params["install_tasks"]:
         for node in node_helpers:
             dev_tools_name = __get_dev_tools_package_name(node)
@@ -867,7 +854,7 @@ def pre_install_steps(node_helpers):
             admin_tools_name_url = __get_tools_url(node, admin_tools_name)
             node.admin_tools_name_url = admin_tools_name_url
 
-    if "install" in params["install_tasks"]:
+    if "download_build" in params["install_tasks"] or "install" in params["install_tasks"]:
         if params["url"] is not None:
             if node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True

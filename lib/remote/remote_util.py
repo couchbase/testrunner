@@ -297,7 +297,7 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def ssh_connect_with_retries(self, ip, ssh_username, ssh_password, ssh_key,
                                  exit_on_failure = False, max_attempts_connect = 5,
-                                 backoff_time = 10):
+                                 backoff_time = 30):
         # Retries with exponential backoff delay
         attempt = 0
         is_ssh_ok = False
@@ -5482,10 +5482,8 @@ class RemoteUtilHelper(object):
             command_2 = "/sbin/iptables -A OUTPUT -p tcp -o " + o[0] + " --sport 1000:65535 -j REJECT"
             command_3 = "/sbin/iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT"
             command_4 = "nft add table ip filter"
-            command_5 = "nft add chain ip filter INPUT '{ type filter hook "
-            "input priority 0; }'"
-            command_6 = "nft add rule ip filter input tcp dport 1000-65535 " \
-                        "reject"
+            command_5 = "nft add chain ip filter INPUT '{ type filter hook input priority 0; }'"
+            command_6 = "nft add rule ip filter INPUT tcp dport 1000-65535 reject"
             if shell.info.distribution_type.lower() in LINUX_DISTRIBUTION_NAME \
                              and server.ssh_username != "root":
                 copy_server.ssh_username = "root"
@@ -5510,7 +5508,7 @@ class RemoteUtilHelper(object):
                 o, r = shell.execute_command(command_3)
                 shell.log_command_output(o, r)
             log.info("enabled firewall on {0}".format(server))
-            o, r = shell.execute_command("/sbin/iptables --list")
+            o, r = shell.execute_command("nft list ruleset")
             shell.log_command_output(o, r)
             shell.disconnect()
 

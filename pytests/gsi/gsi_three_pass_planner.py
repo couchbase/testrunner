@@ -595,8 +595,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         #to verify shards are within soft limit
         shard_partition_map = self.fetch_shard_partition_map()
         for shard in shard_partition_map:
-            # the assertion is done for 5 partitions per shard since for index mem quota from 0-1GB the shards are reused until each shard has 5 partitions each
-            self.assertLessEqual(len(shard_partition_map[shard]), 5, f'shard partition map is {shard_partition_map}')
+            # the assertion is done for 8 partitions per shard since for index mem quota from 0-1GB the shards are reused until each shard has 8 partitions each
+            self.assertLessEqual(len(shard_partition_map[shard]), 8, f'shard partition map is {shard_partition_map}')
 
         self.create_index_post_initial_index_creation(collection_namespace=collection_namespace)
         self.wait_until_indexes_online(defer_build=self.defer_build)
@@ -648,8 +648,8 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
             # to verify shards are within soft limit
             shard_partition_map = self.fetch_shard_partition_map()
             for shard in shard_partition_map:
-                # the assertion is done for 5 partitions per shard since for index mem quota from 0-1GB the shards are reused until each shard has 5 partitions each
-                self.assertLessEqual(len(shard_partition_map[shard]), 5, f'shard partition map is {shard_partition_map}')
+                # the assertion is done for 8 partitions per shard since for index mem quota from 0-1GB the shards are reused until each shard has 8 partitions each
+                self.assertLessEqual(len(shard_partition_map[shard]), 8, f'shard partition map is {shard_partition_map}')
 
         if self.rebalance_type == "rebalance_in":
             add_nodes = [self.servers[self.nodes_init]]

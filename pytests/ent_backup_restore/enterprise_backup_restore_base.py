@@ -333,13 +333,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
         # Common configuration which are shared accross cloud providers
-        self.backupset.objstore_access_key_id = self.input.cbbackupmgr_param('access_key_id', '')
+        self.backupset.objstore_access_key_id = self.input.param('access_key_id', '')
         self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', str(uuid.uuid1()))
         self.backupset.objstore_cacert = self.input.cbbackupmgr_param('cacert', '')
         self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
         self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
         self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
-        self.backupset.objstore_secret_access_key = self.input.cbbackupmgr_param('secret_access_key', '') # Required
+        self.backupset.objstore_secret_access_key = self.input.param('secret_access_key', '') # Required
         self.backupset.objstore_staging_directory = self.change_root_of_path(info, self.input.cbbackupmgr_param('staging_directory'))
 
         # S3 specific configuration
@@ -440,11 +440,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("delete dir %s" % validation_files_location)
             shutil.rmtree(validation_files_location)
 
+        cont_backup_files = ["continuous_backup", "restoreContBk"]
+        list_cont_backup_files = "ls /tmp/"
+        output, error = remote_client.execute_command(list_cont_backup_files)
+        for file in cont_backup_files:
+            command = "rm -rf /tmp/{}".format(file)
+            output, error = remote_client.execute_command(command)
+            remote_client.log_command_output(output, error)
+
         # testrunner runs the teardown before running setup which means the 'objstore_provider' will be undefined
         # we can continue in this case knowing that we haven't yet loaded any data into the cloud.
         try:
             if self.objstore_provider:
                 self.objstore_provider.teardown(info, remote_client)
+                self.objstore_provider.remove_bucket()
                 # Foor Azure we're deleting the remote storage resoruce
                 if self.input.param("objstore_provider", None) == "azure":
                     self.objstore_provider.__del__()
@@ -3238,7 +3247,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return rest._http_request(api, "POST", params)
 
     def create_bucket_for_continuous_backup(self, bucket_name, interval_time, history_retention_seconds=86400,
-                                            history_retention_bytes=16106127360):
+                                            history_retention_bytes=16106127360, max_ttl=None, replica_number=0):
 
         command = f"curl -v http://{self.master.ip}:8091/pools/default/buckets \
                           -u {self.master.rest_username}:{self.master.rest_password} \
@@ -3250,9 +3259,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                           -d historyRetentionSeconds={history_retention_seconds} \
                           -d historyRetentionBytes={history_retention_bytes} \
                           -d durabilityMinLevel=majority \
-                          -d replicaNumber=0 \
+                          -d replicaNumber={replica_number} \
                           -d continuousBackupInterval={interval_time} \
                           -d historyRetentionCollectionDefault=true"
+        if max_ttl is not None:
+            command += f"-d maxTTL={max_ttl}"
 
         remote_client = RemoteMachineShellConnection(self.master)
         output, error = remote_client.execute_command(command)

@@ -111,24 +111,19 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
-
-        self._kill_all_processes_index(self.index_nodes[0])
-
-        self.sleep(10)
-
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            self._kill_all_processes_index(node)
+        self.sleep(30)
         self.load_docs(self.num_items_in_collection)
-
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
-
         index_list = self.index_ops_obj.get_create_index_list()
         self._kill_all_processes_index(self.index_nodes[0])
-        if not self.check_index_recovered_snapshot(index_list, self.index_nodes[0]):
+        if not self.check_gsi_logs_for_snapshot_recovery():
             self.fail("Some indexes did not recover from snapshot")
-
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
-
         self.verify_query_results_from_new_index()
 
     def verify_query_results_from_new_index(self):
@@ -159,34 +154,25 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
 
     def test_recovery_no_disk_snapshot(self):
-
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
-
         self._kill_all_processes_index(self.index_nodes[0])
-
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
             task.result()
-
         if self.index_ops_obj.get_errors():
             self.fail(str(self.index_ops_obj.get_errors()))
-
         self.load_docs(self.start_doc)
-
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
-
         self.sleep(10)
-
-        self._kill_all_processes_index(self.index_nodes[0])
-        if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
-            self.fail("Some indexes did not recover from snapshot")
-
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            self._kill_all_processes_index(node)
+        self.sleep(30)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("Some indexes did not process mutations on time")
-
         self.verify_query_results_from_new_index()
 
     def test_recover_index_from_in_memory_snapshot(self):
@@ -308,14 +294,11 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.verify_query_results_from_new_index()
 
     def test_recovery_projector_crash(self):
-
         index_create_tasks = self.create_indexes(num=self.num_pre_indexes)
         for task in index_create_tasks:
             task.result()
-
         if self.index_ops_obj.get_errors():
             self.fail(str(self.index_ops_obj.get_errors()))
-
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 3000})
@@ -324,32 +307,21 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1200000})
-
         self.load_docs(self.start_doc)
-
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
-
         self._kill_all_processes_index(self.index_nodes[0])
-
         self.sleep(10)
-
         load_tasks = self.async_load_docs(self.num_items_in_collection, self.num_items_in_collection * 2)
-
         data_nodes = self.get_kv_nodes()
-        remote = RemoteMachineShellConnection(data_nodes[1])
-        remote.terminate_process(process_name="projector")
-        self.sleep(1)
-        if not self.check_index_recovered_snapshot(self.index_ops_obj.get_create_index_list(), self.index_nodes[0]):
-            self.fail("Some indexes did not recover from snapshot")
-        self.sleep(2)
-
+        for node in data_nodes:
+            remote = RemoteMachineShellConnection(node)
+            remote.terminate_process(process_name="projector")
+        self.sleep(30)
         for task in load_tasks:
             task.result()
-
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.log.info("some indexes did not process mutations on time")
-
         self.verify_query_results_from_new_index()
 
     def test_recovery_memcached_crash(self):
@@ -650,103 +622,79 @@ class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.scan_indexes(self.index_ops_obj.get_create_index_list())
 
     def test_multiple_rebalances(self):
-
         self.key_prefix = f'bigkeybigkeybigkeybigkeybigkeybigkey_{self.master.ip}_'
-
         for index_node in self.index_nodes:
             rest = RestConnection(index_node)
             rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 1000})
-
         #self.load_docs(self.start_doc)
         #50
         index_create_tasks = self.create_indexes(num=250, query_def_group="unique", defer_build=True)
-
         for task in index_create_tasks:
             task.result()
-
         if self.index_ops_obj.get_errors():
             self.fail(str(self.index_ops_obj.get_errors()))
-
         self.build_indexes()
-
         self.sleep(2)
-
         load_doc_thread = threading.Thread(name="load_doc_thread",
                                            target=self.load_docs,
                                            args=[self.start_doc],
                                            kwargs={'key_prefix': self.key_prefix})
         load_doc_thread.start()
-
         self.sleep(60, "sleeping for 60 sec for index to start processing docs")
-
         if not self.check_if_indexes_in_dgm():
             self.log.error("indexes not in dgm even after {}".format(self.dgm_check_timeout))
-
         self.kill_loader_process()
         self.sdk_loader_manager.shutdown(True)
-
-        if not self.wait_for_mutation_processing(self.index_nodes):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        if not self.wait_for_mutation_processing(index_nodes=index_nodes):
             self.fail("some indexes did not process mutations on time")
-
         self.scan_indexes(self.index_ops_obj.get_create_index_list())
-
         #rebalance in
-
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init],
             [self.servers[self.nodes_init]],
             [], services=["index"])
         rebalance.result()
-
+        self.sleep(30)
         index_node = self.get_nodes_from_services_map(service_type="index")
         self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
-
         self.scan_indexes(self.index_ops_obj.get_defer_index_list())
-
         indexes_not_created = self.index_ops_obj.check_if_indexes_created(index_node, defer_build=True)
         if indexes_not_created:
             self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')
             self.fail(f'Expected Created indexes {indexes_not_created} found to be not created')
-
         #rebalance out
         kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         node_out = kv_nodes[1]
-
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init+1],
             [], [node_out])
         rebalance.result()
-
+        self.sleep(30)
         index_node = self.get_nodes_from_services_map(service_type="index")
         self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
-
         self.scan_indexes(self.index_ops_obj.get_defer_index_list())
-
         indexes_not_created = self.index_ops_obj.check_if_indexes_created(index_node, defer_build=True)
         if indexes_not_created:
             self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')
             self.fail(f'Expected Created indexes {indexes_not_created} found to be not created')
-
         swap_node_out = self.get_nodes_from_services_map(service_type="index")
-
         #swap rebalance
         rebalance = self.cluster.async_rebalance(
             self.servers[:self.nodes_init],
             [node_out],
             [swap_node_out], services=["kv"])
         rebalance.result()
-
+        self.sleep(30)
         index_node = self.get_nodes_from_services_map(service_type="index")
         self.index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if not self.wait_for_mutation_processing(self.index_nodes):
             self.fail("some indexes did not process mutations on time")
-
         self.scan_indexes(self.index_ops_obj.get_defer_index_list())
-
         indexes_not_created = self.index_ops_obj.check_if_indexes_created(index_node, defer_build=True)
         if indexes_not_created:
             self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')

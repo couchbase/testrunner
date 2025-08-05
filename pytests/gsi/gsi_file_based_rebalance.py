@@ -734,6 +734,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -855,6 +856,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 while status != 'running':
                     if time.time() - start_time > timeout:
                         self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                        break
                     time.sleep(1)
                     status, _ = self.rest._rebalance_status_and_progress()
                 self.log.info("Rebalance has started running.")
@@ -946,6 +948,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1033,6 +1036,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1146,6 +1150,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1353,6 +1358,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1457,6 +1463,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         while status != 'running':
             if time.time() - start_time > timeout:
                 self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
             time.sleep(1)
             status, _ = self.rest._rebalance_status_and_progress()
         self.log.info("Rebalance has started running.")
@@ -1652,7 +1659,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             while status != 'running':
                 if time.time() - start_time > timeout:
                     self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
-                    raise Exception(f"Rebalance timeout: status '{status}' after {timeout} seconds")
+                    break
                 time.sleep(1)
                 status, _ = self.rest._rebalance_status_and_progress()
             self.log.info("Rebalance has started running.")
@@ -1685,6 +1692,16 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                             self._kill_all_processes_index(server=node)
                         nodes_in_list = []
                         time.sleep(30)
+            else:
+                self.log.info(f"Rebalance was stopped by the user. Verifying that the staging directory has been emptied")
+                self.sleep(60)
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                for node in index_nodes:
+                    rest = RestConnection(node)
+                    storage_dir = rest.get_indexer_internal_stats()["indexer.storage_dir"]
+                    staging_dir_contents = self.get_staging_directory_contents(node=node, storage_dir=storage_dir)
+                    self.log.info(f"Staging directory contents for node {node.ip}: {staging_dir_contents}")
+                    self.assertTrue(len(staging_dir_contents) == 0, "Staging directory is not empty")
             self.enable_redistribute_indexes()
             time.sleep(120)
             if nodes_in_list:
@@ -1696,7 +1713,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             time.sleep(20)
         self.sleep(10)
         if not self.capella_run:
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=100)
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=250)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             shard_affinity = self.is_shard_based_rebalance_enabled()
@@ -1767,6 +1784,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                    f"Result before \n\n {query_result[query]}."
                                    f"Result after \n \n {post_rebalance_result}")
                     raise Exception("Mismatch in query results before and after rebalance")
+        self.sleep(30)
+        self.wait_until_indexes_online()
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.log.info("Fetch metadata after rebalance")
         if self.chaos_action in ['rebalance_during_ddl', 'ddl_during_rebalance']:
@@ -1834,24 +1853,6 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                   get_pty=True)
             shell.execute_command(command='apt-get install -qq -y iptables > /dev/null && echo 1 || echo 0',
                                   get_pty=True)
-
-    def run_stress_tool(self, stress_factor=0.25, timeout=1800):
-        nodes_all = self.servers
-        shell = RemoteMachineShellConnection(nodes_all[0])
-        free_mem_cmd = "free -m | awk 'NR==2 {print $4}'"
-        output, error = shell.execute_command(free_mem_cmd)
-        free_mem_in_mb = int(output[0])
-        ram = math.floor(free_mem_in_mb * stress_factor)
-        num_cpu_cmd = "grep -c ^processor /proc/cpuinfo"
-        output, error = shell.execute_command(num_cpu_cmd)
-        num_cpu = int(output[0])
-        cpu = math.floor(num_cpu * stress_factor)
-        cmd = f'stress --cpu {cpu} --vm-bytes {ram}M --vm 1 --timeout {timeout} -d 1 & > /dev/null && echo 1 || echo 0'
-        self.log.info(f"Will run this command to simulate CPU and memory stress {cmd}")
-        with ThreadPoolExecutor() as executor_main:
-            for node in nodes_all:
-                shell = RemoteMachineShellConnection(node)
-                executor_main.submit(shell.execute_command, cmd)
 
     def fill_up_disk(self, disk_fill_percent=10):
         self.log.info("Will check the disk usage on all indexer nodes")

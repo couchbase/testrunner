@@ -60,7 +60,13 @@ class QuerySanityTests(QueryTests):
     #
     #   SIMPLE CHECKS
     ##############################################################################################
-
+    def test_use_keys_validate(self):
+        result = self.run_cbq_query('DELETE FROM default USE KEYS VALIDATE ["k1","k2","k3","k4","k5","k6","k7","k8","k9","k10","k11","k12"]')
+        expected_warnings = [{"code": 5503,"msg": "Key(s) in USE KEYS hint not found","reason": {"keys": ["k1","k2","k3","k4","k5","k6","k7","k8","k9","k10"],"keyspace": "default","num_missing_keys": 12}]
+        diffs = DeepDiff(result['warnings'], expected_warnings, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+            
     def test_MB63998(self):
         self.run_cbq_query(query='UPSERT INTO default VALUES("k01", {"c1":10, "c3":30})')
         self.run_cbq_query(query='CREATE INDEX ix100 ON default (c1,IFMISSING(c2,"abc"), c2, c3)')
@@ -2352,6 +2358,25 @@ class QuerySanityTests(QueryTests):
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
+
+    def test_array_replace_max_int(self):
+        # Replace 2 with 100, 2 times
+        self.query = "select array_replace([1,2,3,2,2], 2, 100, 2) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num": [1, 100, 3, 100, 2]}]
+        self._verify_results(actual_result['results'], expected_result)
+
+        # Replace 2 with 100, 0 times
+        self.query = "select array_replace([1,2,3,2,2], 2, 100, 0) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num": [1, 2, 3, 2, 2]}]
+        self._verify_results(actual_result['results'], expected_result)
+
+        # Replace 2 with 100, 4 times
+        self.query = "select array_replace([1,2,3,2,2], 2, 100, 4) as num"
+        actual_result = self.run_cbq_query()
+        expected_result = [{"num": [1, 100, 3, 100, 100]}]
+        self._verify_results(actual_result['results'], expected_result)
 
     def test_array_repeat(self):
         self.query = "select ARRAY_REPEAT(2, 2) as num"
@@ -4838,6 +4863,7 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         # Create a collection
         self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_ismissing_correlated IF NOT EXISTS')
+        self.sleep(5)
 
         # Insert data into the collection
         upsert_query = 'UPSERT INTO default._default.test_prepared_ismissing_correlated VALUES ("k01", {"sdate": "2024-10-31"})'
@@ -5036,3 +5062,58 @@ class QuerySanityTests(QueryTests):
             # Clean up
             self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
             self.run_cbq_query("DELETE FROM system:prepareds WHERE name = 'p_mb66699'", query_context=query_context)
+
+    # MB-39569
+    def test_like_new_line(self):
+        self.fail_if_no_buckets()
+
+        # Create a separate collection for this test
+        collection_name = "test_like_newline"
+        query_context = f"default._default"
+
+        try:
+            # Create the collection
+            self.run_cbq_query(f"CREATE COLLECTION `{collection_name}` IF NOT EXISTS", query_context=query_context)
+            self.sleep(3)
+
+            # Test 1: Without index - should not return results
+            self.log.info("Testing LIKE query without index")
+
+            # Insert test document
+            insert_query = f'INSERT INTO `{collection_name}` VALUES("kk20", {{"text": "[[File:River \\nFile Thames"}})'
+            self.run_cbq_query(insert_query, query_context=query_context)
+
+            # Query without index using USE KEYS
+            select_query = f'SELECT * FROM `{collection_name}` USE KEYS "kk20" WHERE text LIKE "Fil%"'
+            result = self.run_cbq_query(select_query, query_context=query_context)
+
+            # Verify no results are returned
+            self.assertEqual(result['results'], [], 
+                           "Query without index should not return results for LIKE 'Fil%'")
+
+            # Test 2: With index - should not return results
+            self.log.info("Testing LIKE query with index")
+
+            # Create index on text field
+            index_query = f"CREATE INDEX ix20 IF NOT EXISTS ON `{collection_name}`(text)"
+            self.run_cbq_query(index_query, query_context=query_context)
+            self.sleep(3)
+
+            # Query with index
+            select_with_index_query = f'SELECT * FROM `{collection_name}` WHERE text LIKE "Fil%"'
+            result_with_index = self.run_cbq_query(select_with_index_query, query_context=query_context)
+
+            # Verify no results are returned even with index
+            self.assertEqual(result_with_index['results'], [], 
+                           "Query with index should not return results for LIKE 'Fil%'")
+
+            # Additional verification - query should return the document when using exact match
+            exact_match_query = f'SELECT * FROM `{collection_name}` WHERE text LIKE "%File%"'
+            exact_result = self.run_cbq_query(exact_match_query, query_context=query_context)
+
+            # Should return the document when using %File% pattern
+            self.assertEqual(len(exact_result['results']), 1, 
+                           "Query with %File% pattern should return the document")            
+        finally:
+            # Clean up
+            self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)

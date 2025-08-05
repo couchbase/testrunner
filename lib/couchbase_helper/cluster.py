@@ -316,7 +316,7 @@ class Cluster(object):
         return _task
 
     def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False,
-                        services=None, sleep_before_rebalance=None, cluster_config=None):
+                        services=None, sleep_before_rebalance=None, cluster_config=None, master=None):
         """Asyncronously rebalances a cluster
 
         Parameters:
@@ -333,7 +333,7 @@ class Cluster(object):
         else:
             _task = RebalanceTask(servers, to_add, to_remove,
                                 use_hostnames=use_hostnames, services=services,
-                                sleep_before_rebalance=sleep_before_rebalance)
+                                sleep_before_rebalance=sleep_before_rebalance, master=master)
         self.task_manager.schedule(_task)
         return _task
 
