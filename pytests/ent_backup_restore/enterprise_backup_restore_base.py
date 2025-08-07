@@ -333,13 +333,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
         # Common configuration which are shared accross cloud providers
-        self.backupset.objstore_access_key_id = self.input.cbbackupmgr_param('access_key_id', '')
+        self.backupset.objstore_access_key_id = self.input.param('access_key_id', '')
         self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', str(uuid.uuid1()))
         self.backupset.objstore_cacert = self.input.cbbackupmgr_param('cacert', '')
         self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
         self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
         self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
-        self.backupset.objstore_secret_access_key = self.input.cbbackupmgr_param('secret_access_key', '') # Required
+        self.backupset.objstore_secret_access_key = self.input.param('secret_access_key', '') # Required
         self.backupset.objstore_staging_directory = self.change_root_of_path(info, self.input.cbbackupmgr_param('staging_directory'))
 
         # S3 specific configuration
