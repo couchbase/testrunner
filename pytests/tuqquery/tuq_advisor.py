@@ -30,7 +30,7 @@ class QueryAdvisorTests(QueryTests):
             list_of_indexes = self.run_cbq_query(query="select raw name from system:indexes WHERE indexes.bucket_id is missing")
 
             for index in list_of_indexes['results']:
-                if index == "def_primary":
+                if index == "def_primary" or index == "#primary":
                     continue
                 else:
                     self.run_cbq_query(query="drop index `travel-sample`.`%s`" % index)
