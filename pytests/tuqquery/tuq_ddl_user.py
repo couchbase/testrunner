@@ -402,8 +402,6 @@ class QueryDDLUserTests(QueryTests):
             # Cleanup
             self.run_cbq_query(f"DROP USER {ro_user}")
 
-            # INSERT_YOUR_CODE
-
     def test_alter_user_password(self):
         user = "alter_user1"
         password = "oldpass123"
@@ -691,3 +689,275 @@ class QueryDDLUserTests(QueryTests):
             self.run_cbq_query(f"DROP USER {user2}")
             self.run_cbq_query(f"DROP GROUP {group1}")
             self.run_cbq_query(f"DROP GROUP {group2}")
+
+    def test_create_user_if_not_exists(self):
+        """
+        Test CREATE USER IF NOT EXISTS functionality.
+        """
+        user = "if_not_exists_user"
+        password = "ifnotexists123"
+        self.assertGreaterEqual(len(password), 6, "Password must be at least 6 characters long")
+
+        # First creation should succeed
+        self.run_cbq_query(f'CREATE USER IF NOT EXISTS {user} PASSWORD "{password}"')
+        info = self._get_user_info(user)
+        self.assertIsNotNone(info, "User should be created on first attempt")
+
+        # Second creation with IF NOT EXISTS should not fail
+        self.run_cbq_query(f'CREATE USER IF NOT EXISTS {user} PASSWORD "{password}"')
+        info2 = self._get_user_info(user)
+        self.assertIsNotNone(info2, "User should still exist after second IF NOT EXISTS attempt")
+        self.assertEqual(info['id'], info2['id'], "User should be the same after second IF NOT EXISTS attempt")
+
+        # Cleanup
+        self.run_cbq_query(f"DROP USER {user}")
+
+    def test_create_user_if_not_exists_with_options(self):
+        """
+        Test CREATE USER IF NOT EXISTS with additional options like name and groups.
+        """
+        user = "if_not_exists_user_options"
+        password = "ifnotexists456"
+        name = "Test User"
+        group = "if_not_exists_group"
+        self.assertGreaterEqual(len(password), 6, "Password must be at least 6 characters long")
+
+        # Create group first
+        self.run_cbq_query(f'CREATE GROUP {group} NO ROLES')
+
+        # First creation with all options
+        self.run_cbq_query(f'CREATE USER IF NOT EXISTS {user} PASSWORD "{password}" WITH "{name}" GROUP {group}')
+        info = self._get_user_info(user)
+        self.assertIsNotNone(info, "User should be created on first attempt")
+        self.assertEqual(info.get("name"), name)
+        self.assertIn(group, info.get("groups", []))
+
+        # Second creation with different options should not change the user
+        different_name = "Different Name"
+        self.run_cbq_query(f'CREATE USER IF NOT EXISTS {user} PASSWORD "differentpass" WITH "{different_name}" NO GROUPS')
+        info2 = self._get_user_info(user)
+        self.assertIsNotNone(info2, "User should still exist after second IF NOT EXISTS attempt")
+        # Original options should be preserved
+        self.assertEqual(info2.get("name"), name, "Original name should be preserved")
+        self.assertIn(group, info2.get("groups", []), "Original group should be preserved")
+
+        # Cleanup
+        self.run_cbq_query(f"DROP USER {user}")
+        self.run_cbq_query(f"DROP GROUP {group}")
+
+    def test_create_group_if_not_exists(self):
+        """
+        Test CREATE GROUP IF NOT EXISTS functionality.
+        """
+        group = "if_not_exists_group"
+        description = "Test Group Description"
+
+        # First creation should succeed
+        self.run_cbq_query(f'CREATE GROUP IF NOT EXISTS {group} WITH "{description}" NO ROLES')
+        group_info_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertTrue(group_info_res['results'], "Group should be created on first attempt")
+        group_info = group_info_res['results'][0]['group_info']
+        self.assertEqual(group_info.get("description"), description)
+
+        # Second creation with IF NOT EXISTS should not fail
+        different_description = "Different Description"
+        self.run_cbq_query(f'CREATE GROUP IF NOT EXISTS {group} WITH "{different_description}" NO ROLES')
+        group_info_res2 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertTrue(group_info_res2['results'], "Group should still exist after second IF NOT EXISTS attempt")
+        group_info2 = group_info_res2['results'][0]['group_info']
+        # Original description should be preserved
+        self.assertEqual(group_info2.get("description"), description, "Original description should be preserved")
+
+        # Cleanup
+        self.run_cbq_query(f"DROP GROUP {group}")
+
+    def test_create_group_if_not_exists_with_roles(self):
+        """
+        Test CREATE GROUP IF NOT EXISTS with roles.
+        """
+        group = "if_not_exists_group_roles"
+
+        # First creation with roles
+        self.run_cbq_query(f'CREATE GROUP IF NOT EXISTS {group} ROLE query_select ON `{self.bucket}`')
+        group_info_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertTrue(group_info_res['results'], "Group should be created on first attempt")
+        group_info = group_info_res['results'][0]['group_info']
+        roles = group_info.get("roles", [])
+        self.assertTrue(any(r.get("role") == "select" and r.get("bucket_name") == self.bucket for r in roles),
+                        "Group should have select role on bucket")
+
+        # Second creation with different roles should not change the group
+        self.run_cbq_query(f'CREATE GROUP IF NOT EXISTS {group} ROLE query_insert ON `{self.bucket}`')
+        group_info_res2 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        group_info2 = group_info_res2['results'][0]['group_info']
+        roles2 = group_info2.get("roles", [])
+        # Original role should still be present
+        self.assertTrue(any(r.get("role") == "select" and r.get("bucket_name") == self.bucket for r in roles2),
+                        "Original select role should be preserved")
+        # New role should not be added
+        self.assertFalse(any(r.get("role") == "insert" and r.get("bucket_name") == self.bucket for r in roles2),
+                         "New insert role should not be added")
+
+        # Cleanup
+        self.run_cbq_query(f"DROP GROUP {group}")
+
+    def test_drop_user_if_exists(self):
+        """
+        Test DROP USER IF EXISTS functionality.
+        """
+        user = "drop_if_exists_user"
+        password = "dropifexists123"
+        self.assertGreaterEqual(len(password), 6, "Password must be at least 6 characters long")
+
+        # Drop non-existent user with IF EXISTS should not fail
+        self.run_cbq_query(f"DROP USER IF EXISTS {user}")
+        info = self._get_user_info(user)
+        self.assertIsNone(info, "Non-existent user should remain non-existent")
+
+        # Create user
+        self.run_cbq_query(f'CREATE USER {user} PASSWORD "{password}"')
+        info = self._get_user_info(user)
+        self.assertIsNotNone(info, "User should exist after creation")
+
+        # Drop existing user with IF EXISTS should succeed
+        self.run_cbq_query(f"DROP USER IF EXISTS {user}")
+        info2 = self._get_user_info(user)
+        self.assertIsNone(info2, "User should be dropped")
+
+        # Drop again with IF EXISTS should not fail
+        self.run_cbq_query(f"DROP USER IF EXISTS {user}")
+        info3 = self._get_user_info(user)
+        self.assertIsNone(info3, "User should remain dropped")
+
+    def test_drop_group_if_exists(self):
+        """
+        Test DROP GROUP IF EXISTS functionality.
+        """
+        group = "drop_if_exists_group"
+
+        # Drop non-existent group with IF EXISTS should not fail
+        self.run_cbq_query(f"DROP GROUP IF EXISTS {group}")
+        group_info_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertFalse(group_info_res['results'], "Non-existent group should remain non-existent")
+
+        # Create group
+        self.run_cbq_query(f'CREATE GROUP {group} NO ROLES')
+        group_info_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertTrue(group_info_res['results'], "Group should exist after creation")
+
+        # Drop existing group with IF EXISTS should succeed
+        self.run_cbq_query(f"DROP GROUP IF EXISTS {group}")
+        group_info_res2 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertFalse(group_info_res2['results'], "Group should be dropped")
+
+        # Drop again with IF EXISTS should not fail
+        self.run_cbq_query(f"DROP GROUP IF EXISTS {group}")
+        group_info_res3 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertFalse(group_info_res3['results'], "Group should remain dropped")
+
+    def test_drop_user_if_exists_with_dependencies(self):
+        """
+        Test DROP USER IF EXISTS when user is in groups.
+        """
+        user = "drop_if_exists_user_deps"
+        password = "dropifexists456"
+        group = "drop_if_exists_group_deps"
+        self.assertGreaterEqual(len(password), 6, "Password must be at least 6 characters long")
+
+        # Create group and user in group
+        self.run_cbq_query(f'CREATE GROUP {group} NO ROLES')
+        self.run_cbq_query(f'CREATE USER {user} PASSWORD "{password}" GROUP {group}')
+
+        # Verify user exists and is in group
+        info = self._get_user_info(user)
+        self.assertIsNotNone(info, "User should exist")
+        self.assertIn(group, info.get("groups", []), "User should be in group")
+
+        # Drop user with IF EXISTS should succeed even with group membership
+        self.run_cbq_query(f"DROP USER IF EXISTS {user}")
+        info2 = self._get_user_info(user)
+        self.assertIsNone(info2, "User should be dropped")
+
+        # Group should still exist
+        group_info_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertTrue(group_info_res['results'], "Group should still exist after user drop")
+
+        # Cleanup
+        self.run_cbq_query(f"DROP GROUP {group}")
+
+    def test_drop_group_if_exists_with_members(self):
+        """
+        Test DROP GROUP IF EXISTS when group has members.
+        """
+        user = "drop_if_exists_user_member"
+        password = "dropifexists789"
+        group = "drop_if_exists_group_members"
+        self.assertGreaterEqual(len(password), 6, "Password must be at least 6 characters long")
+
+        # Create group and user in group
+        self.run_cbq_query(f'CREATE GROUP {group} NO ROLES')
+        self.run_cbq_query(f'CREATE USER {user} PASSWORD "{password}" GROUP {group}')
+
+        # Verify group exists and has user
+        group_info_res = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertTrue(group_info_res['results'], "Group should exist")
+
+        # Drop group with IF EXISTS should succeed even with members
+        self.run_cbq_query(f"DROP GROUP IF EXISTS {group}")
+        group_info_res2 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group}'")
+        self.assertFalse(group_info_res2['results'], "Group should be dropped")
+
+        # User should still exist but not be in the group
+        info = self._get_user_info(user)
+        self.assertIsNotNone(info, "User should still exist after group drop")
+        self.assertNotIn(group, info.get("groups", []), "User should not be in dropped group")
+
+        # Cleanup
+        self.run_cbq_query(f"DROP USER {user}")
+
+    def test_create_and_drop_mixed_if_exists_syntax(self):
+        """
+        Test mixing IF EXISTS/IF NOT EXISTS with regular CREATE/DROP syntax.
+        """
+        user1 = "mixed_user1"
+        user2 = "mixed_user2"
+        group1 = "mixed_group1"
+        group2 = "mixed_group2"
+        password = "mixedpass123"
+        self.assertGreaterEqual(len(password), 6, "Password must be at least 6 characters long")
+
+        # Create user and group normally
+        self.run_cbq_query(f'CREATE USER {user1} PASSWORD "{password}"')
+        self.run_cbq_query(f'CREATE GROUP {group1} NO ROLES')
+
+        # Try to create same user/group with IF NOT EXISTS (should not fail)
+        self.run_cbq_query(f'CREATE USER IF NOT EXISTS {user1} PASSWORD "{password}"')
+        self.run_cbq_query(f'CREATE GROUP IF NOT EXISTS {group1} NO ROLES')
+
+        # Create new user/group with IF NOT EXISTS
+        self.run_cbq_query(f'CREATE USER IF NOT EXISTS {user2} PASSWORD "{password}"')
+        self.run_cbq_query(f'CREATE GROUP IF NOT EXISTS {group2} NO ROLES')
+
+        # Drop with regular syntax (should succeed)
+        self.run_cbq_query(f"DROP USER {user2}")
+        self.run_cbq_query(f"DROP GROUP {group2}")
+
+        # Drop with IF EXISTS (should succeed)
+        self.run_cbq_query(f"DROP USER IF EXISTS {user1}")
+        self.run_cbq_query(f"DROP GROUP IF EXISTS {group1}")
+
+        # Drop non-existent with IF EXISTS (should not fail)
+        self.run_cbq_query(f"DROP USER IF EXISTS {user1}")
+        self.run_cbq_query(f"DROP GROUP IF EXISTS {group1}")
+
+        # Verify all are gone
+        info1 = self._get_user_info(user1)
+        info2 = self._get_user_info(user2)
+        self.assertIsNone(info1, "User1 should be dropped")
+        self.assertIsNone(info2, "User2 should be dropped")
+
+        group_info_res1 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group1}'")
+        group_info_res2 = self.run_cbq_query(f"SELECT * FROM system:group_info WHERE id = '{group2}'")
+        self.assertFalse(group_info_res1['results'], "Group1 should be dropped")
+        self.assertFalse(group_info_res2['results'], "Group2 should be dropped")
+
