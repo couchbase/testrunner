@@ -610,3 +610,70 @@ class QueryLMKTests(QueryTests):
                 self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query("drop index `travel-sample`.idx_city_country")
+
+    def test_lmk_limit_pushdown(self):
+        # MB-54859
+        collection_name = "shellTest"
+
+        # Create the collection
+        self.run_cbq_query(f"CREATE COLLECTION `default`.`_default`.`{collection_name}`")
+
+        # Insert some test data
+        test_data = [
+            {"test_id": "advise", "c11": "value1"},
+            {"test_id": "advise", "c11": "value2"},
+            {"test_id": "advise", "c11": "value3"},
+            {"test_id": "advise", "c11": "value4"},
+            {"test_id": "advise", "c11": "value5"},
+            {"test_id": "other", "c11": "other_value1"},
+            {"test_id": "other", "c11": "other_value2"}
+        ]
+
+        for doc in test_data:
+            # Insert with explicit doc key to include the doc key
+            doc_key = f"{doc['test_id']}_{doc['c11']}"
+            self.run_cbq_query(f"INSERT INTO `default`.`_default`.`{collection_name}` (KEY, VALUE) VALUES ('{doc_key}', {doc})")
+
+        try:
+            # Create index with INCLUDE MISSING and WHERE clause
+            index_query = f"CREATE INDEX adv_c11 ON `default`.`_default`.`{collection_name}`(`c11` INCLUDE MISSING) WHERE `test_id` = 'advise'"
+            self.run_cbq_query(index_query)
+
+            # Test query with LIMIT
+            query = f"SELECT c11 FROM `default`.`_default`.`{collection_name}` WHERE test_id = 'advise' LIMIT 2"
+            explain_query = f"EXPLAIN {query}"
+
+            explain_plan = self.run_cbq_query(explain_query)
+
+            # Check that the index is being used in an IndexScan3 operator and that limit is pushed down
+            plan = explain_plan['results'][0]['plan']
+            found_indexscan3 = False
+            found_limit_in_indexscan3 = False
+
+            nodes_to_check = [plan]
+            while nodes_to_check:
+                node = nodes_to_check.pop()
+                if isinstance(node, dict):
+                    if node.get('#operator') == 'IndexScan3':
+                        found_indexscan3 = True
+                        if node.get('index') == 'adv_c11':
+                            if 'limit' in node and str(node['limit']) == "2":
+                                found_limit_in_indexscan3 = True
+                    for v in node.values():
+                        if isinstance(v, (dict, list)):
+                            nodes_to_check.append(v)
+                elif isinstance(node, list):
+                    for item in node:
+                        if isinstance(item, (dict, list)):
+                            nodes_to_check.append(item)
+
+            self.assertTrue(found_indexscan3, f"IndexScan3 operator not found in plan: {plan}")
+            self.assertTrue(found_limit_in_indexscan3, f"Limit not pushed down to IndexScan3 operator in plan: {plan}")
+
+            # Verify the actual results
+            actual_results = self.run_cbq_query(query)
+            self.assertEqual(len(actual_results['results']), 2, 
+                           f"Should return exactly 2 results, got {len(actual_results['results'])}")
+        finally:
+            # Clean up: just drop collection if exists
+            self.run_cbq_query(f"DROP COLLECTION `default`.`_default`.`{collection_name}` IF EXISTS")
