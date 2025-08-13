@@ -62,7 +62,7 @@ class QuerySanityTests(QueryTests):
     ##############################################################################################
     def test_use_keys_validate(self):
         result = self.run_cbq_query('DELETE FROM default USE KEYS VALIDATE ["k1","k2","k3","k4","k5","k6","k7","k8","k9","k10","k11","k12"]')
-        expected_warnings = [{"code": 5503,"msg": "Key(s) in USE KEYS hint not found","reason": {"keys": ["k1","k2","k3","k4","k5","k6","k7","k8","k9","k10"],"keyspace": "default","num_missing_keys": 12}]
+        expected_warnings = [{"code": 5503,"msg": "Key(s) in USE KEYS hint not found","reason": {"keys": ["k1","k2","k3","k4","k5","k6","k7","k8","k9","k10"],"keyspace": "default","num_missing_keys": 12}}]
         diffs = DeepDiff(result['warnings'], expected_warnings, ignore_order=True)
         if diffs:
             self.assertTrue(False, diffs)
