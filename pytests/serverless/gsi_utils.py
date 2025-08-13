@@ -31,6 +31,7 @@ class GSIUtils(object):
         self.batch_size = 0
         self.query_event = Event()
         self.encoder = encoder
+        self.query_errors = []
 
     def set_encoder(self, encoder):
         self.encoder = encoder
@@ -2217,6 +2218,8 @@ class GSIUtils(object):
                     task.result()
             except Exception as err:
                 self.log.error(f"Error occurred during query load: {err}")
+                self.query_errors.append(str(err))
+
             time.sleep(sleep_timer)
             
 
