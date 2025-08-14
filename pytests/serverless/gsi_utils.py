@@ -718,7 +718,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partitioned_index', index_fields=['name'],
                             query_template=RANGE_SCAN_TEMPLATE.format("name", 'name like "%%Dil%%" order by name'),
-                            partition_by_fields=['name'], capella_run=True))
+                            partition_by_fields=['meta().id'], capella_run=True))
 
         # Array Index
         definitions_list.append(
