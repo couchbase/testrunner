@@ -815,6 +815,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_update)
                     self.sleep(60)
                     _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
+                    partial_indexes = self.get_partial_indexes_name_list()
                     index_item_count_map = {}
                     for node in stats:
                         for namespace in stats[node]:
@@ -824,6 +825,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                 else:
                                     index_item_count_map[index] += stats[node][namespace][index]["items_count"]
                     for index in index_item_count_map:
+                        if index in partial_indexes:
+                            continue
                         self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         if self.shard_based_rebalance:
