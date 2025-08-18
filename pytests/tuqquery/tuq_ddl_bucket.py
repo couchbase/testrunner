@@ -1,5 +1,5 @@
 from tuqquery.tuq import QueryTests
-from membase.api.exception import CBQError
+from lib.membase.api.exception import CBQError
 
 
 class QueryBucketDDLTests(QueryTests):
@@ -90,7 +90,7 @@ class QueryBucketDDLTests(QueryTests):
 
         for bucket_name in test_buckets:
             try:
-                self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+                self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
             except Exception as e:
                 self.log.info(f"Error dropping bucket {bucket_name}: {e}")
 
@@ -118,7 +118,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertNotIn('flush', bucket_info['controllers'], "flush field should not be defined")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket")
 
     def test_create_database_basic(self):
         """Test basic CREATE DATABASE without any options"""
@@ -144,7 +144,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertNotIn('flush', bucket_info['controllers'], "flush field should not be defined")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_db IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_db")
 
     def test_create_bucket_with_ramquota(self):
         """Test CREATE BUCKET with custom ramQuota"""
@@ -157,7 +157,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 256, "ramQuota should be 256MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket2 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket2")
 
     def test_create_bucket_with_storage_backend_magma(self):
         """Test CREATE BUCKET with storageBackend magma"""
@@ -173,7 +173,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 1024, "Default ramQuota should be 1024MB for magma")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket3 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket3")
 
     def test_create_bucket_with_storage_backend_couchstore(self):
         """Test CREATE BUCKET with storageBackend couchstore"""
@@ -189,7 +189,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 100, "Default ramQuota should be 100MB for couchstore")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket4 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket4")
 
     def test_create_bucket_with_multiple_options(self):
         """Test CREATE BUCKET with multiple configuration options"""
@@ -204,7 +204,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['replicaNumber'], 1, "replicaNumber should be 1")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket5 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket5")
 
     def test_create_bucket_with_replica_number(self):
         """Test CREATE BUCKET with replicaNumber option"""
@@ -217,7 +217,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['replicaNumber'], 2, "replicaNumber should be 2")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket6 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket6")
 
     def test_create_bucket_with_eviction_policy(self):
         """Test CREATE BUCKET with evictionPolicy option"""
@@ -230,7 +230,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['evictionPolicy'], 'fullEviction', "evictionPolicy should be fullEviction")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket7 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket7")
 
     def test_create_bucket_with_flush_enabled(self):
         """Test CREATE BUCKET with flushEnabled option"""
@@ -243,7 +243,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertIn('flush', bucket_info['controllers'], "'flush' field should be defined in bucket info")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket8 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket8")
 
     def test_create_bucket_with_compression_mode(self):
         """Test CREATE BUCKET with compressionMode option"""
@@ -256,7 +256,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['compressionMode'], 'active', "compressionMode should be active")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket9 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket9")
 
     def test_create_bucket_with_max_ttl(self):
         """Test CREATE BUCKET with maxTTL option"""
@@ -269,7 +269,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['maxTTL'], 3600, "maxTTL should be 3600")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket10 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket10")
 
     def test_create_bucket_with_lww_conflict_resolution(self):
         """Test CREATE BUCKET with conflict resolution type"""
@@ -282,14 +282,14 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['conflictResolutionType'], 'lww', "conflictResolutionType should be lww")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket11 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket11")
 
     def test_create_bucket_with_invalid_num_vbuckets(self):
         """Test CREATE BUCKET with invalid numVBuckets option (256 is not allowed, only 128 and 1024 are valid)"""
         with self.assertRaises(CBQError, msg="Should fail for invalid numVBuckets value 256"):
             self.run_cbq_query("CREATE BUCKET test_bucket12 WITH {'storageBackend': 'couchstore', 'numVBuckets': 256}")
         # Clean up in case bucket was created (should not be)
-        self.run_cbq_query("DROP BUCKET test_bucket12 IF EXISTS")
+        self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket12")
 
     def test_create_bucket_with_bucket_type(self):
         """Test CREATE BUCKET with bucketType option"""
@@ -302,7 +302,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['bucketType'], 'ephemeral', "bucketType should be ephemeral")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket13 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket13")
 
     def test_create_bucket_with_replica_index(self):
         """Test CREATE BUCKET with replicaIndex option"""
@@ -315,7 +315,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['replicaIndex'], 0, "replicaIndex should be 0")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket14 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket14")
 
     def test_create_bucket_with_threads_number(self):
         """Test CREATE BUCKET with threadsNumber option"""
@@ -328,7 +328,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['threadsNumber'], 3, "threadsNumber should be 3")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket15 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket15")
 
     def test_create_bucket_with_all_options(self):
         """Test CREATE BUCKET with all available options"""
@@ -366,7 +366,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['threadsNumber'], 3, "threadsNumber should be 3")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket16 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket16")
 
     def test_create_bucket_duplicate_name(self):
         """Test CREATE BUCKET with duplicate name should fail"""
@@ -379,7 +379,7 @@ class QueryBucketDDLTests(QueryTests):
                 self.run_cbq_query("CREATE BUCKET test_bucket17 WITH {'storageBackend': 'couchstore'}")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket17 IF EXISTS")
+                self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket17")
 
     def test_create_bucket_if_not_exists(self):
         """Test CREATE BUCKET IF NOT EXISTS"""
@@ -388,14 +388,14 @@ class QueryBucketDDLTests(QueryTests):
             self.run_cbq_query("CREATE BUCKET test_bucket18 WITH {'storageBackend': 'couchstore'}")
 
             # Try to create bucket with same name using IF NOT EXISTS - should not fail
-            self.run_cbq_query("CREATE BUCKET test_bucket18 IF NOT EXISTS WITH {'storageBackend': 'couchstore'}")
+            self.run_cbq_query("CREATE BUCKET IF NOT EXISTS test_bucket18 WITH {'storageBackend': 'couchstore'}")
 
             # Verify bucket still exists
             result = self.run_cbq_query("SELECT * FROM system:buckets WHERE name = 'test_bucket18'")
             self.assertEqual(len(result['results']), 1, "Bucket should still exist")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket18 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket18")
 
     def test_create_bucket_invalid_ramquota(self):
         """Test CREATE BUCKET with invalid ramQuota should fail"""
@@ -439,7 +439,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 256, "ramQuota should be 256MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket25 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket25")
 
     def test_create_bucket_couchstore_minimum_ram(self):
         """Test CREATE BUCKET with couchstore storage and minimum ram requirement"""
@@ -453,7 +453,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 100, "ramQuota should be 100MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket26 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket26")
 
     def test_create_bucket_with_special_characters_in_name(self):
         """Test CREATE BUCKET with special characters in name"""
@@ -477,9 +477,9 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Bucket with period should be created")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket_27 IF EXISTS")
-            self.run_cbq_query("DROP BUCKET `test-bucket-28` IF EXISTS")
-            self.run_cbq_query("DROP BUCKET `test.bucket.29` IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket_27")
+            self.run_cbq_query("DROP BUCKET IF EXISTS `test-bucket-28`")
+            self.run_cbq_query("DROP BUCKET IF EXISTS `test.bucket.29`")
 
     def test_create_bucket_with_numbers_in_name(self):
         """Test CREATE BUCKET with numbers in name"""
@@ -490,7 +490,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Bucket with numbers should be created")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket_30 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket_30")
 
     def test_create_bucket_with_quoted_name(self):
         """Test CREATE BUCKET with quoted name"""
@@ -501,7 +501,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Bucket with quoted name should be created")
 
         finally:
-            self.run_cbq_query('DROP BUCKET "test_bucket_31" IF EXISTS')
+            self.run_cbq_query('DROP BUCKET IF EXISTS "test_bucket_31"')
 
     def test_create_bucket_with_backtick_name(self):
         """Test CREATE BUCKET with backtick quoted name"""
@@ -512,7 +512,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Bucket with backtick quoted name should be created")
 
         finally:
-            self.run_cbq_query("DROP BUCKET `test_bucket_32` IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS `test_bucket_32`")
 
     def test_create_bucket_case_sensitivity(self):
         """Test CREATE BUCKET case sensitivity"""
@@ -530,9 +530,9 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 3, "All case variants should be created as separate buckets")
 
         finally:
-            self.run_cbq_query("DROP BUCKET Test_Bucket_33 IF EXISTS")
-            self.run_cbq_query("DROP BUCKET TEST_BUCKET_34 IF EXISTS")
-            self.run_cbq_query("DROP BUCKET test_bucket_35 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS Test_Bucket_33")
+            self.run_cbq_query("DROP BUCKET IF EXISTS TEST_BUCKET_34")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket_35")
 
     def test_create_bucket_with_empty_options(self):
         """Test CREATE BUCKET with empty options object"""
@@ -545,7 +545,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 100, "Default ramQuota should be 100MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket36 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket36")
 
     def test_create_bucket_with_nested_json_options(self):
         """Test CREATE BUCKET with nested JSON in options"""
@@ -559,7 +559,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['storageBackend'], 'magma', "storageBackend should be magma")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket37 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket37")
 
     def test_create_bucket_with_whitespace_in_options(self):
         """Test CREATE BUCKET with whitespace in options"""
@@ -573,7 +573,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['storageBackend'], 'magma', "storageBackend should be magma")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket38 IF EXISTS")
+                self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket38")
 
     def test_create_bucket_with_comments_in_options(self):
         """Test CREATE BUCKET with comments in options (should pass)"""
@@ -585,7 +585,7 @@ class QueryBucketDDLTests(QueryTests):
             bucket_info = self.rest.get_bucket_json("test_bucket39")
             self._assert_ram_quota(bucket_info, 256, "ramQuota should be 256MB")
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket39 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket39")
 
     def test_create_bucket_with_trailing_comma_in_options(self):
         """Test CREATE BUCKET with trailing comma in options (should fail)"""
@@ -613,7 +613,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 512, "Last ramQuota value should be used")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket43 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket43")
 
     def test_create_bucket_with_unknown_options(self):
         """Test CREATE BUCKET with unknown options (should fail)"""
@@ -636,7 +636,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 2048, "ramQuota should be 2048MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket46 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket46")
 
     def test_create_bucket_with_fractional_ramquota(self):
         """Test CREATE BUCKET with fractional ramQuota (should be rounded)"""
@@ -649,7 +649,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 256, "ramQuota should be rounded down to 256MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket47 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket47")
 
     def test_create_bucket_with_string_ramquota(self):
         """Test CREATE BUCKET with string ramQuota (should fail)"""
@@ -692,7 +692,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['replicaNumber'], 1, "replicaNumber should be rounded down to 1")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket54 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket54")
 
     def test_create_bucket_with_string_replica_number(self):
         """Test CREATE BUCKET with string replicaNumber (should fail)"""
@@ -735,7 +735,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['maxTTL'], 3600, "maxTTL should be rounded down to 3600")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket61 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket61")
 
     def test_create_bucket_with_string_max_ttl(self):
         """Test CREATE BUCKET with string maxTTL (should fail)"""
@@ -778,7 +778,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['numVBuckets'], 128, "numVBuckets should be rounded down to 128")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket68 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket68")
 
     def test_create_bucket_with_string_num_vbuckets(self):
         """Test CREATE BUCKET with string numVBuckets (should fail)"""
@@ -821,7 +821,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['threadsNumber'], 3, "threadsNumber should be rounded down to 3")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket75 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket75")
 
     def test_create_bucket_with_string_threads_number(self):
         """Test CREATE BUCKET with string threadsNumber (should fail)"""
@@ -915,7 +915,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Long bucket name should be created")
 
         finally:
-            self.run_cbq_query(f"DROP BUCKET {long_name} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {long_name}")
 
     def test_create_bucket_with_unicode_name(self):
         """Test CREATE BUCKET with unicode characters in name (should fail)"""
@@ -934,7 +934,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Reserved keyword bucket name should be created")
 
         finally:
-            self.run_cbq_query('DROP BUCKET `select` IF EXISTS')
+            self.run_cbq_query('DROP BUCKET IF EXISTS `select`')
 
     def test_create_bucket_with_special_sql_characters(self):
         """Test CREATE BUCKET with special SQL characters in name"""
@@ -948,7 +948,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Special character bucket name should be created")
 
         finally:
-            self.run_cbq_query(f'DROP BUCKET `{special_name}` IF EXISTS')
+            self.run_cbq_query(f'DROP BUCKET IF EXISTS `{special_name}`')
 
     def test_create_bucket_with_leading_numbers(self):
         """Test CREATE BUCKET with leading numbers in name"""
@@ -962,7 +962,7 @@ class QueryBucketDDLTests(QueryTests):
 
         finally:
             self.sleep(2)
-            self.run_cbq_query("DROP BUCKET `123test_bucket` IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS `123test_bucket`")
 
     def test_create_bucket_with_leading_underscore(self):
         """Test CREATE BUCKET with leading underscore in name"""
@@ -975,7 +975,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Leading underscore bucket name should be created")
 
         finally:
-            self.run_cbq_query("DROP BUCKET _test_bucket_90 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS _test_bucket_90")
 
     def test_create_bucket_with_leading_hyphen(self):
         """Test CREATE BUCKET with leading hyphen in name"""
@@ -988,7 +988,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Leading hyphen bucket name should be created")
 
         finally:
-            self.run_cbq_query("DROP BUCKET `-test_bucket_91` IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS `-test_bucket_91`")
 
     def test_create_bucket_with_leading_period(self):
         """Test CREATE BUCKET with leading period in name (should fail)"""
@@ -1021,7 +1021,7 @@ class QueryBucketDDLTests(QueryTests):
             self._assert_ram_quota(bucket_info, 8192, "ramQuota should be 8192MB")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket93 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket93")
 
     def test_create_bucket_with_minimum_valid_values(self):
         """Test CREATE BUCKET with minimum valid values for all options"""
@@ -1060,7 +1060,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['threadsNumber'], 3, "threadsNumber should be 3")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket94 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket94")
 
     def test_create_bucket_with_maximum_valid_values(self):
         """Test CREATE BUCKET with maximum valid values for all options"""
@@ -1096,7 +1096,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(bucket_info['threadsNumber'], 8, "threadsNumber should be 8")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket95 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket95")
 
     def test_create_multiple_buckets_concurrently(self):
         """Test creating multiple buckets concurrently"""
@@ -1115,7 +1115,7 @@ class QueryBucketDDLTests(QueryTests):
         finally:
             # Clean up all buckets
             for bucket_name in bucket_names:
-                self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+                self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
 
     def test_create_bucket_and_verify_system_catalog(self):
         """Test that created bucket appears in system catalog"""
@@ -1136,7 +1136,7 @@ class QueryBucketDDLTests(QueryTests):
                 self.log.info("system:buckets catalog not available")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket96 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket96")
 
     def test_create_bucket_and_insert_data(self):
         """Test that created bucket can be used for data operations"""
@@ -1153,7 +1153,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(result['results'][0]['test_bucket97']['name'], 'test', "Data should be correctly inserted")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket97 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket97")
 
     def test_create_bucket_and_create_index(self):
         """Test that created bucket can be used for index operations"""
@@ -1173,7 +1173,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 1, "Index should be created on the bucket")
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket98 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket98")
 
     def test_create_bucket_and_create_scope_collection(self):
         """Test that created bucket can be used for scope/collection operations"""
@@ -1191,7 +1191,7 @@ class QueryBucketDDLTests(QueryTests):
             self.sleep(2)
 
         finally:
-            self.run_cbq_query("DROP BUCKET test_bucket99 IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS test_bucket99")
 
     def test_create_bucket_rbac(self):
         """
@@ -1222,7 +1222,7 @@ class QueryBucketDDLTests(QueryTests):
 
         finally:
             # Cleanup: drop the bucket and remove the user
-            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
             self.run_cbq_query(f"DROP USER {username}")
 
     def test_create_bucket_rbac_negative(self):
@@ -1252,7 +1252,7 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(len(result['results']), 0, "Bucket should not be created by ro_admin user")
         finally:
             # Cleanup: drop the bucket (if created) and remove the user
-            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
             self.run_cbq_query(f"DROP USER {username}")
 
     def test_alter_bucket_basic(self):
@@ -1322,7 +1322,7 @@ class QueryBucketDDLTests(QueryTests):
                     )
 
         finally:
-            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
 
     def test_alter_database_basic(self):
         """
@@ -1361,7 +1361,7 @@ class QueryBucketDDLTests(QueryTests):
                     )
 
         finally:
-            self.run_cbq_query(f"DROP DATABASE {db_name} IF EXISTS")
+            self.run_cbq_query(f"DROP DATABASE IF EXISTS {db_name}")
 
     def test_bucket_uuid_in_system_catalog(self):
         """
@@ -1432,8 +1432,8 @@ class QueryBucketDDLTests(QueryTests):
 
         finally:
             # Clean up
-            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
-            self.run_cbq_query(f"DROP BUCKET {bucket_name2} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name2}")
 
     def test_bucket_uuid_persistence(self):
         """
@@ -1468,4 +1468,4 @@ class QueryBucketDDLTests(QueryTests):
             self.assertEqual(data_uuid, initial_uuid, "Bucket UUID should remain consistent after data operations")
 
         finally:
-            self.run_cbq_query(f"DROP BUCKET {bucket_name} IF EXISTS")
+            self.run_cbq_query(f"DROP BUCKET IF EXISTS {bucket_name}")
