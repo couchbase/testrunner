@@ -42,12 +42,12 @@ class x509main:
     LININSTALLPATH = "/opt/couchbase/var/lib/couchbase/"
     MACINSTALLPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/"
     DOWNLOADPATH = "/tmp/"
-    CACERTFILEPATH = "/tmp/newcerts" + str(random.randint(1, 100)) + "/"
+    CACERTFILEPATH = "/tmp/newcerts" + "/"
     CHAINFILEPATH = "inbox"
     GOCERTGENFILE = "gencert.go"
     INCORRECT_ROOT_CERT = "incorrect_root_cert.crt"
     SLAVE_HOST = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
-    CLIENT_CERT_AUTH_JSON = 'client_cert_auth1.json'
+    CLIENT_CERT_AUTH_JSON = 'client_cert_auth.json'
     CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
     IP_ADDRESS = '172.16.1.174'
     KEY_FILE = CACERTFILEPATH + "/" + CAKEYFILE
@@ -93,8 +93,7 @@ class x509main:
     def _generate_cert(self, servers, root_cn='Root Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
-        shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
-
+        shell.execute_command("mkdir -p " + x509main.CACERTFILEPATH)
         if type == 'go':
             files = []
             cert_file = "./pytests/security/" + x509main.GOCERTGENFILE
@@ -111,6 +110,7 @@ class x509main:
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
 
             shell.execute_command("go run " + cert_file + " -store-to=" + x509main.CACERTFILEPATH + "incorrect_root_cert -common-name=Incorrect Authority")
+            shell.disconnect()
         elif type == 'openssl':
             files = []
             v3_ca = "./pytests/security/v3_ca.crt"
@@ -237,6 +237,7 @@ class x509main:
             status, content = self._reload_node_certificate(host)
             return status, content
 
+
     # Reload cert for self signed certificate
     def _reload_node_certificate(self, host):
         rest = RestConnection(host)
@@ -257,6 +258,7 @@ class x509main:
         else:
             #install_path = x509main.LININSTALLPATH
             install_path = str(self.get_data_path(host)) + "/"
+        shell.disconnect()
         return install_path
 
     # create inbox folder for host
@@ -264,6 +266,7 @@ class x509main:
         shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
         shell.create_directory(final_path)
+        shell.disconnect()
 
     # delete all file inbox folder and remove inbox folder
     def _delete_inbox_folder(self):
@@ -280,11 +283,13 @@ class x509main:
             shell.execute_command('rm -rf ' + final_path)
         else:
             shell.execute_command('rm -rf ' + final_path)
+        shell.disconnect()
 
     # Function to simply copy from source to destination
     def _copy_node_key_chain_cert(self, host, src_path, dest_path):
         shell = RemoteMachineShellConnection(host)
         shell.copy_file_local_to_remote(src_path, dest_path)
+        shell.disconnect()
 
     def _create_rest_headers(self, username="Administrator", password="password"):
         authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
@@ -306,7 +311,20 @@ class x509main:
         rest = RestConnection(self.host)
         url = "controller/uploadClusterCA"
         api = rest.baseUrl + url
-        self._rest_upload_file(api, x509main.CACERTFILEPATH + "/" + x509main.CACERTFILE, "Administrator", 'password')
+        self._rest_upload_file(api, x509main.CACERTFILEPATH + x509main.CACERTFILE, "Administrator", 'password')
+
+    # def _move_file_to_inbox(self, file_name):
+    #     cmd  = f"scp {file_name} root@{self.host.ip}:{self.LININSTALLPATH}/{self.CACERTFILEPATH}/CA/{file_name}"
+    #     return_code = subprocess.call(cmd, shell=True)
+    #     if return_code != 0:
+    #         raise Exception(f"Failed to move file to inbox: {return_code}")
+    #     log.info(f"Moved file to inbox: {file_name}")
+
+    def _new_upload_cluster_ca_certificate(self, username, password):
+        # self._move_file_to_inbox(x509main.CACERTFILE)
+        rest = RestConnection(self.host)
+        rest.load_trusted_CAs()
+        rest.reload_certificate()
 
     # Upload security setting for client cert
     def _upload_cluster_ca_settings(self, username, password):
@@ -328,22 +346,24 @@ class x509main:
     Capture any exception in the code and return error
     '''
 
-    def _validate_ssl_login(self, final_url=None, header=None, client_cert=False, verb='GET', data='', plain_curl=False, username='Administrator', password='password', host=None):
+    def _validate_ssl_login(self, final_url=None, header=None, client_cert=False, verb='GET', data='', plain_curl=False, username='Administrator', password='password', host=None, verify=True):
+        if verify:
+            verify = x509main.CERT_FILE
         if verb == 'GET' and plain_curl:
             r = requests.get(final_url, data=data)
             return r.status_code, r.text
         elif client_cert:
             try:
                 if verb == 'GET':
-                    r = requests.get(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
+                    r = requests.get(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
                 elif verb == 'POST':
-                    r = requests.post(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
+                    r = requests.post(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data)
                 elif verb == 'PUT':
                     header = {'Content-type': 'Content-Type: application/json'}
-                    r = requests.put(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data, headers=header)
+                    r = requests.put(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), data=data, headers=header)
                 elif verb == 'DELETE':
                     header = {'Content-type': 'Content-Type: application/json'}
-                    r = requests.delete(final_url, verify=x509main.CERT_FILE, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), headers=header)
+                    r = requests.delete(final_url, verify=verify, cert=(x509main.CLIENT_CERT_PEM, x509main.CLIENT_CERT_KEY), headers=header)
                 return r.status_code, r.text
             except Exception as ex:
                 log.info ("into exception form validate_ssl_login with client cert")
@@ -351,11 +371,11 @@ class x509main:
                 return 'error','error'
         else:
             try:
-                r = requests.get("https://" + str(self.host.ip) + ":18091", verify=x509main.CERT_FILE)
+                r = requests.get("https://" + str(self.host.ip) + ":18091", verify=verify)
                 if r.status_code == 200:
                     header = {'Content-type': 'application/x-www-form-urlencoded'}
                     params = urllib.parse.urlencode({'user':'{0}'.format(username), 'password':'{0}'.format(password)})
-                    r = requests.post("https://" + str(self.host.ip) + ":18091/uilogin", data=params, headers=header, verify=x509main.CERT_FILE)
+                    r = requests.post("https://" + str(self.host.ip) + ":18091/uilogin", data=params, headers=header, verify=verify)
                     return r.status_code
             except Exception as ex:
                 log.info ("into exception form validate_ssl_login")
@@ -437,8 +457,8 @@ class x509main:
         copy_host = copy.deepcopy(self.host)
         if non_local_CA_upload:
             self.non_local_CA_upload(server=copy_host, allow=True)
-        x509main(copy_host)._upload_cluster_ca_certificate(user, password)
         x509main(copy_host)._setup_node_certificates()
+        x509main(copy_host)._new_upload_cluster_ca_certificate(user, password)
         if state is not None:
             self.write_client_cert_json_new(state, paths, prefixs, delimeters)
             if mode == 'rest':
