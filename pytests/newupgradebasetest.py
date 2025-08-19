@@ -168,11 +168,13 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
                     nodes = rest_obj.get_nodes()
                     self.log.info(f'rest node : {self.rest.ip}')
                     self.log.info(f'Node in cluster : {nodes} ')
-                temp = []
-                for server in self.servers:
-                    if server.ip in [node.ip for node in nodes]:
-                        temp.append(server)
-                self.servers = temp
+                self.enable_log_collection_all_nodes_init = self.input.param("enable_log_collection_all_nodes_init", False)
+                if not self.enable_log_collection_all_nodes_init:
+                    temp = []
+                    for server in self.servers:
+                        if server.ip in [node.ip for node in nodes]:
+                            temp.append(server)
+                    self.servers = temp
             except Exception as e:
                 if e:
                     print(("Exception ", e))
