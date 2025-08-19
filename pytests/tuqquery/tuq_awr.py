@@ -171,13 +171,13 @@ class QueryAWRTests(QueryTests):
             update_awr = self.run_cbq_query("UPDATE system:awr SET interval = '30s'")
             self.fail("We expect this query to error out")
         except Exception as e:
-            self.assertTrue("must be: A valid duration string. The duration must be at least 1 minute." in str(e), f"Error is not as expected, please check the results {e}")
+            self.assertTrue("must be: A valid duration string." in str(e), f"Error is not as expected, please check the results {e}")
 
         try:
             update_awr = self.run_cbq_query("UPDATE system:awr SET interval = 'invalid'")
             self.fail("We expect this query to error out")
         except Exception as e:
-            self.assertTrue("must be: A valid duration string. The duration must be at least 1 minute." in str(e), f"Error is not as expected, please check the results {e}")
+            self.assertTrue("must be: A valid duration string." in str(e), f"Error is not as expected, please check the results {e}")
     
     '''This will test if we can set the location to a valid keyspace path'''
     def test_awr_location(self):
@@ -219,11 +219,6 @@ class QueryAWRTests(QueryTests):
         self.assertEqual(update_awr['status'], 'success')
         check_awr = self.run_cbq_query("SELECT * FROM system:awr")
         self.assertEqual(check_awr['results'][0]['awr']['num_statements'], 100000, f"AWR num_statements is not set to the expected value, please check the results {check_awr}")
-
-        update_awr = self.run_cbq_query("UPDATE system:awr SET num_statements = 2147483647")  # Max 32-bit integer
-        self.assertEqual(update_awr['status'], 'success')
-        check_awr = self.run_cbq_query("SELECT * FROM system:awr")
-        self.assertEqual(check_awr['results'][0]['awr']['num_statements'], 2147483647, f"AWR num_statements is not set to the expected value, please check the results {check_awr}")
     
     '''This will test if we can set the number of statements to a number that is not an integer or is negative'''
     def test_awr_num_statements_negative(self):
@@ -238,18 +233,18 @@ class QueryAWRTests(QueryTests):
             self.fail("We expect this query to error out")
         except Exception as e:
             self.assertTrue("must be: A positive integer" in str(e), f"Error is not as expected, please check the results {e}")
+        try:
+            update_awr = self.run_cbq_query("UPDATE system:awr SET num_statements = 2147483647")  # Max 32-bit integer
+            self.fail("We expect this query to error out")
+        except Exception as e:
+            self.assertTrue("must be: A positive integer. The maximum allowable value is 100000." in str(e), f"Error is not as expected, please check the results {e}")
     
     '''This will test if we can set the queue length to a valid number'''
     def test_awr_queue_length(self):
-        update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 100000")
+        update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 160")
         self.assertEqual(update_awr['status'], 'success')
         check_awr = self.run_cbq_query("SELECT * FROM system:awr")
-        self.assertEqual(check_awr['results'][0]['awr']['queue_len'], 100000, f"AWR queue_len is not set to the expected value, please check the results {check_awr}")
-
-        update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 2147483647")  # Max 32-bit integer
-        self.assertEqual(update_awr['status'], 'success')
-        check_awr = self.run_cbq_query("SELECT * FROM system:awr")
-        self.assertEqual(check_awr['results'][0]['awr']['queue_len'], 2147483647, f"AWR queue_len is not set to the expected value, please check the results {check_awr}")
+        self.assertEqual(check_awr['results'][0]['awr']['queue_len'], 160, f"AWR queue_len is not set to the expected value, please check the results {check_awr}")
     
     '''This will test if we can set the queue length to a number that is not an integer or is negative'''
     def test_awr_queue_length_negative(self):
@@ -264,6 +259,12 @@ class QueryAWRTests(QueryTests):
             self.fail("We expect this query to error out")
         except Exception as e:
             self.assertTrue("must be: A positive integer" in str(e), f"Error is not as expected, please check the results {e}")
+        
+        try:
+            update_awr = self.run_cbq_query("UPDATE system:awr SET queue_len = 2147483647")  # Max 32-bit integer
+            self.fail("We expect this query to error out")
+        except Exception as e:
+            self.assertTrue("must be: A positive integer. The maximum allowable value is" in str(e), f"Error is not as expected, please check the results {e}")
     
     '''This will test if we can set the threshold to a valid number of seconds'''
     def test_threshold(self):
