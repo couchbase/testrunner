@@ -310,6 +310,16 @@ class ServerManager:
             _ = self.cluster.transactions.run(allocate_servers)
             self.logger.info(
                 f"Allocated {len(server_list)} servers: {server_list}")
+
+            try:
+                t_result = self.cluster.query(
+                    f"SELECT ipaddr,state FROM `QE-server-pool` "
+                    f"WHERE ipaddr IN {server_list}")
+                for row in t_result.rows():
+                    self.logger.info(row)
+            except Exception as e:
+                self.logger.error(f"Select query error: {str(e)}")
+
             return server_list
         except Exception as e:
             self.logger.error(f"Error in get_servers transaction: {str(e)}")
