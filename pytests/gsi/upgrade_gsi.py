@@ -1971,6 +1971,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.sleep(30)
         self.log_thp_status()
         self.index_rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
+        self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
+        self.index_rest.set_index_settings({"indexer.plasma.backIndex.enableInMemoryCompression": False})
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -2047,6 +2049,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.sleep(30)
         self.log_thp_status()
         self.index_rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
+        self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
+        self.index_rest.set_index_settings({"indexer.plasma.backIndex.enableInMemoryCompression": False})
         self.enable_shard_based_rebalance()
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
