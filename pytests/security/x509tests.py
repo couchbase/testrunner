@@ -302,12 +302,14 @@ class x509tests(BaseTestCase):
         rest.fail_over(serv_out, graceful=False)
         if (rebalance):
             rest.rebalance(known_nodes, [serv_out])
+            known_nodes.remove(serv_out)
             self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
-            x509main(servs_inout[1]).non_local_CA_upload(server=servs_inout[1], allow=True)
-            x509main(servs_inout[1])._upload_cluster_ca_certificate(self.master.rest_username,
+            x509main(servs_inout[0]).non_local_CA_upload(server=servs_inout[0], allow=True)
+            x509main(servs_inout[0])._upload_cluster_ca_certificate(self.master.rest_username,
                                                                     self.master.rest_password)
-            x509main(servs_inout[1])._reload_node_certificate(host=servs_inout[1])
-            rest.add_node('Administrator', 'password', servs_inout[1].ip)
+            x509main(servs_inout[0])._reload_node_certificate(host=servs_inout[0])
+            rest.add_node('Administrator', 'password', serv_out)
+            known_nodes.append(serv_out)
         else:
             rest.add_back_node(serv_out)
         rest.rebalance(known_nodes)
@@ -500,12 +502,11 @@ class x509tests(BaseTestCase):
         remote_cluster_name = 'sslcluster'
         restCluster1 = RestConnection(cluster1[0])
         restCluster2 = RestConnection(cluster2[0])
-
+        for server in self.servers:
+            x509main(server).setup_master(self.client_cert_state, self.paths, self.prefixs, self.delimeters,
+                                               self.upload_json_mode)
         try:
             # Setup cluster1
-            x509main(cluster1[0])._upload_cluster_ca_certificate("Administrator", 'password')
-            x509main(cluster1[0])._setup_node_certificates()
-            x509main(cluster1[1])._setup_node_certificates(reload_cert=False)
 
             restCluster1.add_node('Administrator', 'password', cluster1[1].ip)
             known_nodes = ['ns_1@' + cluster1[0].ip, 'ns_1@' + cluster1[1].ip]
@@ -521,9 +522,16 @@ class x509tests(BaseTestCase):
             self.assertTrue(self.check_rebalance_complete(restCluster2), "Issue with rebalance")
             restCluster2.create_bucket(bucket='default', ramQuotaMB=256)
 
-            test = x509main.CACERTFILEPATH + x509main.CACERTFILE
-            data = open(test, 'rb').read()
-            restCluster1.add_remote_cluster(cluster2[0].ip, cluster2[0].port, 'Administrator', 'password', remote_cluster_name, certificate=data)
+            test = x509main.CACERTFILEPATH + "ca.pem"
+            data = open(test, 'rb').read().decode()
+            restCluster1.add_remote_cluster(
+                cluster2[0].ip, cluster2[0].port,
+                'Administrator', 'password',
+                remote_cluster_name,
+                demandEncryption=1,certificate=data,
+                clientKey=open(x509main.CACERTFILEPATH + cluster1[1].ip + ".key", 'rb').read(),
+                clientCertificate=open(x509main.CACERTFILEPATH + "long_chain" +cluster1[1].ip + ".pem", 'rb').read()
+            )
             self.sleep(20)
             replication_id = restCluster1.start_replication('continuous', 'default', remote_cluster_name)
             if replication_id is not None:

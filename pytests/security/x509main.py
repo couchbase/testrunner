@@ -116,14 +116,14 @@ class x509main:
             v3_ca = "./pytests/security/v3_ca.crt"
             output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + "ca.key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
-            output, error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key " + x509main.CACERTFILEPATH + "ca.key -out " + x509main.CACERTFILEPATH + "ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'")
+            output, error = shell.execute_command("openssl req -new -x509  -days 3650 -sha256 -key " + x509main.CACERTFILEPATH + "ca.key " + "-config ./pytests/security/v3_ca.conf -extensions v3_ca " + "-out " + x509main.CACERTFILEPATH + "ca.pem -subj '/C=UA/O=My Company/CN=My Company Root CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + "int.key " + str(key_length))
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + "int.key -out " + x509main.CACERTFILEPATH + "int.csr -subj '/C=UA/O=My Company/CN=My Company Intermediate CA'")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
             output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + "int.csr -CA " + x509main.CACERTFILEPATH + "ca.pem -CAkey " + x509main.CACERTFILEPATH + "ca.key -CAcreateserial -CAserial "
-                            + x509main.CACERTFILEPATH + "rootCA.srl -extfile ./pytests/security/v3_ca.ext -out " + x509main.CACERTFILEPATH + "int.pem -days 365 -sha256")
+                            + x509main.CACERTFILEPATH + "rootCA.srl -extfile ./pytests/security/v3_ca.conf -extensions v3_ca -out " + x509main.CACERTFILEPATH + "int.pem -days 365 -sha256")
             log.info ('Output message is {0} and error message is {1}'.format(output, error))
 
             for server in servers:
@@ -229,6 +229,9 @@ class x509main:
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.CHAINCERTFILE
         src_node_key = x509main.CACERTFILEPATH + "/" + host.ip + ".key"
         dest_node_key = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.NODECAKEYFILE
+        src_ca_file = x509main.CACERTFILEPATH + "ca.pem"
+        dest_ca_file = self.install_path + x509main.CHAINFILEPATH + "/CA/" +  "ca.pem"
+        self._copy_node_key_chain_cert(host, src_ca_file, dest_ca_file)
         if chain_cert:
             self._copy_node_key_chain_cert(host, src_chain_file, dest_chain_file)
         if node_key:
@@ -266,6 +269,7 @@ class x509main:
         shell = RemoteMachineShellConnection(self.host)
         final_path = self.install_path + x509main.CHAINFILEPATH
         shell.create_directory(final_path)
+        shell.create_directory(final_path+"/CA")
         shell.disconnect()
 
     # delete all file inbox folder and remove inbox folder
