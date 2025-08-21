@@ -5173,7 +5173,7 @@ class RestConnection(object):
         Assign group roles
     '''
 
-    def add_group_role(self,group_name,description,roles,ldap_group_ref=None):
+    def add_group_role(self, group_name, description, roles, ldap_group_ref=None):
         api = self.baseUrl + "settings/rbac/groups/" + group_name
         if ldap_group_ref is not None:
 
@@ -5189,7 +5189,7 @@ class RestConnection(object):
                                         'roles':'{0}'.format(roles)
                                     })
         status, content, header = self._http_request(api, 'PUT', params)
-        log.info ("Status of Adding role to group command is {0}".format(status))
+        log.info("Status of Adding role to group command is {0}".format(status))
         return status, json.loads(content)
 
     def delete_group(self,group_name):
@@ -5234,7 +5234,6 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST')
         log.info("Status of Invalidate LDAP Cached is {0}".format(status))
         return status, json.loads(content)
-
 
     def ldap_validate_conn(self):
         api = self.baseUrl + "settings/ldap/validate/connectivity"
@@ -5695,6 +5694,16 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return json.loads(content)
+
+    def change_password_user(self, username, password, new_password):
+        url = "controller/changePassword"
+        api = self.baseUrl + url
+        params = urllib.parse.urlencode({'password': new_password})
+        authorization = self.get_authorization(username, password)
+        headers = {'Content-type': 'application/x-www-form-urlencoded',
+                   'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', params, headers=headers)
+        return status, content, header
 
     # Applicable to eventing service
     '''
@@ -6835,6 +6844,29 @@ class RestConnection(object):
         api = self.baseUrl + 'settings/security'
         params = urllib.parse.urlencode({"uiSessionTimeout": timeout})
         status, content, header = self._http_request(api, 'POST', params)
+        return status, content, header
+
+    def set_unset_user_lock(self, user_id, is_lock):
+        api = self.baseUrl + "settings/rbac/users/local/" + user_id
+        params = urllib.parse.urlencode({"locked": is_lock})
+        status, content, header = self._http_request(api, 'PATCH', params)
+        return status, content, header
+
+    def get_user_activity(self):
+        api = self.baseUrl + "settings/security/userActivity"
+        status, content, header = self._http_request(api, 'GET')
+        return status, content, header
+
+    def configure_user_activity(self, params):
+        api = self.baseUrl + "settings/security/userActivity"
+        headers = self._create_capi_headers()
+        params = json.dumps(params)
+        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+        return status, content, header
+
+    def backup_rbac_users(self):
+        api = self.baseUrl + "settings/rbac/backup"
+        status, content, header = self._http_request(api, 'GET')
         return status, content, header
 
 
