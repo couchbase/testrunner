@@ -115,6 +115,10 @@ CREATE_SERVERLESS_PROFILE_FILE = {
 CMDS = {
     "deb": {
         "uninstall":
+            "rm /var/lib/dpkg/lock;" +
+            "rm /var/lib/dpkg/lock-frontend;" +
+            "rm /var/cache/apt/archives/lock;" +
+            "dpkg --configure -a;" +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf /tmp/cbbackupmgr-staging;" +
             "rm -rf /tmp/entbackup*;" +
@@ -136,7 +140,10 @@ CMDS = {
             "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
             "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
             "&& service procps restart) ; "
-
+            "rm /var/lib/dpkg/lock;"
+            "rm /var/lib/dpkg/lock-frontend;"
+            "rm /var/cache/apt/archives/lock;"
+            "dpkg --configure -a;"
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
