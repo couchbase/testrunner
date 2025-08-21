@@ -74,7 +74,7 @@ class auditcli(ldaptest):
 
                 rest = RestConnection(self.master)
                 param = {
-                    'hosts': '{0}'.format("172.23.120.175"),
+                    'hosts': '{0}'.format("172.23.124.20"),
                     'port': '{0}'.format("389"),
                     'encryption': '{0}'.format("None"),
                     'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),
