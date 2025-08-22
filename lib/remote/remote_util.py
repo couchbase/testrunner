@@ -5294,6 +5294,11 @@ class RemoteMachineShellConnection(KeepRefs):
             f"curl -X POST localhost:{self.port}/settings/security/allowNonLocalCACertUpload "
             f"-d \"{allow}\" -u {username}:{password} -H 'Content-Type:application/x-www-form-urlencoded'")
 
+    def change_user_password(self, user, password, new_password):
+        cmd = f'/opt/couchbase/bin/couchbase-cli user-change-password -c 127.0.0.1 -u {user} -p {password} --new-password {new_password}'
+        out,err = self.execute_command(cmd, use_channel=True)
+        self.log_command_output(out, err)
+        return out, err
 
     def give_directory_permissions_to_couchbase(self, location):
         """
