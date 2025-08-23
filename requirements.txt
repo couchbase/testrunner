@@ -9,7 +9,7 @@ deepdiff==5.0.2
 docutils==0.16
 Faker
 Geohash==1.0
-paramiko==2.7.1
+paramiko==2.10.1
 pycparser==2.20
 urllib3==1.26.2
 requests==2.25.0
