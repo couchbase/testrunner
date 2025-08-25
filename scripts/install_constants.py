@@ -385,9 +385,9 @@ WAIT_TIMES = {
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "msi": {
-        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 300),
+        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 600),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (50, "Waiting {0}s for install to complete on {1}..", 150),
+        "install": (50, "Waiting {0}s for install to complete on {1}..", 300),
         "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 180),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
