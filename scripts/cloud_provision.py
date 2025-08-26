@@ -221,11 +221,11 @@ AWS_AMI_MAP = {
             "aarch64": "ami-0d70a59d7191a8079"
         },
         "ubuntu22": {
-            "x86_64": "ami-09c0393bac9d9b6ed",
+            "x86_64": "ami-0e57437fb9199c899",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
         "ubuntu22nonroot": {
-            "x86_64": "ami-09c0393bac9d9b6ed",
+            "x86_64": "ami-0e57437fb9199c899",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
         "ubuntu24": {
