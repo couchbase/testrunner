@@ -66,7 +66,7 @@ class rbacclitests(BaseTestCase):
                 self.set_user_role(rest, self.ldapUser, user_role=self.role)
         rest = RestConnection(self.master)
         param = {
-            'hosts': '{0}'.format("172.23.120.175"),
+            'hosts': '{0}'.format("172.23.124.20"),
             'port': '{0}'.format("389"),
             'encryption': '{0}'.format("None"),
             'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),
@@ -107,12 +107,14 @@ class rbacclitests(BaseTestCase):
         content =  rest.set_user_roles(user_id=username, payload=payload)
 
     def _validate_roles(self, output, result):
+        self.log.info("OUTPUT", output)
         final_result = True
         for outputs in output:
             if result not in outputs:
                 final_result = False
             else:
                 final_result = True
+                break
         self.assertTrue(final_result, "Incorrect Message for the role")
 
     #Wrapper around auditmain
@@ -163,6 +165,7 @@ class rbacclitests(BaseTestCase):
             options = "--server-add=http://{0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command='server-add', options=options, cluster_host="127.0.0.1:8091", user=self.ldapUser, password=self.ldapPass)
         output, error = remote_client.execute_couchbase_cli(cli_command='rebalance', cluster_host="127.0.0.1:8091", user=self.ldapUser, password=self.ldapPass)
+        self.log.info(f"Output is {output} and error is {error}")
         self._validate_roles(output,result)
 
         if (cli_command == 'server-remove'):
@@ -216,6 +219,7 @@ class rbacclitests(BaseTestCase):
         remote_client = RemoteMachineShellConnection(self.master)
         output = self._create_bucket(remote_client, bucket=bucket_name, bucket_type=bucket_type, bucket_port=bucket_port, \
                         bucket_ramsize=bucket_ramsize, bucket_replica=bucket_replica, wait=wait, enable_flush=enable_flush, enable_index_replica=enable_index_replica)
+        self.log.info(f"Output is {output} and error is {error}")
         self._validate_roles(output, result)
         remote_client.disconnect()
 
@@ -265,6 +269,7 @@ class rbacclitests(BaseTestCase):
 
         cli_command = "bucket-delete"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="127.0.0.1:8091", user=self.ldapUser, password=self.ldapPass)
+        self.log.info(f"Output is {output} and error is {error}")
         expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"127.0.0.1", "port":57457}
         self._validate_roles(output, result)
 

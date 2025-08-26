@@ -17,7 +17,7 @@ class ServerInfo():
         self.ssh_key = ssh_key
 
 class LdapGroup():
-    LDAP_HOST = "172.23.120.175"
+    LDAP_HOST = "172.23.124.20"
     LDAP_PORT = "389"
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"

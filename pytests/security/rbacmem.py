@@ -159,7 +159,7 @@ class RbacTestMemcached(BaseTestCase):
         self.user_id = self.input.param("user_id", None)
         self.user_role = self.input.param("user_role", None)
         self.bucket_name = self.input.param("bucket_name", None)
-        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100, lww=True)
+        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=256, lww=True)
         self.role_map = self.input.param("role_map", None)
         self.incorrect_bucket = self.input.param("incorrect_bucket", False)
         self.new_role = self.input.param("new_role", None)
@@ -169,7 +169,7 @@ class RbacTestMemcached(BaseTestCase):
         self.all_buckets = self.input.param("all_buckets", None)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
         if self.no_bucket_access:
-            rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=100, lww=True)
+            rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=256, lww=True)
         if self.auth_type == 'ldap':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
         if self.auth_type == 'ldap':

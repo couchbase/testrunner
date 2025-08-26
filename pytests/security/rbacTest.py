@@ -53,7 +53,7 @@ class rbacTest(ldaptest, AutoFailoverBaseTest):
         if self.auth_type == 'ldap' or self.auth_type == 'LDAPGroup':
             rest = RestConnection(self.master)
             param = {
-                'hosts': '{0}'.format("172.23.120.175"),
+                'hosts': '{0}'.format("172.23.124.20"),
                 'port': '{0}'.format("389"),
                 'encryption': '{0}'.format("None"),
                 'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),

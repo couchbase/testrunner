@@ -35,7 +35,7 @@ class ldaptest(BaseTestCase):
         super(ldaptest, self).setUp()
         #Capture details of LDAP Server
         #LDAP host, where LDAP Server is running
-        self.ldapHost = self.input.param('ldapHost', '172.23.120.175')
+        self.ldapHost = self.input.param('ldapHost', '172.23.124.20')
         #LDAP Port, port of LDAP Server
         self.ldapPort = self.input.param('ldapPort', '389')
         #LDAP Admin to connect to

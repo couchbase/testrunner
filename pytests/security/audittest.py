@@ -54,7 +54,7 @@ class auditTest(BaseTestCase):
         rest = RestConnection(self.master)
         self.setupLDAPSettings(rest)
         param = {
-            'hosts': '{0}'.format("172.23.120.175"),
+            'hosts': '{0}'.format("172.23.124.20"),
             'port': '{0}'.format("389"),
             'encryption': '{0}'.format("None"),
             'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),
@@ -495,7 +495,7 @@ class auditTest(BaseTestCase):
             rest = RestConnection(self.master)
             self.set_user_role(rest, username)
             param = {
-                'hosts': '{0}'.format("172.23.120.175"),
+                'hosts': '{0}'.format("172.23.124.20"),
                 'port': '{0}'.format("389"),
                 'encryption': '{0}'.format("None"),
                 'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),

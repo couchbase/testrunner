@@ -13,7 +13,7 @@ log = logger.Logger.get_logger()
 
 class ldapGroupBase:
     LDAP_GROUP_DN = "ou=Groups,dc=couchbase,dc=com"
-    LDAP_HOST = '172.23.120.175'
+    LDAP_HOST = '172.23.124.20'
     LDAP_PORT = "389"
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"
