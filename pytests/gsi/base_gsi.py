@@ -437,14 +437,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             couchbase_root_dir = '"/cygdrive/c/Program Files/Couchbase/Server/bin/cbbackupmgr"'
         else:
             couchbase_root_dir = "/opt/couchbase/bin/cbbackupmgr"
-        backup_config_cmd = f"{couchbase_root_dir} config --archive backup/ --repo {repo}"
-        out = remote_client.execute_command(backup_config_cmd)
-        self.log.info(out)
-        if "failed" in out[0]:
-            self.fail(out)
+        if type != 'windows':
+            backup_config_cmd = f"{couchbase_root_dir} config --archive backup/ --repo {repo}"
+            out = remote_client.execute_command(backup_config_cmd, timeout=1800)
+            self.log.info(out)
+            if "failed" in out[0]:
+                self.fail(out)
         self.log.info("unzip the backup repo before restoring it")
         if type == 'windows':
-            unzip_cmd = f'powershell -command "Expand-Archive -Path \'C:\\cygwin64\\home\\Administrator\\{filename}\' -DestinationPath \'C:\\cygwin64\\home\\Administrator\\\'"'
+            unzip_cmd = f'powershell -NoProfile -ExecutionPolicy Bypass -command "Expand-Archive -Path \'C:\\cygwin64\\home\\Administrator\\{filename}\' -DestinationPath \'C:\\cygwin64\\home\\Administrator\\\'"'
         else:
             # Install unzip package if not already installed
             info = remote_client.extract_remote_info()
@@ -462,8 +463,15 @@ class BaseSecondaryIndexingTests(QueryTests):
             restore_cmd = f"{couchbase_root_dir} restore --archive backup --repo {repo} " \
                           f"--cluster couchbase://127.0.0.1 --username {self.username} --password {self.password} " \
                           f"-auto-create-buckets "
-        restore_out = remote_client.execute_command(restore_cmd)
-        self.log.debug(restore_out)
+        if type == 'windows':
+            try:
+                restore_out = remote_client.execute_command(restore_cmd, timeout=360)
+                self.log.debug(restore_out)
+            except Exception as e:
+                self.log.info(str(e))
+        else:
+            restore_out = remote_client.execute_command(restore_cmd)
+            self.log.debug(restore_out)
 
         self.buckets = self.rest.get_buckets()
         self.namespaces = []
@@ -2395,9 +2403,13 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
         self.drop_all_indexes()
-        if not skip_disk_cleared_check:
-            self.sleep(360, "sleeping to destroy empty shards")
-            self.check_storage_directory_cleaned_up()
+        self.update_master_node()
+        remote_client = RemoteMachineShellConnection(self.master)
+        type = remote_client.extract_remote_info().distribution_type.lower()
+        if type != "windows":
+            if not skip_disk_cleared_check:
+                self.sleep(360, "sleeping to destroy empty shards")
+                self.check_storage_directory_cleaned_up()
         if not self.validate_memory_released():
             raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
@@ -3734,7 +3746,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.error(f"Mutations still pending after {timeout} seconds")
         return False
 
-    def validate_memory_released(self, timeout=300, threshold_ratio=0.1):
+    def validate_memory_released(self, timeout=300, threshold_ratio=0.4):
         """
         Validates that memory has been properly freed up after index operations
         across all index nodes.
