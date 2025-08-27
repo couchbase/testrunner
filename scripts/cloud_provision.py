@@ -55,28 +55,71 @@ def increase_suse_linux_default_tasks_max(host, username="root", password="couch
 
     ssh.close()
 
+def configure_centos7_vault_repos(ssh):
+    """Configure CentOS 7 vault repositories if needed"""
+    stdin, stdout, stderr = ssh.exec_command("cat /etc/centos-release || true")
+    centos_release = stdout.read().decode().strip()
+    if "CentOS Linux release 7" in centos_release:
+        print("Detected CentOS 7, configuring vault repositories")
+        vault_commands = [
+            "mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak 2>/dev/null || true",
+            """cat > /etc/yum.repos.d/CentOS-Base.repo <<'EOF'
+[base]
+name=CentOS-7.9 - Base
+baseurl=http://vault.centos.org/7.9.2009/os/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+[updates]
+name=CentOS-7.9 - Updates
+baseurl=http://vault.centos.org/7.9.2009/updates/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+[extras]
+name=CentOS-7.9 - Extras
+baseurl=http://vault.centos.org/7.9.2009/extras/$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+EOF""",
+            "yum clean all && yum makecache"
+        ]
+        return vault_commands
+    return []
+
 def install_zip_unzip(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(host,
                 username=username,
                 password=password)
+
     commands = []
+
     stdin, stdout, stderr = ssh.exec_command("yum --help")
     if stdout.channel.recv_exit_status() != 0:
-        commands.append("apt-get install -y zip unzip")
+        # Debian/Ubuntu
+        commands.append("apt-get update -y && apt-get install -y zip unzip")
     else:
+        # Configure CentOS 7 vault repos if needed
+        commands.extend(configure_centos7_vault_repos(ssh))
         commands.append("yum install -y zip unzip")
 
+    # Run commands sequentially
     for command in commands:
-            stdin, stdout, stderr = ssh.exec_command(command)
-            if stdout.channel.recv_exit_status() != 0:
-                ssh.exec_command("sudo shutdown")
-                time.sleep(10)
-                ssh.close()
-                raise Exception("zip and unzip could not be installed on {}".format(host))
+        stdin, stdout, stderr = ssh.exec_command(command)
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            ssh.exec_command("sudo shutdown")
+            time.sleep(10)
+            ssh.close()
+            raise Exception("Command failed on {}: {}".format(host, command))
 
     ssh.close()
+
 
 def create_non_root_user(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
@@ -107,16 +150,54 @@ def install_elastic_search(host, username="root", password="couchbase"):
     ssh.connect(host,
                 username=username,
                 password=password)
-    commands = ["yum install -y wget",
-                "yum install -y java",
-                "wget https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.7.3.tar.gz",
-                "tar -zxvf elasticsearch-1.7.3.tar.gz",
-                "mv elasticsearch-1.7.3 /usr/share/elasticsearch",
-                "/usr/share/elasticsearch/bin/elasticsearch -d"]
+
+    # Configure CentOS 7 vault repos if needed
+    commands = configure_centos7_vault_repos(ssh)
+
+    # Enhanced installation commands with better error handling
+    commands.extend([
+        "yum install -y wget",
+        "yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel",
+        "cd /tmp && wget -O elasticsearch-1.7.3.tar.gz https://download.elastic.co/elasticsearch/elasticsearch/elasticsearch-1.7.3.tar.gz",
+        "cd /tmp && tar -zxvf elasticsearch-1.7.3.tar.gz",
+        "rm -rf /usr/share/elasticsearch && mv /tmp/elasticsearch-1.7.3 /usr/share/elasticsearch",
+        "chown -R root:root /usr/share/elasticsearch",
+        "chmod +x /usr/share/elasticsearch/bin/elasticsearch"
+    ])
+
+    print(f"Installing Elasticsearch on {host}")
     for command in commands:
+        print(f"Executing: {command}")
         stdin, stdout, stderr = ssh.exec_command(command)
-        if stdout.channel.recv_exit_status() != 0:
-            break
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            output = stdout.read().decode().strip()
+            error = stderr.read().decode().strip()
+            print(f"Command failed with exit status {exit_status}")
+            print(f"Output: {output}")
+            print(f"Error: {error}")
+            ssh.close()
+            raise Exception(f"Failed to install Elasticsearch on {host}: {command}")
+
+    # Start Elasticsearch with proper environment
+    print(f"Starting Elasticsearch on {host}")
+    start_command = """
+    export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:bin/java::")
+    export ES_HEAP_SIZE=512m
+    cd /usr/share/elasticsearch
+    ./bin/elasticsearch -d
+    sleep 5
+    """
+    stdin, stdout, stderr = ssh.exec_command(start_command)
+    exit_status = stdout.channel.recv_exit_status()
+    if exit_status != 0:
+        output = stdout.read().decode().strip()
+        error = stderr.read().decode().strip()
+        print(f"Failed to start Elasticsearch: {output}, {error}")
+    else:
+        print(f"Elasticsearch started successfully on {host}")
+
+    ssh.close()
 
 def restart_elastic_search(ips, username="root", password="couchbase"):
     for ip in ips:
@@ -126,10 +207,67 @@ def restart_elastic_search(ips, username="root", password="couchbase"):
                     username=username,
                     password=password)
 
-        start_elastic_search_command = "/usr/share/elasticsearch/bin/elasticsearch -d"
-        stdin, stdout, stderr = ssh.exec_command(start_elastic_search_command)
-        if stdout.channel.recv_exit_status() != 0:
-            raise Exception("Unable to start Elastic Search")
+        # Check if Elasticsearch is already running
+        check_command = "pgrep -f elasticsearch || echo 'not_running'"
+        stdin, stdout, stderr = ssh.exec_command(check_command)
+        output = stdout.read().decode().strip()
+
+        if "not_running" in output:
+            print(f"Starting Elasticsearch on {ip}")
+
+            # Kill any zombie processes first
+            ssh.exec_command("pkill -f elasticsearch 2>/dev/null || true")
+            time.sleep(2)
+
+            # Create a script to start Elasticsearch with proper environment
+            start_script = """#!/bin/bash
+cd /usr/share/elasticsearch
+export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:bin/java::")
+export ES_HEAP_SIZE=512m
+./bin/elasticsearch -d
+sleep 5
+if pgrep -f elasticsearch > /dev/null; then
+    echo "Elasticsearch started successfully"
+    exit 0
+else
+    echo "Failed to start Elasticsearch"
+    exit 1
+fi
+"""
+            # Write the script to the server
+            ssh.exec_command("cat > /tmp/start_es.sh << 'EOF'\n" + start_script + "\nEOF")
+            ssh.exec_command("chmod +x /tmp/start_es.sh")
+
+            # Execute the script
+            stdin, stdout, stderr = ssh.exec_command("/tmp/start_es.sh")
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode().strip()
+            error_output = stderr.read().decode().strip()
+
+            print(f"Elasticsearch start output: {output}")
+            if error_output:
+                print(f"Elasticsearch start errors: {error_output}")
+
+            if exit_status != 0:
+                print(f"Failed to start Elasticsearch on {ip}. Exit status: {exit_status}")
+                print(f"Output: {output}")
+                print(f"Error: {error_output}")
+
+                # Try alternative approach - check if Java is available and try direct start
+                stdin, stdout, stderr = ssh.exec_command("java -version 2>&1")
+                java_version = stdout.read().decode().strip()
+                print(f"Java version: {java_version}")
+
+                # Check if elasticsearch directory exists
+                stdin, stdout, stderr = ssh.exec_command("ls -la /usr/share/elasticsearch/bin/")
+                es_dir = stdout.read().decode().strip()
+                print(f"Elasticsearch directory: {es_dir}")
+
+                ssh.close()
+                raise Exception(f"Unable to start Elasticsearch on {ip}")
+        else:
+            print(f"Elasticsearch is already running on {ip} (PID: {output})")
+
         ssh.close()
 
 def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
@@ -221,11 +359,11 @@ AWS_AMI_MAP = {
             "aarch64": "ami-0d70a59d7191a8079"
         },
         "ubuntu22": {
-            "x86_64": "ami-09c0393bac9d9b6ed",
+            "x86_64": "ami-0e57437fb9199c899",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
         "ubuntu22nonroot": {
-            "x86_64": "ami-09c0393bac9d9b6ed",
+            "x86_64": "ami-0e57437fb9199c899",
             "aarch64": "ami-05b98dc6de6e09e97"
         },
         "ubuntu24": {
