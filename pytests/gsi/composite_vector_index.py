@@ -45,8 +45,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.skip_default = self.input.param("skip_default", True)
         self.post_rebalance_action = self.input.param("post_rebalance_action", None)
         self.partitioned_index_action = self.input.param("partitioned_index_action", "rebalance_out")
-        # the below setting will be reversed post the resolving of MB-63697
-        self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
         self.num_centroids = self.input.param("num_centroids", 256)
         self.target_process = self.input.param("target_process", "memcached")
         self.system_failure_scenario = self.input.param("system_failure_scenario", None)

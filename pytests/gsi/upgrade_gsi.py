@@ -1558,7 +1558,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         # todo the below setting will be reversed post the resolving of MB-63697
         index_rest = RestConnection(index_node)
-        index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
 
         select_queries = set()
         namespace_index_map = {}
@@ -2475,7 +2474,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
         #the below setting will be reversed post the resolving of MB-63697
         index_rest = RestConnection(index_node)
-        index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
 
         select_queries = set()
         namespace_index_map = {}

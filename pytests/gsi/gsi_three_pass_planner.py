@@ -36,8 +36,6 @@ class ThreePassPlanner(BaseSecondaryIndexingTests):
         self.post_rebalance_action = self.input.param("post_rebalance_action", "data_load")
         self.enable_shard_based_rebalance()
         self.enable_shard_seggregation()
-        # the below setting will be reversed post the resolving of MB-63697
-        self.index_rest.set_index_settings({"indexer.plasma.mainIndex.enableInMemoryCompression": False})
 
         self.log.info("==============  ThreePassPlanner setup has ended ==============")
 
