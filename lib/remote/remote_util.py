@@ -3356,7 +3356,7 @@ class RemoteMachineShellConnection(KeepRefs):
             log.warning("SSH connection to {} inactive, reconnecting...".format(self.ip))
             self.ssh_connect_with_retries(self.ip, self.username, self.password, self.ssh_key)
 
-    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600, get_exit_code=False, get_pty=False):
+    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=900, get_exit_code=False, get_pty=False):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         self.reconnect_if_inactive()
