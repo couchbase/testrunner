@@ -101,22 +101,37 @@ def install_zip_unzip(host, username="root", password="couchbase"):
 
     stdin, stdout, stderr = ssh.exec_command("yum --help")
     if stdout.channel.recv_exit_status() != 0:
-        # Debian/Ubuntu
-        commands.append("apt-get update -y && apt-get install -y zip unzip")
+        #Debian or Ubuntu...
+        commands.extend([
+            "apt-get update -y",
+            "apt-get install -y zip unzip"
+        ])
     else:
-        # Configure CentOS 7 vault repos if needed
         commands.extend(configure_centos7_vault_repos(ssh))
         commands.append("yum install -y zip unzip")
 
-    # Run commands sequentially
     for command in commands:
+        print(f"Executing on {host}: {command}")
         stdin, stdout, stderr = ssh.exec_command(command)
         exit_status = stdout.channel.recv_exit_status()
+
+        output = stdout.read().decode().strip()
+        error_output = stderr.read().decode().strip()
+
+        print(f"Command: {command}")
+        print(f"Exit status: {exit_status}")
+
         if exit_status != 0:
+            print(f"Command: {command}")
+            print(f"Exit status: {exit_status}")
+            print(f"Stdout: {output}")
+            print(f"Stderr: {error_output}")
+
             ssh.exec_command("sudo shutdown")
             time.sleep(10)
             ssh.close()
-            raise Exception("Command failed on {}: {}".format(host, command))
+            raise Exception("Command failed on {}: {}\nExit status: {}\nOutput: {}\nError: {}".format(
+                host, command, exit_status, output, error_output))
 
     ssh.close()
 
