@@ -445,6 +445,12 @@ class BaseSecondaryIndexingTests(QueryTests):
         if type == 'windows':
             unzip_cmd = f'powershell -command "Expand-Archive -Path \'C:\\cygwin64\\home\\Administrator\\{filename}\' -DestinationPath \'C:\\cygwin64\\home\\Administrator\\\'"'
         else:
+            # Install unzip package if not already installed
+            info = remote_client.extract_remote_info()
+            if "debian" in info.distribution_version.lower():
+                remote_client.execute_command("apt-get install -y unzip")
+            elif "centos" in info.distribution_version.lower() or "rhel" in info.distribution_version.lower():
+                remote_client.execute_command("yum install -y unzip")
             unzip_cmd = f"unzip -o {filename}"
         remote_client.execute_command(command=unzip_cmd)
         if self.use_https:
