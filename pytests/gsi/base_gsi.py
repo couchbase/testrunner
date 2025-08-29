@@ -185,6 +185,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             # New settings for schedule Indexes
             self.index_rest.set_index_settings({"queryport.client.waitForScheduledIndex": self.wait_for_scheduled_index})
             self.index_rest.set_index_settings({"indexer.allowScheduleCreateRebal": self.scheduled_index_create_rebal})
+            self.index_rest.set_index_settings({"indexer.bhive.enableBreakPad": True})
             if self.use_shard_based_rebalance:
                 self.enable_shard_based_rebalance()
 
