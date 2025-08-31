@@ -3536,23 +3536,17 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                            scope_prefix=self.scope_prefix,
                                                            collection_prefix=self.collection_prefix,
                                                            bucket=self.test_bucket)
-        #creating namespaces and loading docs
-
-        scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
         self.sleep(10, "Allowing time after collection creation")
-        for s_item in scopes:
-            collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
-            for c_item in collections:
-                self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
-                num_docs = 200
-                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
-                                                percent_update=0, percent_delete=0, scope=s_item,
-                                                collection=c_item, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password,
-                                                create_start=0, create_end=num_docs)
+        for namespace in self.namespaces:
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            bucket = bucket.split(':')[-1]
+            num_docs = 200
+            self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,scope=scope,collection=collection, json_template=self.json_template,
+                                            output=True, username=self.username, password=self.password,
+                                            create_start=0, create_end=num_docs)
 
-                self.load_docs_via_magma_server(server=data_node, bucket=self.buckets[0], gen=self.gen_create)
-
+            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
         select_queries = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
