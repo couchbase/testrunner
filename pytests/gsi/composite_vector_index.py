@@ -1182,7 +1182,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             elif self.rebalance_type == 'rebalance_swap':
                 add_nodes = [self.servers[4]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                    to_remove=[data_nodes[0]], services=['kv'])
+                                                    to_remove=[data_nodes[0]], services=['kv,n1ql'])
             elif self.rebalance_type == 'rebalance_out':
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                     to_remove=[data_nodes[0]])
@@ -2001,42 +2001,86 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
 
-        partitioned_index_color_rgb_vector = QueryDefinition("partitioned_colorRGBVector",
-                                                             index_fields=['rating', 'colorRGBVector Vector',
-                                                                           'category'],
-                                                             dimension=3,
-                                                             description=f"IVF,{self.quantization_algo_color_vector}",
-                                                             similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                             limit=self.scan_limit, is_base64=self.base64,
-                                                             query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
-                                                                 "color, colorRGBVector",
-                                                                 "rating = 2 and "
-                                                                 "category in ['Convertible', "
-                                                                 "'Luxury Car', 'Supercar']",
-                                                                 scan_color_vec_2),
-                                                             partition_by_fields=['meta().id'],
-                                                             bhive_index=self.bhive_index
-                                                             )
+        primary_idx = "CREATE PRIMARY INDEX `#primary123` ON `default`:`test_bucket`.`test_scope_1`.`test_collection_1`;"
+        self.run_cbq_query(query=primary_idx, server=self.n1ql_node)
 
-        non_partitioned_index_color_rgb_vector = QueryDefinition("non_partitioned_colorRGBVector",
-                                                                 index_fields=['rating', 'colorRGBVector Vector',
-                                                                               'category'],
+        if self.bhive_index:
+            partitioned_index_color_rgb_vector = QueryDefinition(index_name='partitioned_color_rgb_bhive',
+                                index_fields=['colorRGBVector VECTOR'],
+                                dimension=3, description=f"IVF,{self.quantization_algo_color_vector}", similarity=self.similarity,
+                                scan_nprobes=self.scan_nprobes,
+                                limit=self.scan_limit, persist_full_vector=False,
+                                query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format("colorRGBVector",
+                                                                                   "year > 1980 OR "
+                                                                                   "fuel = 'Diesel' ",
+                                                                                   scan_color_vec_2),
+                                partition_by_fields=['meta().id'], include_fields=['fuel', 'year'])
+            non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color_rgb_bhive',
+                                                                 index_fields=['colorRGBVector VECTOR'],
                                                                  dimension=3,
                                                                  description=f"IVF,{self.quantization_algo_color_vector}",
                                                                  similarity=self.similarity,
                                                                  scan_nprobes=self.scan_nprobes,
-                                                                 limit=self.scan_limit, is_base64=self.base64,
+                                                                 limit=self.scan_limit, persist_full_vector=False,
                                                                  query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
-                                                                     "color, colorRGBVector",
-                                                                     "rating = 2 and "
-                                                                     "category in ['Convertible', "
-                                                                     "'Luxury Car', 'Supercar']",
+                                                                     "colorRGBVector",
+                                                                     "year > 1980 OR "
+                                                                     "fuel = 'Diesel' ",
                                                                      scan_color_vec_2),
-                                                                 bhive_index=self.bhive_index
-                                                                 )
+                                                                 include_fields=['fuel', 'year'])
+            partitioned_index_description_vector = QueryDefinition(index_name='partitioned_description_bhive',
+                            index_fields=['descriptionVector VECTOR'],
+                            dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                            limit=self.scan_limit,
+                            query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(f"descriptionVector",
+                                                                               "rating = 2 and "
+                                                                               "category in ['Convertible', "
+                                                                               "'Luxury Car', 'Supercar']",
+                                                                               scan_desc_vec_2),
+                            partition_by_fields=['meta().id'], include_fields=['rating', 'category']
+                            )
 
-        message = f"quantization value is {self.quantization_algo_description_vector}"
-        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+            non_partitioned_index_description_vector = QueryDefinition(index_name='non_partitioned_description_bhive',
+                                                                   index_fields=['descriptionVector VECTOR'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit,
+                                                                   query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                       f"descriptionVector",
+                                                                       "rating = 2 and "
+                                                                       "category in ['Convertible', "
+                                                                       "'Luxury Car', 'Supercar']",
+                                                                       scan_desc_vec_2),
+                                                                   include_fields=['rating', 'category']
+                                                                   )
+        else:
+            partitioned_index_color_rgb_vector = QueryDefinition(index_name='partitioned_color',
+                            index_fields=['rating', 'colorRGBVector Vector', 'category'],
+                            dimension=3, description=f"IVF,{self.quantization_algo_color_vector}",
+                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                            query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector",
+                                                                               "rating = 2 and "
+                                                                               "category in ['Convertible', "
+                                                                               "'Luxury Car', 'Supercar']",
+                                                                               scan_color_vec_2),
+                            partition_by_fields=['meta().id']
+                            )
+
+            non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color',
+                            index_fields=['rating', 'colorRGBVector Vector', 'category'],
+                            dimension=3, description=f"IVF,{self.quantization_algo_color_vector}",
+                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                            query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector",
+                                                                               "rating = 2 and "
+                                                                               "category in ['Convertible', "
+                                                                               "'Luxury Car', 'Supercar']",
+                                                                               scan_color_vec_2)
+                            )
+
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
                                                                index_fields=['rating', 'descriptionVector Vector',
                                                                              'category'],
                                                                dimension=384,
@@ -2045,7 +2089,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                scan_nprobes=self.scan_nprobes,
                                                                limit=self.scan_limit, is_base64=self.base64,
                                                                query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
-                                                                   "description, descriptionVector",
+                                                                   "descriptionVector",
                                                                    "rating = 2 and "
                                                                    "category in ['Convertible', "
                                                                    "'Luxury Car', 'Supercar']",
@@ -2054,26 +2098,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                bhive_index=self.bhive_index
                                                                )
 
-        non_partitioned_index_description_vector = QueryDefinition("non_partitioned_descriptionVector",
-                                                                   index_fields=['rating', 'descriptionVector Vector',
-                                                                                 'category'],
-                                                                   dimension=384,
-                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
-                                                                   similarity=self.similarity,
-                                                                   scan_nprobes=self.scan_nprobes,
-                                                                   limit=self.scan_limit, is_base64=self.base64,
-                                                                   query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
-                                                                       "description, descriptionVector",
-                                                                       "rating = 2 and "
-                                                                       "category in ['Convertible', "
-                                                                       "'Luxury Car', 'Supercar']",
-                                                                       scan_desc_vec_2), bhive_index=self.bhive_index
-                                                                   )
+            non_partitioned_index_description_vector = QueryDefinition("non_partitioned_descriptionVector",
+                                                               index_fields=['rating', 'descriptionVector Vector',
+                                                                             'category'],
+                                                               dimension=384,
+                                                               description=f"IVF,{self.quantization_algo_description_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                   "descriptionVector",
+                                                                   "rating = 2 and "
+                                                                   "category in ['Convertible', "
+                                                                   "'Luxury Car', 'Supercar']",
+                                                                   scan_desc_vec_2),
+                                                               bhive_index=self.bhive_index
+                                                               )
 
+        message = f"quantization value is {self.quantization_algo_description_vector}"
         select_queries = []
         for idx in [partitioned_index_color_rgb_vector, non_partitioned_index_color_rgb_vector,
                     partitioned_index_description_vector, non_partitioned_index_description_vector]:
-            create_query = idx.generate_index_create_query(namespace=collection_namespace)
+            create_query = idx.generate_index_create_query(namespace=collection_namespace, bhive_index=self.bhive_index)
             self.run_cbq_query(query=create_query, server=self.n1ql_node)
             select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
                                                                 namespace=collection_namespace,
@@ -3541,16 +3587,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                            collection_prefix=self.collection_prefix,
                                                            bucket=self.test_bucket)
         self.sleep(10, "Allowing time after collection creation")
-        for namespace in self.namespaces:
-            _, keyspace = namespace.split(':')
-            bucket, scope, collection = keyspace.split('.')
-            bucket = bucket.split(':')[-1]
-            num_docs = 200
-            self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,scope=scope,collection=collection, json_template=self.json_template,
-                                            output=True, username=self.username, password=self.password,
-                                            create_start=0, create_end=num_docs)
+        # creating namespaces and loading docs
 
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
+        scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
+        self.sleep(10, "Allowing time after collection creation")
+        for s_item in scopes:
+            collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
+            for c_item in collections:
+                self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                num_docs = 200
+                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=s_item,
+                                                collection=c_item, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                create_start=0, create_end=num_docs)
+
+                self.load_docs_via_magma_server(server=data_node, bucket=self.test_bucket, gen=self.gen_create)
         select_queries = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
@@ -3776,21 +3828,39 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
 
         #creating partitioned index with partition on a single key
-        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                               index_fields=['`fuel`,`rating`,`descriptionVector` VECTOR'],
-                                                               dimension=384,
-                                                               description=f"IVF,{self.quantization_algo_description_vector}",
-                                                               similarity=self.similarity,
-                                                               scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit, is_base64=self.base64,
-                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                                   "description, descriptionVector",
-                                                                   "fuel = \"LPG\"",
-                                                                   scan_desc_vec_2),
-                                                               partition_by_fields=['fuel'],
-                                                               bhive_index=self.bhive_index
-                                                               )
-        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
+        if self.bhive_index:
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                                   index_fields=[
+                                                                       '`descriptionVector` VECTOR'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "fuel = \"LPG\"",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['fuel'],
+                                                                   include_fields=['fuel', 'rating'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
+        else:
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                                   index_fields=['`fuel`,`rating`,`descriptionVector` VECTOR'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "fuel = \"LPG\"",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['fuel'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
+        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8,bhive_index=self.bhive_index)
         self.run_cbq_query(query=index)
         self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
@@ -3808,23 +3878,41 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(30)
 
         # creating partitioned index with partition on a multiple keys
-        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                               index_fields=[
-                                                                   '`fuel`,`rating`,`descriptionVector` VECTOR'],
-                                                               dimension=384,
-                                                               description=f"IVF,{self.quantization_algo_description_vector}",
-                                                               similarity=self.similarity,
-                                                               scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit, is_base64=self.base64,
-                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                                   "description, descriptionVector",
-                                                                   "fuel = \"LPG\" and rating = 3",
-                                                                   scan_desc_vec_2),
-                                                               partition_by_fields=['fuel, rating'],
-                                                               bhive_index=self.bhive_index
-                                                               )
+        if self.bhive_index:
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                                   index_fields=[
+                                                                       '`descriptionVector` VECTOR'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "fuel = \"LPG\" and rating = 3",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['fuel, rating'],
+                                                                   include_fields=['fuel', 'rating'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
+        else:
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                                   index_fields=[
+                                                                       '`fuel`,`rating`,`descriptionVector` VECTOR'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "fuel = \"LPG\" and rating = 3",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['fuel, rating'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
-                                                                                 num_partition=8)
+                                                                                 num_partition=8,bhive_index=self.bhive_index)
         self.run_cbq_query(query=index)
         self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
@@ -3843,23 +3931,41 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(30)
 
         # creating partitioned index with partition on scans on using IN predicate
-        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                               index_fields=[
-                                                                   '`fuel`,`rating`,`descriptionVector` VECTOR,`manufacturer`'],
-                                                               dimension=384,
-                                                               description=f"IVF,{self.quantization_algo_description_vector}",
-                                                               similarity=self.similarity,
-                                                               scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit, is_base64=self.base64,
-                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                                   "description, descriptionVector",
-                                                                   "fuel = \"LPG\" and rating = 3 and manufacturer in [\"Chevrolet\", \"Lexus\"]",
-                                                                   scan_desc_vec_2),
-                                                               partition_by_fields=['fuel, rating, manufacturer'],
-                                                               bhive_index=self.bhive_index
-                                                               )
+        if self.bhive_index:
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                                   index_fields=[
+                                                                       '`descriptionVector` VECTOR'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "fuel = \"LPG\" and rating = 3 and manufacturer in [\"Chevrolet\", \"Lexus\"]",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['fuel, rating, manufacturer'],
+                                                                   include_fields=['fuel, rating, manufacturer'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
+        else:
+            partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
+                                                                   index_fields=[
+                                                                       '`fuel`,`rating`,`descriptionVector` VECTOR,`manufacturer`'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                       "description, descriptionVector",
+                                                                       "fuel = \"LPG\" and rating = 3 and manufacturer in [\"Chevrolet\", \"Lexus\"]",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['fuel, rating, manufacturer'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
-                                                                                 num_partition=8)
+                                                                                 num_partition=8,bhive_index=self.bhive_index)
         self.run_cbq_query(query=index)
         self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]

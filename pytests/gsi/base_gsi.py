@@ -2308,6 +2308,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             'debug' : f'{gen.get_sdk_logs}'
         }
 
+        self.log.info(f"magma server params {params}")
         response = requests.post(url, data=params)
         self.log.info(f"Response from magma server is {response.content}")
         if response.status_code != 200:

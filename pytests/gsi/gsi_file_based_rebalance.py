@@ -1317,7 +1317,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         nodes_in = self.servers[self.nodes_init]
         create_queries = []
         replica_count = 1
-        for _ in range(2):
+        for _ in range(5):
             for namespace in self.namespaces:
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -1477,7 +1477,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
 
         #loading 90k docs into collection 1
         bucket, scope, collection = self.namespaces[0].split('.')
-        self.gen_create = SDKDataLoader(num_ops=90000, percent_create=100,
+        self.gen_create = SDKDataLoader(num_ops=90000, percent_create=100,key_prefix="doc_68",
                                         percent_update=0, percent_delete=0, scope=scope,
                                         collection=collection, json_template=self.json_template,
                                         output=True, username=self.username, password=self.password)
@@ -1488,8 +1488,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         task.result()
 
         result = self.run_cbq_query(query="select count(name) from test_bucket.test_scope_1.test_collection_1 where name is not null;")
-        self.log.info(f"Result: {result}")
-        self.assertEqual(result[0]["$1"], 100000, "docs not matching")
+        self.log.info(f"result is {result}")
+        self.assertEqual(result['result'][0]["$1"], 100000, "docs not matching")
 
     # common methods
     def _return_maps(self):

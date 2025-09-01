@@ -1506,15 +1506,17 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.post_upgrade_with_nodes_clause()
 
                 if self.upgrade_to >= "8.0":
-                    index_names_after_upgrade = self.get_all_indexes_in_the_cluster()
-                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade,
+                    self.disable_redistribute_indexes()
+                    self.sleep(10)
+                    index_names_after_upgrade_before_vector = self.get_all_indexes_in_the_cluster()
+                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade_before_vector,
                                                             cluster_profile=None)
                     indexes_post_creating_vector_indexes = self.get_all_indexes_in_the_cluster()
                     index_list_post_creating_vector_indexes = []
                     self.log.info(f'Indexes created before upgrade {index_names_before_upgrade}')
                     self.log.info(f'Indexes list after creating vector indexes {indexes_post_creating_vector_indexes}')
                     for name in indexes_post_creating_vector_indexes:
-                        if name not in index_names_before_upgrade:
+                        if name not in index_names_after_upgrade_before_vector:
                             index_list_post_creating_vector_indexes.append(name)
                     self.log.info(f'new indexes created after  {index_list_post_creating_vector_indexes}')
                     self.validate_shard_affinity(specific_indexes=index_list_post_creating_vector_indexes)
@@ -2037,6 +2039,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     uwl_after_obj.cb_collect_logs(test_prefix=self.test_name_prefix)
                     self.log.info("collecting logs post upgrade")
 
+                index_scan_result_map = {}
+                for query in select_queries:
+                    index_scan_result_map[query] = self.run_cbq_query(query=query, scan_consistency='request_plus',
+                                                             server=self.n1ql_node)['results']
+                self.log.info(f"Resulsts are {index_scan_result_map}")
                 self.fail("induced failure")
             finally:
                 event.set()
