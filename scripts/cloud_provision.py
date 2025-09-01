@@ -408,6 +408,21 @@ AWS_AMI_MAP = {
         },
         "rocky9": {
             "x86_64": "ami-0441302605ba7fdb4"
+        },
+        "oel10": {
+            "x86_64": "ami-0059431db83e2427a"
+        },
+        "rhel10": {
+            "x86_64": "ami-014722b0961444108"
+        },
+        "debian13": {
+            "x86_64": "ami-041cdfd075e0148d5"
+        },
+        "rocky10": {
+            "x86_64": "ami-09e2e4303c332efc1"
+        },
+        "alma10": {
+            "x86_64": "ami-0eae1bc22be3a6cf9"
         }
     },
     # The following AMIs are faulty and not working
