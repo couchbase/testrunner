@@ -452,7 +452,7 @@ class NodeHelper:
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
 
     def wait_for_couchbase_reachable(self):
-        duration, event, timeout = 5, "Waiting {0}s for {1} to be reachable..", 60
+        duration, event, timeout = 5, "Waiting {0}s for {1} to be reachable..", 120
         start_time = time.time()
         log.info("Waiting for couchbase to be reachable")
         while time.time() < start_time + timeout:
