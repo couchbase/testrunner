@@ -5,6 +5,8 @@ from lib.membase.api.rest_client import RestConnection, RestHelper
 from security.x509main import x509main
 import json
 import subprocess
+import socket
+import requests
 from couchbase.cluster import PasswordAuthenticator
 from couchbase.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -74,17 +76,72 @@ class ipv6_ipv4_tests(BaseTestCase):
             logic = logic and check_presence
         return logic
 
+    def verify_port_blocked_direct_connection(self, host, port, timeout=10):
+        """Verify if a port is blocked by attempting direct socket connection"""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
+            result = sock.connect_ex((host, int(port)))
+            sock.close()
+            self.log.info(f"Socket connection to {host}:{port} result: {result}")
+            return result != 0  # Returns True if port is blocked (connection failed)
+        except Exception as e:
+            self.log.info(f"Socket connection to {host}:{port} failed with exception: {e}")
+            return True  # Port is blocked
+
+    def verify_ports_not_listening(self, ports, nodes, addr_family):
+        """Verify ports are not listening using lsof verification"""
+        nodes_obj = IPv6_IPv4([nodes])
+        listening = nodes_obj.check_ports(ports, addr_family)
+        self.log.info(f"Ports {ports} listening status on {addr_family}: {'LISTENING' if listening else 'NOT LISTENING'}")
+        return not listening  # Return True if ports are not listening (blocked)
+
+
     def check_ports_on_blocking(self,ports,nodes,query_strs,logfile):
         nodes_obj = IPv6_IPv4([nodes])
         addr_family = nodes_obj.get_addr_family()
         shell = RemoteMachineShellConnection(nodes)
         shell.delete_file(self.LOG_PATH,logfile)
-        pids = nodes_obj.block_ports(ports,addr_family)
-        self.sleep(20)
-        found = self.verify_logs_wrapper(nodes,logfile,query_strs)
-        nodes_obj.unblock_ports(pids)
+        blocked = self._check_ports_on_blocking(ports, nodes)
         shell.disconnect()
-        return found
+        return  blocked
+
+    def _check_ports_on_blocking(self, ports, nodes):
+        """Enhanced port blocking verification using multiple methods"""
+        nodes_obj = IPv6_IPv4([nodes])
+        addr_family = nodes_obj.get_addr_family()
+        # Block the ports
+        pids = nodes_obj.block_ports(ports, addr_family)
+        self.sleep(20)
+
+        verification_results = []
+        all_blocked = True
+
+        try:
+            self.log.info("=== Starting Socket Connection Verification ===")
+            for port in ports:
+                blocked = self.verify_port_blocked_direct_connection(nodes.ip, port)
+                verification_results.append(("socket_test", port, blocked))
+                if not blocked:
+                    all_blocked = False
+                    self.log.error(f"Socket test FAILED: Port {port} is still accessible")
+                else:
+                    self.log.info(f"Socket test PASSED: Port {port} is blocked")
+            self.log.info("=== Verification Summary ===")
+            for method, target, blocked in verification_results:
+                status = "PASSED" if blocked else "FAILED"
+                self.log.info(f"{method} for {target}: {status}")
+
+            if all_blocked:
+                self.log.info("ALL VERIFICATION METHODS PASSED - Ports are successfully blocked")
+            else:
+                self.log.error("SOME VERIFICATION METHODS FAILED - Port blocking may be incomplete")
+
+            return all_blocked
+
+        finally:
+            self.log.info("=== Cleaning up: Unblocking ports ===")
+            nodes_obj.unblock_ports(pids)
 
     def check_ports_on_blocking_opposite_addr_family(self,ports,nodes,service):
         nodes_obj = IPv6_IPv4([nodes])

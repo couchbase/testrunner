@@ -151,11 +151,12 @@ class IPv6_IPv4():
             shell = RemoteMachineShellConnection(server)
             for port in ports:
                 if addr_family == "ipv6":
-                    output, error = shell.execute_command("netstat -an | grep -w {0} | grep LISTEN | grep -w tcp6".format(port))
+                    cmd = "lsof -nP -i6TCP:{0} -sTCP:LISTEN".format(port)
                 elif addr_family == "ipv4":
-                    output, error = shell.execute_command("netstat -an | grep -w {0} | grep LISTEN | grep -w tcp".format(port))
+                    cmd = "lsof -nP -i4TCP:{0} -sTCP:LISTEN".format(port)
+                output, error = shell.execute_command(cmd)
                 log.info("OUTPUT {0} ERROR {0}".format(output,error))
-                if output == []:
+                if output == [] and error != []:
                     log.info("{0} is not listening on {1} on {2}".format(server.ip,port,addr_family))
                     listening = False
                 else:
@@ -171,11 +172,12 @@ class IPv6_IPv4():
             output = [""]
             while output!=[]:
                 time.sleep(10)
-                cmd = "netstat -antlp | grep {0}".format(ports[0])
+                cmd = "lsof -nP -iTCP:{0} -sTCP:LISTEN".format(ports[0])
                 output, error = shell.execute_command(cmd)
+                log.info(f"Output of command is {output} and error is {error}")
 
             for port in ports:
-                cmd = "python /tmp/block_ports.py {0} {1} > /tmp/block_ports_out & echo $!".format(port,addr_family)
+                cmd = "nohup python3 /tmp/block_ports.py {0} {1} > /tmp/block_ports_out 2>&1 & echo $!".format(port, addr_family)
                 output, error = shell.execute_command(cmd)
                 log.info("OUTPUT : {0} ERROR : {1}".format(output,error))
                 pids.append(output[0])
