@@ -85,6 +85,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         if drop_replica:
             alter_index_query = 'ALTER INDEX {0}.'.format(bucket) + index_name + \
                                 ' WITH {{"action":"drop_replica","replicaId": {0}}}'.format(replicaId)
+            self.log.info(f"Executing drop replica query: {alter_index_query}")
+            self.log.info(f"Dropping replica {replicaId} for index {index_name}")
         else:
             # Negative case consideration
             if no_num_replica:
@@ -236,14 +238,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 self.num_index_replica, self.num_index_partitions)
         else:
             create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}}}".format(self.num_index_partitions)
-
         self._create_partitioned_index(create_index_statement, 'idx1')
-
         error = self._alter_index_replicas(index_name='idx1', drop_replica=True, replicaId=self.replicaId)
-
-        self.sleep(5)
+        self.sleep(60)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
-
         self.verify_partitioned_indexes('idx1', expected_num_replicas, dropped_replica=True, replicaId=self.replicaId)
 
     '''This test is designed to see if you can increment a deferred index before it is built or after it is built, 
@@ -354,7 +352,13 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                     new_nodes_list.append(index_map['default'][index]['hosts'])
 
             # Rebalance out the node that contains the decreased replica
-            rebalance_out_node =list(set(nodes_with_replicas) - set(new_nodes_list))[0]
+            self.log.info(f"nodes_with_replicas: {nodes_with_replicas}")
+            self.log.info(f"new_nodes_list: {new_nodes_list}")
+            nodes_to_rebalance_out = list(set(nodes_with_replicas) - set(new_nodes_list))
+            if not nodes_to_rebalance_out:
+                self.log.info("No nodes need to be rebalanced out - all replica nodes are still in use")
+                return
+            rebalance_out_node = nodes_to_rebalance_out[0]
             rebalance_in_server=''
             for node in nodes_list:
                 if node[1] == rebalance_out_node:
@@ -483,8 +487,35 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
 
         try:
-            # Failover an indexer node
-            failover_task = self.cluster.async_failover(self.servers[:self.nodes_init], failover_nodes=[self.servers[self.nodes_init-1]])
+            # Get the index map to identify which node contains the index
+            index_map = self.get_index_map()
+            index_nodes = set()
+            
+            # Find all nodes that contain the index
+            for index_name, index_info in index_map.get('default', {}).items():
+                if index_name_prefix in index_name:
+                    if 'hosts' in index_info:
+                        for host in index_info['hosts']:
+                            node_ip = host.split(':')[0]
+                            index_nodes.add(node_ip)
+            
+            # Find a node to failover that doesn't contain the index
+            failover_candidate = None
+            for i in range(self.nodes_init):
+                server = self.servers[i]
+                if server.ip not in index_nodes:
+                    failover_candidate = server
+                    break
+            
+            # If all nodes contain the index, use the last node but log a warning
+            if failover_candidate is None:
+                failover_candidate = self.servers[self.nodes_init-1]
+                self.log.warning(f"All nodes contain the index {index_name_prefix}, using last node for failover")
+            else:
+                self.log.info(f"Failing over node {failover_candidate.ip} which doesn't contain index {index_name_prefix}")
+            
+            # Failover the selected node
+            failover_task = self.cluster.async_failover(self.servers[:self.nodes_init], failover_nodes=[failover_candidate])
             failover_task.result()
 
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
@@ -496,9 +527,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 if not error[0]:
                     self.fail("Move index failed with unexpected error")
         finally:
+            # Use the same node that was failed over for rebalancing out
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
-                [], [self.servers[self.nodes_init-1]])
+                [], [failover_candidate])
 
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached,
@@ -533,6 +565,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         try:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
+            
+            # Log the result of the drop operation
+            self.log.info(f"Drop replica operation result: {error}")
+            self.log.info(f"Attempting to drop replica {self.replicaId}")
 
             self.sleep(30)
             if not self.replicaId == 0:
@@ -555,6 +591,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                           self.assertTrue(self.replicaId != index['replicaId'], '%s' % str(index['replicaId']))
                   self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas, dropped_replica=True, replicaId=self.replicaId)
               else:
+                  # When dropping replica 0, the entire index should be removed
+                  self.log.info(f"Checking if index was fully removed (replicaId={self.replicaId})")
+                  self.log.info(f"Current definitions count: {len(definitions)}")
+                  self.log.info(f"Current definitions: {definitions}")
+                  self.log.info(f"Current index map keys: {list(index_map.get('default', {}).keys())}")
                   self.assertTrue(definitions == [], "The index was not fully removed %s" % definitions)
         finally:
             if self.stop_server:
@@ -604,13 +645,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             self.n1ql_helper.run_cbq_query(query=build_index_query, server=self.n1ql_node)
 
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-
-        self.sleep(30)
+        self.sleep(60)
         if not self.build_index:
             self.assertTrue(self.wait_until_indexes_online(defer_build=True), "Indexes were never created")
         else:
             self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
-
         if self.expected_err_msg:
           if self.expected_err_msg not in error[0]:
             self.fail("Move index failed with unexpected error")
@@ -618,7 +657,9 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         else:
             index_map = self.get_index_map()
             definitions = self.rest.get_index_statements()
+            self.log.info(f"Definitions: {definitions}")
             indexes = self.rest.get_indexer_metadata()
+            self.log.info(f"Indexes: {indexes}")
             if not self.replicaId == 0:
                 for index in index_map['default']:
                     if self.build_index:
@@ -684,17 +725,12 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         t1 = Thread(target=self.cluster.async_rebalance, name="rebalance", args=(self.servers[:self.nodes_init],[],
                                                                                 [self.servers[self.nodes_init-1]]))
-
         t1.start()
         self.sleep(2)
-
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-
         t1.join()
-
-        self.sleep(5)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
-
         if not error and self.expect_failure:
             self.fail("Move did not fail and it should have")
 

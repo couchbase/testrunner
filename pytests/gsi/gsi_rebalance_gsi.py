@@ -632,7 +632,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # while create index is running ,rebalance out a indexer node
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
-            rebalance.result()
+            # Note: synchronous rebalance() already waits for completion, no need to call .result()
         except Exception as ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
@@ -1873,6 +1873,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         RestConnection(self.master).update_autofailover_settings(True, 30)
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        self.update_master_node()
         remote = RemoteMachineShellConnection(kv_node[1])
         remote.stop_server()
         self.sleep(40, "Wait for autofailover")
