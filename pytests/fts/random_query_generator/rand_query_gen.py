@@ -616,9 +616,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fuzziness: edit distance (0: exact search to 1: fuzziness,
         2: more fuzziness and so on
         In FTS, fuzzy queries are performed on match and term queries
+        For Elasticsearch, we use match with fuzziness instead of fuzzy query
+        for better compatibility with FTS behavior
         """
         fts_query = {}
-        es_query = {'fuzzy': {}}
+        es_query = {'match': {}}
         fuzziness = random.randint(0, 2)
         fieldname = self.get_random_value(self.fields['str'] +
                                           self.fields['text'])
@@ -632,9 +634,9 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query['match'] = match_str
         fts_query['fuzziness'] = fuzziness
 
-        es_query['fuzzy'][fieldname] = {}
-        es_query['fuzzy'][fieldname]['value'] = match_str
-        es_query['fuzzy'][fieldname]['fuzziness'] = fuzziness
+        es_query['match'][fieldname] = {}
+        es_query['match'][fieldname]['query'] = match_str
+        es_query['match'][fieldname]['fuzziness'] = fuzziness
 
         return fts_query, es_query
 
