@@ -446,7 +446,12 @@ AWS_OS_USERNAME_MAP = {
     "suse15": "ec2-user",
     "suse12": "ec2-user",
     "alma9": "ec2-user",
-    "rocky9": "rocky"
+    "rocky9": "rocky",
+    "alma10": "ec2-user",
+    "rocky10": "rocky",
+    "oel10": "ec2-user",
+    "rhel10": "ec2-user",
+    "debian13": "root"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
