@@ -57,43 +57,53 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         self.run_cbq_query(query)
         self.wait_until_indexes_online()
         # Updating Indexer Settings and adding to system event to validate
-        old_setting = {"indexer.settings.rebalance.redistribute_indexes": False,
-                       "indexer.cpu.throttle.target": 1,
-                       "indexer.allowScheduleCreate": True}
+        # First get the current settings to capture the old state
+        current_settings = self.index_rest.get_index_settings()
+        old_setting = current_settings.copy()   
+        # Define the new settings to apply
         new_setting = {"indexer.settings.rebalance.redistribute_indexes": True,
                        "indexer.cpu.throttle.target": 0.95,
                        "indexer.allowScheduleCreate": False}
+        # Apply the new settings
         self.index_rest.set_index_settings(new_setting)
+        # Update the old_setting to only include the settings we're actually changing
+        old_setting = {k: old_setting.get(k) for k in new_setting.keys()}
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for index_node in index_nodes:
             self.system_events.add_event(IndexingServiceEvents.index_settings_updated(old_setting=old_setting,
                                                                                       new_setting=new_setting,
                                                                                       node=index_node.ip))
-
         # Updating Projector Settings and adding to system event to validate
-        old_setting = {"projector.cpuProfile": False,
-                       "projector.memProfile": False,
-                       "projector.settings.log_level": "info"}
-        new_setting = {"projector.cpuProfile": True,
-                       "projector.memProfile": True,
-                       "projector.settings.log_level": "debug"}
-        self.index_rest.set_index_settings(new_setting)
+        # Get current projector settings
+        current_projector_settings = self.index_rest.get_index_settings()
+        old_projector_setting = current_projector_settings.copy()
+        # Define the new projector settings to apply
+        new_projector_setting = {"projector.cpuProfile": True,
+                                "projector.memProfile": True,
+                                "projector.settings.log_level": "debug"}
+        # Apply the new projector settings
+        self.index_rest.set_index_settings(new_projector_setting)
+        # Update the old_setting to only include the projector settings we're actually changing
+        old_projector_setting = {k: old_projector_setting.get(k) for k in new_projector_setting.keys()}
         index_node = self.index_rest.ip
-        self.system_events.add_event(IndexingServiceEvents.projector_settings_updated(old_setting=old_setting,
-                                                                                      new_setting=new_setting,
+        self.system_events.add_event(IndexingServiceEvents.projector_settings_updated(old_setting=old_projector_setting,
+                                                                                      new_setting=new_projector_setting,
                                                                                       node=index_node))
-
         # Updating Query Client Settings and adding to system event to validate
-        old_setting = {"queryport.client.waitForScheduledIndex": False,
-                       "queryport.client.usePlanner": True,
-                       "queryport.client.log_level": "info"}
-        new_setting = {"queryport.client.waitForScheduledIndex": True,
-                       "queryport.client.usePlanner": False,
-                       "queryport.client.log_level": "debug"}
-        self.index_rest.set_index_settings(new_setting)
+        # Get current query client settings
+        current_query_settings = self.index_rest.get_index_settings()
+        old_query_setting = current_query_settings.copy()
+        # Define the new query client settings to apply
+        new_query_setting = {"queryport.client.waitForScheduledIndex": True,
+                            "queryport.client.usePlanner": False,
+                            "queryport.client.log_level": "debug"}
+        # Apply the new query client settings
+        self.index_rest.set_index_settings(new_query_setting)
+        # Update the old_setting to only include the query client settings we're actually changing
+        old_query_setting = {k: old_query_setting.get(k) for k in new_query_setting.keys()}
         index_node = self.master.ip
-        self.system_events.add_event(IndexingServiceEvents.query_client_settings_updated(old_setting=old_setting,
-                                                                                         new_setting=new_setting,
+        self.system_events.add_event(IndexingServiceEvents.query_client_settings_updated(old_setting=old_query_setting,
+                                                                                         new_setting=new_query_setting,
                                                                                          node=index_node))
         self.sleep(60)
         result = self.system_events.validate(server=self.master, ignore_order=True)
