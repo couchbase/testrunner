@@ -88,10 +88,10 @@ class ldaptest(BaseTestCase):
                     "uid: " + user[0] + "\n"
                 fileName = 'name.ldif'
                 #Execute ldapadd command to add users to the system
-                shell = RemoteMachineShellConnection(self.master)
+                shell = RemoteMachineShellConnection(self.ldap_server)
                 try:
                     shell.write_remote_file("/tmp", fileName, userCreateCmmd)
-                    command = "ldapadd -h " + self.ldapHost + " -p " + self.ldapPort + " -f /tmp/" + fileName + " -D " + self.ldapAdmin + " -w " + self.ldapAdminPass
+                    command = "ldapadd" + " -f /tmp/" + fileName + " -D " + self.ldapAdmin + " -w " + self.ldapAdminPass
                     o, r = shell.execute_command(command)
                     shell.log_command_output(o, r)
                     command = "rm -rf /tmp/*.ldif"
