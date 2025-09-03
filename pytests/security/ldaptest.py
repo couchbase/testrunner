@@ -41,7 +41,7 @@ class ldaptest(BaseTestCase):
         #LDAP Admin to connect to
         self.ldapAdmin = self.input.param('ldapAdmin', 'cn=admin,dc=couchbase,dc=com')
         #LDAP Admin password
-        self.ldapAdminPass = self.input.param('ldapAdminPass', 'p@ssword')
+        self.ldapAdminPass = self.input.param('ldapAdminPass', 'p@ssw0rd')
         #LDAP DN for Users
         self.ldapDN = self.input.param('ldapDN', 'ou=Users,dc=couchbase,dc=com')
         #LDAP Object Class for Users
