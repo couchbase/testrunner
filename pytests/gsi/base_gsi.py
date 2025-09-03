@@ -3197,6 +3197,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         json_resp = self.index_rest.get_index_aggregate_metadata()
         shards = set()
         for each_item in json_resp['result']['metadata']:
+            # Check if topologies key exists and is not empty
+            if 'topologies' not in each_item or not each_item['topologies']:
+                continue
             for item in each_item['topologies']:
                 if item["scope"] == '_system':
                     continue
