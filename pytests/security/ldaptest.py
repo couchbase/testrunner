@@ -109,8 +109,8 @@ class ldaptest(BaseTestCase):
     def _removeLdapUserRemote(self, ldapUserList):
         for user in ldapUserList:
             if (user[0] != ''):
-                userDeleteCmd = 'ldapdelete -h ' + self.ldapHost + " -p " + self.ldapPort + ' cn=' + user[0] + "," + self.ldapDN
-                shell = RemoteMachineShellConnection(self.master)
+                userDeleteCmd = 'ldapdelete' + ' cn=' + user[0] + "," + self.ldapDN
+                shell = RemoteMachineShellConnection(self.ldap_server)
                 try:
                     command = userDeleteCmd + " -D " + self.ldapAdmin + " -w " + self.ldapAdminPass
                     o, r = shell.execute_command(command)
