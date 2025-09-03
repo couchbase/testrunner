@@ -338,7 +338,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.fail("server-info return error output")
 
     def _create_bucket(self, remote_client, bucket="default", bucket_type="couchbase",
-                        bucket_ramsize=200, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
+                        bucket_ramsize=256, bucket_replica=1, wait=False, enable_flush=None, enable_index_replica=None):
         options = "--bucket={0} --bucket-type={1} --bucket-ramsize={2} --bucket-replica={3}".\
             format(bucket, bucket_type, bucket_ramsize, bucket_replica)
         options += (" --enable-flush={0}".format(enable_flush), "")[enable_flush is None]
