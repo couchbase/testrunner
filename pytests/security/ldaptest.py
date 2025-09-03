@@ -127,9 +127,9 @@ class ldaptest(BaseTestCase):
 
     '''
     def _changeLdapPassRemote(self, user, password):
-        shell = RemoteMachineShellConnection(self.master)
+        shell = RemoteMachineShellConnection(self.ldap_server)
         try:
-            command = "ldappasswd -h " + self.ldapHost + " -s " + password + " cn=" + user + "," + self.ldapDN
+            command = "ldappasswd -s " + password + " cn=" + user + "," + self.ldapDN
             command = command + " -D " + self.ldapAdmin + " -w " + self.ldapAdminPass
             o, r = shell.execute_command(command)
             shell.log_command_output(o, r)
