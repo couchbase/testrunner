@@ -3817,9 +3817,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             tasks = self._async_load_all_buckets(self.master, gen, "create", 0)
 
             reps = rest_src.get_replications()
-            start_time = datetime.datetime.now()
+            start_time = datetime.now()
             while reps[0]["status"] != "running" or reps[0]["changesLeft"] > 0:
-                if (datetime.datetime.now() - start_time).total_seconds() > 600:
+                if (datetime.now() - start_time).total_seconds() > 600:
                     self.fail("Timed out waiting for replications")
                 self.sleep(10, "Waiting for replication...")
                 reps = rest_src.get_replications()
