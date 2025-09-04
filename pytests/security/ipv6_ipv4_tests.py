@@ -193,6 +193,7 @@ class ipv6_ipv4_tests(BaseTestCase):
             self.assertEqual(json.loads(output)['status'], "ok", "Issue with creating FTS index with client Cert")
 
         elif service == "cbas":
+            self.sleep(60, "Waiting for cbas to be up")
             cmd = "curl -v  " + \
                   " -s -u Administrator:password --data pretty=true --data-urlencode 'statement=create dataset on default' " + \
                   "http://{0}:{1}/_p/cbas/query/service ". \

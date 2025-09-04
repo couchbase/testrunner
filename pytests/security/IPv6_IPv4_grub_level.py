@@ -9,7 +9,7 @@ class IPv6_IPv4():
     """
     pure_ipv4 - IPv6 is disabled at grub level on all nodes
     pure_ipv6 - Nodes with just IPv6 stack enabled on all nodes
-    hostname  - 
+    hostname  -
     ipv4_ipv6 - Dual Stack present on all nodes
 
     First item in list denotes - cluster setting IPv4 and the second item denotes - cluster setting IPv6
@@ -182,10 +182,10 @@ class IPv6_IPv4():
                 log.info("OUTPUT : {0} ERROR : {1}".format(output,error))
                 pids.append(output[0])
             shell.start_couchbase()
-            time.sleep(10)
+            time.sleep(120)
         shell.disconnect()
         return pids
- 
+
     def unblock_ports(self,pids):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
