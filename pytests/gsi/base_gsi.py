@@ -1916,7 +1916,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         timed_out = True
                         check = next_time - init_time > timeout
         if timed_out:
-            self.log.info(f"Indexes are not online after {timeout} seconds").
+            self.log.info(f"Indexes are not online after {timeout} seconds")
             self.log.info(f"Index status: {index_status}")
             check = False
         return check
