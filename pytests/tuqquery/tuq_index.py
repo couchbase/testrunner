@@ -1,4 +1,5 @@
 import uuid
+import time
 
 from .tuq_join import JoinTests
 from .tuq_sanity import QuerySanityTests
@@ -1521,11 +1522,16 @@ class QueriesViewsTests(QuerySanityTests):
                         f"{{'c1': {c1}, 'c2': {c2}, 'c3': {c3}, 'noncover': 'value_{c1}_{c2}_{c3}'}})"
                     )
                     self.run_cbq_query()
-
         # Verify data was inserted
-        self.query = f"SELECT COUNT(*) as cnt FROM {query_bucket}"
-        res = self.run_cbq_query()
-        self.assertEqual(res['results'][0]['cnt'], 125, "Expected 125 documents")
+        end_time = time.time() + 60
+        while time.time() < end_time:
+            self.query = f"SELECT COUNT(*) as cnt FROM {query_bucket}"
+            res = self.run_cbq_query()
+            if res['results'][0]['cnt'] == 125:
+                return
+            else:
+                self.sleep(1, f'result count is not 125. res is {res['results'][0]['cnt']} sleeping for 1 second')
+        raise Exception('result count is not 125. last response is %s' % (res))
 
     def _find_order_operator(self, plan):
         """
