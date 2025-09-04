@@ -523,11 +523,15 @@ class UserAccounts(BaseTestCase):
             # Lock the user
             self.rest.set_unset_user_lock(user["username"], "true")
 
+            self.sleep(10, "Waiting for user to be locked")
+
             # Verify the user is locked
             assert not self.check_ui_login(self.master, user["username"], user["password"])
 
             # Unlock the user
             self.rest.set_unset_user_lock(user["username"], "false")
+
+            self.sleep(10, "Waiting for user to be unlocked")
 
             # Verify the user is unlocked
             assert self.check_ui_login(self.master, user["username"], user["password"])
