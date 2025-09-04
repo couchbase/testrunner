@@ -33,7 +33,7 @@ class UserAccounts(BaseTestCase):
         self.log.info("Adding an internal user")
         payload = "name={0}&roles={1}&password={2}".format(self.test_user, "admin", self.test_user_password)
         self.rest.add_set_builtin_user(self.test_user, payload)
-        self.remote_connection.execute_command("""curl -g -v -u Administrator:password -X POST http://{0}:8091/sampleBuckets/install -d  '["travel-sample"]'""".format(self.master.ip))
+        output, error = self.remote_connection.execute_command("""curl -g -v -u Administrator:password -X POST http://{0}:8091/sampleBuckets/install -d  '["travel-sample"]'""".format(self.master.ip))
         self.log.info("Setup End")
 
     def suite_tearDown(self):
@@ -561,6 +561,7 @@ class UserAccounts(BaseTestCase):
         print(json.dumps(data.value, indent=4))
         """
 
+        self.sleep(300, "Wait for sample bucket to come up")
         buckets = RestConnection(self.master).get_buckets()
         found_bucket = False
         for bucket in buckets:
