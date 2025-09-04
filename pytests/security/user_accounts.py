@@ -362,6 +362,7 @@ class UserAccounts(BaseTestCase):
         # Lock unlock users
         start_time = datetime.now()
         self.rest.set_unset_user_lock(self.test_user, "true")
+        self.sleep(5)
         end_time = datetime.now()
         self.log.info("Start time: {0}".format(start_time))
         self.log.info("End time: {0}".format(end_time))
