@@ -1488,6 +1488,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         task.result()
 
         result = self.run_cbq_query(query="select count(name) from test_bucket.test_scope_1.test_collection_1 where name is not null;")
+        self.log.info(f"Result: {result}")
         self.assertEqual(result[0]["$1"], 100000, "docs not matching")
 
     # common methods

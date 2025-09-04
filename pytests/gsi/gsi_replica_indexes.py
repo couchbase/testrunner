@@ -473,17 +473,24 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         build_index_query_age = "BUILD INDEX on `default`(" + index_name_age + ")"
 
         threads = [
-            Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
+            Thread(target=self.n1ql_helper.run_cbq_query, name="run_build_index_query",
                    args=(build_index_query_age, 10, self.n1ql_node)),
-            Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
+            Thread(target=self.n1ql_helper.run_cbq_query, name="run_create_index_query",
                    args=(create_index_query_name, 10, self.n1ql_node))]
 
         for thread in threads:
             thread.start()
             self.sleep(1)
 
+        # Check for thread completion and any errors
         for thread in threads:
             thread.join()
+            if hasattr(thread, '_exception') and thread._exception:
+                self.log.error(f"Thread {thread.name} ended with error: {thread._exception}")
+            elif thread.is_alive():
+                self.log.warning(f"Thread {thread.name} is still alive after join")
+            else:
+                self.log.info(f"Thread {thread.name} completed successfully")
 
         self.sleep(120)
         index_map = self.get_index_map()
@@ -905,17 +912,24 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         build_index_query_name = "BUILD INDEX on `default`(" + index_name_name + ")"
 
         threads = [
-            Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
+            Thread(target=self.n1ql_helper.run_cbq_query, name="run_query_1",
                    args=(build_index_query_age, 10, self.n1ql_node)),
-            Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
+            Thread(target=self.n1ql_helper.run_cbq_query, name="run_query_2",
                    args=(build_index_query_name, 10, self.n1ql_node))]
 
         for thread in threads:
             thread.start()
             self.sleep(1)
 
+        # Check for thread completion and any errors
         for thread in threads:
             thread.join()
+            if hasattr(thread, '_exception') and thread._exception:
+                self.log.error(f"Thread {thread.name} ended with error: {thread._exception}")
+            elif thread.is_alive():
+                self.log.warning(f"Thread {thread.name} is still alive after join")
+            else:
+                self.log.info(f"Thread {thread.name} completed successfully")
 
         # Index building in the background can take longer, so wait for some time
         self.sleep(360)
@@ -1057,7 +1071,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         node_out = self.servers[self.node_out]
         drop_index_query = "DROP INDEX `default`." + index_name_prefix
-
+        self.log.info(f"Drop index query: {drop_index_query}")
         threads = []
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
@@ -1069,8 +1083,15 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         for thread in threads:
             thread.start()
         self.sleep(5)
+        # Check for thread completion and any errors
         for thread in threads:
             thread.join()
+            if hasattr(thread, '_exception') and thread._exception:
+                self.log.error(f"Thread {thread.name} ended with error: {thread._exception}")
+            elif thread.is_alive():
+                self.log.warning(f"Thread {thread.name} is still alive after join")
+            else:
+                self.log.info(f"Thread {thread.name} completed successfully")
 
         self.sleep(30)
         index_map = self.get_index_map()
