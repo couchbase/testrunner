@@ -379,6 +379,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
                 post_rebalance_in_map = self.get_index_map()
+                self.log.info(f"Pre rebalance in map: {pre_rebalance_in_map}")
+                self.log.info(f"Post rebalance in map: {post_rebalance_in_map}")
                 self.assertEqual(pre_rebalance_in_map, post_rebalance_in_map)
 
     '''Do the same alter index tests on an index created with a node list'''
@@ -483,14 +485,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                                  " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replica)
         else:
             create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI;"
-
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
-
         try:
             # Get the index map to identify which node contains the index
             index_map = self.get_index_map()
             index_nodes = set()
-            
             # Find all nodes that contain the index
             for index_name, index_info in index_map.get('default', {}).items():
                 if index_name_prefix in index_name:
@@ -498,31 +497,34 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                         for host in index_info['hosts']:
                             node_ip = host.split(':')[0]
                             index_nodes.add(node_ip)
-            
-            # Find a node to failover that doesn't contain the index
+            # Find a node to failover that doesn't contain the index and is not a KV node
             failover_candidate = None
+            kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+            kv_node_ips = {node.ip for node in kv_nodes}
             for i in range(self.nodes_init):
                 server = self.servers[i]
-                if server.ip not in index_nodes:
+                if server.ip not in index_nodes and server.ip not in kv_node_ips:
                     failover_candidate = server
                     break
-            
-            # If all nodes contain the index, use the last node but log a warning
+            # If no suitable non-KV, non-index node found, try to find any non-KV node
             if failover_candidate is None:
-                failover_candidate = self.servers[self.nodes_init-1]
+                for i in range(self.nodes_init):
+                    server = self.servers[i]
+                    if server.ip not in kv_node_ips:
+                        failover_candidate = server
+                        break
+            # If all nodes are KV nodes, use the last non-KV node but log a warning
+            if failover_candidate is None:
+                failover_candidate = index_nodes[1]
                 self.log.warning(f"All nodes contain the index {index_name_prefix}, using last node for failover")
             else:
                 self.log.info(f"Failing over node {failover_candidate.ip} which doesn't contain index {index_name_prefix}")
-            
             # Failover the selected node
             failover_task = self.cluster.async_failover(self.servers[:self.nodes_init], failover_nodes=[failover_candidate])
             failover_task.result()
-
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-
             self.sleep(5)
             self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
-
             if self.expected_err_msg:
                 if not error[0]:
                     self.fail("Move index failed with unexpected error")
