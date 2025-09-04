@@ -103,12 +103,12 @@ class QueryArrayQueryTests(QueryTests):
                 # Get the covering index required to run the query (we want to test optimized query paths
                 advise_query = "advise " + query
                 advise_query = advise_query.replace("`travel-sample`", "bucket_01")
-                advise_result = self.run_cbq_query(query= advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                advise_result = self.run_cbq_query(query= advise_query, server=self.master, username=self.rest.username, password= self.rest.password)
                 required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['covering_indexes'][0]['index_statement']
             except Exception as e:
                 # Sometimes the advisor will not advise a covering index, so in this case we need to grab a different index recommendation
                 if str(e) == "'covering_indexes'":
-                    advise_result = self.run_cbq_query(query=advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                    advise_result = self.run_cbq_query(query=advise_query, server=self.master, username=self.rest.username, password= self.rest.password)
                     required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['indexes'][0]['index_statement']
             try:
                 if required_index:
@@ -244,12 +244,12 @@ class QueryArrayQueryTests(QueryTests):
                 # Get the covering index required to run the query (we want to test optimized query paths
                 advise_query = "advise " + query
                 advise_query = advise_query.replace("default", "bucket_01")
-                advise_result = self.run_cbq_query(query= advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                advise_result = self.run_cbq_query(query= advise_query, server=self.master, username=self.rest.username, password= self.rest.password)
                 required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['covering_indexes'][0]['index_statement']
             except Exception as e:
                 # Sometimes the advisor will not advise a covering index, so in this case we need to grab a different index recommendation
                 if str(e) == "'covering_indexes'":
-                    advise_result = self.run_cbq_query(query=advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                    advise_result = self.run_cbq_query(query=advise_query, server=self.master, username=self.rest.username, password= self.rest.password)
                     required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['indexes'][0]['index_statement']
             try:
                 if required_index:
