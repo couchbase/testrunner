@@ -376,6 +376,7 @@ class MultipleCA(BaseTestCase):
                 self.wait_for_rebalance_to_complete(task)
                 CbServer.use_https = https_val
         self.auth(servers=nodes_in_cluster)
+        self.sleep(300, "Wait for sometime after rebalance operation") # Ref : MB-68356
 
     def test_CA_upload_from_all_nodes(self):
         """
