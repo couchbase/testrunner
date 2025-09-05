@@ -6718,6 +6718,12 @@ class RestConnection(object):
         if not status:
             raise Exception("Failed to set internal password rotation interval: {}".format(content))
 
+    def create_jwt_with_config(self, jwt_config:dict):
+        api  =  self.baseUrl + "settings/jwt"
+        params = json.dumps(jwt_config)
+        status, content, header = self._http_request(api, 'PUT', params)
+        return status, content, header
+
     def load_trusted_CAs(self):
         """
         Instructs the cluster to load trusted CAs(.pem files) from the node's inbox/CA folder
