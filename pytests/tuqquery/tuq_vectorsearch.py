@@ -215,7 +215,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue('index_vector' in children)
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
     '''Vector query that uses both ann and knn'''
     def test_ann_knn(self):
@@ -350,7 +350,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue(f'vector_index_{self.distance}' in str(explain), f"We expect a vector index to be used please check {explain}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     '''Vector query with a correlated subquery in the predicate'''
     def test_ann_subquery_correlated(self):
@@ -367,7 +367,7 @@ class VectorSearchTests(QueryTests):
             self.assertTrue(f'vector_index_{self.distance}' in str(explain), f"We expect a vector index to be used please check {explain}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
             self.run_cbq_query('DROP INDEX default.idx_size')
 
     def test_normalize(self):
@@ -794,7 +794,10 @@ class VectorSearchTests(QueryTests):
             query_plan = explain_plan['results'][0]['plan']
             children = query_plan['~children'][0]['~children'][0]
             index_name = children['index']
-            self.assertEqual(index_name, f'vector_index_{self.distance}')
+            if self.use_bhive:
+                self.assertEqual(index_name, f'vector_bhive_index_{self.distance}')
+            else:
+                self.assertEqual(index_name, f'vector_index_{self.distance}')
             # check the spans
             for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
                 # Vector field will not have a high or a low value
@@ -806,7 +809,7 @@ class VectorSearchTests(QueryTests):
             self.check_results_against_knn(knn_query, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_name='non_pushdown')
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True,custom_name='non_pushdown')
     
     '''Query contains equality predicates only and only orderbys on a vector field'''
     def test_limit_pushdown_leading_scalar_orderby_vector(self):
@@ -923,7 +926,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
     '''Query contains spans on a non leading field and orderby not in index order'''
     def test_limit_pushdown_non_leading_scalar_non_ordered(self):
@@ -950,7 +953,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
     '''Query contains spans on a non leading field and orderby not in index order, mutliple predicates have different possible values so there is more to orderby'''
     def test_limit_pushdown_non_leading_scalar_non_ordered_multiple_range(self):
@@ -977,7 +980,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
     '''Query contains a range span and orderby on vector'''
     def test_limit_pushdown_leading_range_scalar(self):
@@ -1100,7 +1103,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
     '''Vector query with no limit vector only'''
     def test_no_limit_vector_only(self):
@@ -1143,7 +1146,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
     
     '''Vector query with no limit orderby vector and scalar'''
     def test_no_limit_scalar_orderby_scalar_vector(self):
@@ -1168,7 +1171,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
     
     '''Vector query with no limit orderby vector and scalar, in predicate'''
     def test_no_limit_scalar_in_orderby_scalar_vector(self):
@@ -1193,7 +1196,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
     
     '''Query contains a range span and orderby on vector'''
     def test_no_limit_leading_range_scalar(self):
@@ -1295,7 +1298,7 @@ class VectorSearchTests(QueryTests):
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
             self.check_results_against_knn(knn_query, ann_query)
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
     
     '''Pushdown should not occur'''
     def test_leading_vector_no_pushdown(self):
