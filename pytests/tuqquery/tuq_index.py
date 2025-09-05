@@ -1527,10 +1527,11 @@ class QueriesViewsTests(QuerySanityTests):
         while time.time() < end_time:
             self.query = f"SELECT COUNT(*) as cnt FROM {query_bucket}"
             res = self.run_cbq_query()
+            result_count = res['results'][0]['cnt']
             if res['results'][0]['cnt'] == 125:
                 return
             else:
-                self.sleep(1, f'result count is not 125. res is {res['results'][0]['cnt']} sleeping for 1 second')
+                self.sleep(1, f'result count is not 125. res is {result_count} sleeping for 1 second')
         raise Exception('result count is not 125. last response is %s' % (res))
 
     def _find_order_operator(self, plan):
