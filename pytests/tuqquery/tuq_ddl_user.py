@@ -1,5 +1,5 @@
 from tuqquery.tuq import QueryTests
-from lib.membase.api.exception import CBQError
+from membase.api.exception import CBQError
 
 class QueryDDLUserTests(QueryTests):
     def setUp(self):

@@ -1,5 +1,5 @@
 from tuqquery.tuq import QueryTests
-from lib.membase.api.exception import CBQError
+from membase.api.exception import CBQError
 
 
 class QueryBucketDDLTests(QueryTests):
@@ -163,7 +163,7 @@ class QueryBucketDDLTests(QueryTests):
         """Test CREATE BUCKET with storageBackend magma"""
         try:
             # Test with storageBackend magma
-            self.run_cbq_query("CREATE BUCKET test_bucket3 WITH {'storageBackend': 'magma'}")
+            self.run_cbq_query("CREATE BUCKET test_bucket3 WITH {'storageBackend': 'magma', 'ramQuota': 1024}")
 
             # Verify bucket was created with magma storage
             bucket_info = self.rest.get_bucket_json("test_bucket3")
