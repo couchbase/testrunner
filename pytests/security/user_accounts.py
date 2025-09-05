@@ -516,7 +516,7 @@ class UserAccounts(BaseTestCase):
         # Create users in bulk
         for user in self.test_users:
             payload = "name={0}&roles={1}&password={2}".format(user["username"], user["roles"], user["password"])
-            self.rest.add_set_builtin_user(self.test_user, payload)
+            self.rest.add_set_builtin_user(user["username"], payload)
 
         for user in self.test_users:
             self.log.info("User: {0}".format(user))
