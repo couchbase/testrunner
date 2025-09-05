@@ -145,7 +145,14 @@ CMDS = {
             "rm /var/cache/apt/archives/lock;"
             "dpkg --configure -a;"
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
-        "pre_install": None,
+        "pre_install": "kill -9 `lsof -ti:4369`;" + 
+                       "kill -9 `lsof -ti:8091`;" + 
+                       "kill -9 `lsof -ti:21100`;" + 
+                       "kill -9 `lsof -ti:21200`;" + 
+                       "kill -9 `lsof -ti:21300`;" + 
+                       "kill -9 `lsof -ti:21150`;" + 
+                       "kill -9 `lsof -ti:21250`;" + 
+                       "kill -9 `lsof -ti:21350`;",
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
@@ -199,7 +206,14 @@ CMDS = {
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
-        "pre_install": None,
+        "pre_install": "kill -9 `lsof -ti:4369`;" + 
+                       "kill -9 `lsof -ti:8091`;" + 
+                       "kill -9 `lsof -ti:21100`;" + 
+                       "kill -9 `lsof -ti:21200`;" + 
+                       "kill -9 `lsof -ti:21300`;" + 
+                       "kill -9 `lsof -ti:21150`;" + 
+                       "kill -9 `lsof -ti:21250`;" + 
+                       "kill -9 `lsof -ti:21350`;",
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         "set_vm_swappiness_and_thp":
             "/sbin/sysctl vm.swappiness=0; " +
@@ -313,7 +327,14 @@ NON_ROOT_MANUAL_CMDS = {
             "rm /var/lib/dpkg/info/couchbase-server.*; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;",
-        "pre_install": None,
+        "pre_install": "kill -9 `lsof -ti:4369`;" + 
+                       "kill -9 `lsof -ti:8091`;" + 
+                       "kill -9 `lsof -ti:21100`;" + 
+                       "kill -9 `lsof -ti:21200`;" + 
+                       "kill -9 `lsof -ti:21300`;" + 
+                       "kill -9 `lsof -ti:21150`;" + 
+                       "kill -9 `lsof -ti:21250`;" + 
+                       "kill -9 `lsof -ti:21350`;",
         "install":
             "dpkg-deb -x buildpath $HOME > /dev/null && echo 1 || echo 0;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
@@ -403,6 +424,7 @@ WAIT_TIMES = {
         "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
+        "pre_install": (0, "No need to wait after pre install commands", 0),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
 
@@ -427,7 +449,7 @@ WAIT_TIMES = {
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
-        "pre_install": (20, "Waiting {0}s to remove previous yum repo on {1}..", 60),
+        "pre_install": (0, "No need to wait after pre install commands", 0),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }
 }
