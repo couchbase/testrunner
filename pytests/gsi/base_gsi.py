@@ -434,6 +434,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         repo = filename.split('.')[0]
         remote_client.execute_command("rm -rf backup")
         if type == 'windows':
+            windows_backup_process_kill_cmd = "ps -ef | grep cbbackupmgr | grep -v grep | awk '{print $2}' | xargs -r kill -9"
+            remote_client.execute_command(windows_backup_process_kill_cmd, timeout=600)
+        if type == 'windows':
             couchbase_root_dir = '"/cygdrive/c/Program Files/Couchbase/Server/bin/cbbackupmgr"'
         else:
             couchbase_root_dir = "/opt/couchbase/bin/cbbackupmgr"
@@ -466,9 +469,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         if type == 'windows':
             try:
                 restore_out = remote_client.execute_command(restore_cmd, timeout=360)
-                self.log.debug(restore_out)
+                self.log.info(restore_out)
             except Exception as e:
                 self.log.info(str(e))
+                self.sleep(60)
+                remote_client.execute_command(windows_backup_process_kill_cmd, timeout=360)
         else:
             restore_out = remote_client.execute_command(restore_cmd)
             self.log.debug(restore_out)
