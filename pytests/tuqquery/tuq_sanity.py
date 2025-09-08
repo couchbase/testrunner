@@ -4129,37 +4129,43 @@ class QuerySanityTests(QueryTests):
 
     def test_limit_offset(self):
         self.fail_if_no_buckets()
-        for query_bucket in self.query_buckets:
-            self.run_cbq_query(query=f'CREATE INDEX ix10 ON {query_bucket}(c0)')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
-            results1 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
-            results2 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
-            results3 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
-            self.assertEqual(results1['results'],[{'c1': '1', 'c2': 2}])
-            self.assertEqual(results2['results'],[{'c1': '1', 'c2': 3}])
-            self.assertEqual(results3['results'],[{'c1': '1', 'c2': 4}])
+        try:
+            for query_bucket in self.query_buckets:
+                self.run_cbq_query(query=f'CREATE INDEX ix10 ON {query_bucket}(c0)')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
+                results1 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
+                results2 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
+                results3 = self.run_cbq_query(query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
+                self.assertEqual(results1['results'],[{'c1': '1', 'c2': 2}])
+                self.assertEqual(results2['results'],[{'c1': '1', 'c2': 3}])
+                self.assertEqual(results3['results'],[{'c1': '1', 'c2': 4}])
+        finally:
+            self.run_cbq_query(query=f'DROP INDEX ix10 ON {query_bucket}')
     def test_limit_offset_early_order(self):
         self.fail_if_no_buckets()
-        for query_bucket in self.query_buckets:
-            self.run_cbq_query(query=f'CREATE INDEX ix10 ON {query_bucket}(c0,c1)')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
-            self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
-            results1 = self.run_cbq_query(
-                query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
-            results2 = self.run_cbq_query(
-                query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
-            results3 = self.run_cbq_query(
-                query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix10) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
-            self.assertEqual(results1['results'], [{'c1': '1', 'c2': 2}])
-            self.assertEqual(results2['results'], [{'c1': '1', 'c2': 3}])
-            self.assertEqual(results3['results'], [{'c1': '1', 'c2': 4}])
+        try:
+            for query_bucket in self.query_buckets:
+                self.run_cbq_query(query=f'CREATE INDEX ix100 ON {query_bucket}(c0,c1)')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
+                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
+                results1 = self.run_cbq_query(
+                    query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
+                results2 = self.run_cbq_query(
+                    query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
+                results3 = self.run_cbq_query(
+                    query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
+                self.assertEqual(results1['results'], [{'c1': '1', 'c2': 2}])
+                self.assertEqual(results2['results'], [{'c1': '1', 'c2': 3}])
+                self.assertEqual(results3['results'], [{'c1': '1', 'c2': 4}])
+        finally:
+            self.run_cbq_query(query=f'DROP INDEX ix100 ON {query_bucket}')
 
     ##############################################################################################
     #
@@ -4697,32 +4703,38 @@ class QuerySanityTests(QueryTests):
     # MB-65246
     def test_array_agg_perf(self):
         self.fail_if_no_buckets()
-        self.run_cbq_query('CREATE INDEX ix1 ON default(c1, a1)')
-        upsert_query = '''
-        UPSERT INTO default (KEY v.id, VALUE v)
-        SELECT {"c1": 1, "id": "k"||SUBSTR("0000000"||TOSTR(d),-7), "a1": ["aa","bb","cc"]} AS v
-        FROM ARRAY_RANGE(0,32000) AS d
-        '''
-        self.run_cbq_query(upsert_query)
-        array_agg_query = 'SELECT d1.c1 FROM default AS d1 WHERE d1.c1 = 1 GROUP BY d1.c1 LETTING aa = ARRAY_AGG(d1.a1)'
-        expected_result = [{'c1': 1}]
-        # Query should run within 2 seconds
-        result = self.run_cbq_query(array_agg_query, query_params={'timeout': '2s'})
-        self.assertEqual(result['results'], expected_result)
+        try:
+            self.run_cbq_query('CREATE INDEX ix1000 ON default(c1, a1)')
+            upsert_query = '''
+            UPSERT INTO default (KEY v.id, VALUE v)
+            SELECT {"c1": 1, "id": "k"||SUBSTR("0000000"||TOSTR(d),-7), "a1": ["aa","bb","cc"]} AS v
+            FROM ARRAY_RANGE(0,32000) AS d
+            '''
+            self.run_cbq_query(upsert_query)
+            array_agg_query = 'SELECT d1.c1 FROM default AS d1 WHERE d1.c1 = 1 GROUP BY d1.c1 LETTING aa = ARRAY_AGG(d1.a1)'
+            expected_result = [{'c1': 1}]
+            # Query should run within 2 seconds
+            result = self.run_cbq_query(array_agg_query, query_params={'timeout': '2s'})
+            self.assertEqual(result['results'], expected_result)
+        finally:
+            self.run_cbq_query('DROP INDEX ix1000 ON default')
 
     def test_array_agg_distinct(self):
         self.fail_if_no_buckets()
-        self.run_cbq_query('DROP INDEX ix1 IF EXISTS ON default')
-        self.run_cbq_query('DELETE FROM default WHERE c1 is not missing')
-        upsert_query = '''
-        UPSERT INTO default (KEY k, VALUE t)
-        SELECT "k"|| TOSTR(d) AS k, {"c1":IMOD(d,500), "o1" : OBJECT "o"||TOSTR(o):o FOR o IN ARRAY_RANGE(0,25) END} AS t
-        FROM ARRAY_RANGE(0,2000) AS d
-        '''
-        self.run_cbq_query(upsert_query)
-        array_agg_distinct_query = 'SELECT d.c1, ARRAY_AGG(DISTINCT d) AS a1 FROM (SELECT d1.* FROM default AS d1 ) AS d GROUP BY d.c1 ORDER BY d.c1 LIMIT 100'
-        result = self.run_cbq_query(array_agg_distinct_query)
-        self.assertEqual(result['metrics']['resultCount'], 100)
+        try:
+            self.run_cbq_query('DROP INDEX ix10000 IF EXISTS ON default')
+            self.run_cbq_query('DELETE FROM default WHERE c1 is not missing')
+            upsert_query = '''
+            UPSERT INTO default (KEY k, VALUE t)
+            SELECT "k"|| TOSTR(d) AS k, {"c1":IMOD(d,500), "o1" : OBJECT "o"||TOSTR(o):o FOR o IN ARRAY_RANGE(0,25) END} AS t
+            FROM ARRAY_RANGE(0,2000) AS d
+            '''
+            self.run_cbq_query(upsert_query)
+            array_agg_distinct_query = 'SELECT d.c1, ARRAY_AGG(DISTINCT d) AS a1 FROM (SELECT d1.* FROM default AS d1 ) AS d GROUP BY d.c1 ORDER BY d.c1 LIMIT 100'
+            result = self.run_cbq_query(array_agg_distinct_query)
+            self.assertEqual(result['metrics']['resultCount'], 100)
+        finally:
+            self.run_cbq_query('DROP INDEX ix10000 ON default')
 
     def test_unnest_array_memory_quota(self):
         self.fail_if_no_buckets()
