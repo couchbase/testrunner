@@ -52,6 +52,10 @@ class QueryUpdateStatsTests(QueryTests):
             self.wait_for_all_indexes_online(build_deferred=True)
         
         self.delete_stats(bucket="travel-sample")
+        # wait for 8 seconds for stats to be deleted
+        self.sleep(8)
+        # delete from travel-sample bucket stats via delete query
+        self.run_cbq_query(query="DELETE FROM `travel-sample`._system._query WHERE type = 'histogram'")
 
         self.log.info("==============  QueryUpdateStatsTests setup has completed ==============")
         self.log_config_info()
