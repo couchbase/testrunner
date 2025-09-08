@@ -282,6 +282,7 @@ class QuerySequenceTests(QueryTests):
         node1 = self.servers[0]
         node2 = self.servers[1]
 
+        self.run_cbq_query(f"DELETE FROM system:prepareds WHERE name = 'SEQ1'")
         self.run_cbq_query(f"DROP SEQUENCE {self.bucket}.`_default`.{sequence_name} IF EXISTS")
         self.run_cbq_query(f"CREATE SEQUENCE {self.bucket}.`_default`.{sequence_name} NO CYCLE CACHE {self.cache} START WITH {self.start} INCREMENT BY {self.increment} MAXVALUE {self.max} MINVALUE {self.min}")
         result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
