@@ -125,7 +125,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         threads = [
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(create_index_query, 10, self.n1ql_node)),
+                   args=(create_index_query, self.n1ql_node)),
             Thread(target=self.cluster.async_failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful))]
         for thread in threads:
@@ -468,15 +468,16 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                            server=self.n1ql_node)
         except Exception as ex:
             self.log.info(str(ex))
-            self.fail("Index creation Failed : %s", str(ex))
+            self.fail("  : %s", str(ex))
 
         build_index_query_age = "BUILD INDEX on `default`(" + index_name_age + ")"
-
+        self.log.info(f"Building index: {build_index_query_age}")
+        self.log.info(f"Creating index: {create_index_query_name}")
         threads = [
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_build_index_query",
-                   args=(build_index_query_age, 10, self.n1ql_node)),
+                   args=(build_index_query_age, self.n1ql_node)),
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_create_index_query",
-                   args=(create_index_query_name, 10, self.n1ql_node))]
+                   args=(create_index_query_name, self.n1ql_node))]
 
         for thread in threads:
             thread.start()
@@ -711,7 +712,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         threads = []
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(build_index_query, 10, self.n1ql_node)))
+                   args=(build_index_query, self.n1ql_node)))
         threads.append(
             Thread(target=self.cluster.async_failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful)))
@@ -913,9 +914,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
         threads = [
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query_1",
-                   args=(build_index_query_age, 10, self.n1ql_node)),
+                   args=(build_index_query_age, self.n1ql_node)),
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query_2",
-                   args=(build_index_query_name, 10, self.n1ql_node))]
+                   args=(build_index_query_name, self.n1ql_node))]
 
         for thread in threads:
             thread.start()
@@ -1075,7 +1076,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         threads = []
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(drop_index_query, 10, self.n1ql_node)))
+                   args=(drop_index_query, self.n1ql_node)))
         threads.append(
             Thread(target=self.cluster.async_failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful)))

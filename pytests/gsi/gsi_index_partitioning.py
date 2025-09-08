@@ -966,7 +966,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         threads = []
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(create_index_statement, 10, self.n1ql_node)))
+                   args=(create_index_statement, self.n1ql_node)))
         threads.append(
             Thread(target=self.cluster.failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful,
@@ -1003,7 +1003,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                    name="network_partitioning", args=(node_out,)))
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(create_index_statement, 10, self.n1ql_node)))
+                   args=(create_index_statement, self.n1ql_node)))
 
         for thread in threads:
             thread.start()
@@ -1058,7 +1058,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                    name="network_partitioning", args=(node_out,)))
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(create_index_statement, 10, self.n1ql_node)))
+                   args=(create_index_statement, self.n1ql_node)))
 
         for thread in threads:
             thread.start()
@@ -1312,7 +1312,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         threads = []
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query, name="run_query",
-                   args=(build_index_query, 10, self.n1ql_node)))
+                   args=(build_index_query, self.n1ql_node)))
         threads.append(
             Thread(target=self.cluster.async_failover, name="failover", args=(
                 self.servers[:self.nodes_init], [node_out], self.graceful)))
@@ -1663,7 +1663,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         threads.append(
             Thread(target=self.n1ql_helper.run_cbq_query,
                    name="run_query",
-                   args=(drop_index_query, 10, self.n1ql_node)))
+                   args=(drop_index_query, self.n1ql_node)))
         threads.append(
             Thread(target=self.cluster.async_failover, name="failover",
                    args=(
