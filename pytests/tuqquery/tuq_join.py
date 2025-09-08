@@ -910,41 +910,44 @@ class JoinTests(QuerySanityTests):
         self._verify_results(actual_result['results'], expected_result)
 
     def test_MB59084(self):
-        upsert = 'UPSERT INTO default (KEY k, VALUE v) SELECT "k00"||TO_STR(d) AS k, {"c1":d, "c2":d, "c3":d} AS v FROM ARRAY_RANGE(1,10) AS d'
-        index = 'CREATE INDEX ix1 ON default(c1,c2, c3)'
-        self.run_cbq_query(upsert)
-        self.run_cbq_query(index)
+        try:
+            upsert = 'UPSERT INTO default (KEY k, VALUE v) SELECT "k00"||TO_STR(d) AS k, {"c1":d, "c2":d, "c3":d} AS v FROM ARRAY_RANGE(1,10) AS d'
+            index = 'CREATE INDEX ix1000 ON default(c1,c2, c3)'
+            self.run_cbq_query(upsert)
+            self.run_cbq_query(index)
 
-        udf1 = 'CREATE OR REPLACE FUNCTION f11(a) {(SELECT l, r FROM default AS l JOIN default AS r USE NL ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = a)}'
-        udf2 = 'CREATE OR REPLACE FUNCTION f12(a) {(SELECT l, r FROM default AS l JOIN default AS r  ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = a)}'
+            udf1 = 'CREATE OR REPLACE FUNCTION f11(a) {(SELECT l, r FROM default AS l JOIN default AS r USE NL ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = a)}'
+            udf2 = 'CREATE OR REPLACE FUNCTION f12(a) {(SELECT l, r FROM default AS l JOIN default AS r  ON l.c3=r.c3 WHERE l.c1 > 0 AND r.c1 > 0 AND r.c2 = a)}'
 
-        self.run_cbq_query(udf1)
-        self.run_cbq_query(udf2)
+            self.run_cbq_query(udf1)
+            self.run_cbq_query(udf2)
 
-        expected_result = [
-            {"$1": [{"l": {"c1": 1,"c2": 1,"c3": 1}, "r": {"c1": 1,"c2": 1,"c3": 1}}]},
-            {"$1": [{"l": {"c1": 2,"c2": 2,"c3": 2}, "r": {"c1": 2,"c2": 2,"c3": 2}}]},
-            {"$1": [{"l": {"c1": 3,"c2": 3,"c3": 3}, "r": {"c1": 3,"c2": 3,"c3": 3}}]},
-            {"$1": [{"l": {"c1": 4,"c2": 4,"c3": 4}, "r": {"c1": 4,"c2": 4,"c3": 4}}]},
-            {"$1": [{"l": {"c1": 5,"c2": 5,"c3": 5}, "r": {"c1": 5,"c2": 5,"c3": 5}}]},
-            {"$1": [{"l": {"c1": 6,"c2": 6,"c3": 6}, "r": {"c1": 6,"c2": 6,"c3": 6}}]},
-            {"$1": [{"l": {"c1": 7,"c2": 7,"c3": 7}, "r": {"c1": 7,"c2": 7,"c3": 7}}]},
-            {"$1": [{"l": {"c1": 8,"c2": 8,"c3": 8}, "r": {"c1": 8,"c2": 8,"c3": 8}}]},
-            {"$1": [{"l": {"c1": 9,"c2": 9,"c3": 9}, "r": {"c1": 9,"c2": 9,"c3": 9}}]}
-        ]
-        result1 = self.run_cbq_query('SELECT f11(t.c1) FROM default AS t WHERE t.c1 > 0')
-        result2 = self.run_cbq_query('SELECT f12(t.c1) FROM default AS t WHERE t.c1 > 0')
+            expected_result = [
+                {"$1": [{"l": {"c1": 1,"c2": 1,"c3": 1}, "r": {"c1": 1,"c2": 1,"c3": 1}}]},
+                {"$1": [{"l": {"c1": 2,"c2": 2,"c3": 2}, "r": {"c1": 2,"c2": 2,"c3": 2}}]},
+                {"$1": [{"l": {"c1": 3,"c2": 3,"c3": 3}, "r": {"c1": 3,"c2": 3,"c3": 3}}]},
+                {"$1": [{"l": {"c1": 4,"c2": 4,"c3": 4}, "r": {"c1": 4,"c2": 4,"c3": 4}}]},
+                {"$1": [{"l": {"c1": 5,"c2": 5,"c3": 5}, "r": {"c1": 5,"c2": 5,"c3": 5}}]},
+                {"$1": [{"l": {"c1": 6,"c2": 6,"c3": 6}, "r": {"c1": 6,"c2": 6,"c3": 6}}]},
+                {"$1": [{"l": {"c1": 7,"c2": 7,"c3": 7}, "r": {"c1": 7,"c2": 7,"c3": 7}}]},
+                {"$1": [{"l": {"c1": 8,"c2": 8,"c3": 8}, "r": {"c1": 8,"c2": 8,"c3": 8}}]},
+                {"$1": [{"l": {"c1": 9,"c2": 9,"c3": 9}, "r": {"c1": 9,"c2": 9,"c3": 9}}]}
+            ]
+            result1 = self.run_cbq_query('SELECT f11(t.c1) FROM default AS t WHERE t.c1 > 0')
+            result2 = self.run_cbq_query('SELECT f12(t.c1) FROM default AS t WHERE t.c1 > 0')
 
-        self.assertEqual(expected_result, result1['results'])
-        self.assertEqual(expected_result, result2['results'])
+            self.assertEqual(expected_result, result1['results'])
+            self.assertEqual(expected_result, result2['results'])
 
-        expected_result2 = [
-            {"l": {"c1": 1,"c2": 1,"c3": 1},"r": {"c1": 1,"c2": 1,"c3": 1}},
-            {"l": {"c1": 2,"c2": 2,"c3": 2},"r": {"c1": 2,"c2": 2,"c3": 2}},
-            {"l": {"c1": 3,"c2": 3,"c3": 3},"r": {"c1": 3,"c2": 3,"c3": 3}}
-        ]
-        result3 = self.run_cbq_query('WITH a AS ([1,2,3]) SELECT l, r FROM default l JOIN default r USE NL ON l.c3 = r.c3 WHERE l.c1 > 0 and r.c1 > 0 AND r.c2 IN a')
-        self.assertEqual(expected_result2, result3['results'])
+            expected_result2 = [
+                {"l": {"c1": 1,"c2": 1,"c3": 1},"r": {"c1": 1,"c2": 1,"c3": 1}},
+                {"l": {"c1": 2,"c2": 2,"c3": 2},"r": {"c1": 2,"c2": 2,"c3": 2}},
+                {"l": {"c1": 3,"c2": 3,"c3": 3},"r": {"c1": 3,"c2": 3,"c3": 3}}
+            ]
+            result3 = self.run_cbq_query('WITH a AS ([1,2,3]) SELECT l, r FROM default l JOIN default r USE NL ON l.c3 = r.c3 WHERE l.c1 > 0 and r.c1 > 0 AND r.c2 IN a')
+            self.assertEqual(expected_result2, result3['results'])
+        finally:
+            self.run_cbq_query('DROP INDEX default.ix1000')
 
     def test_MB62254(self):
         query = 'select * from {} a left join {} b on false'
