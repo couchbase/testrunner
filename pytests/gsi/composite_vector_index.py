@@ -2014,7 +2014,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                                    "year > 1980 OR "
                                                                                    "fuel = 'Diesel' ",
                                                                                    scan_color_vec_2),
-                                partition_by_fields=['meta().id'], include_fields=['fuel', 'year'])
+                                partition_by_fields=['meta().id'], include_fields=['fuel', 'year'],train_list=self.trainlist)
             non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color_rgb_bhive',
                                                                  index_fields=['colorRGBVector VECTOR'],
                                                                  dimension=3,
@@ -2027,7 +2027,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                      "year > 1980 OR "
                                                                      "fuel = 'Diesel' ",
                                                                      scan_color_vec_2),
-                                                                 include_fields=['fuel', 'year'])
+                                                                 include_fields=['fuel', 'year'],train_list=self.trainlist)
             partitioned_index_description_vector = QueryDefinition(index_name='partitioned_description_bhive',
                             index_fields=['descriptionVector VECTOR'],
                             dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
@@ -2038,7 +2038,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                                "category in ['Convertible', "
                                                                                "'Luxury Car', 'Supercar']",
                                                                                scan_desc_vec_2),
-                            partition_by_fields=['meta().id'], include_fields=['rating', 'category']
+                            partition_by_fields=['meta().id'], include_fields=['rating', 'category'],train_list=self.trainlist
                             )
 
             non_partitioned_index_description_vector = QueryDefinition(index_name='non_partitioned_description_bhive',
@@ -2054,7 +2054,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                        "category in ['Convertible', "
                                                                        "'Luxury Car', 'Supercar']",
                                                                        scan_desc_vec_2),
-                                                                   include_fields=['rating', 'category']
+                                                                   include_fields=['rating', 'category'],train_list=self.trainlist
                                                                    )
         else:
             partitioned_index_color_rgb_vector = QueryDefinition(index_name='partitioned_color',
