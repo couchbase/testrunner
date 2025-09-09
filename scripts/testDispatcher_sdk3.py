@@ -169,6 +169,9 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     print('response: {}'.format(response))
     print('content: {}'.format(content))
     print("*" * 75)
+    if os == "windows22":
+        print("Sleeping for 5 minutes for windows vm launch completion")
+        time.sleep(300)
     if response.status == 499:
         time.sleep(POLL_INTERVAL)  # some error checking here at some point
         return json.loads("[]"), None
