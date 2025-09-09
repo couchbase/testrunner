@@ -654,6 +654,8 @@ class UserAccounts(BaseTestCase):
         if err:
             self.fail("Failed to change password. Exiting test.....")
 
+        self.sleep(10, "Wait for some time before connecting to the bucket again")
+
         url = 'couchbase://{}/{}'.format(ip, bucket_name)
         self.log.info("Connecting to Couchbase at: {}".format(url))
 
