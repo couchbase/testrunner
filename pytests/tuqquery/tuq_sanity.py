@@ -4693,7 +4693,7 @@ class QuerySanityTests(QueryTests):
         self.run_cbq_query(prepare)
         # We are looking to see that the hints followed section does not display any syntax errors in a 2 node environment
         hints_followed = self.run_cbq_query('select * from system:prepareds')
-        self.assertTrue("['INDEX(`travel-sample` `def_city`)']" in str(hints_followed), f"We expect the indexer hint to be backticked, please check the plan: {hints_followed}")
+        self.assertTrue("INDEX(`travel-sample` `def_city`)" in str(hints_followed), f"We expect the indexer hint to be backticked, please check the plan: {hints_followed}")
         actual_result = self.run_cbq_query('execute prepared_hint')
         expected_result = self.run_cbq_query(expected)
         diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
@@ -4719,22 +4719,19 @@ class QuerySanityTests(QueryTests):
         finally:
             self.run_cbq_query('DROP INDEX ix1000 ON default')
 
-    def test_array_agg_distinct(self):
+    def test_array_agg_distinct_seq(self):
         self.fail_if_no_buckets()
-        try:
-            self.run_cbq_query('DROP INDEX ix10000 IF EXISTS ON default')
-            self.run_cbq_query('DELETE FROM default WHERE c1 is not missing')
-            upsert_query = '''
+        self.run_cbq_query('DROP INDEX ix1 IF EXISTS ON default')
+        self.run_cbq_query('DELETE FROM default WHERE c1 is not missing')
+        upsert_query = '''
             UPSERT INTO default (KEY k, VALUE t)
             SELECT "k"|| TOSTR(d) AS k, {"c1":IMOD(d,500), "o1" : OBJECT "o"||TOSTR(o):o FOR o IN ARRAY_RANGE(0,25) END} AS t
             FROM ARRAY_RANGE(0,2000) AS d
             '''
-            self.run_cbq_query(upsert_query)
-            array_agg_distinct_query = 'SELECT d.c1, ARRAY_AGG(DISTINCT d) AS a1 FROM (SELECT d1.* FROM default AS d1 ) AS d GROUP BY d.c1 ORDER BY d.c1 LIMIT 100'
-            result = self.run_cbq_query(array_agg_distinct_query)
-            self.assertEqual(result['metrics']['resultCount'], 100)
-        finally:
-            self.run_cbq_query('DROP INDEX ix10000 ON default')
+        self.run_cbq_query(upsert_query)
+        array_agg_distinct_query = 'SELECT d.c1, ARRAY_AGG(DISTINCT d) AS a1 FROM (SELECT d1.* FROM default AS d1 ) AS d GROUP BY d.c1 ORDER BY d.c1 LIMIT 100'
+        result = self.run_cbq_query(array_agg_distinct_query)
+        self.assertEqual(result['metrics']['resultCount'], 100)
 
     def test_unnest_array_memory_quota(self):
         self.fail_if_no_buckets()

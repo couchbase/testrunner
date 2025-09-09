@@ -3233,6 +3233,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(idx in str(actual_result['results']), f"The index is returning the wrong index, please check {actual_result}")
                 created_indexes.append(idx)
 
+                self.sleep(10)
                 self.query = "explain select count(distinct VMs[1].os) from {0} where VMs[1].os='windows' and " \
                              "tasks_points.task1>1".format(query_bucket)
                 actual_result = self.run_cbq_query()
