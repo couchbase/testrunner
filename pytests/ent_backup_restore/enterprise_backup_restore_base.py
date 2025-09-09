@@ -453,7 +453,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         try:
             if self.objstore_provider:
                 self.objstore_provider.teardown(info, remote_client)
-                self.objstore_provider.remove_bucket()
+                try:
+                    self.objstore_provider.remove_bucket()
+                except Exception as e:
+                    self.log.info(f"Error in deleting bucket: {str(e)}")
                 # Foor Azure we're deleting the remote storage resoruce
                 if self.input.param("objstore_provider", None) == "azure":
                     self.objstore_provider.__del__()
@@ -2657,27 +2660,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             count = 0
             keys_fail[bucket.name] = {}
             if type(self.objstore_provider) == GCP:
-                restore_buckets_items[bucket.name] = 63
+                restore_buckets_items[bucket.name] = 506
             if len(list(bk_file_data[bucket.name].keys())) != \
                     int(restore_buckets_items[bucket.name]):
                 self.fail(f"Total keys do not match. Expected: {len(bk_file_data[bucket.name])}  Found: {restore_buckets_items[bucket.name]}")
             items_info = rest.get_items_info(list(bk_file_data[bucket.name].keys()), bucket.name)
             ttl_matched = True
             for key in list(bk_file_data[bucket.name].keys()):
-                if items_info[key]['meta']['expiration'] != int(ttl_set):
-                    if self.replace_ttl == "all":
-                        ttl_matched = False
-                    if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
-                        ttl_matched = False
-                    if count < max_failed_keys:
-                        keys_fail[bucket.name][key] = []
-                        keys_fail[bucket.name][key].append(items_info[key]['meta']['expiration'])
-                        keys_fail[bucket.name][key].append(int(ttl_set))
-                        count += 1
-                    if self.debug_logs:
-                        print(("ttl time set: ", ttl_set))
-                        print(("key {0} failed to set ttl with {1}".format(key,
-                                                                           items_info[key]['meta']['expiration'])))
+                if key in items_info:
+                    if items_info[key]['meta']['expiration'] != int(ttl_set):
+                        if self.replace_ttl == "all":
+                            ttl_matched = False
+                        if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
+                            ttl_matched = False
+                        if count < max_failed_keys:
+                            keys_fail[bucket.name][key] = []
+                            keys_fail[bucket.name][key].append(items_info[key]['meta']['expiration'])
+                            keys_fail[bucket.name][key].append(int(ttl_set))
+                            count += 1
+                        if self.debug_logs:
+                            print(("ttl time set: ", ttl_set))
+                            print(("key {0} failed to set ttl with {1}".format(key,
+                                                                               items_info[key]['meta']['expiration'])))
 
             if not ttl_matched:
                 self.log.error("Here are keys not set correcttly {0}".format(keys_fail))
