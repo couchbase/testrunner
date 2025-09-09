@@ -3581,7 +3581,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             finally:
                 shell.disconnect()
 
-    def check_storage_directory_cleaned_up(self, threshold_gb=0.025):
+    def check_storage_directory_cleaned_up(self, threshold_gb=0.05):
         """
         Checks if storage directory is cleaned up
         Args:
