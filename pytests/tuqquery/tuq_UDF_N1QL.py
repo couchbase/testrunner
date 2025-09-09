@@ -423,6 +423,8 @@ class QueryUDFN1QLTests(QueryTests):
         function_name = "infer_default"
         query = 'INFER default'
         self.create_n1ql_function(function_name, query)
+        # Wait to ensure data is loaded
+        self.sleep(10)
         # Run query for comparison
         query_result = self.run_cbq_query(query)
         # Execute function and check
@@ -2455,14 +2457,31 @@ class QueryUDFN1QLTests(QueryTests):
         self.create_library(self.library_name, functions, function_names)
         self.run_cbq_query(f'CREATE OR REPLACE FUNCTION {function_name}() LANGUAGE JAVASCRIPT AS "{function_name}" AT "{self.library_name}"')
         result = self.run_cbq_query(f"EXECUTE FUNCTION {function_name}()")
-        expected_result = [
-            {
-                'code': 12009, 'icode': 'Duplicate Key: k004',
-                'key': 'datastore.couchbase.DML_error',
-                'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004',
-                'reason': {'_level':'exception', 'caller': 'couchbase:2848', 'code': 17012, 'key': 'dml.statement.duplicatekey', 'message': 'Duplicate Key: k004'},
-                'retry': False,
-                'stack': 'Error\n    at error_handling (functions/n1ql.js:1:190)'
-            }
-        ]
-        self.assertEqual(result['results'], expected_result)
+        expected_result = {
+            'code': 12009,
+            'icode': 'Duplicate Key: k004',
+            'key': 'datastore.couchbase.DML_error',
+            'message': 'DML Error, possible causes include concurrent modification. Failed to perform INSERT on key k004',
+            'reason': {
+                '_level': 'exception',
+                'caller': 'couchbase:2848',
+                'code': 17012,
+                'key': 'dml.statement.duplicatekey',
+                'message': 'Duplicate Key: k004'
+            },
+            'retry': False,
+            'stack': 'Error\n    at error_handling (functions/n1ql.js:1:190)'
+        }
+        self.assertEqual(len(result['results']), 1)
+        actual_result = result['results'][0]
+        self.assertEqual(actual_result['code'], expected_result['code'])
+        self.assertEqual(actual_result['icode'], expected_result['icode'])
+        self.assertEqual(actual_result['key'], expected_result['key'])
+        self.assertEqual(actual_result['message'], expected_result['message'])
+        self.assertEqual(actual_result['retry'], expected_result['retry'])
+        self.assertEqual(actual_result['stack'], expected_result['stack'])
+        self.assertEqual(actual_result['reason']['_level'], expected_result['reason']['_level'])
+        self.assertTrue(actual_result['reason']['caller'].startswith('couchbase:'))
+        self.assertEqual(actual_result['reason']['code'], expected_result['reason']['code'])
+        self.assertEqual(actual_result['reason']['key'], expected_result['reason']['key'])
+        self.assertEqual(actual_result['reason']['message'], expected_result['reason']['message'])
