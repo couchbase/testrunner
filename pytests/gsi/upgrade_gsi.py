@@ -3201,7 +3201,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                              server=n1ql_server)['results']
 
             cluster_profile = None
-            if not downgrade and self.initial_version[:3] != "7.6" or self.upgrade_to[:3] == "8.0":
+            if not downgrade and (self.initial_version[:3] != "7.6" or self.upgrade_to[:3] != "8.0"):
+                self.log.info("should not go here")
                 cluster_profile = "provisioned"
             active_nodes = []
             for active_node in self.servers[:self.nodes_init]:
@@ -3223,6 +3224,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 upgrade_th = self._async_update(upgrade_version=self.initial_version, servers=[node_to_upgrade],
                                                 cluster_profile=cluster_profile)
             else:
+                self.log.info(f"cluster profile is {cluster_profile}")
                 upgrade_th = self._async_update(upgrade_version=self.upgrade_to, servers=[node_to_upgrade],
                                                 cluster_profile=cluster_profile)
             for th in upgrade_th:

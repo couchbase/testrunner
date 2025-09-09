@@ -1312,12 +1312,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         # 100 MB
         self.set_maximum_disk_usage_per_shard(109715200)
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        allowed_num_shards = self.fetch_total_shards_limit() * len(indexer_nodes)
+        rest = RestConnection(indexer_nodes[0])
+        settings = rest.get_indexer_internal_stats()
+        max_shard_count = settings['indexer.plasma.shardLimitPerNode']
+        allowed_num_shards = max_shard_count * len(indexer_nodes)
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         nodes_in = self.servers[self.nodes_init]
         create_queries = []
         replica_count = 1
-        for _ in range(5):
+        for _ in range(10):
             for namespace in self.namespaces:
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,

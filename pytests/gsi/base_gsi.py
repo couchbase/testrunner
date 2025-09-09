@@ -476,7 +476,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                 remote_client.execute_command(windows_backup_process_kill_cmd, timeout=360)
         else:
             restore_out = remote_client.execute_command(restore_cmd)
-            self.log.debug(restore_out)
+            self.log.info(restore_out)
 
         self.buckets = self.rest.get_buckets()
         self.namespaces = []
