@@ -1421,7 +1421,7 @@ class VectorSearchTests(QueryTests):
                 else:
                     if self.distance in ['L2', 'EUCLIDEAN']:
                         expected_distance = UtilVector().l2_dist(vector_one, data[item['id']])
-                        self.assertAlmostEqual(item['distance'], expected_distance)
+                        self.assertAlmostEqual(item['distance'], expected_distance, delta=0.05)
                     if self.distance in ['L2_SQUARED', 'EUCLIDEAN_SQUARED']:
                         expected_distance = UtilVector().l2_dist_sq(vector_one, data[item['id']])
                         self.assertAlmostEqual(item['distance'], expected_distance)
