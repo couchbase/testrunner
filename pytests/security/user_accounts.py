@@ -603,6 +603,8 @@ class UserAccounts(BaseTestCase):
         self.rest.set_unset_user_lock(self.test_user, "false")
         self.log.info("User {} unlocked successfully.".format(self.test_user))
 
+        self.sleep(10, "Wait for some time before connecting to the bucket again")
+
         self.log.info("Bucket Name: {}, IP: {}, Username: {}".format(bucket_name, ip, username))
 
         url = 'couchbase://{}/{}'.format(ip, bucket_name)
