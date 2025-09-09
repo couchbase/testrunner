@@ -2155,7 +2155,7 @@ class QueryUDFTests(QueryTests):
     def test_order_param(self):
         self.run_cbq_query('CREATE INDEX ix1_id IF NOT EXISTS ON default(id)')
         self.run_cbq_query('upsert into default (key k, value v) select "key_" || tostr(d) as k , {"name": "San Francisco", "id": d} as v from array_range(0,5) d')
-        self.sleep(5)
+        self.sleep(30)
         udf = 'create or replace function i1(dir, nullsPos) { ( select raw id from default where id is not missing order by id dir nulls nullsPos ) }'
         self.run_cbq_query(udf)
         
@@ -2170,7 +2170,7 @@ class QueryUDFTests(QueryTests):
     def test_order_named_param(self):
         self.run_cbq_query('CREATE INDEX ix1_id IF NOT EXISTS ON default(id)')
         self.run_cbq_query('upsert into default (key k, value v) select "key_" || tostr(d) as k , {"name": "San Francisco", "id": d} as v from array_range(0,5) d')
-        self.sleep(5)
+        self.sleep(30)
         udf = 'create or replace function i2() { ( select raw id from default where id is not missing order by id $dir nulls $nullsPos ) }'
         self.run_cbq_query(udf)
 
@@ -2185,7 +2185,7 @@ class QueryUDFTests(QueryTests):
     def test_order_pos_param(self):
         self.run_cbq_query('CREATE INDEX ix1_id IF NOT EXISTS ON default(id)')
         self.run_cbq_query('upsert into default (key k, value v) select "key_" || tostr(d) as k , {"name": "San Francisco", "id": d} as v from array_range(0,5) d')
-        self.sleep(5)
+        self.sleep(30)
         udf = 'create or replace function i3() { ( select raw id from default where id is not missing order by id $1 nulls $2 ) }'
         self.run_cbq_query(udf)
 
