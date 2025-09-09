@@ -494,6 +494,7 @@ def main():
     parser.add_option('--job_url', dest='job_url', default=None)
     parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
     parser.add_option('--columnar_version', dest='columnar_version', default=0)
+    parser.add_option('--is_dynamic_vms', dest='is_dynamic_vms', default="false")
     parser.add_option('--log_level', dest='log_level', default='INFO',
                       help='Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
 
@@ -528,10 +529,12 @@ def main():
           rerun params.........{}
           Timeout..............{}
           nolaunch.............{}
+          is_dynamic_vms.......{}
           """.format(options.run, options.version, RELEASE_VERSION,
                      options.branch, options.os, options.url,
                      options.cherrypick, options.dashboardReportedParameters,
-                     options.rerun_params, options.TIMEOUT, options.noLaunch))
+                     options.rerun_params, options.TIMEOUT, options.noLaunch,
+                     options.is_dynamic_vms))
 
     if options.TEST_SUITE_DB:
         TEST_SUITE_DB = options.TEST_SUITE_DB
@@ -696,10 +699,11 @@ def main():
     # this are VM/Docker dependent - or maybe not
     launchString = '/buildWithParameters?token=test_dispatcher&' + \
                    'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                   'iniFile={5}&parameters={6}&os={7}&initNodes={' \
-                   '8}&installParameters={9}&branch={10}&slave={' \
-                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
-                   'columnar_version_number={16}&mixed_build_config={17}'
+                   'iniFile={5}&parameters={6}&os={7}&initNodes={8}&' \
+                   'installParameters={9}&branch={10}&slave={11}&' \
+                   'owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
+                   'columnar_version_number={16}&mixed_build_config={17}&' \
+                   'is_dynamic_vms={18}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
@@ -771,7 +775,8 @@ def main():
                                           urllib.parse.quote(testsToLaunch[i]['mailing_list']),
                                           testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'],
                                           options.columnar_version,
-                                          testsToLaunch[i]['mixed_build_config'])
+                                          testsToLaunch[i]['mixed_build_config'],
+                                          options.is_dynamic_vms)
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": currentExecutorParams})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
@@ -1016,7 +1021,8 @@ def main():
                                           testsToLaunch[i]['mode'],
                                           testsToLaunch[i]['timeLimit'],
                                           options.columnar_version,
-                                          testsToLaunch[i]['mixed_build_config'])
+                                          testsToLaunch[i]['mixed_build_config'],
+                                          options.is_dynamic_vms)
                 url = url + '&dispatcher_params=' + \
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})

@@ -488,6 +488,7 @@ def main():
     parser.add_option('--capella_token', dest='capella_token', default=None)
     parser.add_option('--sleep_between_trigger', dest='sleep_between_trigger', default=0)
     parser.add_option('--columnar_version', dest='columnar_version', default=0)
+    parser.add_option('--is_dynamic_vms', dest='is_dynamic_vms', default="false")
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -517,6 +518,7 @@ def main():
     print(('rerun params are', options.rerun_params))
     print(('Server Manager is ', options.SERVER_MANAGER))
     print(('Timeout is ', options.TIMEOUT))
+    print(('is_dynamic_vms is ', options.is_dynamic_vms))
 
     if options.SERVER_MANAGER:
         SERVER_MANAGER=options.SERVER_MANAGER
@@ -646,11 +648,13 @@ def main():
 
     # this are VM/Docker dependent - or maybe not
     launchString = '/buildWithParameters?token=test_dispatcher&' + \
-                   'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                   'iniFile={5}&parameters={6}&os={7}&initNodes={' \
-                   '8}&installParameters={9}&branch={10}&slave={' \
-                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
-                   'columnar_version_number={16}&mixed_build_config={17}'
+                   'version_number={0}&confFile={1}&descriptor={2}&' \
+                   'component={3}&subcomponent={4}&' \
+                   'iniFile={5}&parameters={6}&os={7}&initNodes={8}&' \
+                   'installParameters={9}&branch={10}&slave={11}&' \
+                   'owners={12}&mailing_list={13}&mode={14}&timeout={15}&' \
+                   'columnar_version_number={16}&mixed_build_config={17}&' \
+                   'is_dynamic_vms={18}'
     if options.rerun_params:
         rerun_params = options.rerun_params.strip('\'')
         launchString = launchString + '&' + urllib.parse.urlencode({
@@ -721,7 +725,8 @@ def main():
                                           urllib.parse.quote(testsToLaunch[i]['mailing_list']),
                                           testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'],
                                           options.columnar_version,
-                                          testsToLaunch[i]['mixed_build_config'])
+                                          testsToLaunch[i]['mixed_build_config'],
+                                          options.is_dynamic_vms)
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": currentExecutorParams})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
@@ -953,7 +958,8 @@ def main():
                                             testsToLaunch[i]['mode'],
                                             testsToLaunch[i]['timeLimit'],
                                             options.columnar_version,
-                                            testsToLaunch[i]['mixed_build_config'])
+                                            testsToLaunch[i]['mixed_build_config'],
+                                            options.is_dynamic_vms)
                 url = url + '&dispatcher_params=' + \
                                 urllib.parse.urlencode({"parameters":
                                                 currentExecutorParams})
