@@ -241,9 +241,11 @@ class RbacTestMemcached(BaseTestCase):
             temp_action = action.split("!")
             for users in self.ldap_users:
                     if self.no_bucket_access:
-                        mc, result = TestMemcachedClient().connection(self.master.ip, self.no_access_bucket_name, users[0], users[1])
+                        mc, result = TestMemcachedClient().connection(self.master.ip, self.no_access_bucket_name, users[0], users[1],
+                                                                      vbucket_count=self.vbuckets)
                     else:
-                        mc, result = TestMemcachedClient().connection(self.master.ip, self.bucket_name, users[0], users[1])
+                        mc, result = TestMemcachedClient().connection(self.master.ip, self.bucket_name, users[0], users[1],
+                                                                      vbucket_count=self.vbuckets)
                         sdk_conn, result = TestSDK().connection(self.master.ip, self.bucket_name, users[0], users[1])
                     time.sleep(10)
                     if (result):
@@ -251,13 +253,16 @@ class RbacTestMemcached(BaseTestCase):
                         if temp_action[0] == 'write':
                             result_action = TestMemcachedClient().write_data(mc)
                         elif temp_action[0] == 'read':
-                            result_action = TestMemcachedClient().read_data(self.master.ip, mc, self.bucket_name)
+                            result_action = TestMemcachedClient().read_data(self.master.ip, mc, self.bucket_name,
+                                                                            vbucket_count=self.vbuckets)
                         elif temp_action[0] == 'statsRead':
                             result_action = TestMemcachedClient().read_stats(mc)
                         elif temp_action[0] == 'ReadMeta':
-                            result_action = TestMemcachedClient().get_meta(self.master.ip, mc, self.bucket_name)
+                            result_action = TestMemcachedClient().get_meta(self.master.ip, mc, self.bucket_name,
+                                                                            vbucket_count=self.vbuckets)
                         elif temp_action[0] == 'WriteMeta':
-                            result_action = TestMemcachedClient().set_meta(self.master.ip, mc, self.bucket_name)
+                            result_action = TestMemcachedClient().set_meta(self.master.ip, mc, self.bucket_name,
+                                                                            vbucket_count=self.vbuckets)
                         elif temp_action[0] == 'WriteXattr':
                             if self.no_bucket_access:
                                 self.log.info ("No access to bucket via SDK")

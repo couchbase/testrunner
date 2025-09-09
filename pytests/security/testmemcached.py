@@ -9,12 +9,13 @@ from couchbase.bucket import Bucket
 
 class TestMemcachedClient():
 
-    def connection(self, client_ip, bucket_name, user, password, port=11210):
+    def connection(self, client_ip, bucket_name, user, password, port=11210, vbucket_count=1024):
         log.info(
             "Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user,
                                                                                                     password))
         try:
             mc = MemcachedClient(host=client_ip, port=port)
+            mc.vbucket_count = vbucket_count
             mc.sasl_auth_plain(user, password)
             mc.bucket_select(bucket_name)
             return mc, True
@@ -34,9 +35,10 @@ class TestMemcachedClient():
             log.info("Exception is from write_data function {0}".format(e))
             return False
 
-    def read_data(self, client_ip, mc, bucket_name):
+    def read_data(self, client_ip, mc, bucket_name, vbucket_count=1024):
         try:
-            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password')
+            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password',
+                                              vbucket_count=vbucket_count)
             self.write_data(mc_temp)
             test = mc.get("test--0")
             return True
@@ -52,9 +54,10 @@ class TestMemcachedClient():
             log.info("Exception is {0}".format(e))
             return False
 
-    def get_meta(self, client_ip, mc, bucket_name):
+    def get_meta(self, client_ip, mc, bucket_name, vbucket_count=1024):
         try:
-            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password')
+            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password',
+                                              vbucket_count=vbucket_count)
             self.write_data(mc_temp)
             test = mc.getMeta("test--0")
             return True
@@ -62,9 +65,10 @@ class TestMemcachedClient():
             log.info("Exception is from get_meata function {0}".format(e))
             return False
 
-    def set_meta(self, client_ip, mc, bucket_name):
+    def set_meta(self, client_ip, mc, bucket_name, vbucket_count=1024):
         try:
-            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password')
+            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password',
+                                              vbucket_count=vbucket_count)
             self.write_data(mc_temp)
             rc = mc_temp.getMeta("test--0")
             cas = rc[4] + 1
