@@ -2540,6 +2540,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         rest = RestConnection(indexer_nodes[0])
         index_status = rest.get_indexer_metadata()
+        if 'status' not in index_status:
+            return index_name_list
         for index_info in index_status['status']:
             index_name_list.append(index_info['name'])
         return index_name_list
@@ -3660,8 +3662,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         """
         self.log.info("Dropping all indexes...")
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
-        query = "SELECT bucket_id, scope_id, keyspace_id, name FROM system:indexes WHERE `using`='gsi'"
+        query = "SELECT bucket_id, scope_id, keyspace_id, name FROM system:all_indexes WHERE `using`='gsi'"
         result = self.n1ql_helper.run_cbq_query(query=query, server=query_node)
+        self.log.info(f"Result for drop_all_indexes: {result}")
         for index in result['results']:
             try:
                 if 'bucket_id' not in index:
@@ -3673,8 +3676,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                     collection = index.get('keyspace_id', '_default')
                     scope = index.get('scope_id', '_default')
                 index_name = index['name']
-                if bucket == '_system':
-                    continue
                 drop_query = f"DROP INDEX `{index_name}` ON default:`{bucket}`.`{scope}`.`{collection}`"
                 self.log.info(f"Executing: {drop_query}")
                 self.n1ql_helper.run_cbq_query(query=drop_query, server=query_node)

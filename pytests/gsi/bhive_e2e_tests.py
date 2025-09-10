@@ -529,6 +529,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         for index_node in index_nodes:
             remote_client = RemoteMachineShellConnection(index_node)
             remote_client.terminate_process(process_name='indexer')
+        
+        self.log.info("Sleeping for 60seconds after indexer process has been killed in all the index nodes.")
+        self.sleep(60)
         # Polling for api/v1/bucket/test_bucket/backup
         bucket = "test_bucket_0"
         for index_node in index_nodes:

@@ -3601,7 +3601,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
             for c_item in collections:
                 self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
-                num_docs = self.num_of_docs_per_collection
+                num_docs = 200
                 self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
                                                 percent_update=0, percent_delete=0, scope=s_item,
                                                 collection=c_item, json_template=self.json_template,
