@@ -307,7 +307,7 @@ class QueryExpirationTests(QueryTests):
             if item['id'] in doc_ids_for_new_insertion:
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
         self.run_cbq_query('select * from {0}'.format(query_default_bucket))
-        self.sleep(1)
+        self.sleep(10)
         new_num_docs = self.get_item_count(self.master, bucket)
         self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
                          "Some of newly inserted docs are missing")
@@ -558,7 +558,7 @@ class QueryExpirationTests(QueryTests):
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
 
         self.run_cbq_query('select * from {0}'.format(query_default_bucket))
-        self.sleep(1)
+        self.sleep(10)
         new_num_docs = self.get_item_count(self.master, bucket)
         self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
                          "Some of newly inserted docs are missing")
