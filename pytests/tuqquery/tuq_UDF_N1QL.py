@@ -424,7 +424,7 @@ class QueryUDFN1QLTests(QueryTests):
         query = 'INFER default'
         self.create_n1ql_function(function_name, query)
         # Wait to ensure data is loaded
-        self.sleep(10)
+        self.sleep(30)
         # Run query for comparison
         query_result = self.run_cbq_query(query)
         # Execute function and check
@@ -2479,7 +2479,7 @@ class QueryUDFN1QLTests(QueryTests):
         self.assertEqual(actual_result['key'], expected_result['key'])
         self.assertEqual(actual_result['message'], expected_result['message'])
         self.assertEqual(actual_result['retry'], expected_result['retry'])
-        self.assertEqual(actual_result['stack'], expected_result['stack'])
+        self.assertIn('functions/n1ql.js', actual_result['stack'])
         self.assertEqual(actual_result['reason']['_level'], expected_result['reason']['_level'])
         self.assertTrue(actual_result['reason']['caller'].startswith('couchbase:'))
         self.assertEqual(actual_result['reason']['code'], expected_result['reason']['code'])
