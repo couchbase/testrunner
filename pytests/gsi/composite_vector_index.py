@@ -880,7 +880,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[], services=['kv'])
             elif self.rebalance_type == 'rebalance_swap':
-                add_nodes = [self.servers[3]]
+                add_nodes = [self.servers[4]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[data_nodes[0]], services=['kv'])
             elif self.rebalance_type == 'rebalance_out':
