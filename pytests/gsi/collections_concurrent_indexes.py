@@ -1138,6 +1138,7 @@ class ConcurrentIndexes(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online(timeout=900)
         index_info = self.rest.get_indexer_metadata()['status']
         self.assertEqual(len(index_info), self.num_of_indexes)
+        self.log.info(f"Index info: {index_info}")
         for index in index_info:
             self.assertEqual(index['status'], 'Ready')
             self.assertEqual(index['completion'], 100)
