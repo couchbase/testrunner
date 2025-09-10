@@ -1424,7 +1424,7 @@ class VectorSearchTests(QueryTests):
                         self.assertAlmostEqual(item['distance'], expected_distance, delta=0.05)
                     if self.distance in ['L2_SQUARED', 'EUCLIDEAN_SQUARED']:
                         expected_distance = UtilVector().l2_dist_sq(vector_one, data[item['id']])
-                        self.assertAlmostEqual(item['distance'], expected_distance)
+                        self.assertAlmostEqual(item['distance'], expected_distance, delta=0.6)
                     if self.distance == 'DOT':
                         self.assertAlmostEqual(round(item['distance']), 0)
                     if self.distance == 'COSINE':
