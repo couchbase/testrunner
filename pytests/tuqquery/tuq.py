@@ -2908,7 +2908,7 @@ class QueryTests(BaseTestCase):
         if role == "admin":
             self.assertTrue(res['status'] == 'success')
         elif role == "ro_admin":
-            self.assertTrue(res['status'] == 'success')
+            self.assertTrue(str(res).find("'code': 13014") != -1)
         elif role == "cluster_admin" or role == "bucket_admin(default)":
             self.assertTrue(str(res).find("'code': 13014") != -1)
 
