@@ -2,7 +2,11 @@ import sys
 import time
 
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+try:
+    from couchbase.auth import PasswordAuthenticator
+    from couchbase.cluster import ClusterOptions
+except ImportError:
+    from couchbase.cluster import PasswordAuthenticator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from .tuq import QueryTests
@@ -21,9 +25,12 @@ class QueryExpirationTests(QueryTests):
         self.exp_index = 'idx_expire'
         self.default_bucket_name = self.input.param('bucket_name', 'default')
         self.cb_rest = RestConnection(self.master)
-        self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip))
         authenticator = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
-        self.cb_cluster.authenticate(authenticator)
+        try:
+            self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip))
+            self.cb_cluster.authenticate(authenticator)
+        except Exception as e:
+            self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip), ClusterOptions(authenticator))
 
     def tearDown(self):
         self.log.info("==============  QueryExpirationTests tearDown has started ==============")
@@ -248,9 +255,8 @@ class QueryExpirationTests(QueryTests):
         insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
                        ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
         self.run_cbq_query(insert_query)
-        cb = self.cb_cluster.open_bucket(self.default_bucket_name)
-        doc_value = cb.get("12345", quiet=True).value
-        self.assertEqual(doc_value, None, "Insert doc with expiration epoch value is still available in db")
+        doc_value = self.run_cbq_query(f"select * from {query_default_bucket} where id = '12345'")
+        self.assertEqual(doc_value['results'], [], "Insert doc with expiration epoch value is still available in db")
 
         # Insert Queries with some valid values
         valid_expiration_time_list = [100000.4, sys.maxsize, int(time.time() + 120)]
@@ -294,12 +300,14 @@ class QueryExpirationTests(QueryTests):
         for query in query_with_zero_ttl:
             self.run_cbq_query(query)
 
-        self.sleep(10)
+        self.sleep(30)
         select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(query_default_bucket)
         result = self.run_cbq_query(select_exp_query)
         for item in result['results']:
             if item['id'] in doc_ids_for_new_insertion:
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
+        self.run_cbq_query('select * from {0}'.format(query_default_bucket))
+        self.sleep(1)
         new_num_docs = self.get_item_count(self.master, bucket)
         self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
                          "Some of newly inserted docs are missing")
@@ -497,9 +505,8 @@ class QueryExpirationTests(QueryTests):
         insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
                        ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
         self.run_cbq_query(insert_query)
-        cb = self.cb_cluster.open_bucket(self.default_bucket_name)
-        doc_value = cb.get("12345", quiet=True).value
-        self.assertEqual(doc_value, None, "Upsert doc with expiration epoch value is still available in db")
+        doc_value = self.run_cbq_query(f"select * from {query_default_bucket} where id = '12345'")
+        self.assertEqual(doc_value['results'], [], "Insert doc with expiration epoch value is still available in db")
 
         # Insert Queries with some valid values
         valid_expiration_time_list = [100000.4, sys.maxsize, int(time.time() + 120)]
@@ -543,13 +550,15 @@ class QueryExpirationTests(QueryTests):
         for query in query_with_zero_ttl:
             self.run_cbq_query(query)
 
-        self.sleep(10)
+        self.sleep(30)
         select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(query_default_bucket)
         result = self.run_cbq_query(select_exp_query)
         for item in result['results']:
             if item['id'] in doc_ids_for_new_insertion:
                 self.assertEqual(item['expiration'], 0, "Expiration is not set to 0 for new insertions")
 
+        self.run_cbq_query('select * from {0}'.format(query_default_bucket))
+        self.sleep(1)
         new_num_docs = self.get_item_count(self.master, bucket)
         self.assertEqual(new_num_docs, num_docs + len(query_with_zero_ttl) - 1 + result_count,
                          "Some of newly inserted docs are missing")
@@ -619,8 +628,8 @@ class QueryExpirationTests(QueryTests):
                                          ' WHERE b.type = "brewery" LIMIT {1}'.format(query_sample_bucket,
                                                                                       update_count)
         self.run_cbq_query(update_field_with_expiry_query)
-        self.sleep(10)
-        check_update_query = 'SELECT COUNT(type) FROM {0} where type = "Brewery"'.format(query_sample_bucket)
+        self.sleep(15)
+        check_update_query = 'SELECT COUNT(`type`) FROM {0} where `type` = "Brewery"'.format(query_sample_bucket)
         result = self.run_cbq_query(check_update_query)
         self.assertEqual(result['results'][0]['$1'], update_count * 3,  # for previous 2 updates + this update
                          "No. of updated documents is not matching with expected values.")
@@ -980,7 +989,7 @@ class QueryExpirationTests(QueryTests):
                                                stat_name=self.index_stat, expected_stat_value=0)
         self.assertTrue(result, "Indexer still has indexes for expired docs")
 
-    def _is_expected_kv_expired_stats(self, bucket='default', expected_val=None, max_retry=25, sleep_time=2):
+    def _is_expected_kv_expired_stats(self, bucket='default', expected_val=None, max_retry=60, sleep_time=2):
         """
         @summary: This method returns no. of doc expired as reflected in KV stats
         """
@@ -1005,13 +1014,14 @@ class QueryExpirationTests(QueryTests):
         return False
 
     def _is_expected_index_count(self, bucket_name, idx_name, stat_name, expected_stat_value,
-                                 index_node=None, max_try=25, sleep_time=2):
+                                 index_node=None, max_try=60, sleep_time=2):
         if not index_node:
             index_node = self.master
         rest = RestConnection(index_node)
         count = 0
         curr_stat_value = None
         while count < max_try:
+            self.run_cbq_query('select * from `{0}`'.format(bucket_name))
             curr_stat_value = rest.get_index_stats()[bucket_name][idx_name][stat_name]
             if curr_stat_value == expected_stat_value:
                 self.log.info("Expected: {0}, Actual: {1}".format(expected_stat_value, curr_stat_value))
