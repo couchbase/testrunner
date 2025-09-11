@@ -8885,3 +8885,87 @@ class QueriesIndexTests(QueryTests):
         
         # Clean up
         self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
+
+    def test_MB68458(self):
+        """
+        Test MB-68458: Cardinality estimation for array index with DISTINCT ARRAY.
+        """
+        self.fail_if_no_buckets()
+        query_context = "default._default"
+        collection_name = "mb68458col"
+        bucket_name = "default"
+
+        # Create a dedicated collection for this test
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name}", query_context=query_context)
+        self.sleep(3)
+
+        try:
+            # Insert 10,000 documents into the collection using UPSERT ... SELECT ... FROM ARRAY_RANGE
+            upsert_query = f"""
+            UPSERT INTO {collection_name} (KEY doc.k, VALUE doc)
+            SELECT {{"k":"k"||TO_STR(d), "a1": [
+                {{"name":"ac1", "val":"p123"}},
+                {{"name":"ac2", "val":"q123"}},
+                {{"name":"ac3", "val":"r123"}}
+            ]}} AS doc
+            FROM ARRAY_RANGE(0,10000) AS d;
+            """
+            self.run_cbq_query(upsert_query, query_context=query_context)
+
+            # Create the array index
+            create_index_query = f"CREATE INDEX ix1 ON {collection_name}(DISTINCT ARRAY [v.name,v.val] FOR v IN a1 END)"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.wait_for_all_indexes_online()
+
+            # Wait for stats to be updated
+            self.sleep(8)
+
+            # EXPLAIN the query
+            explain_query = f"""
+            EXPLAIN SELECT d.*
+            FROM {collection_name} AS d
+            WHERE ANY v IN a1 SATISFIES [v.name,v.val] = ["ac0", "123"] END
+            """
+            explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+            self.log.info(f"EXPLAIN result: {explain_result}")
+
+            # Extract the plan
+            plan = explain_result['results'][0]['plan']
+
+            # Check optimizer_estimates under the first child of plan['~children']
+            first_child = plan['~children'][0]
+            opt_est = first_child.get('optimizer_estimates', None)
+            self.assertIsNotNone(opt_est, "No optimizer_estimates found under first child of plan['~children']")
+            card = opt_est.get('cardinality', None)
+            self.assertIsNotNone(card, "No cardinality found in optimizer_estimates under first child")
+            self.log.info(f"First child optimizer_estimates.cardinality: {card}")
+            self.assertLess(card, 1e-10, f"Expected cardinality to be close to 0, got {card}")
+
+            # Find IndexScan3 operator and check its cardinality
+            def find_indexscan3(node):
+                if isinstance(node, dict):
+                    if node.get('#operator', '') == 'IndexScan3':
+                        return node
+                    for v in node.values():
+                        result = find_indexscan3(v)
+                        if result:
+                            return result
+                elif isinstance(node, list):
+                    for item in node:
+                        result = find_indexscan3(item)
+                        if result:
+                            return result
+                return None
+
+            indexscan3 = find_indexscan3(plan)
+            self.assertIsNotNone(indexscan3, "IndexScan3 operator not found in plan")
+            scan_card = None
+            if 'optimizer_estimates' in indexscan3:
+                scan_card = indexscan3['optimizer_estimates'].get('cardinality', None)
+            self.assertIsNotNone(scan_card, "No optimizer_estimates.cardinality found in IndexScan3")
+            self.log.info(f"IndexScan3 cardinality: {scan_card}")
+            self.assertLess(scan_card, 1e-10, f"Expected IndexScan3 cardinality to be close to 0, got {scan_card}")
+
+        finally:
+            # Clean up: drop the collection (which drops all indexes on it)
+            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
