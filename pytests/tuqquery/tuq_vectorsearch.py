@@ -71,6 +71,13 @@ class VectorSearchTests(QueryTests):
             # add nested data into the data
             self.run_cbq_query('UPDATE default SET nested = {"a": 1, "b": [1,2,3]} limit 20000')
             self.run_cbq_query('UPDATE default SET nested = {"a": 2, "b": [3,2,1]} WHERE nested IS MISSING limit 10000')
+            # add in more variance for composite fields 
+            self.run_cbq_query('UPDATE default SET size = 6 limit 5000')
+            self.run_cbq_query('UPDATE default SET brand = "reebok" limit 5000')
+            self.run_cbq_query('UPDATE default SET size = 7 where size != 6 limit 5000')
+            self.run_cbq_query('UPDATE default SET brand = "puma" where brand != "reebok" limit 5000')
+            self.run_cbq_query('UPDATE default SET size = 10 limit 5000')
+            self.run_cbq_query('UPDATE default SET brand = "asics" where brand != "puma" and brand != "reebok" limit 5000')
         self.log.info("Completed loading vector data")
 
     def tearDown(self):
@@ -736,7 +743,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             ann_results = self.run_cbq_query(ann_query)
             knn_results = self.run_cbq_query(knn_query)
@@ -762,7 +769,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -781,8 +788,8 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",custom_name="non_pushdown",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",custom_name="non_pushdown",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -820,7 +827,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -837,6 +844,7 @@ class VectorSearchTests(QueryTests):
                 else:
                     #check that spans have the same high and low values
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
+            
             self.check_results_against_knn(knn_query, ann_query)
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
@@ -850,7 +858,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -880,7 +888,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -910,7 +918,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR,price)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -937,7 +945,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR,price)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -964,7 +972,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR,price)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -991,7 +999,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -1023,7 +1031,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -1055,7 +1063,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -1087,7 +1095,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR,price)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
@@ -1114,7 +1122,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # We don't expect pushdown to occur without limit
             self.assertTrue("cover (approx_vector_distance(" in str(explain_plan), f'We expect the indexer to provide an approximate distance, please check plan {explain_plan}')
@@ -1132,7 +1140,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # We don't expect pushdown to occur without limit
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
@@ -1157,7 +1165,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # We don't expect pushdown to occur without limit
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
@@ -1182,7 +1190,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             # We don't expect pushdown to occur without limit
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
@@ -1207,7 +1215,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
             # check the spans
@@ -1233,7 +1241,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
             # check the spans
@@ -1259,7 +1267,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
-            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='tail',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue('Order' in str(explain_plan), f'We expect order operator, please check plan {explain_plan}')
             # check the spans
@@ -1285,7 +1293,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR,price)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="size,brand,vec VECTOR,price",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue('Order' in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
             # check the spans
@@ -1309,7 +1317,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (vec VECTOR, size, brand)
-            IndexVector().create_index(self.database,index_order='lead',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition)
+            IndexVector().create_index(self.database,index_order='lead',similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             self.assertTrue('Order' in str(explain_plan), f'We expect an Order operator, please check plan {explain_plan}')
             self.assertTrue('index_order' not in str(explain_plan), f'We expect order not to be pushed to the indexer, please check plan {explain_plan}')
@@ -1484,7 +1492,7 @@ class VectorSearchTests(QueryTests):
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR")
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",nprobes=self.nprobes)
             ann_results = self.run_cbq_query(ann_query)
             self.fail("We expected an error message")
         except Exception as e:
