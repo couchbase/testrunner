@@ -1,5 +1,4 @@
 """bhive_vector_index.py: "This class test BHIVE Vector indexes for GSI"
-
 __author__ = "Dananjay S"
 __maintainer = "Dananjay S"
 __email__ = "dananjay.s@couchbase.com"

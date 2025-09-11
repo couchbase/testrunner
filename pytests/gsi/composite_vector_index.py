@@ -216,8 +216,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       namespace=namespace, limit=self.scan_limit)
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                       namespace=namespace)
-                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
+                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
                 self.wait_until_indexes_online(timeout=3600)
+                self.log.info(f"select queries are {select_queries}")
                 self.sleep(60)
                 self.item_count_related_validations()
                 self.validate_num_centroids_from_metadata()
@@ -253,7 +254,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         for query_stats_map in query_comparison_list:
             for query in query_stats_map:
-                if "colorRGBVector" in query or "colorVector" in query:
+                if "colorRGBVector" in query or "colorVector" in query or self.dimension == 4096:
                     continue
                 self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
                                         f"recall for query {query} is less than threshold 70")

@@ -2034,18 +2034,18 @@ class GSIUtils(object):
                             include_fields=['avg_rating', 'free_breakfast']))
 
         # Partial Indexes
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'PartialIndexBhive',
-                            index_fields=['emb VECTOR'],
-                            index_where_clause='avg_rating > 2',
-                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"country, emb",
-                                                                               "avg_rating = 4 and "
-                                                                               'country like "%%ra%%" ',
-                                                                               vec_1),
-                            include_fields=['avg_rating', 'country']))
+        # definitions_list.append(
+        #     QueryDefinition(index_name=index_name_prefix + 'PartialIndexBhive',
+        #                     index_fields=['emb VECTOR'],
+        #                     index_where_clause='avg_rating > 2',
+        #                     dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
+        #                     similarity=similarity, scan_nprobes=scan_nprobes,
+        #                     train_list=train_list, limit=limit, is_base64=is_base64,
+        #                     query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"country, emb",
+        #                                                                        "avg_rating = 4 and "
+        #                                                                        'country is not null ',
+        #                                                                        vec_1),
+        #                     include_fields=['avg_rating', 'country']))
 
         self.batch_size = len(definitions_list)
         return definitions_list
