@@ -30,6 +30,7 @@ class VectorSearchTests(QueryTests):
         self.prepare_before = self.input.param("prepare_before", False)
         self.use_partition = self.input.param("use_partition", False)
         self.use_bhive = self.input.param("use_bhive", False)
+        self.rerank = self.input.param("rerank", False)
         self.train = self.input.param("train", 10000)
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
@@ -737,20 +738,23 @@ class VectorSearchTests(QueryTests):
     
     def test_early_filter_vector_only(self):
         query_num = 72
-        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}", {self.nprobes}, {self.rerank}) LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
         # Create vector index based on conf file
         try:
             # Index is on (vec VECTOR)
-            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive,custom_index_fields="vec VECTOR",use_partition=self.use_partition,nprobes=self.nprobes)
+            IndexVector().create_index(self.database,similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, custom_index_fields="vec VECTOR",use_partition=self.use_partition,nprobes=self.nprobes)
             explain_plan = self.run_cbq_query(explain_query)
             ann_results = self.run_cbq_query(ann_query)
             knn_results = self.run_cbq_query(knn_query)
+            if self.rerank:
+                self.assertTrue('index_keys' not in str(explain_plan), f'We expect early order to take place, please check plan {explain_plan}')
             # Index is not covering and thus we have an opportunity for an early order, index_keys indicates early order is happening
-            self.assertTrue('index_keys' in str(explain_plan), f'We expect early order to take place, please check plan {explain_plan}')
-            # Order operator should happen before the fetch operator
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][1]['#operator'] == 'Order', f'We expect order to take place before fetch, please check plan {explain_plan}')
+            else:
+                self.assertTrue('index_keys' in str(explain_plan), f'We expect early order to take place, please check plan {explain_plan}')
+                # Order operator should happen before the fetch operator
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][1]['#operator'] == 'Order', f'We expect order to take place before fetch, please check plan {explain_plan}')
             recall, accuracy = UtilVector().compare_result(knn_results['results'], ann_results['results'])
             self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             if recall < self.recall_ann:
@@ -758,7 +762,7 @@ class VectorSearchTests(QueryTests):
                 self.log.warn(f"Actual: {ann_results['results']}")
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
         finally:
-            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive,custom_fields=True)
+            IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive, custom_fields=True)
     
     '''Vector only has some unique expectations when it comes to the range spans'''
     def test_limit_pushdown_vector_only(self):
@@ -922,7 +926,10 @@ class VectorSearchTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 2}], f"We expect the ordering to be on the vector, please check explain plan {explain_plan}")
+            if self.use_bhive:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 0}], f"We expect the ordering to be on the vector, please check explain plan {explain_plan}")
+            else:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 2}], f"We expect the ordering to be on the vector, please check explain plan {explain_plan}")
             self.assertTrue('Order' not in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
             # check the spans
             for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
@@ -949,7 +956,10 @@ class VectorSearchTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'desc': True, 'keypos': 3}, {'keypos': 2}], f"We expect the ordering to be on price desc, and the vector, please check explain plan {explain_plan}")
+            if self.use_bhive:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'desc': True, 'keypos': 3}, {'keypos': 0}], f"We expect the ordering to be on price desc, and the vector, please check explain plan {explain_plan}")
+            else:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'desc': True, 'keypos': 3}, {'keypos': 2}], f"We expect the ordering to be on price desc, and the vector, please check explain plan {explain_plan}")
             self.assertTrue('Order' not in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
             # check the spans
             for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
@@ -976,7 +986,10 @@ class VectorSearchTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'desc': True, 'keypos': 3}, {'keypos': 2},{'keypos': 1}], f"We expect the ordering to be on price desc, the vector, and brand please check explain plan {explain_plan}")
+            if self.use_bhive:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'desc': True, 'keypos': 3}, {'keypos': 0}, {'keypos': 2}], f"We expect the ordering to be on price desc, the vector, and brand please check explain plan {explain_plan}")
+            else:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'desc': True, 'keypos': 3}, {'keypos': 2},{'keypos': 1}], f"We expect the ordering to be on price desc, the vector, and brand please check explain plan {explain_plan}")
             self.assertTrue('Order' not in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
             # check the spans
             for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
@@ -1209,9 +1222,9 @@ class VectorSearchTests(QueryTests):
     '''Query contains a range span and orderby on vector'''
     def test_no_limit_leading_range_scalar(self):
         query_num = 72
-        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
-        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
@@ -1235,9 +1248,9 @@ class VectorSearchTests(QueryTests):
     '''Query contains a range span and orderby on scalar and vector'''
     def test_no_limit_leading_range_scalar_orderby_scalar_vector(self):
         query_num = 72
-        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
-        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)
@@ -1261,9 +1274,9 @@ class VectorSearchTests(QueryTests):
         '''Query contains a range span and orderby on vector'''
     def test_no_limit_leading_multiple_range_scalar_orderby_scalar_vector(self):
         query_num = 72
-        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
-        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR)

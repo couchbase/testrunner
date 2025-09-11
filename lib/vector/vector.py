@@ -256,7 +256,7 @@ class IndexVector(object):
             if custom_name:
                 index_query = f'DROP INDEX {custom_name} IF EXISTS ON {collection}'
             else:
-                index_query = f'DROP INDEX vector_index_{similarity}_custom IF EXISTS ON {collection}'
+                index_query = f'DROP INDEX vector_bhive_index_{similarity}_custom IF EXISTS ON {collection}'
         print(index_query)
         result = cb_scope.query(index_query, metrics=True, timeout=timedelta(seconds=300))
         for row in result:
