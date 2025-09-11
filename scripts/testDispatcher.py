@@ -167,6 +167,9 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
         return json.loads(content2), None
     else:
         return json.loads(content1), None
+    if os_version and "windows" in os_version.lower():
+        print("Sleeping for 5 minutes for windows vm launch completion")
+        time.sleep(300)
 
 
 def check_servers_via_ssh(servers=[], test=None):
