@@ -3676,8 +3676,6 @@ class BaseSecondaryIndexingTests(QueryTests):
             except Exception as e:
                 self.log.error(f"Error dropping index {index_name}: {str(e)}")
         self.log.info("Finished dropping indexes")
-        index_names = self.get_all_indexes_in_the_cluster()
-        self.log.info(f"Current indexes: {index_names}")
 
     def validate_replica_indexes_item_counts(self):
         """
