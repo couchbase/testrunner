@@ -1112,7 +1112,10 @@ class VectorSearchTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query)
             # To know pushdown happens we need to see index_order and that the spans have the same high and low values, and Order is not an operator in the plan
             self.assertTrue('index_order' in str(explain_plan), f'We expect order to be pushed to the indexer, please check plan {explain_plan}')
-            self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 1}, {'keypos': 0}, {'keypos': 2}], f"We expect the ordering to be on brand, size, and vector, please check explain plan {explain_plan}")
+            if self.use_bhive:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 2}, {'keypos': 1}, {'keypos': 0}], f"We expect the ordering to be on brand, size, and vector, please check explain plan {explain_plan}")
+            else:
+                self.assertTrue(explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['index_order'] == [{'keypos': 1}, {'keypos': 0}, {'keypos': 2}], f"We expect the ordering to be on brand, size, and vector, please check explain plan {explain_plan}")
             self.assertTrue('Order' not in str(explain_plan), f'We only expect an Order operator with rerank, please check plan {explain_plan}')
             # check the spans
             for fields in explain_plan['results'][0]['plan']['~children'][0]['~children'][0]['spans'][0]['range']:
@@ -1352,8 +1355,6 @@ class VectorSearchTests(QueryTests):
         recall, accuracy = UtilVector().compare_result(knn_results['results'], ann_results['results'])
         self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
         if recall < self.recall_ann:
-            self.log.warn(f"Expected: {knn_results['results']}")
-            self.log.warn(f"Actual: {ann_results['results']}")
             self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
 
     def test_use_seqscan(self):
