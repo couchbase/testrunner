@@ -178,6 +178,12 @@ class x509tests(BaseTestCase):
         else:
             return False
 
+    def _extract_certs(self, raw_content):
+        certs = ""
+        for ca_dict in raw_content:
+            certs += ca_dict["pem"]
+        return certs
+
     def _sdk_connection(self, root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE, bucket='default', host_ip=None):
         self.sleep(10)
         result = False
@@ -664,7 +670,8 @@ class x509tests(BaseTestCase):
         result = self._sdk_connection(host_ip=self.master.ip)
         self.assertTrue(result, "Cannot create a security connection with server")
         rest.regenerate_cluster_certificate()
-        temp_cert = rest.get_cluster_ceritificate()
+        raw_content = rest.get_trusted_CAs()
+        temp_cert = self._extract_certs(raw_content)
         temp_file = open(temp_file_name, 'w')
         temp_file.write(temp_cert)
         temp_file.close()
@@ -931,12 +938,12 @@ class x509tests(BaseTestCase):
                                                         client_cert=False, curl=True, verb='DELETE', plain_curl=True)
         self.assertEqual(json.loads(output)['status'], "ok", "Issue with deleteing FTS index on 8094")
 
-        ''' - Check with FTS team on this        
+        ''' - Check with FTS team on this
         if self.client_cert_state == 'enable':
             cmd = "curl -v  --cacert " + self.root_ca_path + " --cert-type PEM --cert " + self.client_cert_pem + " --key-type PEM --key " + self.client_cert_key + \
                   "  -H \"Content-Type: application/json\" " + \
                   "https://{0}:{1}/api/index/". \
-                          format(host.ip, fts_ssl_port) 
+                          format(host.ip, fts_ssl_port)
         else:
             cmd = "curl -v --cacert " + self.root_ca_path  + \
                       " -H \"Content-Type: application/json\" " + \
@@ -1068,28 +1075,28 @@ class x509_upgrade(NewUpgradeBaseTest):
         self.prefixs = self.input.param('prefixs', 'www.cb-:us.:www.').split(":")
         self.delimeters = self.input.param('delimeter', '.:.:.') .split(":")
         self.setup_once = self.input.param("setup_once", False)
-        
+
         SSLtype = self.input.param("SSLtype", "openssl")
         encryption_type = self.input.param('encryption_type', "")
         key_length = self.input.param("key_length", 1024)
-        
+
         self.dns = self.input.param('dns', None)
         self.uri = self.input.param('uri', None)
-        
+
         copy_servers = copy.deepcopy(self.servers)
-        
+
         self._reset_original()
-        
+
         if (self.dns is not None) or (self.uri is not None):
             x509main(self.master)._generate_cert(copy_servers, type=SSLtype, encryption=encryption_type, key_length=key_length, client_ip=self.ip_address, alt_names='non_default', dns=self.dns, uri=self.uri)
         else:
             x509main(self.master)._generate_cert(copy_servers, type=SSLtype, encryption=encryption_type, key_length=key_length, client_ip=self.ip_address)
         self.log.info(" Path is {0} - Prefixs - {1} -- Delimeters - {2}".format(self.paths, self.prefixs, self.delimeters))
-        
+
         if (self.setup_once):
             x509main(self.master).setup_master(self.client_cert_state, self.paths, self.prefixs, self.delimeters)
             x509main().setup_cluster_nodes_ssl(self.servers)
-        
+
         enable_audit = self.input.param('audit', None)
         if enable_audit:
             Audit = audit(host=self.master)
@@ -1110,14 +1117,14 @@ class x509_upgrade(NewUpgradeBaseTest):
             rest = RestConnection(servers)
             rest.regenerate_cluster_certificate()
             x509main(servers)._delete_inbox_folder()
-    
+
     def check_rest_api(self, host):
         rest = RestConnection(host)
         helper = RestHelper(rest)
         if not helper.bucket_exists('default'):
             rest.create_bucket(bucket='default', ramQuotaMB=256)
             self.sleep(10)
-            
+
         if self.client_cert_state == 'enable':
             output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers="", client_cert=True, curl=True)
         else:
@@ -1125,23 +1132,23 @@ class x509_upgrade(NewUpgradeBaseTest):
 
         output = json.loads(output)
         self.log.info ("Print output of command is {0}".format(output))
-        self.assertEqual(output['rebalanceStatus'], 'none', " The Web request has failed on port 18091 ")            
-        
+        self.assertEqual(output['rebalanceStatus'], 'none', " The Web request has failed on port 18091 ")
+
         if self.client_cert_state == 'enable':
             output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers=None, client_cert=True, curl=True, verb='POST', data='memoryQuota=400')
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers=' -u Administrator:password ', client_cert=False, curl=True, verb='POST', data='memoryQuota=400')
-        
+
         if output == "":
             self.assertTrue(True, "Issue with post on /pools/default")
-        
+
         output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=8091, headers=" -u Administrator:password ", client_cert=False, curl=True, verb='GET', plain_curl=True)
         self.assertEqual(json.loads(output)['rebalanceStatus'], 'none', " The Web request has failed on port 8091 ")
-        
+
         output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=8091, headers=" -u Administrator:password ", client_cert=True, curl=True, verb='POST', plain_curl=True, data='memoryQuota=400')
         if output == "":
             self.assertTrue(True, "Issue with post on /pools/default")
-    
+
     def _sdk_connection(self, root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE, bucket='default', host_ip=None, sdk_version='pre-vulcan'):
         self.sleep(30)
         result = False
@@ -1221,14 +1228,14 @@ class x509_upgrade(NewUpgradeBaseTest):
         rest_conn.init_cluster(username='Administrator', password='password')
         rest_conn.create_bucket(bucket='default', ramQuotaMB=512)
         self.cluster.rebalance(self.servers, servers_in, [])
-        
+
         x509main(self.master).setup_master()
         x509main().setup_cluster_nodes_ssl(self.servers, reload_cert=True)
 
         upgrade_threads = self._async_update(upgrade_version=self.upgrade_version, servers=self.servers)
         for threads in upgrade_threads:
             threads.join()
-        
+
         for server in self.servers:
             result = self._sdk_connection(host_ip=server.ip)
             self.assertTrue(result, "Cannot create a security connection with server")
