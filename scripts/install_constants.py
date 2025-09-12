@@ -145,13 +145,13 @@ CMDS = {
             "rm /var/cache/apt/archives/lock;"
             "dpkg --configure -a;"
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
-        "pre_install": "kill -9 `lsof -ti:4369`;" + 
-                       "kill -9 `lsof -ti:8091`;" + 
-                       "kill -9 `lsof -ti:21100`;" + 
-                       "kill -9 `lsof -ti:21200`;" + 
-                       "kill -9 `lsof -ti:21300`;" + 
-                       "kill -9 `lsof -ti:21150`;" + 
-                       "kill -9 `lsof -ti:21250`;" + 
+        "pre_install": "kill -9 `lsof -ti:4369`;" +
+                       "kill -9 `lsof -ti:8091`;" +
+                       "kill -9 `lsof -ti:21100`;" +
+                       "kill -9 `lsof -ti:21200`;" +
+                       "kill -9 `lsof -ti:21300`;" +
+                       "kill -9 `lsof -ti:21150`;" +
+                       "kill -9 `lsof -ti:21250`;" +
                        "kill -9 `lsof -ti:21350`;",
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
         "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
@@ -206,13 +206,13 @@ CMDS = {
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
-        "pre_install": "kill -9 `lsof -ti:4369`;" + 
-                       "kill -9 `lsof -ti:8091`;" + 
-                       "kill -9 `lsof -ti:21100`;" + 
-                       "kill -9 `lsof -ti:21200`;" + 
-                       "kill -9 `lsof -ti:21300`;" + 
-                       "kill -9 `lsof -ti:21150`;" + 
-                       "kill -9 `lsof -ti:21250`;" + 
+        "pre_install": "kill -9 `lsof -ti:4369`;" +
+                       "kill -9 `lsof -ti:8091`;" +
+                       "kill -9 `lsof -ti:21100`;" +
+                       "kill -9 `lsof -ti:21200`;" +
+                       "kill -9 `lsof -ti:21300`;" +
+                       "kill -9 `lsof -ti:21150`;" +
+                       "kill -9 `lsof -ti:21250`;" +
                        "kill -9 `lsof -ti:21350`;",
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         "set_vm_swappiness_and_thp":
@@ -327,13 +327,13 @@ NON_ROOT_MANUAL_CMDS = {
             "rm /var/lib/dpkg/info/couchbase-server.*; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;",
-        "pre_install": "kill -9 `lsof -ti:4369`;" + 
-                       "kill -9 `lsof -ti:8091`;" + 
-                       "kill -9 `lsof -ti:21100`;" + 
-                       "kill -9 `lsof -ti:21200`;" + 
-                       "kill -9 `lsof -ti:21300`;" + 
-                       "kill -9 `lsof -ti:21150`;" + 
-                       "kill -9 `lsof -ti:21250`;" + 
+        "pre_install": "kill -9 `lsof -ti:4369`;" +
+                       "kill -9 `lsof -ti:8091`;" +
+                       "kill -9 `lsof -ti:21100`;" +
+                       "kill -9 `lsof -ti:21200`;" +
+                       "kill -9 `lsof -ti:21300`;" +
+                       "kill -9 `lsof -ti:21150`;" +
+                       "kill -9 `lsof -ti:21250`;" +
                        "kill -9 `lsof -ti:21350`;",
         "install":
             "dpkg-deb -x buildpath $HOME > /dev/null && echo 1 || echo 0;"
@@ -457,7 +457,7 @@ WAIT_TIMES = {
 DOWNLOAD_CMD = {
     "deb": WGET_CMD,
     "dmg": CURL_CMD,
-    "msi": WGET_CMD,
+    "msi": WGET_CMD + " --no-check-certificate",
     "rpm": WGET_CMD
 }
 
