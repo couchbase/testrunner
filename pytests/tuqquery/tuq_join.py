@@ -1029,6 +1029,7 @@ class JoinTests(QuerySanityTests):
         # create collection mb65976 if not exists
         self.query = "CREATE COLLECTION mb65976 IF NOT EXISTS"
         self.run_cbq_query(query_context='default._default')
+        self.sleep(3)
 
         # drop primary index on mb65976 collection if exists
         self.query = "DROP PRIMARY INDEX IF EXISTS ON mb65976"
@@ -1210,6 +1211,7 @@ class JoinTests(QuerySanityTests):
             self.sleep(3)
             self.run_cbq_query(f"CREATE COLLECTION default.{scope_name}.c1 IF NOT EXISTS")
             self.run_cbq_query(f"CREATE COLLECTION default.{scope_name}.c2 IF NOT EXISTS")
+            self.sleep(3)
 
             # Insert documents with {"id": 1} in both collections
             self.run_cbq_query(f'INSERT INTO default.{scope_name}.c1 (key, value) VALUES ("doc1", {{"id": 1}})')
