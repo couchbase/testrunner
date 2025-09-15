@@ -385,6 +385,10 @@ AWS_AMI_MAP = {
             "x86_64": "ami-067e3046d94c5f19f",
             "aarch64": "ami-04bc6fa168e83352d"
         },
+        "ubuntu24nonroot": {
+            "x86_64": "ami-067e3046d94c5f19f",
+            "aarch64": "ami-04bc6fa168e83352d"
+        },
         "oel8": {
             "x86_64": "ami-0b5aaeac901e41860"
         },
@@ -440,6 +444,7 @@ AWS_OS_USERNAME_MAP = {
     "ubuntu22": "ubuntu",
     "ubuntu22nonroot": "ubuntu",
     "ubuntu24": "ubuntu",
+    "ubuntu24nonroot": "ubuntu",
     "oel8": "ec2-user",
     "rhel8": "ec2-user",
     "rhel9": "ec2-user",
