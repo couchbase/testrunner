@@ -26,4 +26,3 @@ flask
 flask-cors
 sentence-transformers==2.2.2
 torch==2.0.1
-PyJWT[crypto]==2.9.0
