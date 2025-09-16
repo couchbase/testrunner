@@ -4663,8 +4663,8 @@ class QuerySanityTests(QueryTests):
         query = 'SELECT type, COUNT(1) FROM `travel-sample` GROUP BY type LIMIT 2'
         result = self.run_cbq_query(query)
         self.log.info(result['results'])
-        self.assertTrue(result['results'][0]['type'] in ['airline', 'airport', 'hotel', 'route'])
-        self.assertTrue(result['results'][1]['type'] in ['airline', 'airport', 'hotel', 'route'])
+        self.assertTrue(result['results'][0]['type'] in ['airline', 'airport', 'hotel', 'route', 'landmark'])
+        self.assertTrue(result['results'][1]['type'] in ['airline', 'airport', 'hotel', 'route', 'landmark'])
         self.assertNotEqual(result['results'][0]['type'], result['results'][1]['type'])
         self.assertTrue(result['results'][0]['$1'] > 0 and result['results'][1]['$1'] > 0)
 
