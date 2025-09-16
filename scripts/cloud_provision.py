@@ -8,6 +8,11 @@ from google.cloud.dns import Client as DnsClient
 import dns.resolver
 import time
 import io
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+log = logging.getLogger(__name__)
 """
   Azure needs to install azure cli 'az' in dispatcher slave
 """
@@ -60,7 +65,7 @@ def configure_centos7_vault_repos(ssh):
     stdin, stdout, stderr = ssh.exec_command("cat /etc/centos-release || true")
     centos_release = stdout.read().decode().strip()
     if "CentOS Linux release 7" in centos_release:
-        print("Detected CentOS 7, configuring vault repositories")
+        log.info("Detected CentOS 7, configuring vault repositories")
         vault_commands = [
             "mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak 2>/dev/null || true",
             """cat > /etc/yum.repos.d/CentOS-Base.repo <<'EOF'
@@ -93,9 +98,23 @@ EOF""",
 def install_zip_unzip(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(host,
-                username=username,
-                password=password)
+
+    # Try password authentication first
+    try:
+        log.info(f"DEBUG: Attempting password authentication to {host} as {username}")
+        ssh.connect(host,
+                    username=username,
+                    password=password)
+        log.info(f"DEBUG: Password authentication successful to {host}")
+    except paramiko.ssh_exception.BadAuthenticationType as e:
+        log.error(f"DEBUG: Password authentication failed to {host}: {e}")
+        log.error(f"DEBUG: Allowed authentication types: {e.allowed_types}")
+        ssh.close()
+        raise Exception(f"SSH authentication failed to {host}. Password authentication not allowed. Allowed types: {e.allowed_types}. This indicates the post_provisioner SSH configuration failed.")
+    except Exception as e:
+        log.error(f"DEBUG: SSH connection failed to {host}: {e}")
+        ssh.close()
+        raise
 
     commands = []
 
@@ -111,21 +130,21 @@ def install_zip_unzip(host, username="root", password="couchbase"):
         commands.append("yum install -y zip unzip")
 
     for command in commands:
-        print(f"Executing on {host}: {command}")
+        log.info(f"Executing on {host}: {command}")
         stdin, stdout, stderr = ssh.exec_command(command)
         exit_status = stdout.channel.recv_exit_status()
 
         output = stdout.read().decode().strip()
         error_output = stderr.read().decode().strip()
 
-        print(f"Command: {command}")
-        print(f"Exit status: {exit_status}")
+        log.info(f"Command: {command}")
+        log.info(f"Exit status: {exit_status}")
 
         if exit_status != 0:
-            print(f"Command: {command}")
-            print(f"Exit status: {exit_status}")
-            print(f"Stdout: {output}")
-            print(f"Stderr: {error_output}")
+            log.error(f"Command: {command}")
+            log.error(f"Exit status: {exit_status}")
+            log.error(f"Stdout: {output}")
+            log.error(f"Stderr: {error_output}")
 
             ssh.exec_command("sudo shutdown")
             time.sleep(10)
@@ -139,9 +158,22 @@ def install_zip_unzip(host, username="root", password="couchbase"):
 def create_non_root_user(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect(host,
-                username=username,
-                password=password)
+
+    try:
+        log.info(f"DEBUG: create_non_root_user attempting password authentication to {host} as {username}")
+        ssh.connect(host,
+                    username=username,
+                    password=password)
+        log.info(f"DEBUG: create_non_root_user password authentication successful to {host}")
+    except paramiko.ssh_exception.BadAuthenticationType as e:
+        log.error(f"DEBUG: create_non_root_user password authentication failed to {host}: {e}")
+        log.error(f"DEBUG: Allowed authentication types: {e.allowed_types}")
+        ssh.close()
+        raise Exception(f"SSH authentication failed to {host} for nonroot user creation. Password authentication not allowed. This indicates the SSH configuration was not properly applied.")
+    except Exception as e:
+        log.error(f"DEBUG: create_non_root_user SSH connection failed to {host}: {e}")
+        ssh.close()
+        raise
     commands = ["useradd -m nonroot",
                 "echo -e 'couchbase\ncouchbase' | sudo passwd nonroot",
                 "echo \"nonroot       soft  nofile         200000\" >> /etc/security/limits.conf",
@@ -153,9 +185,9 @@ def create_non_root_user(host, username="root", password="couchbase"):
             break
 
     if check_root_login(host):
-        print("nonroot login to host {} successful.".format(host))
+        log.info("nonroot login to host {} successful.".format(host))
     else:
-        print("nonroot login to host {} failed. Terminating the EC2 instance".format(host))
+        log.error("nonroot login to host {} failed. Terminating the EC2 instance".format(host))
         ssh.exec_command("sudo shutdown")
         time.sleep(10)
 
@@ -180,22 +212,22 @@ def install_elastic_search(host, username="root", password="couchbase"):
         "chmod +x /usr/share/elasticsearch/bin/elasticsearch"
     ])
 
-    print(f"Installing Elasticsearch on {host}")
+    log.info(f"Installing Elasticsearch on {host}")
     for command in commands:
-        print(f"Executing: {command}")
+        log.info(f"Executing: {command}")
         stdin, stdout, stderr = ssh.exec_command(command)
         exit_status = stdout.channel.recv_exit_status()
         if exit_status != 0:
             output = stdout.read().decode().strip()
             error = stderr.read().decode().strip()
-            print(f"Command failed with exit status {exit_status}")
-            print(f"Output: {output}")
-            print(f"Error: {error}")
+            log.error(f"Command failed with exit status {exit_status}")
+            log.error(f"Output: {output}")
+            log.error(f"Error: {error}")
             ssh.close()
             raise Exception(f"Failed to install Elasticsearch on {host}: {command}")
 
     # Start Elasticsearch with proper environment
-    print(f"Starting Elasticsearch on {host}")
+    log.info(f"Starting Elasticsearch on {host}")
     start_command = """
     export JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:bin/java::")
     export ES_HEAP_SIZE=512m
@@ -208,9 +240,9 @@ def install_elastic_search(host, username="root", password="couchbase"):
     if exit_status != 0:
         output = stdout.read().decode().strip()
         error = stderr.read().decode().strip()
-        print(f"Failed to start Elasticsearch: {output}, {error}")
+        log.error(f"Failed to start Elasticsearch: {output}, {error}")
     else:
-        print(f"Elasticsearch started successfully on {host}")
+        log.info(f"Elasticsearch started successfully on {host}")
 
     ssh.close()
 
@@ -228,7 +260,7 @@ def restart_elastic_search(ips, username="root", password="couchbase"):
         output = stdout.read().decode().strip()
 
         if "not_running" in output:
-            print(f"Starting Elasticsearch on {ip}")
+            log.info(f"Starting Elasticsearch on {ip}")
 
             # Kill any zombie processes first
             ssh.exec_command("pkill -f elasticsearch 2>/dev/null || true")
@@ -259,31 +291,76 @@ fi
             output = stdout.read().decode().strip()
             error_output = stderr.read().decode().strip()
 
-            print(f"Elasticsearch start output: {output}")
+            log.info(f"Elasticsearch start output: {output}")
             if error_output:
-                print(f"Elasticsearch start errors: {error_output}")
+                log.warning(f"Elasticsearch start errors: {error_output}")
 
             if exit_status != 0:
-                print(f"Failed to start Elasticsearch on {ip}. Exit status: {exit_status}")
-                print(f"Output: {output}")
-                print(f"Error: {error_output}")
+                log.error(f"Failed to start Elasticsearch on {ip}. Exit status: {exit_status}")
+                log.error(f"Output: {output}")
+                log.error(f"Error: {error_output}")
 
                 # Try alternative approach - check if Java is available and try direct start
                 stdin, stdout, stderr = ssh.exec_command("java -version 2>&1")
                 java_version = stdout.read().decode().strip()
-                print(f"Java version: {java_version}")
+                log.info(f"Java version: {java_version}")
 
                 # Check if elasticsearch directory exists
                 stdin, stdout, stderr = ssh.exec_command("ls -la /usr/share/elasticsearch/bin/")
                 es_dir = stdout.read().decode().strip()
-                print(f"Elasticsearch directory: {es_dir}")
+                log.info(f"Elasticsearch directory: {es_dir}")
 
                 ssh.close()
                 raise Exception(f"Unable to start Elasticsearch on {ip}")
         else:
-            print(f"Elasticsearch is already running on {ip} (PID: {output})")
+            log.info(f"Elasticsearch is already running on {ip} (PID: {output})")
 
         ssh.close()
+
+def create_fallback_ssh_config(ssh, host):
+    """Create a completely new SSH config as fallback for problematic modern distributions"""
+    log.info(f"DEBUG: Creating fallback SSH configuration for {host}")
+
+    fallback_config = """# Couchbase Test SSH Configuration - FALLBACK
+Port 22
+Protocol 2
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+UsePrivilegeSeparation yes
+KeyRegenerationInterval 3600
+ServerKeyBits 1024
+SyslogFacility AUTH
+LogLevel INFO
+LoginGraceTime 120
+PermitRootLogin yes
+StrictModes no
+RSAAuthentication yes
+PubkeyAuthentication yes
+PasswordAuthentication yes
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding yes
+PrintMotd no
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server
+"""
+
+    fallback_commands = [
+        "sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%s)",
+        f"echo '{fallback_config}' | sudo tee /etc/ssh/sshd_config",
+        "sudo chmod 644 /etc/ssh/sshd_config",
+        "sudo sshd -t || echo 'Fallback config test failed'",
+        "sudo systemctl restart sshd || sudo systemctl restart ssh"
+    ]
+
+    for cmd in fallback_commands:
+        log.info(f"DEBUG: Fallback command: {cmd}")
+        stdin, stdout, stderr = ssh.exec_command(cmd)
+        exit_status = stdout.channel.recv_exit_status()
+        if exit_status != 0:
+            log.error(f"DEBUG: Fallback command failed: {cmd} (exit: {exit_status})")
+
 
 def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
         ssh = paramiko.SSHClient()
@@ -292,31 +369,168 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                     username=username,
                     key_filename=ssh_key_path)
 
+        # Detect OS version for modern distribution handling
+        stdin, stdout, stderr = ssh.exec_command("cat /etc/redhat-release 2>/dev/null || cat /etc/os-release 2>/dev/null || echo 'unknown'")
+        os_info = stdout.read().decode().strip()
+        log.info(f"DEBUG: Detected OS on {host}: {os_info}")
+
+        # Check for modern distributions that may have stricter SSH defaults
+        is_rhel10_or_newer = "Red Hat Enterprise Linux release 10" in os_info or "rhel:10" in os_info
+        is_debian13_or_newer = "debian" in os_info.lower() and ("13" in os_info or "bookworm" in os_info.lower())
+        is_modern_distro = is_rhel10_or_newer or is_debian13_or_newer
+
+        log.info(f"DEBUG: Modern distribution detected: {is_modern_distro} (RHEL10+: {is_rhel10_or_newer}, Debian13+: {is_debian13_or_newer})")
+
+        # Check initial SSH configuration and active SSH service
+        stdin, stdout, stderr = ssh.exec_command("echo 'INITIAL SSH CONFIG:' && sudo cat /etc/ssh/sshd_config | grep -E '(PermitRootLogin|PasswordAuthentication)' && echo 'SSH SERVICE STATUS:' && sudo systemctl status sshd --no-pager -l | head -10")
+        initial_config = stdout.read().decode().strip()
+        log.info(f"DEBUG: Initial SSH state on {host}:\n{initial_config}")
+
+        # Base SSH configuration commands
         commands = ["echo -e 'couchbase\ncouchbase' | sudo passwd root",
                     "sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin prohibit-password/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config",
-                    "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config",
-                    "sudo rm -rf /etc/ssh/sshd_config.d/*",
-                    "sudo systemctl restart sshd.service",
-                    "sudo service sshd restart",
-                    "sudo systemctl restart sshd",
-                    "sudo systemctl restart ssh",
-                    "sudo shutdown -P +800"]
+                    "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config"]
+
+        # Modern distribution specific configuration
+        if is_modern_distro:
+            commands.extend([
+                # First, check what override directories exist
+                "echo 'CHECKING SSH OVERRIDE DIRS:' && find /etc/ssh/ /usr/lib/ssh/ /lib/systemd/ -name '*ssh*' -type d 2>/dev/null || true",
+                "echo 'CHECKING SSH OVERRIDE FILES:' && find /etc/ssh/ -name '*.conf' -o -name '*.d' 2>/dev/null | head -20 || true",
+                # Remove all potential override directories
+                "sudo rm -rf /etc/ssh/sshd_config.d/*",
+                "sudo rm -rf /etc/ssh/ssh_config.d/*",
+                # Check for systemd overrides
+                "sudo find /etc/systemd /lib/systemd -name '*ssh*' -type f 2>/dev/null | head -10 || true",
+                # Force append critical settings to ensure they override any includes
+                "echo '' | sudo tee -a /etc/ssh/sshd_config",
+                "echo '# FORCED COUCHBASE TEST CONFIGURATION' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'PermitRootLogin yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'PasswordAuthentication yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'PubkeyAuthentication yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'ChallengeResponseAuthentication no' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'UsePAM yes' | sudo tee -a /etc/ssh/sshd_config"])
+        else:
+            commands.append("sudo rm -rf /etc/ssh/sshd_config.d/*")
+
+        # Additional modern distribution security handling
+        if is_modern_distro:
+            commands.extend([
+                # Check for and handle SELinux/AppArmor
+                "echo 'SECURITY CONTEXT CHECK:' && (getenforce 2>/dev/null || aa-status 2>/dev/null | head -5 || echo 'No SELinux/AppArmor detected')",
+                # Temporarily disable SELinux if present
+                "sudo setenforce 0 2>/dev/null || true",
+                # Test SSH config before restart
+                "echo 'SSH CONFIG TEST:' && sudo sshd -t && echo 'SSH config is valid' || echo 'WARNING: SSH config test failed'"])
+
+        # Add debugging commands
+        commands.extend([
+            "echo 'DEBUG: Current SSH config:' && sudo grep -E '(PermitRootLogin|PasswordAuthentication)' /etc/ssh/sshd_config | tail -10",
+            "echo 'DEBUG: SSH config dir contents:' && sudo ls -la /etc/ssh/sshd_config.d/ 2>/dev/null || echo 'No sshd_config.d directory'"])
+
+        # SSH restart with enhanced error handling for modern distributions
+        if is_modern_distro:
+            commands.extend([
+                # For modern distributions, use a more careful restart approach
+                "echo 'STOPPING SSH SERVICE...' && sudo systemctl stop sshd.service ssh.service 2>/dev/null || true",
+                "sleep 3",
+                "echo 'STARTING SSH SERVICE...' && sudo systemctl start sshd.service || sudo systemctl start ssh.service",
+                "sleep 5",
+                "echo 'VERIFYING SSH SERVICE...' && sudo systemctl is-active sshd.service || sudo systemctl is-active ssh.service",
+                "echo 'RELOADING SSH CONFIG...' && sudo systemctl reload sshd.service || sudo systemctl reload ssh.service || true"])
+        else:
+            commands.extend([
+                "sudo systemctl restart sshd.service",
+                "sudo service sshd restart || true",
+                "sudo systemctl restart sshd || true",
+                "sudo systemctl restart ssh || true"])
+
+        # Post-restart verification and testing
+        commands.extend([
+            "echo 'DEBUG: SSH service status:' && (sudo systemctl status sshd --no-pager -l || sudo systemctl status ssh --no-pager -l)",
+            "echo 'DEBUG: SSH process check:' && sudo ps aux | grep '[s]shd'",
+            "echo 'DEBUG: SSH config test:' && sudo sshd -t",
+            "echo 'DEBUG: Final SSH config verification:' && sudo cat /etc/ssh/sshd_config | tail -20",
+            # Test what authentication methods are actually being advertised
+            "echo 'DEBUG: SSH auth methods test:' && timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 -o PreferredAuthentications=password root@localhost 'echo test' 2>&1 | head -5 || echo 'Local SSH password test completed'",
+            "sudo shutdown -P +800"])
 
         for command in commands:
+            log.info(f"DEBUG: Executing command on {host}: {command}")
             stdin, stdout, stderr = ssh.exec_command(command)
             exit_status = stdout.channel.recv_exit_status()
-            if exit_status != 0:
-                print("The command {} failed and gave a exit staus {}".format(command, exit_status))
+            output = stdout.read().decode().strip()
+            error_output = stderr.read().decode().strip()
 
-        if check_root_login(host):
-            print("root login to host {} successful.".format(host))
+            log.info(f"DEBUG: Command exit status: {exit_status}")
+            if output:
+                log.info(f"DEBUG: Command output: {output}")
+            if error_output:
+                log.warning(f"DEBUG: Command error: {error_output}")
+
+            if exit_status != 0:
+                log.error("The command {} failed and gave a exit staus {}".format(command, exit_status))
+
+        # Wait for SSH to fully restart and stabilize
+        log.info(f"DEBUG: Waiting 15 seconds for SSH service to stabilize on {host}")
+        time.sleep(15)
+
+        # Perform comprehensive SSH authentication test
+        log.info(f"DEBUG: Testing SSH password authentication on {host}")
+
+        # Test with multiple attempts as sometimes it takes a moment for the config to take effect
+        auth_success = False
+        for attempt in range(3):
+            log.info(f"DEBUG: Password authentication attempt {attempt + 1}/3 on {host}")
+            if check_root_login(host):
+                log.info(f"DEBUG: Password authentication successful on attempt {attempt + 1} for {host}")
+                auth_success = True
+                break
+            else:
+                log.warning(f"DEBUG: Password authentication failed on attempt {attempt + 1} for {host}")
+                if attempt < 2:  # Don't sleep on the last attempt
+                    time.sleep(5)
+
+        if auth_success:
+            log.info("root login to host {} successful.".format(host))
         else:
-            print("root login to host {} failed. Terminating the EC2 instance".format(host))
-            ssh.exec_command("sudo shutdown")
-            time.sleep(10)
+            log.error("root login to host {} failed after 3 attempts.".format(host))
+
+            # Try fallback SSH configuration for modern distributions
+            if is_modern_distro:
+                log.info(f"DEBUG: Attempting fallback SSH configuration for modern distribution on {host}")
+                try:
+                    create_fallback_ssh_config(ssh, host)
+
+                    # Wait for fallback config to take effect
+                    log.info(f"DEBUG: Waiting 10 seconds for fallback SSH config to take effect on {host}")
+                    time.sleep(10)
+
+                    # Test fallback configuration
+                    if check_root_login(host):
+                        log.info(f"SUCCESS: Fallback SSH configuration worked for {host}")
+                        auth_success = True
+                    else:
+                        log.error(f"FAILED: Fallback SSH configuration also failed for {host}")
+                except Exception as e:
+                    log.error(f"ERROR: Fallback configuration attempt failed: {e}")
+
+            if not auth_success:
+                log.error("Terminating the EC2 instance after all SSH configuration attempts failed")
+                # Get comprehensive debugging info before terminating
+                log.info(f"GATHERING FINAL DEBUG INFO for {host}...")
+                try:
+                    stdin, stdout, stderr = ssh.exec_command("echo 'FINAL DEBUG - SSH CONFIG:' && sudo cat /etc/ssh/sshd_config | tail -30 && echo 'FINAL DEBUG - SSH STATUS:' && sudo systemctl status sshd ssh --no-pager -l 2>/dev/null | head -20 && echo 'FINAL DEBUG - SSH PROCESSES:' && sudo ps aux | grep ssh && echo 'FINAL DEBUG - SSH LISTEN PORTS:' && sudo netstat -tlnp | grep ':22'")
+                    debug_output = stdout.read().decode().strip()
+                    log.info(f"FINAL DEBUG OUTPUT for {host}:\n{debug_output}")
+                except Exception as e:
+                    log.error(f"Could not gather final debug info: {e}")
+
+                ssh.exec_command("sudo shutdown")
+                time.sleep(10)
 
         if modify_hosts:
             # add hostname to /etc/hosts so node-init-hostname works by binding to 127.0.0.1
@@ -456,7 +670,7 @@ AWS_OS_USERNAME_MAP = {
     "rocky10": "rocky",
     "oel10": "ec2-user",
     "rhel10": "ec2-user",
-    "debian13": "root"
+    "debian13": "admin"
 }
 
 def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
@@ -519,12 +733,12 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     )
 
     instance_ids = [instance.id for instance in instances]
-    print("Waiting for instances: ", instance_ids)
+    log.info("Waiting for instances: " + str(instance_ids))
     ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
 
     instances = ec2_client.describe_instances(InstanceIds=instance_ids)
     ips = [instance['PublicDnsName'] for instance in instances['Reservations'][0]['Instances']]
-    print("EC2 Instances : ", ips)
+    log.info("EC2 Instances : " + str(ips))
     for ip in ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
         if type == "elastic-fts":
@@ -542,7 +756,7 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     # It was observed that all the ports were reachable on reboot
     # The temporary fix now is to reboot instances before passing onto tests
     # TODO - Investigate the reason for failures and fix it
-    print("Rebooting instances : ", instance_ids)
+    log.info("Rebooting instances : " + str(instance_ids))
     ec2_client.reboot_instances(InstanceIds=instance_ids)
     ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
     time.sleep(180)
@@ -584,7 +798,7 @@ GCP_TEMPLATE_MAP = {
 }
 
 def gcp_wait_for_operation(operation):
-    print(f"Waiting for {operation} to complete")
+    log.info(f"Waiting for {operation} to complete")
     client = ZoneOperationsClient()
     while True:
         result = client.get(project=PROJECT, zone=ZONE, operation=operation)
@@ -705,7 +919,7 @@ def az_get_servers(name, count, os, type, ssh_key_path, architecture):
     for x in range(1, count + 1):
         cmd = "az vm create -g {0} -n {1}{2} --image {3} --nsg {4} --size {5} --public-ip-sku Standard --output json "\
               .format(group_name, name, x, image_name, security_group_name, vm_type)
-        print("\ncreate vm {0}{1}".format(name, x))
+        log.info("create vm {0}{1}".format(name, x))
         stdout = subprocess.check_output(cmd, shell=True)
         if isinstance(stdout, bytes):
             # convert to string to load json
@@ -715,8 +929,8 @@ def az_get_servers(name, count, os, type, ssh_key_path, architecture):
             ips.append(stdout["publicIpAddress"])
             internal_ips.append(stdout["privateIpAddress"])
     """ no need post_provisioner run on azure """
-    print("public ips of vms: ", ips)
-    print("private ips of vms: ", internal_ips)
+    log.info("public ips of vms: " + str(ips))
+    log.info("private ips of vms: " + str(internal_ips))
     return ips, internal_ips
 
 def az_terminate(name):
@@ -732,11 +946,11 @@ def az_terminate(name):
                 .format(group_name, vm_name)
         cmd3 = "az network public-ip delete -g {0} -n {1}PublicIP"\
                 .format(group_name, vm_name)
-        print("\ndelete vm {0}".format(name))
+        log.info("delete vm {0}".format(name))
         subprocess.check_output(cmd1, shell=True)
-        print("\ndelete network of vm {0}".format(name))
+        log.info("delete network of vm {0}".format(name))
         subprocess.check_output(cmd2, shell=True)
-        print("\ndelete public ip of vm {0}".format(name))
+        log.info("delete public ip of vm {0}".format(name))
         subprocess.check_output(cmd3, shell=True)
 
 
