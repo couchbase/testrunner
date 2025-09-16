@@ -1702,6 +1702,26 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             else:
                 self.log.info(f"Rebalance was stopped by the user. Verifying that the staging directory has been emptied")
                 self.sleep(60)
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                # Poll for rebalanceCleanupStatus to be done before validating staging directories.
+                timeout_duration = 3600  # 1 hour in seconds
+                start_time = time.time()
+                while True:
+                    for node in index_nodes:
+                        rest = RestConnection(node)
+                        status = rest.get_index_rebalance_token_cleanup_status()
+                        if status == 'done':
+                            self.log.info("Rebalance cleanup status is done")
+                            break
+                    
+                    # Check if timeout has been reached
+                    elapsed_time = time.time() - start_time
+                    if elapsed_time >= timeout_duration:
+                        self.log.error(f"Timeout reached ({timeout_duration} seconds) while waiting for rebalance cleanup status to be done. Last status: {status}")
+                        break
+                    
+                    time.sleep(10)
+                    self.log.info(f"Rebalance cleanup status: {status} (elapsed: {elapsed_time:.1f}s)")
                 self._validate_staging_directories_cleaned()
             self.enable_redistribute_indexes()
             time.sleep(120)

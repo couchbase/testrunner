@@ -1315,23 +1315,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         for namespace in self.namespaces:
             self.log.info(f"Creating index on {namespace}")
-            bhive_def = self.gsi_util_obj.get_index_definition_list(
-                dataset=self.dataset,
-                skip_primary=True,
-                prefix="test_bhive",
-                similarity="L2_SQUARED", 
-                train_list=None,
-                scan_nprobes=self.scan_nprobes,
-                array_indexes=False,
-                xattr_indexes=self.xattr_indexes,
-                limit=self.scan_limit, 
-                is_base64=self.base64,
-                quantization_algo_color_vector=self.quantization_algo_color_vector,
-                quantization_algo_description_vector=self.quantization_algo_description_vector,
-                bhive_index=True, 
-                description_dimension=4097
-            )
-            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bhive_def, namespace=namespace)
+            create_query_1 = f"""CREATE VECTOR INDEX test_bhive ON {namespace} (embedding VECTOR) WITH {{"dimension": 4097}}"""
+            create_query_2 = f"""CREATE VECTOR INDEX test_bhive ON {namespace} (embedding VECTOR) WITH {{"dimension": 4097, "train_list": 10000}}"""
+            create_queries = [create_query_1, create_query_2]
             creation_success = False
             try:
                 # self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=query_node)
