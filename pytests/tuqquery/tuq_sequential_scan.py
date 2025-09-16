@@ -438,3 +438,30 @@ class QuerySeqScanTests(QueryTests):
 
         explain = self.run_cbq_query(f'EXPLAIN {query}', username=user_id, password=user_pwd)
         self.log.info(explain['results'])
+
+    # MB-68546
+    def test_order_by(self):
+        doc_count = 250000
+        # create new collection for test
+        self.run_cbq_query(f'CREATE COLLECTION {self.bucket}._default.order_by IF not exists')
+        self.sleep(5)
+        self.run_cbq_query(f'UPSERT INTO {self.bucket}._default.order_by (KEY doc.k, value doc) SELECT {{"k":"k"||TO_STR(d)}} doc FROM ARRAY_RANGE(0,{doc_count}) AS d;')
+        self.sleep(5)
+        # create primary index
+        self.run_cbq_query(f'CREATE PRIMARY INDEX ON {self.bucket}._default.order_by')
+        self.sleep(5)
+
+        # run query and check metrics resultCount is doc_count
+        query = f'SELECT RAW META().id FROM {self.bucket}._default.order_by USE INDEX(`#primary`) ORDER BY META().id'
+        result_primary = self.run_cbq_query(query)
+        self.log.info(result_primary['metrics'])
+        self.assertEqual(result_primary['metrics']['resultCount'], doc_count)
+
+        # run query and check metrics resultCount is doc_count
+        query = f'SELECT RAW META().id FROM {self.bucket}._default.order_by USE INDEX(`#sequentialscan`) ORDER BY META().id'
+        result_sequentialscan = self.run_cbq_query(query)
+        self.log.info(result_sequentialscan['metrics'])
+        self.assertEqual(result_sequentialscan['metrics']['resultCount'], doc_count)
+
+        # check result is the same
+        self.assertEqual(result_primary['results'], result_sequentialscan['results'])
