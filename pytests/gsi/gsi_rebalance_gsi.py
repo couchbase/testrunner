@@ -628,7 +628,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
         t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
         t1.start()
-        self.sleep(0.5)
         # while create index is running ,rebalance out a indexer node
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
@@ -1846,6 +1845,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         # do a swap rebalance
         try:
+            # Ensure psmisc package (with killall) is installed before killing processes
+            self._ensure_psmisc_installed(self.servers[self.nodes_init])
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
             # kill indexer while rebalance is running
             for i in range(20):
@@ -2224,6 +2225,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        
+        # Ensure psmisc package (with killall) is installed before killing processes
+        self._ensure_psmisc_installed(index_server)
+        self._ensure_psmisc_installed(self.servers[self.nodes_init])
+        
         threads = []
         # start multiple cbindex moves
         for index in indexes:
@@ -3082,6 +3088,35 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 if cbq_engine.find('grep') == -1:
                     pid = [item for item in cbq_engine.split(' ') if item][1]
                     shell.execute_command("kill -9 %s" % pid)
+
+    def _ensure_psmisc_installed(self, server):
+        """Ensure psmisc package (which contains killall) is installed on the server"""
+        shell = RemoteMachineShellConnection(server)
+        
+        # Check if killall command exists
+        output, error = shell.execute_command("which killall")
+        if output and len(output) > 0 and "killall" in output[0]:
+            self.log.info("killall command already available on server {0}".format(server.ip))
+            shell.disconnect()
+            return
+        
+        self.log.info("killall command not found on server {0}, installing psmisc package".format(server.ip))
+        
+        # Try different package managers based on the OS
+        # First try apt-get (Ubuntu/Debian)
+        output, error = shell.execute_command("apt-get update && apt-get install -qq -y psmisc > /dev/null && echo 'apt-success' || echo 'apt-failed'", get_pty=True)
+        if output and len(output) > 0 and "apt-success" in output[-1]:
+            self.log.info("Successfully installed psmisc using apt-get on server {0}".format(server.ip))
+            shell.disconnect()
+            return
+        # Final check if killall is now available
+        output, error = shell.execute_command("which killall")
+        if output and len(output) > 0 and "killall" in output[0]:
+            self.log.info("killall command now available on server {0} after package installation attempts".format(server.ip))
+        else:
+            self.log.error("Failed to install psmisc package on server {0}. killall command may not work.".format(server.ip))
+        
+        shell.disconnect()
 
     def _kill_all_processes_index(self, server):
         shell = RemoteMachineShellConnection(server)
