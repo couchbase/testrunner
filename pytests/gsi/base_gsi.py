@@ -1201,8 +1201,11 @@ class BaseSecondaryIndexingTests(QueryTests):
                 scan_vector = []
                 self.log.info("analyzing for bucket {0}".format(bucket.name))
                 map = sequence_bucket_map[bucket.name]
+                self.log.info(f"Map is {map}")
                 for i in range(1024):
                     key = "vb_" + str(i)
+                    if key not in map:
+                        continue
                     value = [int(map[key]["abs_high_seqno"]), map[key]["uuid"]]
                     scan_vector.append(value)
                 scan_vectors[bucket.name] = scan_vector
@@ -1221,6 +1224,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                         value = [int(map[key]["abs_high_seqno"]), map[key]["uuid"]]
                         scan_vector[str(vb)] = value
                 scan_vectors[bucket.name] = scan_vector
+        self.log.info(f"scan_vectors: {scan_vectors}")
         return scan_vectors
 
     def check_missing_and_extra(self, actual, expected):

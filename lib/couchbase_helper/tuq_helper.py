@@ -819,6 +819,7 @@ class N1QLHelper():
         while not check:
             next_time = time.time()
             try:
+                self.log.info(f"query: {query}. scan_consistency: {scan_consistency} scan_vector: {scan_vector}. server {server}")
                 actual_result = self.run_cbq_query(query=query, server=server, scan_consistency=scan_consistency,
                                                    scan_vector=scan_vector)
 
