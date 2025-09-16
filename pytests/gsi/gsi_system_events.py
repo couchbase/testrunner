@@ -26,6 +26,7 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
         super(GSISystemEvents, self).setUp()
         self.log.info("==============  GSIFreeTier setup has started ==============")
         self.rest.delete_all_buckets()
+        self.sleep(120)
         global_vars.system_event_logs = EventHelper()
         self.system_events = global_vars.system_event_logs
         self.system_events.set_test_start_time()
@@ -106,6 +107,21 @@ class GSISystemEvents(BaseSecondaryIndexingTests):
                                                                                          new_setting=new_query_setting,
                                                                                          node=index_node))
         self.sleep(60)
+        # Debug: Print actual system events before validation
+        from lib.SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
+        rest_helper = SystemEventRestHelper([self.master])
+        actual_events = rest_helper.get_events(server=self.master, 
+                                             since_time=self.system_events.test_start_time,
+                                             events_count=-1)
+        self.log.info("=== ACTUAL SYSTEM EVENTS ===")
+        if 'events' in actual_events:
+            for i, event in enumerate(actual_events['events']):
+                self.log.info(f"Event {i}: {event}")
+        else:
+            self.log.info(f"No events found or error: {actual_events}")
+        self.log.info("=== EXPECTED SYSTEM EVENTS ===")
+        for i, event in enumerate(self.system_events.events):
+            self.log.info(f"Expected Event {i}: {event}")
         result = self.system_events.validate(server=self.master, ignore_order=True)
         if result:
             self.log.error(result)
