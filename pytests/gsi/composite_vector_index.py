@@ -1180,7 +1180,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[], services=['kv,n1ql'])
             elif self.rebalance_type == 'rebalance_swap':
-                add_nodes = [self.servers[4]]
+                add_nodes = [self.servers[self.nodes_init]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                     to_remove=[data_nodes[0]], services=['kv,n1ql'])
             elif self.rebalance_type == 'rebalance_out':
@@ -1618,8 +1618,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 while timeout < 360:
                     index_state = self.index_rest.get_indexer_metadata()['status'][0]['status']
                     if index_state == self.build_phase:
-                        self.run_cbq_query(query=drop_query, server=self.n1ql_node)
-                        break
+                        try:
+                            self.run_cbq_query(query=drop_query, server=self.n1ql_node)
+                            break
+                        except Exception as e:
+                            self.log.info(str(e))
+                            self.sleep(60)
+                            self.wait_until_indexes_online()
+                            break
                     self.sleep(1)
                     timeout = timeout + 1
             if timeout > 360:
