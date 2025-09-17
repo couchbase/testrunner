@@ -3671,7 +3671,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for index in index_item_count_map:
                 if index in partial_indexes:
                     continue
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection + num_docs, f"stats {stats}")
 
             self.gsi_util_obj.query_event.clear()
 

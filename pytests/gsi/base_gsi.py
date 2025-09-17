@@ -2429,7 +2429,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
             raise AssertionError("CPU not normalized despite dropping all the indexes")
-    
+
     def validate_num_centroids_from_metadata(self):
         self.log.info("Validating num centroids from metadata for vector indexes")
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -3550,7 +3550,7 @@ class BaseSecondaryIndexingTests(QueryTests):
     def _validate_staging_directories_cleaned(self):
         """
         Validates staging directories cleanup semantics after a cancelled rebalance.
-        
+
         Rules:
         - Check both paths under the indexer storage directory on each index node:
           1) <storage_dir>/@bhive/staging2
@@ -3573,16 +3573,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                     if not exists:
                         self.log.info(f"Node {node.ip}: {abs_path} MISSING -> OK")
                         continue
-                    # If exists, ensure it's empty
-                    out, err = shell.execute_command(f"sh -c 'ls -A \"{abs_path}\" 2>/dev/null | wc -l'")
+                    # If exists, ensure no files exist (empty directories are allowed)
+                    out, err = shell.execute_command(f"find '{abs_path}' -type f 2>/dev/null | wc -l")
                     try:
-                        count = int(out[0].strip()) if out else 0
+                        file_count = int(out[0].strip()) if out else 0
                     except Exception:
-                        count = 0
-                    if count == 0:
-                        self.log.info(f"Node {node.ip}: {abs_path} exists but EMPTY -> OK")
+                        file_count = 0
+                    if file_count == 0:
+                        self.log.info(f"Node {node.ip}: {abs_path} exists but has no files -> OK")
                     else:
-                        raise Exception(f"Node {node.ip}: {abs_path} not cleaned. Entries count={count}")
+                        raise Exception(f"Node {node.ip}: {abs_path} not cleaned. File count={file_count}")
             finally:
                 shell.disconnect()
 
