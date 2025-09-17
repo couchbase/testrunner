@@ -996,7 +996,8 @@ class QueryTests(BaseTestCase):
                 for field in field_list:
                     temp_list = list(field)
                     if "INCLUDE MISSING" in temp_list[0]:
-                        temp_list[0] = temp_list[0].replace("INCLUDE MISSING", "MISSING")
+                        # NOTE: we don't need to replace INCLUDE MISSING with MISSING
+                        # temp_list[0] = temp_list[0].replace("INCLUDE MISSING", "MISSING")
                         new_tuple = (temp_list[0], temp_list[1])
                         field_list[i] = new_tuple
                     i += 1
