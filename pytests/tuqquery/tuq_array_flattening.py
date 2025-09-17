@@ -490,7 +490,7 @@ class QueryArrayFlatteningTests(QueryTests):
             query="CREATE INDEX idx1 ON default(public_likes, DISTINCT ARRAY flatten_keys(r.ratings.Cleanliness,r.ratings.Rooms,r.author) FOR r IN reviews END, free_parking)")
         self.run_cbq_query(query='CREATE PRIMARY INDEX ON default')
 
-        query = "SELECT * FROM default AS d UNNEST d.public_likes p WHERE p " \
+        query = "SELECT * FROM default AS d USE INDEX (`idx1`) UNNEST d.public_likes p WHERE p " \
                 "LIKE 'R%' AND ANY r IN d.reviews SATISFIES r.author LIKE '%m' AND " \
                 "(r.ratings.Cleanliness >= 1 OR r.ratings.Rooms <= 3) END OR d.free_parking = TRUE"
         primary_query = "SELECT * FROM default AS d USE INDEX (`#primary`) UNNEST d.public_likes p WHERE p " \
@@ -1681,11 +1681,12 @@ class QueryArrayFlatteningTests(QueryTests):
         self.run_cbq_query(
             query="CREATE INDEX `idx1` ON `default`((distinct (array flatten_keys((`r`.`author`), ((`r`.`ratings`).`Cleanliness`)) for `r` in `reviews` end)))")
         self.run_cbq_query(query="CREATE INDEX `idx2` ON `default`((distinct (array flatten_keys(((`r`.`ratings`).`Rooms`), ((`r`.`ratings`).`Overall`)) for `r` in `reviews` end)),`email`)")
+        self.sleep(30)
         # Ensure the query is actually using the flatten index instead of primary
         explain_results = self.run_cbq_query(
             query="EXPLAIN SELECT * FROM default d WHERE ANY r IN d.reviews SATISFIES r.ratings.Cleanliness > 1 "
                   "AND r.author LIKE 'M%' END UNION SELECT * FROM default d WHERE ANY s IN d.reviews SATISFIES s.ratings.Rooms > 3 AND s.ratings.Overall > 1 END")
-        self.assertTrue("UnionAll" in str(explain_results), "The query should be using an instersect scan, check explain results {0}".format(explain_results))
+        self.assertTrue("UnionAll" in str(explain_results), "The query should be using an union scan, check explain results {0}".format(explain_results))
         self.assertTrue("idx1" in str(explain_results),
                         "The query should be using an instersect scan between idx1 and idx2, check explain results {0}".format(
                             explain_results))
