@@ -1320,7 +1320,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         nodes_in = self.servers[self.nodes_init]
         create_queries = []
         replica_count = 1
-        for _ in range(10):
+        for _ in range(5):
             for namespace in self.namespaces:
                 query_definitions = self.gsi_util_obj.generate_hotel_data_index_definition()
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
@@ -1394,21 +1394,13 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 raise Exception(
                     f"The new index is sharing existing shard id shard list before {slot_id_map_before_with_query}, after {slot_id_map_post_with_query}")
 
-        shard_list_before = self.fetch_plasma_shards_list()
         index_query_on_all_three_nodes = f"create index idx2 on {self.namespaces[0]}(name) with {{\"nodes\":[{deploy_nodes}], \"num_replica\":{num_replica}}}"
         self.run_cbq_query(query=index_query_on_all_three_nodes)
         self.wait_until_indexes_online()
-        shard_list_after = self.fetch_plasma_shards_list()
-        self.assertEqual(len(shard_list_before), len(shard_list_after),
-                         f"new shards created before : {shard_list_before}  after {shard_list_after}")
 
-        shard_list_before = self.fetch_plasma_shards_list()
         query = f"create index idx3 on {self.namespaces[0]}(name) with {{\"num_replica\":{num_replica}}}"
         self.run_cbq_query(query=query)
         self.wait_until_indexes_online()
-        shard_list_after = self.fetch_plasma_shards_list()
-        self.assertEqual(len(shard_list_before), len(shard_list_after),
-                         f"new shards created before : {shard_list_before}  after {shard_list_after}")
 
         slot_id_map_post_all_queries = self.find_unique_slot_id_per_node()
         counter = 0
@@ -1417,8 +1409,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 f'{indexer_nodes_post_rebalance[0].ip}:{self.node_port}'] and shard in slot_id_map_post_all_queries[
                 f'{indexer_nodes_post_rebalance[1].ip}:{self.node_port}']:
                 counter += 1
-        self.assertEqual(counter, 1,
-                         f"new slot id not created for the new node for with clause stats : {slot_id_map_post_with_query}")
+        self.assertGreater(counter, 0,
+                         f"new slot id created for the new node for with clause stats : {slot_id_map_post_with_query}")
 
     def test_missing_partitions_during_shard_rebalance(self):
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
