@@ -700,7 +700,7 @@ class QueryCurlTests(QueryTests):
         -Test with a max-time that will result in a successful transfer of data'''
 
     def test_max_time(self):
-        n1ql_query = 'select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket
+        n1ql_query = 'select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket
         select_query = "select curl(" + self.query_service_url + ", {'data' : 'statement=%s', 'user':'%s:%s','max-time':1})" \
                        % (n1ql_query, self.username, self.password)
         self.log.info(f"query: {select_query}")
