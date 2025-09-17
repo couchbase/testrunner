@@ -235,8 +235,11 @@ class QueryMagmaTests(QueryTests):
             actual_list = self.run_cbq_query()
             docs = self.run_cbq_query(query="select * from default")
             num_docs = docs['metrics']['resultCount']
-            expected_results = [{'firstnames': num_docs}, {'lastnames': num_docs}]
-            self.assertEqual(expected_results,actual_list['results'])
+            # handle case if result is lastnames before firstnames
+            expected_results_1 = [{'firstnames': num_docs}, {'lastnames': num_docs}]
+            expected_results_2 = [{'lastnames': num_docs}, {'firstnames': num_docs}]
+            self.assertTrue(actual_list['results'] == expected_results_1 or actual_list['results'] == expected_results_2,
+                            f"Unexpected results: {actual_list['results']}")
         self.conn.delete_all_buckets()
 
     def test_basic_cte(self):
