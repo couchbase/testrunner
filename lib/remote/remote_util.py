@@ -1632,7 +1632,11 @@ class RemoteMachineShellConnection(KeepRefs):
 
     # create a remote file from input string
     def create_file(self, remote_path, file_data):
-        output, error = self.execute_command("echo '{0}' > {1}".format(file_data, remote_path))
+        # Get parent directory from the full file path
+        parent_dir = remote_path.rsplit('/', 1)[0]
+        # Ensure the directory exists, then write the file
+        cmd = "mkdir -p '{0}' && echo '{1}' > '{2}'".format(parent_dir, file_data, remote_path)
+        output, error = self.execute_command(cmd)
 
     def find_file(self, remote_path, file):
         sftp = self._ssh_client.open_sftp()
