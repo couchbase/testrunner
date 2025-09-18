@@ -901,8 +901,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default:default._default.nestedinliness3(a,b,c) { (SELECT RAW default:default._default.nestedjslibraryss(a,b,c)) }")
                 else:
                     #global calling global 
-                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql2"')
-                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg3(a,b,c) { (SELECT RAW nestedjsinlinegg(a,b,c)) }")
+                    self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql2"')
+                    self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg3(a,b,c) { (SELECT RAW nestedjslibrarygg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default:default._default.nestedinliness3(10,20,30)")
@@ -928,7 +928,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION default:default._default.nestedjslibraryss")
                         self.run_cbq_query("DROP FUNCTION default:default._default.nestedinliness3")
                     else:
-                        self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
+                        self.run_cbq_query("DROP FUNCTION nestedjslibrarygg")
                         self.run_cbq_query("DROP FUNCTION nestedinlinegg3")
                     self.log.info("Delete n1ql library")
                     self.delete_library("n1ql2")
@@ -961,7 +961,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 else:
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedinlinegg2(10,20,30)")
                     results_select = self.run_cbq_query("SELECT nestedinlinegg2(10,20,30)")
-                self.assertEqual(results_execute['results'], [[[20]]])
+                self.assertEqual(results_execute['results'], [[20]])
                 self.assertEqual(results_select['results'], [{'$1': [[20]]}])
         except Exception as e:
             self.log.error(str(e))
@@ -988,15 +988,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if scoping == "global_scoped":
                     #global calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inlinegs(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {SELECT RAW default._default.inlinegs($a,$b,$c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs2(a,b,c) {var queryres = SELECT RAW default._default.inlinegs($a,$b,$c); var res =[]; for (const doc of queryres) { res.push(doc);} return res;}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inliness(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {SELECT RAW default._default.inliness($a,$b,$c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness2(a,b,c) {var queryres = SELECT RAW default._default.inliness($a,$b,$c); var res =[]; for (const doc of queryres) { res.push(doc);} return res;}'")
                 else:
                     #global calling global
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION inlinegg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {SELECT RAW inlinegg($a,$b,$c);}'")
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg2(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg2(a,b,c) {var queryres = SELECT RAW inlinegg($a,$b,$c); var res =[]; for (const doc of queryres) { res.push(doc);} return res;}'")
             if phase == "mixed-mode" or phase == "post-upgrade":
                 if scoping == "scoped_scoped":
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION default._default.nestedjsinliness2(10,20,30)")
@@ -1007,7 +1007,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 else:
                     results_execute = self.run_cbq_query("EXECUTE FUNCTION nestedjsinlinegg2(10,20,30)")
                     results_select = self.run_cbq_query("SELECT nestedjsinlinegg2(10,20,30)")
-                self.assertEqual(results_execute['results'], [[[20]]])
+                self.assertEqual(results_execute['results'], [[20]])
                 self.assertEqual(results_select['results'], [{'$1': [[20]]}])
         except Exception as e:
             self.log.error(str(e))
@@ -1107,11 +1107,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if scoping == "global_scoped":
                     #global calling scoped
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygs2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalscopedinline" AT "n1ql3"')
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinegslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinegslibrary(doctype,cityname) { (SELECT airportname FROM default:`travel-sample`.inventory.airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
                     self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql3"')
-                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
+                    self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM default:`travel-sample`.inventory.airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 else:
                     #global calling global 
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalinline" AT "n1ql3"')
@@ -1400,7 +1400,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.log.error("Bucket test failed: {0}".format(e))
             self.fail()
         finally:
-            self.run_cbq_query("DROP BUCKET testbucket IF EXISTS")
+            self.run_cbq_query("DROP BUCKET IF EXISTS testbucket")
 
     def run_test_type_function(self):
         isarray = "SELECT ISARRAY('test')"
