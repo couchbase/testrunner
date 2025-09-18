@@ -18,6 +18,7 @@ log = logging.getLogger(__name__)
 class CollectionsSecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
     def setUp(self):
         super(CollectionsSecondaryIndexingRecoveryTests, self).setUp()
+        self.log = logging.getLogger(__name__)
         self.log.info("==============  PlasmaCollectionsTests setup has started ==============")
         self.rest.delete_all_buckets()
         self.num_scopes = self.input.param("num_scopes", 2)
@@ -787,7 +788,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 self.async_multi_drop_index(
                     buckets=self.buckets, query_definitions=self.load_query_definitions)
             except Exception as ex:
-                log.info(ex)
+                self.log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
 
     '''Test that checks if indexes that are ready during index warmup can be used'''
@@ -895,12 +896,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_rebalance_out(self):
@@ -919,12 +920,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_rebalance_in_out(self):
@@ -943,12 +944,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_rebalance_in_out_multi_nodes(self):
@@ -984,7 +985,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self.nodes_out_dist = "index:1"
             self.services_in = ["index"]
             self.nodes_in_list = [extra_nodes[1]]
@@ -998,12 +999,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_rebalance_with_stop_start(self):
@@ -1031,12 +1032,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_server_crash(self):
@@ -1060,12 +1061,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_server_stop(self):
@@ -1085,7 +1086,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
         finally:
             for node in self.nodes_out_list:
@@ -1112,12 +1113,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_failover(self):
@@ -1127,6 +1128,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         kvOps_tasks = self._run_kvops_tasks()
         try:
             self._create_replica_indexes()
+            indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            rest = RestConnection(indexer_nodes[0])
+            index_resp = rest.get_indexer_metadata()
+            if 'status' in index_resp:
+                index_map = index_resp['status']
+                self.log.info("Index metadata {}".format(index_map))
             servr_out = self.nodes_out_list
             failover_task = self.cluster.async_failover(
                 [self.master],
@@ -1147,12 +1154,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_failover_add_back(self):
@@ -1178,7 +1185,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     nodes.extend([node for node in nodes_all
                                   if node.ip == failover_node.ip])
             for node in nodes:
-                log.info("Adding Back: {0}".format(node))
+                self.log.info("Adding Back: {0}".format(node))
                 rest.add_back_node(node.id)
                 rest.set_recovery_type(otpNode=node.id,
                                        recoveryType=recoveryType)
@@ -1190,12 +1197,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_failover_indexer_add_back(self):
@@ -1233,12 +1240,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     nodes.extend([node for node in nodes_all
                                   if node.ip == failover_node.ip])
                 for node in nodes:
-                    log.info("Adding back {0} with recovery type {1}...".format(
+                    self.log.info("Adding back {0} with recovery type {1}...".format(
                         node.ip, recoveryType))
                     rest.add_back_node(node.id)
                     rest.set_recovery_type(otpNode=node.id,
                                            recoveryType=recoveryType)
-            log.info("Rebalancing nodes in...")
+            self.log.info("Rebalancing nodes in...")
             mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], [], [])
@@ -1247,12 +1254,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
 
     def test_failover_indexer_restart(self):
@@ -1280,7 +1287,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     if msg in str(ex):
                         continue
                     else:
-                        log.info(str(ex))
+                        self.log.info(str(ex))
                         break
         remote.start_server()
         self.sleep(20)
@@ -1310,12 +1317,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
         finally:
             remote.start_server()
@@ -1328,6 +1335,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         kvOps_tasks = self._run_kvops_tasks()
         try:
             self._create_replica_indexes()
+            indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            rest = RestConnection(indexer_nodes[0])
+            index_resp = rest.get_indexer_metadata()
+            if 'status' in index_resp:
+                index_map = index_resp['status']
+                self.log.info("Index metadata {}".format(index_map))
             for node in self.nodes_out_list:
                 self.start_firewall_on_node(node)
                 self.sleep(60)
@@ -1336,7 +1349,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             raise
         finally:
             for node in self.nodes_out_list:
@@ -1345,7 +1358,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-            log.info("==== Cluster in healthy state ====")
+            self.log.info("==== Cluster in healthy state ====")
             self._check_all_bucket_items_indexed()
 
     def test_couchbase_bucket_compaction(self):
@@ -1385,7 +1398,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         # check if the nodes in cluster are healthy
         msg = "Cluster not in Healthy state"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-        log.info("==== Cluster in healthy state ====")
+        self.log.info("==== Cluster in healthy state ====")
         self._check_all_bucket_items_indexed()
         post_recovery_tasks = self.async_run_operations(phase="after")
         self._run_tasks([post_recovery_tasks])
@@ -1397,24 +1410,24 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         kvOps_tasks = self._run_kvops_tasks()
         # Flush the bucket
         for bucket in self.buckets:
-            log.info("Flushing bucket {0}...".format(bucket.name))
+            self.log.info("Flushing bucket {0}...".format(bucket.name))
             rest = RestConnection(self.master)
             rest.flush_bucket(bucket.name)
             count = 0
             while rest.get_bucket_status(bucket.name) != "healthy" and \
                     count < 10:
-                log.info("Bucket {0} Status is {1}. Sleeping...".format(
+                self.log.info("Bucket {0} Status is {1}. Sleeping...".format(
                     bucket.name, rest.get_bucket_status(bucket.name)))
                 count += 1
                 self.sleep(10)
-            log.info("Bucket {0} is {1}".format(
+            self.log.info("Bucket {0} is {1}".format(
                 bucket.name, rest.get_bucket_status(bucket.name)))
         mid_recovery_tasks = self.async_run_operations(phase="in_between")
         self._run_tasks([kvOps_tasks, mid_recovery_tasks])
         # check if the nodes in cluster are healthy
         msg = "Cluster not in Healthy state"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
-        log.info("==== Cluster in healthy state ====")
+        self.log.info("==== Cluster in healthy state ====")
         self.sleep(180)
         self._check_all_bucket_items_indexed()
         post_recovery_tasks = self.async_run_operations(phase="after")
@@ -1873,7 +1886,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             bucket_count_before_rollback = self.get_item_count(self.master, bucket.name)
             bucket_before_item_counts[bucket.name] = bucket_count_before_rollback
-            log.info("Items in bucket {0} before rollback = {1}".format(
+            self.log.info("Items in bucket {0} before rollback = {1}".format(
                 bucket.name, bucket_count_before_rollback))
 
         # Index rollback count before rollback
@@ -1907,12 +1920,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             bucket_count_after_rollback = self.get_item_count(self.master, bucket.name)
             bucket_after_item_counts[bucket.name] = bucket_count_after_rollback
-            log.info("Items in bucket {0} after rollback = {1}".format(
+            self.log.info("Items in bucket {0} after rollback = {1}".format(
                 bucket.name, bucket_count_after_rollback))
 
         for bucket in self.buckets:
             if bucket_after_item_counts[bucket.name] == bucket_before_item_counts[bucket.name]:
-                log.info("Looks like KV rollback did not happen at all.")
+                self.log.info("Looks like KV rollback did not happen at all.")
         self._verify_bucket_count_with_index_count()
         self.multi_query_using_index()
 
@@ -1949,14 +1962,14 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         lost_indexes = []
         rest = RestConnection(self.master)
         index_map = rest.get_index_status()
-        log.info("index_map: {0}".format(index_map))
+        self.log.info("index_map: {0}".format(index_map))
         for index_node in self.index_nodes_out:
             host = "{0}:{1}".format(index_node.ip, self.node_port)
             for index in index_map.values():
                 for keys, vals in index.items():
                     if vals["hosts"] == host:
                         lost_indexes.append(keys)
-        log.info("Lost Indexes: {0}".format(lost_indexes))
+        self.log.info("Lost Indexes: {0}".format(lost_indexes))
         return lost_indexes
 
     def _run_kvops_tasks(self):

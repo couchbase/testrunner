@@ -440,7 +440,7 @@ class PlannerGSI(BaseSecondaryIndexingTests):
             defer_build = random.choice([True, False])
             try:
                 query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
-                                                              num_replica=self.num_replicas)
+                                                              num_replica=0)
                 self.run_cbq_query(query)
             except Exception as err:
                 if 'Build Already In Progress.' not in str(err):
@@ -481,6 +481,7 @@ class PlannerGSI(BaseSecondaryIndexingTests):
             self.wait_until_indexes_online(defer_build=True)
 
             index_metadata = self.index_rest.get_indexer_metadata()['status']
+            self.log.info(index_metadata)
             for index in index_metadata:
                 if index['indexName'] == idx_new:
                     host = index['hosts'][0].split(':')[0]
@@ -658,16 +659,17 @@ class PlannerGSI(BaseSecondaryIndexingTests):
         new_idx = "new_idx"
         new_index_gen = QueryDefinition(index_name=new_idx, index_fields=[equivalent_index_field])
         query = new_index_gen.generate_index_create_query(namespace=collection_namespace,
-                                                          num_replica=self.num_replicas)
+                                                          num_replica=0)
         self.run_cbq_query(query=query)
         self.wait_until_indexes_online()
-
         indexer_meta_data = self.index_rest.get_indexer_metadata()['status']
+        self.log.info("Indexer metadata: %s", indexer_meta_data)
         for index in indexer_meta_data:
             if index['indexName'] == new_idx:
                 host = index['hosts'][0].split(':')[0]
                 self.assertTrue(host not in least_loaded_node,
                                 "Equivalent index replica created on least loaded node, not maintaining HA")
+
     def test_alter_index_equivalent_partitioned_index(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         if len(index_nodes) < 4:
