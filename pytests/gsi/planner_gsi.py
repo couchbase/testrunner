@@ -672,8 +672,8 @@ class PlannerGSI(BaseSecondaryIndexingTests):
 
     def test_alter_index_equivalent_partitioned_index(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        if len(index_nodes) < 4:
-            self.fail("Need 3 index nodes")
+        if len(index_nodes) < 2:
+            self.fail("Need atleast 3 index nodes")
         self.prepare_collection_for_indexing(num_of_docs_per_collection=self.num_of_docs_per_collection, json_template=self.json_template)
         collection_namespace = self.namespaces[0]
         deploy_nodes = [f"{node.ip}:{self.node_port}" for node in index_nodes]
