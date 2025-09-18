@@ -321,37 +321,92 @@ def create_fallback_ssh_config(ssh, host):
     """Create a completely new SSH config as fallback for problematic modern distributions"""
     log.info(f"DEBUG: Creating fallback SSH configuration for {host}")
 
-    fallback_config = """# Couchbase Test SSH Configuration - FALLBACK
+    # Detect the correct SFTP server path for the distribution
+    log.info(f"DEBUG: Detecting SFTP server path on {host}")
+    stdin, stdout, stderr = ssh.exec_command("find /usr -name 'sftp-server' 2>/dev/null | head -1")
+    sftp_path = stdout.read().decode().strip()
+
+    if not sftp_path:
+        # Default paths for common distributions
+        stdin, stdout, stderr = ssh.exec_command("cat /etc/os-release 2>/dev/null || echo 'unknown'")
+        os_info = stdout.read().decode().strip().lower()
+
+        if "red hat" in os_info or "rhel" in os_info or "centos" in os_info:
+            sftp_path = "/usr/libexec/openssh/sftp-server"
+        elif "ubuntu" in os_info or "debian" in os_info:
+            sftp_path = "/usr/lib/openssh/sftp-server"
+        else:
+            sftp_path = "/usr/libexec/openssh/sftp-server"  # Default for modern systems
+
+    log.info(f"DEBUG: Using SFTP server path: {sftp_path}")
+
+    # Modern SSH configuration without deprecated directives
+    fallback_config = f"""# Couchbase Test SSH Configuration - Modern Fallback
+# Basic SSH Settings
 Port 22
-Protocol 2
+
+# Host Keys (modern approach)
 HostKey /etc/ssh/ssh_host_rsa_key
 HostKey /etc/ssh/ssh_host_ecdsa_key
 HostKey /etc/ssh/ssh_host_ed25519_key
-UsePrivilegeSeparation yes
-KeyRegenerationInterval 3600
-ServerKeyBits 1024
+
+# Logging
 SyslogFacility AUTH
 LogLevel INFO
+
+# Authentication Settings
 LoginGraceTime 120
 PermitRootLogin yes
 StrictModes no
-RSAAuthentication yes
 PubkeyAuthentication yes
 PasswordAuthentication yes
 ChallengeResponseAuthentication no
+KbdInteractiveAuthentication no
 UsePAM yes
+
+# Connection Settings
+MaxAuthTries 6
+MaxSessions 10
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Security Settings
 X11Forwarding yes
 PrintMotd no
+PrintLastLog yes
+TCPKeepAlive yes
+
+# Environment
 AcceptEnv LANG LC_*
-Subsystem sftp /usr/lib/openssh/sftp-server
+
+# SFTP Subsystem (critical for file operations)
+Subsystem sftp {sftp_path}
+
+# Additional modern security settings
+AllowUsers *
+PermitTunnel no
+GatewayPorts no
 """
 
     fallback_commands = [
         "sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%s)",
         f"echo '{fallback_config}' | sudo tee /etc/ssh/sshd_config",
         "sudo chmod 644 /etc/ssh/sshd_config",
+        # Ensure SFTP server package is installed (distribution-specific)
+        "if command -v yum &> /dev/null; then sudo yum install -y openssh-sftp-server; elif command -v dnf &> /dev/null; then sudo dnf install -y openssh-sftp-server; elif command -v apt-get &> /dev/null; then sudo apt-get update && sudo apt-get install -y openssh-server; else echo 'No supported package manager found'; fi",
+        # Test configuration
         "sudo sshd -t || echo 'Fallback config test failed'",
-        "sudo systemctl restart sshd || sudo systemctl restart ssh"
+        # Test SFTP subsystem specifically
+        f"test -f {sftp_path} && echo 'SFTP server binary exists' || echo 'ERROR: SFTP server binary missing at {sftp_path}'",
+        # Restart SSH with proper sequence for SFTP (distribution-aware)
+        "if systemctl list-units --full -all | grep -Fq 'ssh.service'; then SSH_SERVICE='ssh'; else SSH_SERVICE='sshd'; fi",
+        "echo \"Using SSH service: $SSH_SERVICE\"",
+        "sudo systemctl stop $SSH_SERVICE 2>/dev/null || true",
+        "sleep 3",
+        "sudo systemctl start $SSH_SERVICE",
+        "sleep 5",
+        # Verify SFTP is working
+        "sudo systemctl status $SSH_SERVICE --no-pager -l | head -10"
     ]
 
     for cmd in fallback_commands:
@@ -400,11 +455,18 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                 # First, check what override directories exist
                 "echo 'CHECKING SSH OVERRIDE DIRS:' && find /etc/ssh/ /usr/lib/ssh/ /lib/systemd/ -name '*ssh*' -type d 2>/dev/null || true",
                 "echo 'CHECKING SSH OVERRIDE FILES:' && find /etc/ssh/ -name '*.conf' -o -name '*.d' 2>/dev/null | head -20 || true",
-                # Remove all potential override directories
-                "sudo rm -rf /etc/ssh/sshd_config.d/*",
-                "sudo rm -rf /etc/ssh/ssh_config.d/*",
+                # Backup important override files before removing
+                "sudo mkdir -p /tmp/ssh_backup && sudo cp -r /etc/ssh/sshd_config.d/ /tmp/ssh_backup/ 2>/dev/null || true",
+                # Check for SFTP configuration in override files
+                "echo 'CHECKING FOR SFTP CONFIG:' && sudo grep -r 'sftp' /etc/ssh/sshd_config.d/ 2>/dev/null || echo 'No SFTP config found in overrides'",
+                # Only remove non-SFTP override files, preserve SFTP configs
+                "sudo find /etc/ssh/sshd_config.d/ -name '*.conf' -exec grep -L 'sftp\\|Subsystem' {} \\; | sudo xargs rm -f 2>/dev/null || true",
                 # Check for systemd overrides
                 "sudo find /etc/systemd /lib/systemd -name '*ssh*' -type f 2>/dev/null | head -10 || true",
+                # Detect correct SFTP server path
+                "SFTP_PATH=$(find /usr -name 'sftp-server' 2>/dev/null | head -1) && echo \"DETECTED SFTP PATH: $SFTP_PATH\"",
+                # Ensure SFTP subsystem is properly configured
+                "SFTP_PATH=$(find /usr -name 'sftp-server' 2>/dev/null | head -1) && if [ -n \"$SFTP_PATH\" ]; then echo \"Subsystem sftp $SFTP_PATH\" | sudo tee -a /etc/ssh/sshd_config; fi",
                 # Force append critical settings to ensure they override any includes
                 "echo '' | sudo tee -a /etc/ssh/sshd_config",
                 "echo '# FORCED COUCHBASE TEST CONFIGURATION' | sudo tee -a /etc/ssh/sshd_config",
@@ -412,7 +474,10 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                 "echo 'PasswordAuthentication yes' | sudo tee -a /etc/ssh/sshd_config",
                 "echo 'PubkeyAuthentication yes' | sudo tee -a /etc/ssh/sshd_config",
                 "echo 'ChallengeResponseAuthentication no' | sudo tee -a /etc/ssh/sshd_config",
-                "echo 'UsePAM yes' | sudo tee -a /etc/ssh/sshd_config"])
+                "echo 'KbdInteractiveAuthentication no' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'UsePAM yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'MaxSessions 10' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'ClientAliveInterval 300' | sudo tee -a /etc/ssh/sshd_config"])
         else:
             commands.append("sudo rm -rf /etc/ssh/sshd_config.d/*")
 
@@ -421,8 +486,10 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
             commands.extend([
                 # Check for and handle SELinux/AppArmor
                 "echo 'SECURITY CONTEXT CHECK:' && (getenforce 2>/dev/null || aa-status 2>/dev/null | head -5 || echo 'No SELinux/AppArmor detected')",
-                # Temporarily disable SELinux if present
-                "sudo setenforce 0 2>/dev/null || true",
+                # Handle security frameworks (SELinux for RHEL, AppArmor for Debian)
+                "sudo setenforce 0 2>/dev/null || sudo aa-complain /usr/sbin/sshd 2>/dev/null || echo 'Security framework handling attempted'",
+                # Install SFTP server if missing (distribution-specific approach)
+                "if command -v yum &> /dev/null; then sudo yum install -y openssh-sftp-server; elif command -v dnf &> /dev/null; then sudo dnf install -y openssh-sftp-server; elif command -v apt-get &> /dev/null; then sudo apt-get update && sudo apt-get install -y openssh-server; else echo 'No supported package manager found'; fi",
                 # Test SSH config before restart
                 "echo 'SSH CONFIG TEST:' && sudo sshd -t && echo 'SSH config is valid' || echo 'WARNING: SSH config test failed'"])
 
@@ -433,14 +500,26 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
 
         # SSH restart with enhanced error handling for modern distributions
         if is_modern_distro:
-            commands.extend([
-                # For modern distributions, use a more careful restart approach
-                "echo 'STOPPING SSH SERVICE...' && sudo systemctl stop sshd.service ssh.service 2>/dev/null || true",
-                "sleep 3",
-                "echo 'STARTING SSH SERVICE...' && sudo systemctl start sshd.service || sudo systemctl start ssh.service",
-                "sleep 5",
-                "echo 'VERIFYING SSH SERVICE...' && sudo systemctl is-active sshd.service || sudo systemctl is-active ssh.service",
-                "echo 'RELOADING SSH CONFIG...' && sudo systemctl reload sshd.service || sudo systemctl reload ssh.service || true"])
+            if is_debian13_or_newer:
+                # Debian-specific SSH restart sequence
+                commands.extend([
+                    "echo 'DEBIAN SSH RESTART SEQUENCE...'",
+                    "sudo systemctl stop ssh.service 2>/dev/null || sudo systemctl stop sshd.service 2>/dev/null || true",
+                    "sleep 3",
+                    "echo 'STARTING SSH SERVICE...' && sudo systemctl start ssh.service || sudo systemctl start sshd.service",
+                    "sleep 5",
+                    "echo 'VERIFYING SSH SERVICE...' && sudo systemctl is-active ssh.service || sudo systemctl is-active sshd.service",
+                    "echo 'RELOADING SSH CONFIG...' && sudo systemctl reload ssh.service || sudo systemctl reload sshd.service || true"])
+            else:
+                # RHEL/CentOS-specific SSH restart sequence
+                commands.extend([
+                    "echo 'RHEL SSH RESTART SEQUENCE...'",
+                    "sudo systemctl stop sshd.service 2>/dev/null || sudo systemctl stop ssh.service 2>/dev/null || true",
+                    "sleep 3",
+                    "echo 'STARTING SSH SERVICE...' && sudo systemctl start sshd.service || sudo systemctl start ssh.service",
+                    "sleep 5",
+                    "echo 'VERIFYING SSH SERVICE...' && sudo systemctl is-active sshd.service || sudo systemctl is-active ssh.service",
+                    "echo 'RELOADING SSH CONFIG...' && sudo systemctl reload sshd.service || sudo systemctl reload ssh.service || true"])
         else:
             commands.extend([
                 "sudo systemctl restart sshd.service",
@@ -453,7 +532,11 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
             "echo 'DEBUG: SSH service status:' && (sudo systemctl status sshd --no-pager -l || sudo systemctl status ssh --no-pager -l)",
             "echo 'DEBUG: SSH process check:' && sudo ps aux | grep '[s]shd'",
             "echo 'DEBUG: SSH config test:' && sudo sshd -t",
+            "echo 'DEBUG: SFTP subsystem check:' && sudo grep -i 'subsystem.*sftp' /etc/ssh/sshd_config || echo 'No SFTP subsystem found'",
+            "echo 'DEBUG: SFTP server binary check:' && find /usr -name 'sftp-server' 2>/dev/null || echo 'SFTP server binary not found'",
             "echo 'DEBUG: Final SSH config verification:' && sudo cat /etc/ssh/sshd_config | tail -20",
+            # Test SFTP functionality locally
+            "echo 'DEBUG: Local SFTP test:' && timeout 10 bash -c 'echo \"ls\" | sftp -o BatchMode=no -o StrictHostKeyChecking=no -o ConnectTimeout=5 root@localhost 2>&1' | head -10 || echo 'Local SFTP test completed'",
             # Test what authentication methods are actually being advertised
             "echo 'DEBUG: SSH auth methods test:' && timeout 10 ssh -o BatchMode=yes -o ConnectTimeout=5 -o PreferredAuthentications=password root@localhost 'echo test' 2>&1 | head -5 || echo 'Local SSH password test completed'",
             "sudo shutdown -P +800"])
