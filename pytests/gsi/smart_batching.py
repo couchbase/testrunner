@@ -82,7 +82,8 @@ class SmartBatching(BaseSecondaryIndexingTests):
                                                       to_remove=[], services=services)
 
         # self.sleep(60)
-        self.validate_smart_batching_during_rebalance(rebalance_task)
+        # with the recent changes in rebalance, this is no longer valid. Might need to backport this to 7.6.
+        # self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
@@ -138,7 +139,8 @@ class SmartBatching(BaseSecondaryIndexingTests):
         services = ['index'] * self.remove_nodes_num
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                       to_remove=remove_nodes, services=services)
-        self.validate_smart_batching_during_rebalance(rebalance_task)
+        #  with the recent changes in rebalance, this is no longer valid. Might need to backport this to 7.6.
+        # self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
@@ -196,7 +198,8 @@ class SmartBatching(BaseSecondaryIndexingTests):
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                       to_remove=remove_nodes, services=services)
         self.sleep(30)
-        self.validate_smart_batching_during_rebalance(rebalance_task)
+        #  with the recent changes in rebalance, this is no longer valid. Might need to backport this to 7.6.
+        # self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_rebalance),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
@@ -267,7 +270,8 @@ class SmartBatching(BaseSecondaryIndexingTests):
                                                       to_remove=[], services=services)
 
         self.sleep(30)
-        self.validate_smart_batching_during_rebalance(rebalance_task)
+        #  with the recent changes in rebalance, this is no longer valid. Might need to backport this to 7.6.
+        # self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_failover = self.index_rest.get_indexer_metadata()['status']
         self.assertEqual(len(indexer_metadata_after_failover),
                          self.initial_index_num * (self.num_replicas + 1) * self.scope_num * self.collection_num)
