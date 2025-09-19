@@ -8954,3 +8954,41 @@ class QueriesIndexTests(QueryTests):
         finally:
             # Clean up: drop the collection (which drops all indexes on it)
             self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
+
+    def test_MB38289(self):
+        """
+        Test MB-38289: non leading array index MISSING can give wrong results.
+        """
+        self.fail_if_no_buckets()
+        query_context = "default._default"
+        collection_name = "mb38289col"
+        bucket_name = "default"
+
+        # Create a dedicated collection for this test
+        self.run_cbq_query(f"CREATE COLLECTION {collection_name}", query_context=query_context)
+        self.sleep(3)
+
+        try:
+            # Insert a single document into the default bucket as specified
+            upsert_query = f'UPSERT INTO {collection_name} (key, value) VALUES("k01", {{ "c1": "a", "arr1": [ {{"id":1}}, {{"x":2}}, {{"id":1}}, {{"id":4}} ] }});'
+            self.run_cbq_query(upsert_query, query_context=query_context)
+
+            # Create the array index
+            create_index_query = f"CREATE INDEX ix2 ON {collection_name}(c1, ALL ARRAY v.id FOR v IN arr1 END)"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.wait_for_all_indexes_online()
+
+            # Check explain plan
+            explain_query = f"EXPLAIN SELECT * FROM {collection_name} WHERE c1 = 'a' AND ANY v IN arr1 SATISFIES v.id IS MISSING END"
+            explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+            self.log.info(f"EXPLAIN result: {explain_result}")
+            self.assertIn('ix2', str(explain_result['results'][0]['plan']), f"Expected ix2 to be used in the plan, but got: {explain_result['results'][0]['plan']}")
+
+            # Run the query and check returns 1 document
+            query = f"SELECT * FROM {collection_name} WHERE c1 = 'a' AND ANY v IN arr1 SATISFIES v.id IS MISSING END"
+            result = self.run_cbq_query(query, query_context=query_context)
+            self.assertEqual(len(result['results']), 1, f"Expected 1 result, got {len(result['results'])}")
+
+        finally:
+            # Clean up: drop the collection (which drops all indexes on it)
+            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)            
