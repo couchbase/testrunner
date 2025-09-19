@@ -52,7 +52,7 @@ import logging
 
 try:
     CHECK_FLAG = False
-    if (TestInputSingleton.input.param("testrunner_client", None) == testconstants.PYTHON_SDK) or \
+    if (TestInputSingleton.input is not None and TestInputSingleton.input.param("testrunner_client", None) == testconstants.PYTHON_SDK) or \
         ((testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK):
         try:
             from sdk_client import SDKSmartClient as VBucketAwareMemcached
