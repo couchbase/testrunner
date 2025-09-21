@@ -52,8 +52,8 @@ class x509tests(BaseTestCase):
             self.verify_ssl = True  # if true it uses x509Main.CERT_FILE
         copy_servers = copy.deepcopy(self.servers)
 
-        if self.enable_nton_local:
-            ntonencryptionBase().setup_nton_cluster(self.servers, 'enable', self.local_clusterEncryption)
+        if self.ntonencrypt == 'disable' and self.enable_nton_local:
+            ntonencryptionBase().setup_nton_cluster(self.servers,'enable',self.local_clusterEncryption)
         # Generate cert and pass on the client ip for cert generation
         if (self.dns is not None) or (self.uri is not None):
             x509main(self.master)._generate_cert(copy_servers, type=SSLtype, encryption=encryption_type, key_length=key_length, client_ip=self.ip_address, alt_names='non_default', dns=self.dns, uri=self.uri,wildcard_dns=self.wildcard_dns)
@@ -278,15 +278,21 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         for node in servs_inout:
             x509main(node).setup_master()
+
         known_nodes = ['ns_1@' + self.master.ip]
         for server in servs_inout:
             rest.add_node('Administrator', 'password', server.ip)
             known_nodes.append('ns_1@' + server.ip)
         rest.rebalance(known_nodes)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
+
         for server in self.servers:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code")
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_remove_add_back_node_with_cert(self, rebalance=None):
         rebalance = self.input.param('rebalance', True)
@@ -303,8 +309,12 @@ class x509tests(BaseTestCase):
         rest.rebalance(known_nodes)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code")
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
         rest.fail_over(serv_out, graceful=False)
         if (rebalance):
             rest.rebalance(known_nodes, [serv_out])
@@ -321,8 +331,12 @@ class x509tests(BaseTestCase):
         rest.rebalance(known_nodes)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code")
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_remove_graceful_add_back_node_with_cert(self, recovery_type=None):
         recovery_type = self.input.param('recovery_type')
@@ -346,8 +360,12 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
 
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code")
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
 
         rest.fail_over(serv_out, graceful=True)
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
@@ -357,8 +375,12 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
 
         for server in servs_inout:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code")
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_remove_autofailover(self):
         rest = RestConnection(self.master)
@@ -385,8 +407,12 @@ class x509tests(BaseTestCase):
         shell.disconnect()
         self.sleep(30)
         for server in self.servers[1:4]:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code")
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_add_node_with_cert_non_master(self):
         rest = RestConnection(self.master)
@@ -407,8 +433,12 @@ class x509tests(BaseTestCase):
         self.assertTrue(self.check_rebalance_complete(rest), "Issue with rebalance")
 
         for server in self.servers[:3]:
-            status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
-            self.assertEqual(status, 200, "Not able to login via SSL code for ip - {0}".format(server.ip))
+            if self.client_cert_state == "mandatory":
+                status = x509main(server)._validate_mandatory_state_ssl_login()
+                self.assertEqual(status, 200, "Not able to login via SSL code")
+            else:
+                status = x509main(server)._validate_ssl_login(verify=self.verify_ssl)
+                self.assertEqual(status, 200, "Not able to login via SSL code")
 
     # simple xdcr with ca cert
     def test_basic_xdcr_with_cert(self):
@@ -606,8 +636,12 @@ class x509tests(BaseTestCase):
 
     def test_basic_ssl_test_invalid_cert(self):
         x509main(self.master).setup_master()
-        status = x509main(self.master)._validate_ssl_login(verify=self.verify_ssl)
-        self.assertEqual(status, 200, "Not able to login via SSL code")
+        if self.client_cert_state == "mandatory":
+            status = x509main(self.master)._validate_mandatory_state_ssl_login()
+            self.assertEqual(status, 200, "Not able to login via SSL code")
+        else:
+            status = x509main(self.master)._validate_ssl_login(verify=self.verify_ssl)
+            self.assertEqual(status, 200, "Not able to login via SSL code")
 
     # test sdk certs on a single node
     def test_sdk(self):
