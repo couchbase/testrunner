@@ -2826,6 +2826,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                        and "{0}.{1}".format(index['scope'], index['collection'])
                        in bucket_collection_namespaces]
                 self._build_indexes(indexes_after_restore)
+                self.sleep(120)
                 self.wait_until_indexes_online()
                 #doing a swap rebalance operation post restore
                 index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

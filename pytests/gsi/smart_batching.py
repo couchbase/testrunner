@@ -198,6 +198,10 @@ class SmartBatching(BaseSecondaryIndexingTests):
         rebalance_task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
                                                       to_remove=remove_nodes, services=services)
         self.sleep(30)
+        result = rebalance_task.result()
+        self.log.info(result)
+        rebalance_status = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         #  with the recent changes in rebalance, this is no longer valid. Might need to backport this to 7.6.
         # self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_rebalance = self.index_rest.get_indexer_metadata()['status']
@@ -270,6 +274,10 @@ class SmartBatching(BaseSecondaryIndexingTests):
                                                       to_remove=[], services=services)
 
         self.sleep(30)
+        result = rebalance_task.result()
+        self.log.info(result)
+        rebalance_status = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
         #  with the recent changes in rebalance, this is no longer valid. Might need to backport this to 7.6.
         # self.validate_smart_batching_during_rebalance(rebalance_task)
         indexer_metadata_after_failover = self.index_rest.get_indexer_metadata()['status']
