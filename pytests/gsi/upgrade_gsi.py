@@ -2659,8 +2659,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     scan_results_check = False
                 select_queries = self.create_index_in_batches(replica_count=2, scalar=scalar, dataset=self.json_template, bhive=False)
                 self.wait_until_indexes_online()
-                node_position = random.randint(0, self.nodes_init-1)
-                node_to_upgrade = node_to_downgrade = self.servers[node_position]
+                index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                node_position = random.randint(0, len(index_nodes)-1)
+                node_to_upgrade = node_to_downgrade = index_nodes[node_position]
+
                 self.upgrade_and_downgrade_and_validate_single_node(node_to_upgrade=node_to_upgrade, select_queries=select_queries)
                 self.sleep(10)
                 if self.initial_version[:3] == "7.6" or self.upgrade_to[:3] >= "8.0":
@@ -3040,10 +3042,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.update_master_node()
         self.sleep(20)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        scalar_idx = QueryDefinition(index_name='scalar_rgb_2', index_fields=['color'],
-                                     partition_by_fields=['meta().id'])
-        scalar_query = scalar_idx.generate_index_create_query(namespace=collection_namespace, num_partition=2,
-                                                              defer_build=self.defer_build, num_replica=self.num_index_replica)
+        scalar_idx = QueryDefinition(index_name='scalar_rgb_2', index_fields=['color'])
+        scalar_query = scalar_idx.generate_index_create_query(namespace=collection_namespace,defer_build=self.defer_build, num_replica=self.num_index_replica)
         self.run_cbq_query(query=scalar_query, server=self.n1ql_node)
 
         if self.initial_version[:3] >= "7.6":
