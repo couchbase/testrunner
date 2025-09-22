@@ -292,3 +292,114 @@ class JWTTokenTest(OnPremBaseTestCase):
             status, content = rest_conn.delete_group(group_name)
             if not status:
                 self.fail(f"Failed to clean up group - {group_name}")
+
+    def test_access_forbidden_with_jwt(self):
+        """
+        Test that access_forbidden audit events are properly triggered with JWT auth.
+        Creates a read-only user via JWT and verifies they can read but not write/create resources.
+        """
+        rest_conn = RestConnection(self.master)
+
+        read_only_group = "jwt_readonly_users"
+        self.log.info(f"Creating {read_only_group} group with read-only permissions...")
+
+        group_status, content = rest_conn.add_group_role(
+            read_only_group,
+            "JWT test group for read-only users",
+            "data_reader[*]"
+        )
+        if not group_status:
+            self.log.info(f"Group creation failed, group {read_only_group} might already exist - deleting and recreating")
+            status, content = rest_conn.delete_group(read_only_group)
+            if not status:
+                self.fail(f"Failed to delete group, reason: {content}")
+            self.sleep(3, "Sleeping for group deletion to take effect")
+            status, content = rest_conn.add_group_role(
+                read_only_group,
+                "JWT test group for read-only users",
+                "data_reader[*]"
+            )
+            if not status:
+                self.fail(f"Failed to recreate group, reason: {content}")
+
+        self.log.info(f"{read_only_group} group created successfully with read-only permissions")
+
+        original_user_groups = self.user_groups
+        original_group_rule = self.token_group_matching_rule
+
+        self.user_groups = ["readonly"]
+        self.token_group_matching_rule = [f"^readonly$ {read_only_group}"]
+
+        config = self._get_jwt_config(jit_provisioning=True)
+        self.log.info(f"JWT Configuration for read-only test: {json.dumps(config, indent=2)}")
+
+        status, content, header = rest_conn.create_jwt_with_config(config)
+        self.log.info(f"JWT Config Creation - Status: {status}, Content: {content}")
+        if not status:
+            self.fail(f"Failed to create jwt config for read-only test: {content}")
+
+        self.sleep(10, "Waiting for JWT config to take effect")
+
+        token = self.create_token()
+        self.log.info(f"Generated JWT Token for read-only user: {token}")
+
+        try:
+            decoded = jwt.decode(token, options={"verify_signature": False})
+            self.log.info(f"JWT Token Payload for read-only user: {json.dumps(decoded, indent=2)}")
+        except Exception as e:
+            self.fail(f"Error decoding token: {e}")
+
+        self.log.info("Testing read access - should succeed...")
+        ok, res_text, response = self.make_request_with_jwt(
+            token, self.master,
+            "pools/default/buckets",
+            "GET", params={}
+        )
+        status_code = response.status
+        self.log.info(f"Read Request Result - OK: {ok}, Status: {status_code}, Response: {res_text}")
+
+        if not (200 <= status_code < 300):
+            self.fail(f"Read access failed unexpectedly. Status: {status_code}, Response: {res_text}")
+
+        self.log.info("Read access successful as expected")
+
+        self.log.info("Testing write access (bucket creation) - should fail with 403...")
+
+        bucket_params = {
+            "name": "test_forbidden_bucket",
+            "ramQuotaMB": 100,
+            "bucketType": "membase"
+        }
+
+        ok, res_text, response = self.make_request_with_jwt(
+            token, self.master,
+            "pools/default/buckets",
+            "POST", params=bucket_params
+        )
+        status_code = response.status
+        self.log.info(f"Write Request Result - OK: {ok}, Status: {status_code}, Response: {res_text}")
+
+        if status_code != 403:
+            self.fail(f"Expected 403 Forbidden for write access, got {status_code}. Response: {res_text}")
+
+        self.log.info("Write access correctly forbidden with 403 status")
+        self.log.info("Access forbidden audit event should have been triggered")
+
+        self.log.info("Testing user creation - should also fail with 403...")
+        user_params = {
+            "name": "test_forbidden_user",
+            "roles": "admin"
+        }
+
+        ok, res_text, response = self.make_request_with_jwt(
+            token, self.master,
+            "settings/rbac/users/local/test_forbidden_user",
+            "PUT", params=user_params
+        )
+        status_code = response.status
+        self.log.info(f"User Creation Request Result - OK: {ok}, Status: {status_code}, Response: {res_text}")
+
+        if status_code != 403:
+            self.fail(f"Expected 403 for user creation, got {status_code}")
+        else:
+            self.log.info("User creation correctly forbidden with 403 status")
