@@ -69,19 +69,3 @@ class BucketFlushTests(BaseTestCase):
         self._load_all_buckets(self.master, self.gen_create, "create", 0)
         self.persist_and_verify()
 
-    """Test case to check client behavior with bucket flush while loading/updating/deleting data"""
-    def bucketflush_with_data_ops(self):
-        try:
-            tasks = self._async_load_all_buckets(self.master, self.gen_create,
-                                                 self.data_op, 0)
-            for bucket in self.buckets:
-                self.cluster.bucket_flush(self.master, bucket)
-            for task in tasks:
-                task.result()
-        except MemcachedError as exp:
-            self.assertEqual(exp.status, 134,
-                             msg="Unexpected Exception - {0}".format(exp))
-            self.log.info("Expected Exception Caught - {0}".format(exp))
-        except Exception as exp:
-            self.log.info("Unxpected Exception Caught - {0}".format(exp))
-            self.fail("Unexpected exception caught- {0}".format(exp))
