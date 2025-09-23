@@ -42,7 +42,7 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '6.5.1-6299')
         self.use_domain_name = self.input.param('use_domain_names', 0)
-        self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
+        self.initial_vbuckets = self.input.param('initial_vbuckets', 128)
         self.clean_upgrade_install = self.input.param("clean_upgrade_install", True)
         self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
