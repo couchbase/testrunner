@@ -11,6 +11,7 @@ import requests
 import urllib.request, urllib.parse, urllib.error
 import random
 import os
+import uuid
 import copy
 import subprocess
 import json
@@ -42,7 +43,7 @@ class x509main:
     LININSTALLPATH = "/opt/couchbase/var/lib/couchbase/"
     MACINSTALLPATH = "/Users/couchbase/Library/Application Support/Couchbase/var/lib/couchbase/"
     DOWNLOADPATH = "/tmp/"
-    CACERTFILEPATH = "/tmp/newcerts" + "/"
+    CACERTFILEPATH = "/tmp/newcerts" + str(uuid.uuid4()) + "/"
     CHAINFILEPATH = "inbox"
     GOCERTGENFILE = "gencert.go"
     INCORRECT_ROOT_CERT = "incorrect_root_cert.crt"
@@ -50,11 +51,11 @@ class x509main:
     CLIENT_CERT_AUTH_JSON = 'client_cert_auth.json'
     CLIENT_CERT_AUTH_TEMPLATE = 'client_cert_config_template.txt'
     IP_ADDRESS = '172.16.1.174'
-    KEY_FILE = CACERTFILEPATH + "/" + CAKEYFILE
-    CERT_FILE = CACERTFILEPATH + "/" + CACERTFILE
+    KEY_FILE = CACERTFILEPATH + CAKEYFILE
+    CERT_FILE = CACERTFILEPATH + CACERTFILE
     CLIENT_CERT_KEY = CACERTFILEPATH + IP_ADDRESS + ".key"
     CLIENT_CERT_PEM = CACERTFILEPATH + IP_ADDRESS + ".pem"
-    SRC_CHAIN_FILE = CACERTFILEPATH + "/long_chain" + IP_ADDRESS + ".pem"
+    SRC_CHAIN_FILE = CACERTFILEPATH + "long_chain" + IP_ADDRESS + ".pem"
 
     def __init__(self,
                  host=None,
