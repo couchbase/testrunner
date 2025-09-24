@@ -1805,7 +1805,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             indexes_changed = True
         else:
             indexes_changed = False
-        if not continuous_mutations:
+        if not continuous_mutations or failover_nodes_list is None:
             self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
                                                         map_after_rebalance=map_after_rebalance,
                                                         stats_map_before_rebalance=stats_map_before_rebalance,
