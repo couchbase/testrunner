@@ -8,7 +8,7 @@ from couchbase.bucket import Bucket
 
 class SAMLUtils:
     def __init__(self, logger):
-        self.qe_server_ip = "172.23.216.60"
+        self.qe_server_ip = "172.23.105.178"
         self.log = logger
         self.saml_resources = None
         self.idp_metadata = None

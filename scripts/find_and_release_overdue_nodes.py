@@ -41,7 +41,7 @@ def main():
 
     # Initialize the Couchbase cluster connection with authentication
     authenticator = PasswordAuthenticator(SERVER_MANAGER_USER_NAME, SERVER_MANAGER_PASSWORD)
-    cluster = Cluster('couchbase://172.23.216.60', authenticator=authenticator)
+    cluster = Cluster('couchbase://172.23.105.178', authenticator=authenticator)
     bucket = cluster.bucket('QE-server-pool')
 
     # Query strings

@@ -28,7 +28,7 @@ import capella
 # need a timeout param
 
 POLL_INTERVAL = 60
-TEST_SUITE_DB = '172.23.216.60'
+TEST_SUITE_DB = '172.23.105.178'
 SERVER_MANAGER = '%s:8081' % TEST_SUITE_DB
 ADDL_SERVER_MANAGER = '%s:8081' % TEST_SUITE_DB
 SERVER_MANAGER_USER_NAME = 'Administrator'
@@ -473,11 +473,11 @@ def main():
                       default="all")
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
-                      default='172.23.216.60:8081')
+                      default='172.23.105.178:8081')
     parser.add_option('--addl_server_manager', dest='ADDL_SERVER_MANAGER',
-                      default='172.23.216.60:8081')
+                      default='172.23.105.178:8081')
     parser.add_option('--test_suite_db', dest="TEST_SUITE_DB",
-                      default='172.23.216.60')
+                      default='172.23.105.178')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
     parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
