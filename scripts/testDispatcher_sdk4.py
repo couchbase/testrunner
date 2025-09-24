@@ -33,7 +33,7 @@ from table_view import TableView
 
 POLL_INTERVAL = 60
 
-TEST_SUITE_DB = '172.23.104.162'
+TEST_SUITE_DB = '172.23.216.60'
 TEST_SUITE_DB_USER_NAME = 'Administrator'
 TEST_SUITE_DB_PASSWORD = "esabhcuoc"
 TIMEOUT = 120
@@ -478,7 +478,7 @@ def main():
     parser.add_option('-k', '--include_tests', dest='include_tests', default=None)
 
     parser.add_option('--test_suite_db', dest="TEST_SUITE_DB",
-                      default='172.23.104.162')
+                      default='172.23.216.60')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default='60')
     parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")

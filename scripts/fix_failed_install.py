@@ -40,7 +40,7 @@ password = sys.argv[3]
 cb_username = sys.argv[4]
 cb_userpassword = sys.argv[5]
 
-cluster = Cluster('couchbase://172.23.104.162')
+cluster = Cluster('couchbase://172.23.216.60')
 authenticator = PasswordAuthenticator(cb_username,cb_userpassword)
 cluster.authenticate(authenticator)
 cb = cluster.open_bucket('QE-server-pool')
