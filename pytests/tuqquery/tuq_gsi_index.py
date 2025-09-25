@@ -4918,9 +4918,11 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
+                    self.sleep(20, "sleep for index to be online")
                     self.query = "EXPLAIN SELECT * FROM {0} where name ".format(query_bucket) + "like 'xyz%'"
                     res = self.run_cbq_query()
                     plan = self.ExplainPlanHelper(res)
+                    self.log.info(f"plan is: {plan}")
                     self.assertTrue(plan["~children"][0]['index'] == index_name, "correct index is not used")
                     self.assertTrue(plan["~children"][0]['spans'][0]["range"][0]["high"] == "\"xy{\"")
                     self.assertTrue(plan["~children"][0]['spans'][0]["range"][0]["low"] == "\"xyz\"")
