@@ -432,8 +432,16 @@ class QueryLMKTests(QueryTests):
                 pass
 
     def test_lmk_insert(self):
+        # get the number of docs that have missing faa
+        query_count = "SELECT COUNT(*) as count FROM `travel-sample` WHERE faa IS MISSING"
+        result = self.run_cbq_query(query_count)
+        count = result['results'][0]['count']
+        self.log.info(f"count is: {count}")
+
         index = "CREATE INDEX idx1 ON `travel-sample`(`faa` INCLUDE MISSING) "
         self.run_cbq_query(index)
+        self.sleep(10, "sleep for index to be online")
+        
         try:
             query = "INSERT INTO `travel-sample`.inventory.hotel (KEY foo, VALUE bar) SELECT 'copy_' || meta(doc).id AS foo, doc AS bar FROM `travel-sample` AS doc where faa is missing"
 
@@ -443,7 +451,7 @@ class QueryLMKTests(QueryTests):
                             f"idx1 is not being picked up, it should be, please check explain {explain_plan}")
 
             actual_results = self.run_cbq_query(query)
-            self.assertEqual(actual_results['metrics']['mutationCount'], 29623)
+            self.assertEqual(actual_results['metrics']['mutationCount'], count, f"Mutation count is not correct, expected {count} got {actual_results['metrics']['mutationCount']}")
         finally:
             self.run_cbq_query("drop index `travel-sample`.idx1")
 
