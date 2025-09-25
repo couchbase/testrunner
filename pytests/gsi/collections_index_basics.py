@@ -119,7 +119,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
-            self.sleep(5)
+            self.sleep(120)
 
             self.rqg.random_query_generator(create_query=query_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build), node=self.n1ql_node.ip, dataset="person", num_queries=self.num_rqg_queries)
 
