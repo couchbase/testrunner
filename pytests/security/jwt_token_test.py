@@ -403,3 +403,314 @@ class JWTTokenTest(OnPremBaseTestCase):
             self.fail(f"Expected 403 for user creation, got {status_code}")
         else:
             self.log.info("User creation correctly forbidden with 403 status")
+
+    def test_nested_field_paths(self):
+        """Test JWT authentication with nested field paths in custom claims"""
+
+        # Configurable parameters
+        nested_user_name = self.input.param("nested_user_name", "nested_test_user")
+        nested_group_name = self.input.param("nested_group_name", "jwt_nested_admins")
+        sub_claim_path = self.input.param("sub_claim_path", "user.preferred_username")
+        groups_claim_path = self.input.param("groups_claim_path", "user.profile.groups")
+        jwt_group_value = self.input.param("jwt_group_value", "nested_admins")
+
+        rest_conn = RestConnection(self.master)
+
+        group_status = self.create_new_group(nested_group_name, "Admin group for nested JWT claims testing")
+        if not group_status:
+            self.fail(f"Failed to create {nested_group_name} group")
+
+        self.user_name = nested_user_name
+
+        config = {
+            "enabled": True,
+            "issuers": [
+                {
+                    "name": self.issuer_name,
+                    "signingAlgorithm": self.algorithm,
+                    "publicKeySource": "pem",
+                    "publicKey": self.pub_key,
+                    "jitProvisioning": True,
+                    "subClaim": sub_claim_path,
+                    "audClaim": "aud",
+                    "audienceHandling": "any",
+                    "audiences": self.token_audience,
+                    "groupsClaim": groups_claim_path,
+                    "groupsMaps": [f"^{jwt_group_value}$ {nested_group_name}"]
+                }
+            ]
+        }
+
+        status, content, header = rest_conn.create_jwt_with_config(config)
+        if not status:
+            self.fail(f"Failed to create jwt config with nested field paths: {content}")
+
+        self.sleep(10)
+
+        curr_time = int(time.time())
+        nested_payload = {
+            "iss": self.issuer_name,
+            "user": {
+                "preferred_username": self.user_name,
+                "profile": {
+                    "groups": [jwt_group_value]
+                }
+            },
+            "exp": curr_time + self.ttl,
+            "iat": curr_time,
+            "nbf": curr_time - self.nbf_seconds,
+            "jti": str(uuid.uuid4()),
+        }
+
+        if self.token_audience:
+            nested_payload['aud'] = self.token_audience
+
+        jwt_token = jwt.encode(payload=nested_payload,
+                               algorithm=self.algorithm,
+                               key=self.private_key)
+
+        ok, res_text, response = self.make_request_with_jwt(jwt_token, self.master,
+                                                            "/pools/default/buckets",
+                                                            "GET", params={})
+        status_code = response.status
+
+        if 200 <= status_code < 300:
+            self.log.info("SUCCESS: Nested field paths authentication worked")
+        elif status_code == 401:
+            self._debug_jwt_config(rest_conn)
+            self.fail("Unauthorized error with nested field paths")
+        else:
+            self._debug_jwt_config(rest_conn)
+            self.fail(f"Unexpected error, status: {status_code}, response: {res_text}")
+
+        # Test missing nested field (should fail)
+        missing_payload = {
+            "iss": self.issuer_name,
+            "user": {
+                "id": self.user_name,
+                "groups": [jwt_group_value]
+            },
+            "exp": curr_time + self.ttl,
+            "iat": curr_time,
+            "nbf": curr_time - self.nbf_seconds,
+            "jti": str(uuid.uuid4()),
+        }
+
+        if self.token_audience:
+            missing_payload['aud'] = self.token_audience
+
+        missing_token = jwt.encode(payload=missing_payload,
+                                   algorithm=self.algorithm,
+                                   key=self.private_key)
+
+        ok, res_text, response = self.make_request_with_jwt(missing_token, self.master,
+                                                            "/pools/default/buckets",
+                                                            "GET", params={})
+        status_code = response.status
+
+        if status_code == 401:
+            self.log.info("SUCCESS: Correctly rejected token with missing nested fields")
+        else:
+            self.fail(f"Expected 401 for missing nested fields, got {status_code}")
+        status, content = rest_conn.delete_group(nested_group_name)
+        if not status:
+            self.fail("failed to delete group after test")
+
+    def test_nested_roles_claim(self):
+        """Test JWT authentication with nested roles claim"""
+
+        # Configurable parameters
+        roles_user_name = self.input.param("roles_user_name", "roles_test_user")
+        roles_claim_path = self.input.param("roles_claim_path", "resource.testclient.roles")
+        jwt_role_value = self.input.param("jwt_role_value", "admin-access")
+        couchbase_role = self.input.param("couchbase_role", "admin")
+
+        rest_conn = RestConnection(self.master)
+
+        self.user_name = roles_user_name
+
+        config = {
+            "enabled": True,
+            "issuers": [
+                {
+                    "name": self.issuer_name,
+                    "signingAlgorithm": self.algorithm,
+                    "publicKeySource": "pem",
+                    "publicKey": self.pub_key,
+                    "jitProvisioning": True,
+                    "subClaim": "sub",
+                    "audClaim": "aud",
+                    "audienceHandling": "any",
+                    "audiences": self.token_audience,
+                    "rolesClaim": roles_claim_path,
+                    "rolesMaps": [f"^{jwt_role_value}$ {couchbase_role}"]
+                }
+            ]
+        }
+
+        status, content, header = rest_conn.create_jwt_with_config(config)
+        if not status:
+            self.fail(f"Failed to create jwt config with nested roles claim: {content}")
+
+        self.sleep(10)
+
+        curr_time = int(time.time())
+        roles_payload = {
+            "iss": self.issuer_name,
+            "sub": self.user_name,
+            "resource": {
+                "testclient": {
+                    "roles": [jwt_role_value]
+                }
+            },
+            "exp": curr_time + self.ttl,
+            "iat": curr_time,
+            "nbf": curr_time - self.nbf_seconds,
+            "jti": str(uuid.uuid4()),
+        }
+
+        if self.token_audience:
+            roles_payload['aud'] = self.token_audience
+
+        jwt_token = jwt.encode(payload=roles_payload,
+                               algorithm=self.algorithm,
+                               key=self.private_key)
+
+        ok, res_text, response = self.make_request_with_jwt(jwt_token, self.master,
+                                                            "/pools/default/buckets",
+                                                            "GET", params={})
+        status_code = response.status
+
+        if 200 <= status_code < 300:
+            self.log.info("SUCCESS: Nested roles claim authentication worked")
+        elif status_code == 401:
+            self._debug_jwt_config(rest_conn)
+            self.fail("Unauthorized error with nested roles claim")
+        else:
+            self._debug_jwt_config(rest_conn)
+            self.fail(f"Unexpected error, status: {status_code}, response: {res_text}")
+
+        # Test wrong nesting level (should fail)
+        wrong_payload = {
+            "iss": self.issuer_name,
+            "sub": self.user_name,
+            "resource": {
+                "roles": [jwt_role_value]
+            },
+            "exp": curr_time + self.ttl,
+            "iat": curr_time,
+            "nbf": curr_time - self.nbf_seconds,
+            "jti": str(uuid.uuid4()),
+        }
+
+        if self.token_audience:
+            wrong_payload['aud'] = self.token_audience
+
+        wrong_token = jwt.encode(payload=wrong_payload,
+                                 algorithm=self.algorithm,
+                                 key=self.private_key)
+
+        ok, res_text, response = self.make_request_with_jwt(wrong_token, self.master,
+                                                            "/pools/default/buckets",
+                                                            "GET", params={})
+        status_code = response.status
+
+        if status_code == 401:
+            self.log.info("SUCCESS: Correctly rejected token with wrong nesting level")
+        else:
+            self.fail(f"Expected 401 for wrong nesting level, got {status_code}")
+
+    def test_comprehensive_nested_claims(self):
+        """Test JWT authentication with multiple nested claims combined"""
+
+        # Configurable parameters
+        comp_user_name = self.input.param("comp_user_name", "comprehensive_user")
+        comp_group_name = self.input.param("comp_group_name", "jwt_comprehensive_admins")
+        sub_claim_path = self.input.param("sub_claim_path", "user.identity.username")
+        groups_claim_path = self.input.param("groups_claim_path", "user.profile.groups")
+        roles_claim_path = self.input.param("roles_claim_path", "resource.app.roles")
+        jwt_group_value = self.input.param("jwt_group_value", "comprehensive-group")
+        jwt_role_value = self.input.param("jwt_role_value", "comprehensive-role")
+        couchbase_role = self.input.param("couchbase_role", "admin")
+
+        rest_conn = RestConnection(self.master)
+
+        group_status = self.create_new_group(comp_group_name, "Admin group for comprehensive nested JWT testing")
+        if not group_status:
+            self.fail(f"Failed to create {comp_group_name} group")
+
+        self.user_name = comp_user_name
+
+        config = {
+            "enabled": True,
+            "issuers": [
+                {
+                    "name": self.issuer_name,
+                    "signingAlgorithm": self.algorithm,
+                    "publicKeySource": "pem",
+                    "publicKey": self.pub_key,
+                    "jitProvisioning": True,
+                    "subClaim": sub_claim_path,
+                    "audClaim": "aud",
+                    "audienceHandling": "any",
+                    "audiences": self.token_audience,
+                    "groupsClaim": groups_claim_path,
+                    "groupsMaps": [f"^{jwt_group_value}$ {comp_group_name}"],
+                    "rolesClaim": roles_claim_path,
+                    "rolesMaps": [f"^{jwt_role_value}$ {couchbase_role}"]
+                }
+            ]
+        }
+
+        status, content, header = rest_conn.create_jwt_with_config(config)
+        if not status:
+            self.fail(f"Failed to create comprehensive jwt config: {content}")
+
+        self.sleep(10)
+
+        curr_time = int(time.time())
+        comprehensive_payload = {
+            "iss": self.issuer_name,
+            "user": {
+                "identity": {
+                    "username": self.user_name
+                },
+                "profile": {
+                    "groups": [jwt_group_value]
+                }
+            },
+            "resource": {
+                "app": {
+                    "roles": [jwt_role_value]
+                }
+            },
+            "exp": curr_time + self.ttl,
+            "iat": curr_time,
+            "nbf": curr_time - self.nbf_seconds,
+            "jti": str(uuid.uuid4()),
+        }
+
+        if self.token_audience:
+            comprehensive_payload['aud'] = self.token_audience
+
+        jwt_token = jwt.encode(payload=comprehensive_payload,
+                               algorithm=self.algorithm,
+                               key=self.private_key)
+
+        ok, res_text, response = self.make_request_with_jwt(jwt_token, self.master,
+                                                            "/pools/default/buckets",
+                                                            "GET", params={})
+        status_code = response.status
+
+        if 200 <= status_code < 300:
+            self.log.info("SUCCESS: Comprehensive nested claims authentication worked")
+        elif status_code == 401:
+            self._debug_jwt_config(rest_conn)
+            self.fail("Unauthorized error with comprehensive nested claims")
+        else:
+            self._debug_jwt_config(rest_conn)
+            self.fail(f"Unexpected error, status: {status_code}, response: {res_text}")
+
+        status, content = rest_conn.delete_group(comp_group_name)
+        if not status:
+            self.fail("failed to delete group after test")
