@@ -973,6 +973,7 @@ class QueriesViewsTests(QuerySanityTests):
                                                                  query_bucket, attr)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
+                    self.sleep(30, 'sleep before running query...')
                     created_indexes.append(ind_name)
                     self.query = 'SELECT name, join_day, join_mo FROM %s WHERE join_day>2 AND join_mo>3' % (
                         query_bucket)
@@ -987,6 +988,7 @@ class QueriesViewsTests(QuerySanityTests):
                         query_bucket)
                     res = self.run_cbq_query()
                     plan = self.ExplainPlanHelper(res)
+                    self.log.info(f'plan is: {plan}')
                     self.assertTrue(plan["~children"][0]["index"] == ind_name,
                                     "Index should be %s, but is: %s" % (ind_name, plan))
             finally:
