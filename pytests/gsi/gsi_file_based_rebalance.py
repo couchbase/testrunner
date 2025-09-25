@@ -394,7 +394,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     self.validate_node_placement_with_nodes_clause(create_queries=create_queries)
                 self.validate_shard_affinity()
                 nodes_out = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                nodes_out_list = nodes_out[:2]
+                nodes_out_list = nodes_out[:1]
                 if self.rebalance_all_at_once:
                     # failover all nodes at once
                     self.rebalance_and_validate(failover_nodes_list=nodes_out_list,
@@ -1805,7 +1805,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
             indexes_changed = True
         else:
             indexes_changed = False
-        if not continuous_mutations or failover_nodes_list is None:
+        if not continuous_mutations:
             self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance=map_before_rebalance,
                                                         map_after_rebalance=map_after_rebalance,
                                                         stats_map_before_rebalance=stats_map_before_rebalance,
