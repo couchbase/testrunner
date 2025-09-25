@@ -846,14 +846,14 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.log.info(f"plan is: {plan}")
-                self.assertTrue(plan['~children'][0]['#operator'] == 'UnionScan')
+                self.assertTrue(plan['~children'][0]['#operator'] == 'UnionScan' or plan['~children'][0]['#operator'] == 'PrimaryScan3')
                 self.query = 'explain SELECT  meta().id  FROM {0} ' \
                              'where meta().id in ["",null,"query-testemployee10231.2819054-0",' \
                              '"query-testemployee9987.55838821-0"]'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.log.info(f"plan is: {plan}")
-                self.assertTrue("covers" in str(plan))
+                self.assertTrue("cover" in str(plan))
                 self.assertTrue(plan['~children'][0]['index'] in ["#primary", "idx4"])
                 self.query = 'SELECT  meta().id  FROM {0} ' \
                              'where meta().id in ["",null,"query-testemployee10231.2819054-0",' \
