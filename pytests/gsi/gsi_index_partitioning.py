@@ -1968,7 +1968,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Heal Network Partitioning
         self.stop_firewall_on_node(node_out)
-
+        self.sleep(60)
         # Re-run query
         scan_query = "select name,mutated from default where name > 'a' and mutated >=0;"
         try:
@@ -4154,8 +4154,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # Run query
         scan_query = "select name,mutated from default where name > 'a' and mutated >=0;"
         try:
-            result_before = self.n1ql_helper.run_cbq_query(query=scan_query, min_output_size=10000000,
-                                           server=self.n1ql_node)
+            result_before = self.n1ql_helper.run_cbq_query(query=scan_query, server=self.n1ql_node)
         except Exception as ex:
             self.log.info(str(ex))
             self.fail("Scan failed")

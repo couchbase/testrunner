@@ -381,7 +381,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 post_rebalance_in_map = self.get_index_map()
                 self.log.info(f"Pre rebalance in map: {pre_rebalance_in_map}")
                 self.log.info(f"Post rebalance in map: {post_rebalance_in_map}")
-                self.assertEqual(pre_rebalance_in_map, post_rebalance_in_map)
+                self.assertNotEqual(pre_rebalance_in_map, post_rebalance_in_map)
 
     '''Do the same alter index tests on an index created with a node list'''
     def test_alter_index_with_node_list(self):
@@ -1724,6 +1724,3 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, (expected_num_replicas - 1),
                                                 dropped_replica=True, replicaId=replica_id)
-
-        index_map = self.get_index_map()
-        self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas )

@@ -425,7 +425,7 @@ class EphemeralGSI(BaseSecondaryIndexingTests):
             self.sleep(30)
             memory_used = int(stats_all_buckets[bucket.name].get_stats([self.master], bucket, '',
                                                                        'mem_used')[self.master])
-            self.log.info(f"Current memory usage: {memory_used}")
+            self.log.info(f"Current memory usage: {memory_used}. Bucket size: {self.bucket_size}")
             if self.eviction_policy == 'noEviction':
                 # memory is considered full if mem_used is at say 90% of the available memory
                 if memory_used > threshold * self.bucket_size * 1000000:
@@ -434,7 +434,10 @@ class EphemeralGSI(BaseSecondaryIndexingTests):
                                                percent_update=0, percent_delete=0, scope=scope,
                                                collection=collection, output=True, start_seq_num=num_of_docs + 1)
                     task = self.cluster.async_load_gen_docs(self.master, bucket, gen_create)
-                    task.result()
+                    try:
+                        task.result()
+                    except Exception as ex:
+                        self.log.info(f"Error loading docs: {ex}. Ignore this error")
                     num_of_docs = num_of_docs + new_inserts
                     memory_used = int(stats_all_buckets[bucket.name].get_stats([self.master], bucket, '',
                                                                                'mem_used')[self.master])

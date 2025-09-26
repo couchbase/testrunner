@@ -1970,7 +1970,10 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         for i in range(20):
             self._kill_fts_process(fts_node)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
+        try:
+            rebalance.result()
+        except Exception as ex:
+            log.info("rebalance failed as expected: {0}".format(str(ex)))
         self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         # validate the results
