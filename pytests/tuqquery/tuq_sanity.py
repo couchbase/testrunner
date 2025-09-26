@@ -4149,23 +4149,33 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         try:
             for query_bucket in self.query_buckets:
-                self.run_cbq_query(query=f'CREATE INDEX ix100 ON {query_bucket}(c0,c1)')
-                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
-                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
-                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
-                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
-                self.run_cbq_query(query=f'INSERT INTO {query_bucket} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
+                # Use _default scope and a test collection
+                scope_name = "_default"
+                coll_name = "test_coll"
+                # Create collection in _default scope
+                self.run_cbq_query(query=f'CREATE COLLECTION IF NOT EXISTS `{query_bucket}`.`{scope_name}`.`{coll_name}`')
+                self.sleep(5, "Waiting for collection to be created")
+                fq_coll = f'`{query_bucket}`.`{scope_name}`.`{coll_name}`'
+                # Create index on the collection
+                self.run_cbq_query(query=f'CREATE INDEX ix100 ON {fq_coll}(c0,c1)')
+                # Insert documents into the collection
+                self.run_cbq_query(query=f'INSERT INTO {fq_coll} VALUES ("k01", {{"c0":0, "c1":"1", "c2":1}})')
+                self.run_cbq_query(query=f'INSERT INTO {fq_coll} VALUES ("k02", {{"c0":0, "c1":"1", "c2":2}})')
+                self.run_cbq_query(query=f'INSERT INTO {fq_coll} VALUES ("k03", {{"c0":0, "c1":"1", "c2":3}})')
+                self.run_cbq_query(query=f'INSERT INTO {fq_coll} VALUES ("k04", {{"c0":0, "c1":"1", "c2":4}})')
+                self.run_cbq_query(query=f'INSERT INTO {fq_coll} VALUES ("k05", {{"c0":0, "c1":"1", "c2":5}})')
+                # Run queries on the collection
                 results1 = self.run_cbq_query(
-                    query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
+                    query=f'SELECT c1, c2 FROM {fq_coll} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 1 LIMIT 1')
                 results2 = self.run_cbq_query(
-                    query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
+                    query=f'SELECT c1, c2 FROM {fq_coll} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 2 LIMIT 1')
                 results3 = self.run_cbq_query(
-                    query=f'SELECT c1, c2 FROM {query_bucket} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
+                    query=f'SELECT c1, c2 FROM {fq_coll} USE INDEX(ix100) WHERE c0 >= 0  ORDER BY c1 OFFSET 3 LIMIT 1')
                 self.assertEqual(results1['results'], [{'c1': '1', 'c2': 2}])
                 self.assertEqual(results2['results'], [{'c1': '1', 'c2': 3}])
                 self.assertEqual(results3['results'], [{'c1': '1', 'c2': 4}])
         finally:
-            self.run_cbq_query(query=f'DROP INDEX ix100 ON {query_bucket}')
+            self.run_cbq_query(query=f'DROP COLLECTION IF EXISTS `{query_bucket}`.`{scope_name}`.`{coll_name}`')
 
     ##############################################################################################
     #
