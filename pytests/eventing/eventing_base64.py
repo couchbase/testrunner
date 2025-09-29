@@ -27,7 +27,14 @@ class EventingBase64(EventingBaseTest):
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day*self.num_docs)
         self.undeploy_and_delete_function(body)
-        
+
+    def test_positive_negative_scenarios_ondeploy(self):
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.load_data_to_collection(self.docs_per_day*self.num_docs, "src_bucket._default._default")
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 1)
+        self.undeploy_and_delete_function(body)
+
     def test_end_to_end_query(self):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.load_data_to_collection(self.docs_per_day*self.num_docs, "src_bucket._default._default")

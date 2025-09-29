@@ -24,7 +24,7 @@ function OnDelete(meta, options) {
 }
 
 function OnDeploy(action) {
-    meta = {"id" : "1"};
+    var meta = {"id" : "1"};
     const sampleInteger=-10678324;
     const sampleFloat= 45.894055;
     const sampleBool=true;
@@ -61,7 +61,10 @@ function OnDeploy(action) {
     const negative_decode=[sampleInteger,sampleFloat,sampleBool,sampleNonAsciiString,sampleNull,
         sampleUndefined,sampleInfinity,sampleFunction,sampleNaN,sampleSymbol,sampleIntegerArray,sampleDate,sampleJSONObject,sampleFloatArray,
         sampleStringArray,sampleBigInt]
-    const positive_decode=[sampleASCIIString]
+
+    const base64EncodedString = couchbase.base64Encode(sampleASCIIString);
+    const positive_decode = [base64EncodedString];
+
     const positive_base64_float_encode =[sampleFloatArray,sampleIntegerArray]
 
     const positive_scenarios=[positive_base64_encode,positive_decode,positive_base64_float_encode,positive_decode,positive_base64_float_encode,positive_decode]
