@@ -22,6 +22,25 @@ class QueryAliasTests(QueryTests):
         self.params = self.input.param("params", False)
         self.query_context = self.input.param("query_context", False)
         self.cbqpath = '{0}cbq -quiet -u {1} -p {2} -e=localhost:8093 '.format(self.path, self.username, self.password)
+        self.scope = self.input.param("scope", "test")
+        self.collections = self.input.param("collections", ["test1", "test2"])
+        self.run_cbq_query(query='CREATE SCOPE default.{0} IF NOT EXISTS'.format(self.scope))
+        time.sleep(5)
+        self.run_cbq_query(query='CREATE COLLECTION default.{0}.{1} IF NOT EXISTS'.format(self.scope, self.collections[0]))
+        time.sleep(5)
+        self.run_cbq_query(query='CREATE COLLECTION default.{0}.{1} IF NOT EXISTS'.format(self.scope, self.collections[1]))
+        time.sleep(5)
+        self.run_cbq_query(
+            query=('UPSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+        self.run_cbq_query(
+            query=('UPSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
+        self.run_cbq_query(
+            query=('UPSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[1]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "new hotel" })'))
+        self.run_cbq_query(
+            query=('UPSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key3", { "nested" : {"fields": "fake"}, "name" : "old hotel" })'))
+        self.run_cbq_query(
+            query=('UPSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key4", { "numbers": [1,2,3,4] , "name" : "old hotel" })'))
+        time.sleep(20)
 
 
         self.log.info("==============  QuerySanityTests setup has completed ==============")
