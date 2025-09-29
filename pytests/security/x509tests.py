@@ -683,6 +683,8 @@ class x509tests(BaseTestCase):
     def test_sdk_cluster_incorrect_cert(self):
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
+        for node in self.servers[1:]:
+            x509main(node).setup_master()
         x509main().setup_cluster_nodes_ssl(self.servers)
         rest.create_bucket(bucket='default', ramQuotaMB=256)
 
@@ -739,6 +741,8 @@ class x509tests(BaseTestCase):
     def test_root_crt_rotate_cluster(self):
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
+        for node in self.servers[1:]:
+            x509main(node).setup_master()
         x509main().setup_cluster_nodes_ssl(self.servers)
         rest.create_bucket(bucket='default', ramQuotaMB=256)
         self.sleep(30)
@@ -770,6 +774,8 @@ class x509tests(BaseTestCase):
         #ntonencryptionBase().ntonencryption_cli(self.servers, 'disable')
         rest = RestConnection(self.master)
         x509main(self.master).setup_master()
+        for node in self.servers[1:]:
+            x509main(node).setup_master()
         x509main().setup_cluster_nodes_ssl(self.servers)
         rest.create_bucket(bucket='default', ramQuotaMB=256)
         self.sleep(30)
