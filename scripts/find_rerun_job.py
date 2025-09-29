@@ -19,7 +19,7 @@ import get_jenkins_params as jenkins_api
 import traceback
 
 
-host = '172.23.120.87'
+host = '172.23.104.97'
 bucket_name = 'rerun_jobs'
 
 
