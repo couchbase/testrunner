@@ -503,6 +503,7 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             self.assertEqual(count, num_of_docs, "No. indexed docs are not matching after rebalance")
         timeout_duration = 3600  # 1 hour in seconds
         start_time = time.time()
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         while True:
             for node in index_nodes:
                 rest = RestConnection(node)
