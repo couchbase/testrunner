@@ -2582,6 +2582,16 @@ class RestConnection(object):
         _stats = json.loads(content)
         return _stats['vBucketServerMap']['vBucketMap']
 
+    def fetch_bucket_uuid(self, bucket="default"):
+        """Return bucket uuid
+        Keyword argument:
+        bucket -- bucket name
+        """
+        api = self.baseUrl + 'pools/default/buckets/' + bucket
+        status, content, header = self._http_request(api)
+        _stats = json.loads(content)
+        return _stats['uuid']
+
     def get_vbucket_map_and_server_list(self, bucket="default"):
         """ Return server list, replica and vbuckets map
         that matches to server list """

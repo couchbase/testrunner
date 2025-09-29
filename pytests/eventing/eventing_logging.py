@@ -109,10 +109,10 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         # deploy a function without any alias
         self.deploy_function(body)
         self.verify_doc_count_collections("dst_bucket._default._default", 31591)
-        number=self.check_number_of_files()
+        number=self.check_number_of_files(self.src_bucket_name, self.function_scope["scope"], self.function_name)
         if number ==1:
             raise Exception("Files not rotated")
-        matched, count=self.check_word_count_eventing_log(self.function_name,"docId:",31591)
+        matched, count=self.check_word_count_eventing_log(self.function_name, "docId:", 31591, False, self.src_bucket_name, self.function_scope["scope"])
         self.skip_metabucket_check = True
         if not matched:
             raise Exception("Not all data logged in file")
