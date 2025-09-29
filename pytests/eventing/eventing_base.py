@@ -837,10 +837,34 @@ class EventingBaseTest(QueryHelperTests):
         if wait_for_resume:
             self.wait_for_handler_state(name, "deployed")
 
-    def check_word_count_eventing_log(self,function_name,word,expected_count,return_count_only=False):
+    def check_word_count_eventing_log(self, function_name, word, expected_count, return_count_only=False, bucket_name=None, scope_name=None):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
-        command = "cat /opt/couchbase/var/lib/couchbase/data/@eventing/b_travel-sample/s__default/"+ function_name +"* | grep -a \""+word+"\" | wc -l"
+        path = ""
+        # Use provided bucket_name and scope_name, or fall back to defaults
+        if bucket_name is None:
+            path += function_name
+        elif scope_name is None:
+            scope_name = "_default"
+        else:
+            # Get bucket uuid
+            uuid = self.rest.fetch_bucket_uuid(bucket_name)
+            bucket_uuid = "b_" + uuid
+            path += bucket_uuid
+            manifest = self.rest.get_bucket_manifest(bucket_name)
+            # Find the scope ID for the specified scope
+            scope_id = None
+            for scope in manifest["scopes"]:
+                if scope["name"] == scope_name:
+                    scope_id = "s_" + scope["uid"]
+                    path += "/" + scope_id
+                    break
+            if scope_id is None:
+                raise Exception("Scope '{}' not found in bucket '{}' manifest".format(scope_name, bucket_name))
+
+        # Construct dynamic path using bucket UUID and scope ID
+        command = "cd /opt/couchbase/var/lib/couchbase/data/@eventing/{}".format(path) + " && cat * | grep -a \""+word+"\" | wc -l"
+
         for eventing_node in eventing_nodes:
             shell = RemoteMachineShellConnection(eventing_node)
             count, error = shell.execute_non_sudo_command(command)
@@ -859,10 +883,35 @@ class EventingBaseTest(QueryHelperTests):
             return True, count_of_all_words
         return False, count_of_all_words
 
-    def check_number_of_files(self):
+    def check_number_of_files(self, bucket_name=None, scope_name=None, function_name=None):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
-        command = "cd /opt/couchbase/var/lib/couchbase/data/@eventing/b_travel-sample/s__default;ls | wc -l"
+
+        path = ""
+        # Use provided bucket_name and scope_name, or fall back to defaults
+        if bucket_name is None:
+            path += function_name
+        elif scope_name is None:
+            scope_name = "_default"
+        else:
+            # Get bucket uuid
+            uuid = self.rest.fetch_bucket_uuid(bucket_name)
+            bucket_uuid = "b_" + uuid
+            path += bucket_uuid
+            manifest = self.rest.get_bucket_manifest(bucket_name)
+            # Find the scope ID for the specified scope
+            scope_id = None
+            for scope in manifest["scopes"]:
+                if scope["name"] == scope_name:
+                    scope_id = "s_" + scope["uid"]
+                    path += "/" + scope_id
+                    break
+            if scope_id is None:
+                raise Exception("Scope '{}' not found in bucket '{}' manifest".format(scope_name, bucket_name))
+
+        # Construct the path using bucket UUID and scope ID
+        command = "cd /opt/couchbase/var/lib/couchbase/data/@eventing/'{}';ls | wc -l".format(path)
+
         for eventing_node in eventing_nodes:
             shell = RemoteMachineShellConnection(eventing_node)
             count, error = shell.execute_non_sudo_command(command)
