@@ -135,7 +135,21 @@ class x509main:
                                             dest_client_ext_path)
         x509main.CLIENT_EXT = dest_client_ext_path
 
-
+    def _delete_inbox_folder(self):
+        shell = RemoteMachineShellConnection(self.host)
+        final_path = self.install_path + x509main.CHAINFILEPATH
+        shell = RemoteMachineShellConnection(self.host)
+        os_type = shell.extract_remote_info().distribution_type
+        self.log.info ("OS type is {0}".format(os_type))
+        shell.delete_file(final_path, "root.crt")
+        shell.delete_file(final_path, "chain.pem")
+        shell.delete_file(final_path, "pkey.key")
+        if os_type == 'windows':
+            final_path = '/cygdrive/c/Program Files/Couchbase/Server/var/lib/couchbase/inbox'
+            shell.execute_command('rm -rf ' + final_path)
+        else:
+            shell.execute_command('rm -rf ' + final_path)
+        shell.disconnect()
 
     # Get the install path for different operating systems
     def _get_install_path(self, host):

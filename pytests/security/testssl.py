@@ -293,7 +293,26 @@ class TestSSLTests(BaseTestCase):
         CbServer.use_https = True
         ntonencryptionBase().setup_nton_cluster(servers=self.servers,
                                                 clusterEncryptionLevel="strict")
-        self.test_port_security()
+        try:
+            self.test_port_security()
+        finally:
+            # Revert back to original state
+            ntonencryptionBase().disable_nton_cluster(servers=self.servers)
+            CbServer.use_https = False
+            self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
+            tmp_path = "/tmp/abcd.pem"
+            for servers in self.servers:
+                cli_command = "ssl-manage"
+                remote_client = RemoteMachineShellConnection(servers)
+                options = "--regenerate-cert={0}".format(tmp_path)
+                output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options,
+                                                                    cluster_host=servers.cluster_ip, user="Administrator",
+                                                                    password="password")
+                x509main(servers)._delete_inbox_folder()
+
+            shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+            shell.execute_command("rm " + x509main.CACERTFILEPATH)
+            shell.disconnect()
 
     def test_tls_1_dot_3_ciphers(self):
         """
@@ -324,6 +343,7 @@ class TestSSLTests(BaseTestCase):
                             check_next = 0
                         else:
                             if line.split()[-1] not in tls_1_dot_3_ciphers:
+                                self.log.info("Cipher used: {0}".format(line.split()[-1]))
                                 self.fail("Cipher used not under TLS 1.3 supported cipher suites")
 
                     elif "--------" in line:
