@@ -704,7 +704,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             query_definitions = self.query_definitions
         create_index_tasks = []
         self.index_lost_during_move_out = []
-        self.log.info(self.index_nodes_out)
+        self.log.info(f"Indexes out {self.index_nodes_out}")
+        self.log.info(f"Deploy node info {self.deploy_node_info}")
         index_node_count = 0
         for query_definition in query_definitions:
             index_info = "{0}".format(query_definition.index_name)

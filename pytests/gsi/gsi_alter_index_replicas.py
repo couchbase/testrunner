@@ -157,7 +157,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             remote = RemoteMachineShellConnection(self.servers[1])
             remote.stop_server()
             # Sleep to wait some time to let the server properly stop, and to let the cluster become aware of an issue
-            self.sleep(30)
+            self.sleep(120)
 
         try:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
@@ -180,7 +180,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             if self.stop_server:
                 remote.start_server()
                 # Sleep sometime to let the cluster catch up to the server being back online
-                self.sleep(30)
+                self.sleep(120)
 
     '''Create an index with the same names on two different buckets, make sure alter index works on the intended index'''
     def test_alter_index_multiple_buckets(self):
@@ -196,7 +196,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
         # Review how to get rid of this sleep, need to check if alter index is for increase/decrease and check accordingly
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
         index_map = self.get_index_map()
@@ -320,7 +320,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.drop_replica:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-            self.sleep(30)
+            self.sleep(120)
         else:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
             self.sleep(10)
@@ -372,7 +372,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             # Replica that was removed should be re-created
             if self.check_repair:
                 # Sleep for sometime to allow cluster state to be stabilized after rebalance
-                self.sleep(30)
+                self.sleep(120)
                 pre_rebalance_in_map = self.get_index_map()
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [rebalance_in_server], [],services=["index"])
                 reached = RestHelper(self.rest).rebalance_reached()
@@ -403,7 +403,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             remote = RemoteMachineShellConnection(self.servers[1])
             remote.stop_server()
             # Sleep to wait some time to let the server properly stop, and to let the cluster become aware of an issue
-            self.sleep(30)
+            self.sleep(120)
 
         try:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
@@ -426,7 +426,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             if self.stop_server:
                 remote.start_server()
                 # Sleep sometime to let the cluster catch up to the server being back online
-                self.sleep(30)
+                self.sleep(120)
 
     '''This test is designed to see if you can increment a deferred index before it is built or after it is built, 
        replica should behave the same as the index it is a replica of. If the index is deferred the replica should also 
@@ -449,7 +449,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
-        self.sleep(30)
+        self.sleep(120)
         if not self.build_index:
             self.assertTrue(self.wait_until_indexes_online(defer_build=True), "Indexes were never created")
         else:
@@ -563,7 +563,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             remote = RemoteMachineShellConnection(self.servers[1])
             remote.stop_server()
             # Sleep to wait some time to let the server properly stop, and to let the cluster become aware of an issue
-            self.sleep(30)
+            self.sleep(120)
 
         try:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
@@ -572,7 +572,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             self.log.info(f"Drop replica operation result: {error}")
             self.log.info(f"Attempting to drop replica {self.replicaId}")
 
-            self.sleep(30)
+            self.sleep(120)
             if not self.replicaId == 0:
                 self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
@@ -603,7 +603,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             if self.stop_server:
                 remote.start_server()
                 # Sleep sometime to let the cluster catch up to the server being back online
-                self.sleep(30)
+                self.sleep(120)
 
     '''Execute alter index tests on indexes with and without replicas'''
     def test_alter_index_drop_all_indexes(self):
@@ -617,7 +617,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         for i in range(0, self.num_index_replica):
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=i+1)
 
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
         if self.expected_err_msg:
@@ -695,7 +695,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
 
-            self.sleep(30)
+            self.sleep(120)
             self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
             if self.expected_err_msg:
@@ -951,7 +951,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             thread.join()
 
         if self.flush_bucket:
-            self.sleep(30)
+            self.sleep(120)
             self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
             index_map = self.get_index_map()
             definitions = self.rest.get_index_statements()
@@ -984,7 +984,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         self.run_doc_ops()
 
-        self.sleep(30)
+        self.sleep(120)
 
         # Kill memcached on Node A so that Node B becomes master
         self.log.info("Kill Memcached process on NodeA")
@@ -999,7 +999,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         # Failover Node B
         self.log.info("Failing over NodeB")
-        self.sleep(30)
+        self.sleep(120)
         failover_task = self.cluster.async_failover(
             self.servers[:self.nodes_init], [self.servers[1]], self.graceful,
             wait_for_pending=30)
@@ -1094,7 +1094,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.drop_replica:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-            self.sleep(30)
+            self.sleep(120)
         else:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
@@ -1210,7 +1210,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.create_replica_hole:
             error = self._alter_index_replicas(index_name='idx1', drop_replica=True, replicaId=self.replicaId)
-            self.sleep(30)
+            self.sleep(120)
             self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
         self._create_restore(kv_node)
@@ -1273,7 +1273,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         create_index_query = "CREATE INDEX idx1 ON default(_id) USING GSI  WITH {'num_replica':2};"
 
         self.n1ql_helper.run_cbq_query(query=create_index_query, server=self.n1ql_node)
-        self.sleep(5)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
         index_map = self.get_index_map()
@@ -1290,12 +1290,12 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             remote = RemoteMachineShellConnection(stop_node)
             remote.stop_server()
             # Sleep to wait some time to let the server properly stop, and to let the cluster become aware of an issue
-            self.sleep(30)
+            self.sleep(120)
             failover_task = self.cluster.async_failover(self.servers[:self.nodes_init],
                                                         failover_nodes=[stop_node], graceful=False)
             failover_task.result()
 
-            self.sleep(30)
+            self.sleep(120)
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
                 [], [stop_node])
@@ -1317,7 +1317,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         finally:
             remote.start_server()
             # Sleep sometime to let the cluster catch up to the server being back online
-            self.sleep(30)
+            self.sleep(120)
 
     '''Execute alter index to increase and decrease indexes in a loop'''
     def test_chain_alter_index(self):
@@ -1345,7 +1345,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 # Decrease number of replicas
                 expected_num_replicas = expected_num_replicas - 1
                 error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-                self.sleep(30)
+                self.sleep(120)
                 self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
                 index_map = self.get_index_map()
                 definitions = self.rest.get_index_statements()
@@ -1381,14 +1381,14 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         # Fail drop replica
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
         self.log.info(error)
 
         # Increase number of replicas
         expected_num_replicas = self.num_replicas + 1
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
         index_map = self.get_index_map()
         definitions = self.rest.get_index_statements()
@@ -1400,7 +1400,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         # Decrease number of replicas
         expected_num_replicas = expected_num_replicas - 1
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
         index_map = self.get_index_map()
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas, dropped_replica=True, replicaId=self.replicaId)
@@ -1494,7 +1494,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.drop_replica:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=replica_id)
-            self.sleep(30)
+            self.sleep(120)
         else:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=self.num_index_replica - 1)
             self.sleep(10)
@@ -1553,7 +1553,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         if self.drop_replica:
             expected_num_replica = self.num_index_replica - 1
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-            self.sleep(30)
+            self.sleep(120)
         else:
             expected_num_replica = self.num_index_replica + self.num_change_replica
             error = self._alter_index_replicas(index_name=index_name_prefix,  num_replicas=expected_num_replica)
@@ -1674,7 +1674,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
 
@@ -1706,7 +1706,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                         "rebalance failed, stuck or did not complete")
         rebalance.result()
 
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info(index_metadata)
@@ -1717,7 +1717,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 replica_id = index['replicaId']
 
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=replica_id)
-        self.sleep(30)
+        self.sleep(120)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
         index_map = self.get_index_map()
