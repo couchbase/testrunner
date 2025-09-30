@@ -538,11 +538,11 @@ class x509tests(BaseTestCase):
         remote_cluster_name = 'sslcluster'
         restCluster1 = RestConnection(cluster1[0])
         restCluster2 = RestConnection(cluster2[0])
-        for server in self.servers:
-            x509main(server).setup_master(self.client_cert_state, self.paths, self.prefixs, self.delimeters,
-                                               self.upload_json_mode)
         try:
             # Setup cluster1
+            for server in cluster1:
+                x509main(server).setup_master()
+            x509main(cluster1[1])._setup_node_certificates()
 
             restCluster1.add_node('Administrator', 'password', cluster1[1].ip)
             known_nodes = ['ns_1@' + cluster1[0].ip, 'ns_1@' + cluster1[1].ip]
@@ -552,22 +552,23 @@ class x509tests(BaseTestCase):
             restCluster1.remove_all_replications()
             restCluster1.remove_all_remote_clusters()
 
+            # Setup cluster2
+            for server in cluster2:
+                x509main(server).setup_master()
+            x509main(cluster2[1])._setup_node_certificates()
+
             restCluster2.add_node('Administrator', 'password', cluster2[1].ip)
             known_nodes = ['ns_1@' + cluster2[0].ip, 'ns_1@' + cluster2[1].ip]
             restCluster2.rebalance(known_nodes)
             self.assertTrue(self.check_rebalance_complete(restCluster2), "Issue with rebalance")
             restCluster2.create_bucket(bucket='default', ramQuotaMB=256)
 
-            test = x509main.CACERTFILEPATH + "ca.pem"
-            data = open(test, 'rb').read().decode()
-            restCluster1.add_remote_cluster(
-                cluster2[0].ip, cluster2[0].port,
-                'Administrator', 'password',
-                remote_cluster_name,
-                demandEncryption=1,certificate=data,
-                clientKey=open(x509main.CACERTFILEPATH + cluster1[1].ip + ".key", 'rb').read(),
-                clientCertificate=open(x509main.CACERTFILEPATH + "long_chain" +cluster1[1].ip + ".pem", 'rb').read()
-            )
+            self.sleep(20)
+            test = x509main.CACERTFILEPATH + x509main.CACERTFILE
+            data = open(test, 'rb').read()
+            restCluster1.add_remote_cluster(cluster2[0].ip, cluster2[0].port,
+                                            'Administrator', 'password',
+                                            remote_cluster_name, certificate=data)
             self.sleep(20)
             replication_id = restCluster1.start_replication('continuous', 'default', remote_cluster_name)
             if replication_id is not None:
