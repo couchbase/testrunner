@@ -1151,7 +1151,7 @@ class VectorSearchTests(QueryTests):
         query_num = 72
         ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
-        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"]" and price in [100,150] ORDER BY brand ASC,size,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (size, brand, vec VECTOR,price)
@@ -1169,6 +1169,8 @@ class VectorSearchTests(QueryTests):
                 # Vector field will not have a high or a low value
                 if fields['index_key'] == '`vec`':
                     continue
+                elif fields['index_key'] == '`size`':
+                    self.assertTrue(fields['low'] == '8', f"We expect the low value to be 8, please check {explain_plan}")
                 else:
                     #check that spans have the same high and low values
                     self.assertTrue(fields['high'] == fields['low'], f"We expect the high and low of each span to be the same, please check the spans in the plan {explain_plan}")
