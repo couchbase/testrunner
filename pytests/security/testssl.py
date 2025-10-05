@@ -1,5 +1,6 @@
 import json
 import time
+import re
 
 from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
@@ -332,22 +333,65 @@ class TestSSLTests(BaseTestCase):
                 shell = RemoteMachineShellConnection(self.slave_host)
                 output, error = shell.execute_command(cmd)
                 shell.disconnect()
-                output = output.decode().split("\n")
-                check_next = 0
+                output = output.decode()
+
+                """
+                Output will be like
+
+                #####################################################################
+                testssl.sh version 3.3dev from https://testssl.sh/dev/
+                (1747da3 2025-10-04 19:44:48)
+
+                This program is free software. Distribution and modification under
+                GPLv2 permitted. USAGE w/o ANY WARRANTY. USE IT AT YOUR OWN RISK!
+
+                Please file bugs @ https://testssl.sh/bugs/
+                #####################################################################
+
+                Using OpenSSL 1.0.2-bad (Mar 28 2025)  [~183 ciphers]
+                on CentOS7:/tmp/testssl.sh/bin/openssl.Linux.x86_64
+
+                Testing all IPv4 addresses (port 11207): 172.23.219.7
+                -----------------------------------------------------
+                Start 2025-10-04 19:53:38        -->> 172.23.219.7:11207 (172.23.219.7) <<--
+
+                rDNS (172.23.219.7):    --
+                Service detected:       Couldn't determine what's running on port 11207, assuming no HTTP service => skipping all HTTP checks
+
+
+                Testing 372 ciphers via OpenSSL plus sockets against the server, ordered by encryption strength
+
+                Hexcode  Cipher Suite Name (OpenSSL)       KeyExch.   Encryption  Bits     Cipher Suite Name (IANA/RFC)
+                -----------------------------------------------------------------------------------------------------------------------------
+                x1302   TLS_AES_256_GCM_SHA384            ECDH/MLKEM AESGCM      256      TLS_AES_256_GCM_SHA384
+                x1303   TLS_CHACHA20_POLY1305_SHA256      ECDH/MLKEM ChaCha20    256      TLS_CHACHA20_POLY1305_SHA256
+                x1301   TLS_AES_128_GCM_SHA256            ECDH/MLKEM AESGCM      128      TLS_AES_128_GCM_SHA256
+                x1305   TLS_AES_128_CCM_8_SHA256          ECDH 253   AESCCM8     128      TLS_AES_128_CCM_8_SHA256
+
+
+                Done 2025-10-04 19:53:58 [  25s] -->> 172.23.219.7:11207 (172.23.219.7) <<--
+
+                -----------------------------------------------------
+                Done testing now all IP addresses (on port 11207): 172.23.219.7
+                """
+
+                self.log.info("Output of the command is\n{}\n".format(output))
+                output = output.split("\n")
                 tls_1_dot_3_ciphers = ["TLS_AES_256_GCM_SHA384", "TLS_AES_128_GCM_SHA256",
                                        "TLS_CHACHA20_POLY1305_SHA256", "TLS_AES_128_CCM_SHA256",
                                        "TLS_AES_128_CCM_8_SHA256"]
-                for line in output:
-                    if check_next == 1:
-                        if line == '':
-                            check_next = 0
-                        else:
-                            if line.split()[-1] not in tls_1_dot_3_ciphers:
-                                self.log.info("Cipher used: {0}".format(line.split()[-1]))
-                                self.fail("Cipher used not under TLS 1.3 supported cipher suites")
 
-                    elif "--------" in line:
-                        check_next = 1
+
+                for line in output:
+                    if re.match(r"\s+x[0-9a-fA-F]+", line):
+                        columns = re.split(r'\s{2,}', line.strip())
+                        if len(columns) == 5 or len(columns) == 6:
+                            cipher = columns[-1]
+                            if cipher not in tls_1_dot_3_ciphers:
+                                self.fail(f"Cipher used not under TLS 1.3 supported cipher suites: {cipher}")
+                        else:
+                            self.fail(f"Unexpected cipher line format: {line}")
+
 
     def test_tls_ciphers_used(self):
         """
