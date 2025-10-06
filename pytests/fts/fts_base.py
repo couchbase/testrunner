@@ -159,7 +159,7 @@ class INDEX_DEFAULTS:
                 "dynamic": True,
                 "default_analyzer": ""
             },
-            "scoring_model": "tfidf",
+            "scoring_model": "tf-idf",
             "type_field": "_type",
             "default_type": "_default",
             "default_analyzer": "standard",
@@ -7383,7 +7383,7 @@ class FTSBaseTest(unittest.TestCase):
         mapping["default_type"] = "_default"
         mapping["docvalues_dynamic"] = False
         mapping["index_dynamic"] = True
-        mapping["scoring_model"] = "tfidf"
+        mapping["scoring_model"] = "tf-idf"
         mapping["store_dynamic"] = False
         mapping["type_field"] = "_type"
         
