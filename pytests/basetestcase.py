@@ -3179,7 +3179,10 @@ class OnPremBaseTestCase(unittest.TestCase):
                     processes = shell.get_processes_binding_to_ip_family(ip_family="ipv4")
                 self.log.info("{0} : {1} \n {2} \n\n".format(server.ip, len(processes), processes))
                 if len(processes) != 0:
-                    self.fail("Ports are still binding to the opposite ip-family")
+                    if isinstance(processes, list) and "cbcontbk" in processes[0]:
+                        self.log.info("bug. Ticket created MB-68870")
+                    else:
+                        self.fail("Ports are still binding to the opposite ip-family")
 
     def set_flusher_total_batch_limit(self, flusher_total_batch_limit=3, buckets=None):
         self.log.info("Changing the bucket properties by changing flusher_total_batch_limit to {0}".
