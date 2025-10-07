@@ -3595,14 +3595,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                            bucket=self.test_bucket)
         self.sleep(10, "Allowing time after collection creation")
         # creating namespaces and loading docs
-
         scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
         self.sleep(10, "Allowing time after collection creation")
         for s_item in scopes:
             collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
             for c_item in collections:
                 self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
-                num_docs = 200
+                num_docs = self.num_of_docs_per_collection
                 self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
                                                 percent_update=0, percent_delete=0, scope=s_item,
                                                 collection=c_item, json_template=self.json_template,
@@ -3611,6 +3610,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 self.load_docs_via_magma_server(server=data_node, bucket=self.test_bucket, gen=self.gen_create)
         select_queries = []
+        build_queries = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -3622,6 +3622,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
+            build_queries.append(build_query)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
@@ -3640,18 +3641,45 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for namespace in self.namespaces:
                 bucket, scope, collection = namespace.split('.')
                 bucket = bucket.split(':')[-1]
-                num_docs = self.num_of_docs_per_collection
-                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+                # Load additional documents to ensure enough training vectors
+                additional_docs = self.num_of_docs_per_collection  # Load same number of additional documents
+                self.gen_create = SDKDataLoader(num_ops=additional_docs, percent_create=100,
                                                 percent_update=0, percent_delete=0, scope=scope,
                                                 collection=collection, json_template=self.json_template,
                                                 output=True, username=self.username, password=self.password,
                                                 create_start=0,key_prefix="doc_77",
-                                                create_end=self.num_of_docs_per_collection)
+                                                create_end=additional_docs,
+                                                timeout=3000, workers=4, ops_rate=5000)
                 self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
 
-            # index building should succeed this time around as there are enough qualifying documents
-            # for codebook training
-            self.run_cbq_query(query=build_query, server=self.n1ql_node)
+            # Recreate indexes after rebalance since the removed index node may have lost some indexes
+            self.log.info("Recreating indexes after rebalance...")
+            for namespace in self.namespaces:
+                definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                          similarity=self.similarity, train_list=None,
+                                                                          scan_nprobes=self.scan_nprobes,
+                                                                          array_indexes=False, bhive_index=self.bhive_index,
+                                                                          limit=self.scan_limit, is_base64=self.base64,
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          quantization_algo_color_vector=self.quantization_algo_color_vector)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                         num_replica=1, bhive_index=self.bhive_index)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            # Build all indexes using a single query per namespace
+            self.log.info("Building all indexes after rebalance...")
+            for namespace in self.namespaces:
+                # Get all index names for this namespace
+                query = f"SELECT name FROM system:indexes WHERE `using`='gsi' AND '`' || `bucket_id` || '`.`' || `scope_id` || '`.`' || `keyspace_id` || '`' = '{namespace}' AND state = 'deferred'"
+                result = self.run_cbq_query(query=query, server=self.n1ql_node)
+
+                if result['results']:
+                    # Extract index names
+                    index_names = [index['name'] for index in result['results']]
+                    # Build all indexes for this namespace in a single query
+                    build_query = f"BUILD INDEX ON {namespace}({', '.join(index_names)}) USING GSI"
+                    self.log.info(f"Building indexes for {namespace}: {build_query}")
+                    self.run_cbq_query(query=build_query, server=self.n1ql_node)
             self.wait_until_indexes_online()
 
             self.gsi_util_obj.query_event.set()
@@ -3672,7 +3700,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for index in index_item_count_map:
                 if index in partial_indexes:
                     continue
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection + num_docs, f"stats {stats}")
+                # Expected total: initial docs + additional docs = 2 * num_of_docs_per_collection
+                expected_total = 2 * self.num_of_docs_per_collection
+                self.assertEqual(index_item_count_map[index], expected_total, f"stats {stats}")
 
             self.gsi_util_obj.query_event.clear()
 
