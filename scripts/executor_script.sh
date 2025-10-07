@@ -22,7 +22,6 @@ touch rerun_props_file
 if [ ${fresh_run} == false ]; then
   ${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --manual_run
 fi
-export `cat rerun_props_file`
 # End of block
 
 echo "Set ALLOW_HTP to False so test could run."
