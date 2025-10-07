@@ -240,24 +240,19 @@ find /root/workspace/ -type d -ctime +10 -exec rm -rf {} \;
 ## Updated on 11/21/19 by Mihir to kill all python processes older than 3 days instead of 10 days.
 killall --older-than 72h ${py_executable}
 
-# Load the rerun_props_file
-if [ -f rerun_props_file ]; then
-  eval "$(awk -F= '{key=$1; $1=""; sub(/^ /, "", $0); print "export " key "=\"" $0 "\"" }' rerun_props_file)"
-  echo "Loaded rerun_props_file variable:"
-  env | grep rerun_params_manual
-  echo "End of variable value"
-fi
-
-if [ -z "${rerun_params_manual}" ] && [ -z "${rerun_params}" ]; then
-  rerun_param=
-elif [ -z "${rerun_params_manual}" ]; then
-  rerun_param=$rerun_params
-else
-  rerun_param=${rerun_params_manual}
+# Trim whitespaces to detect empty input
+rerun_params=$(echo "$rerun_params" | xargs)
+if [ "$rerun_params" == "" ]; then
+  # Only if user has no input given, get rerun data from
+  # the file created by prev. rerun_jobs.py script
+  rerun_file_data=$(cat rerun_props_file)
+  if [ "$rerun_file_data" != "" ]; then
+    rerun_params="$rerun_file_data"
+  fi
 fi
 
 set -x
-eval "${py_executable} testrunner.py -i /tmp/testexec.$$.ini -c ${confFile} -p ${parameters} ${rerun_param}"
+${py_executable} testrunner.py -i /tmp/testexec.$$.ini -c ${confFile} -p ${parameters} ${rerun_params}
 set +x
 
 fails=`cat $WORKSPACE/logs/*/*.xml | grep 'testsuite errors' | awk '{split($3,s1,"=");print s1[2]}' | sed s/\"//g | awk '{s+=$1} END {print s}'`
