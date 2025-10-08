@@ -5137,3 +5137,53 @@ class QuerySanityTests(QueryTests):
         finally:
             # Clean up
             self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
+
+    def test_MB67241(self):
+        """
+        MB-67241: Ensure that prepared statements use covers when executed on different nodes in a cluster.
+        Note: MB-68885 was also triggered from this test.
+        """
+        self.fail_if_no_buckets()
+
+        # Create a separate collection for this test
+        collection_name = "mb67241"
+        query_context = "default._default"
+        try:
+            # Create the collection
+            self.run_cbq_query(f"CREATE COLLECTION `{collection_name}` IF NOT EXISTS", query_context=query_context)
+            self.sleep(3)
+
+            # create index on collection like CREATE INDEX ix2 ON collection(type, id, dateAction DESC)
+            self.run_cbq_query(f"CREATE INDEX ix2 ON `{collection_name}`(type, id, dateAction DESC)", query_context=query_context)
+            self.sleep(5)
+
+            # PREPARE p1
+            self.run_cbq_query(f"PREPARE p111 FROM SELECT (SELECT h.dateAction FROM `{collection_name}` AS h WHERE h.type = 'history' AND h.id = d.id ORDER BY h.dateAction DESC LIMIT 1)[0].* FROM [{{'id':'b01'}}] AS d LIMIT 10", query_context=query_context)
+            self.sleep(5)
+
+            # Get available query nodes
+            query_nodes = []
+            if hasattr(self, 'n1ql_nodes') and self.n1ql_nodes:
+                query_nodes = self.n1ql_nodes
+            elif hasattr(self, 'servers') and len(self.servers) > 1:
+                query_nodes = self.servers[:2]  # Use first two servers as query nodes
+            else:
+                # Fallback to single node execution
+                query_nodes = [self.master]
+            
+            # Execute on each available query node
+            for i, node in enumerate(query_nodes[:2]):  # Limit to 2 nodes max
+                node_name = f"node_{i+1}"
+                self.log.info(f"Executing prepared statement on {node_name} ({node.ip}:{node.port})")
+                result = self.run_cbq_query(
+                    f"EXECUTE p111",
+                    server=node,
+                    query_context=query_context,
+                    query_params={"profile": "timings"}
+                )
+                # verify query result contains covers
+                self.assertTrue('covers' in str(result['profile']), f"Query should use covers on {node_name} in {result['profile']}")                
+        finally:
+            # Clean up
+            self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
+            self.run_cbq_query("DELETE FROM system:prepareds WHERE name = 'p111'", query_context=query_context)
