@@ -358,16 +358,18 @@ def getNodeText(nodelist):
     return ''.join(rc)
 
 def parse_testreport_result_xml(filepath=""):
+    is_jenkins_url = False
     if filepath.startswith("http://") or filepath.startswith("https://"):
         if filepath.endswith(".xml"):
             url_path = filepath
         else:
             url_path = filepath+"/testReport/api/xml?pretty=true"
+            is_jenkins_url = True
         jobnamebuild = filepath.split('/')
         if not os.path.exists('logs'):
             os.mkdir('logs')
         newfilepath = 'logs'+''.join(os.sep)+'_'.join(jobnamebuild[-3:])+"_testresult.xml"
-        log.info("Downloading " + url_path +" to "+newfilepath)
+        log.info("Downloading " + url_path + " to " + newfilepath)
         try:
             filedata = urllib.request.urlopen(url_path)
             datatowrite = filedata.read()
@@ -375,16 +377,59 @@ def parse_testreport_result_xml(filepath=""):
             with open(filepath, 'wb') as f:
                 f.write(datatowrite)
         except Exception as ex:
-            log.error("Error:: "+str(ex)+"! Please check if " +
-                      url_path + " URL is accessible!!")
-            log.info("Running all the tests instead for now.")
-            return None, None
+            rerun_all_flag = True
+            if is_jenkins_url:
+                rerun_all_flag = False
+                # Retry with S3 URL format
+                try:
+                    # Get version from environment variable
+                    version = os.environ.get('version_number')
+
+                    # Extract build number from the url_path
+                    # Pattern: http://qe-jenkins1.sc.couchbase.com/job/<job_name>/<build_number>/...
+                    url_parts = url_path.split('/')
+                    build_number = None
+
+                    # Find the job name and get the next part as build number
+                    for i, part in enumerate(url_parts):
+                        if part == 'job' and i + 2 < len(url_parts):
+                            # The part after 'job' is the job name, the part after that is the build number
+                            build_number = url_parts[i + 2]
+                            break
+
+                    if version and build_number:
+                        # Construct S3 URL
+                        s3_url = f"http://cb-logs-qe.s3-website-us-west-2.amazonaws.com/{version}/jenkins_logs/test_suite_executor/{build_number}/testresult.xml"
+                        log.info(f"Retrying with S3 URL: {s3_url}")
+
+                        try:
+                            filedata = urllib.request.urlopen(s3_url)
+                            datatowrite = filedata.read()
+                            filepath = newfilepath
+                            with open(filepath, 'wb') as f:
+                                f.write(datatowrite)
+                            log.info("Successfully downloaded from S3 URL")
+                        except Exception as s3_ex:
+                            log.error(f"S3 retry also failed: {str(s3_ex)}")
+                            rerun_all_flag = True
+                    else:
+                        log.warning(f"Could not get version from env var version_number ({version}) or extract build number ({build_number}) from URL: {url_path}")
+                        rerun_all_flag = True
+                except Exception as retry_ex:
+                    log.error(f"Error during S3 retry: {str(retry_ex)}")
+                    rerun_all_flag = True
+            else:
+                log.error("Error:: "+str(ex)+"! Please check if " +
+                          url_path + " URL is accessible!!")
+            if rerun_all_flag:
+                log.info("Running all the tests instead for now.")
+                return None, None
     if filepath == "":
         filepath = "logs/**/*.xml"
     log.info("Loading result data from "+filepath)
     xml_files = glob.glob(filepath)
-    passed_tests=[]
-    failed_tests=[]
+    passed_tests = []
+    failed_tests = []
     for xml_file in xml_files:
         log.info("-- "+xml_file+" --")
         doc = xml.dom.minidom.parse(xml_file)
@@ -396,10 +441,10 @@ def parse_testreport_result_xml(filepath=""):
                 tcname = getNodeText((tc.getElementsByTagName("name")[0]).childNodes)
                 tcstatus = getNodeText((tc.getElementsByTagName("status")[0]).childNodes)
                 if tcstatus == 'PASSED':
-                    failed=False
+                    failed = False
                     passed_tests.append(tcname)
                 else:
-                    failed=True
+                    failed = True
                     failed_tests.append(tcname)
 
     if failed_tests:
