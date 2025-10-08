@@ -7,38 +7,12 @@ echo $host_ip
 rerun_job=true
 py_executable=python3
 
-# Block was prev. in a separate shell block before 
+# Block was prev. in a separate shell block before
 echo Desc: $descriptor
-
-echo "###########################################"
-echo "  Populating env file for downstream jobs"
-echo "1/4 Extracting is_dynamic_vms value"
-export is_dynamic_vms=`echo $dispatcher_params| sed -n 's/.*"use_dynamic_vms": *\([^,]*\).*/\1/p' | tr -d ' '`
-echo "is_dynamic_vms value: $is_dynamic_vms"
-
-echo "2/4 Creating file: savejoblogs_job_params"
-echo "test_job_url=${JOB_URL}" > savejoblogs_job_params
-echo "test_job_build=${BUILD_NUMBER}" >> savejoblogs_job_params
-echo "test_name=${descriptor}" >> savejoblogs_job_params
-echo "addPoolServers=$addPoolServers" >> savejoblogs_job_params
-echo "version_number=$version_number" >> savejoblogs_job_params
-echo "is_dynamic_vms=$is_dynamic_vms" >> savejoblogs_job_params
-
-echo "3/4 Creating file: cleanup_job_params"
-echo "descriptor=$descriptor" > cleanup_job_params
-echo "UPSTREAM_BUILD_NUMBER=${BUILD_NUMBER}" >> cleanup_job_params
-echo "addPoolServers=$addPoolServers" >> cleanup_job_params
-echo "version_number=$version_number" >> cleanup_job_params
-echo "is_dynamic_vms=$is_dynamic_vms" >> cleanup_job_params
-
-echo "4/4 Creating file: aws_cleanup_job_params"
-echo "servers=${servers}" > aws_cleanup_job_params
-echo "###########################################"
-
 if [[ ${component} == "backup_recovery"  || ${component} == "xdcr" ]]; then
-    echo "Forcefully setting branch and testrunner_tag=master"
-	branch=master
-    testrunner_tag=master
+  echo "Forcefully setting branch and testrunner_tag=master"
+  branch=master
+  testrunner_tag=master
 fi
 
 git checkout ${branch}
@@ -52,7 +26,7 @@ fi
 
 echo "Set ALLOW_HTP to False so test could run."
 sed -i 's/ALLOW_HTP.*/ALLOW_HTP = False/' lib/testconstants.py
-  
+
 ###### Added on 22/March/2018 to fix auto merge failures. Please revert this if this does not work.
 git fetch
 git reset --hard origin/${branch}
@@ -74,7 +48,7 @@ majorRelease=`echo ${version_number} | awk '{print substr($0,1,1)}'`
 echo the major release is $majorRelease
 echo ${servers}
 
-${py_executable} -m easy_install httplib2 ground hypothesis_geometry	
+${py_executable} -m easy_install httplib2 ground hypothesis_geometry
 
 if [ -f /etc/redhat-release ]; then
   echo 'centos'
@@ -156,13 +130,13 @@ fi
 if [ "$component" = "xdcr" ]; then
    installParameters='init_clusters=True'
 fi
-    
+
 if [ "$installParameters" = "None" ]; then
    extraInstall=''
 else
    extraInstall=,$installParameters
 fi
-	
+
 echo extra install is $extraInstall
 timedatectl
 status=0
@@ -175,7 +149,7 @@ else
     sed 's/nonroot/root/g' /tmp/testexec.$$.ini > /tmp/testexec_root.$$.ini
     echo ${py_executable} scripts/ssh.py -i /tmp/testexec_root.$$.ini "iptables -F"
     ${py_executable} scripts/ssh.py -i /tmp/testexec_root.$$.ini "iptables -F"
-    
+
     if [ "${INSTALL_TIMEOUT}" = "" ]; then
        INSTALL_TIMEOUT="1200"
     fi
@@ -183,11 +157,11 @@ else
     if [ "${SKIP_LOCAL_DOWNLOAD}" = "" ]; then
        SKIP_LOCAL_DOWNLOAD="False"
     fi
-    
+
     if [ ! "$majorRelease" = "7" ]; then
        SKIP_LOCAL_DOWNLOAD="True"
     fi
-    
+
     echo "Starting server installation"
     if [[ "${slave}" = "bhive_slave_test" ]]; then
       echo "Starting server installation"
@@ -204,7 +178,7 @@ else
       set -x
       initial_version=$(echo "$parameters" | sed -n 's/.*initial_version=\([^,]*\).*/\1/p')
 	  echo "Initial version: $initial_version"
-      if [ -n "$initial_version" ]; then 
+      if [ -n "$initial_version" ]; then
         echo ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${initial_version},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
         ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${initial_version},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
    	  else
@@ -234,7 +208,7 @@ fi
 
 desc2=`echo $descriptor | awk '{split($0,r,"-");print r[1],r[2]}'`
 ${py_executable} scripts/ssh.py -i /tmp/testexec.$$.ini "iptables -F"
-  
+
 if [ $majorRelease = "3" ]; then
    echo have a 3.x release
    git checkout 0b2bb7a53e350f90737112457877ef2c05ca482a
@@ -269,16 +243,19 @@ find /root/workspace/ -type d -ctime +10 -exec rm -rf {} \;
 ## Updated on 11/21/19 by Mihir to kill all python processes older than 3 days instead of 10 days.
 killall --older-than 72h ${py_executable}
 
-if [ -z "${rerun_params_manual}" ] && [ -z "${rerun_params}" ]; then
-  rerun_param=
-elif [ -z "${rerun_params_manual}" ]; then
-  rerun_param=$rerun_params
-else
-  rerun_param=${rerun_params_manual}
+# Trim whitespaces to detect empty input
+rerun_params=$(echo "$rerun_params" | xargs)
+if [ "$rerun_params" == "" ]; then
+  # Only if user has no input given, get rerun data from
+  # the file created by prev. rerun_jobs.py script
+  rerun_file_data=$(cat rerun_props_file)
+  if [ "$rerun_file_data" != "" ]; then
+    rerun_params="$rerun_file_data"
+  fi
 fi
 
 set -x
-${py_executable} testrunner.py -i /tmp/testexec.$$.ini -c ${confFile} -p ${parameters} ${rerun_param}
+${py_executable} testrunner.py -i /tmp/testexec.$$.ini -c ${confFile} -p ${parameters} ${rerun_params}
 set +x
 
 fails=`cat $WORKSPACE/logs/*/*.xml | grep 'testsuite errors' | awk '{split($3,s1,"=");print s1[2]}' | sed s/\"//g | awk '{s+=$1} END {print s}'`
@@ -295,7 +272,6 @@ total_tests=`cat $WORKSPACE/logs/*/*.xml | grep 'testsuite errors' | awk '{split
 echo $total_tests
 echo Desc1: $version_number - $desc2 - $os \($(( $total_tests - $fails ))/$total_tests\)
 if [ ${rerun_job} == true ]; then
-  echo "${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --run_params=${parameters}"
+  set -x
   ${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --run_params=${parameters} || true
 fi
-
