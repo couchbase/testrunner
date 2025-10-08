@@ -393,10 +393,7 @@ def manual_rerun(args):
         print("Could not find a valid previous build to run with")
         return
     with open("rerun_props_file", 'w') as f:
-        to_write = "rerun_params_manual={}".format(
-            rerun_param)
-        f.write(to_write)
-        f.close()
+        f.write("{}".format(rerun_param))
 
 
 if __name__ == '__main__':
