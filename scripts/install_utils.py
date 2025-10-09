@@ -368,8 +368,10 @@ class NodeHelper:
                 return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
 
     def _set_ip_version(self, retries=3):
+        time_sleep = 30
         if params["enable_ipv6"]:
             self.enable_ipv6 = True
+            time_sleep = 60
             if self.node.ip.startswith("["):
                 hostname = self.node.ip[self.node.ip.find("[") + 1:self.node.ip.find("]")]
             else:
@@ -392,7 +394,8 @@ class NodeHelper:
             ret, err = self.shell.execute_command(cmd)
             if ret == ['0']:
                 log.error(err)
-                time.sleep(30)
+                log.info("sleeping for {0} seconds".format(time_sleep))
+                time.sleep(time_sleep)
                 retries -= 1
             else:
                 break
