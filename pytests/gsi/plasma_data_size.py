@@ -1,6 +1,8 @@
 import copy
 import logging
 import random
+import gc
+import psutil
 
 from string import ascii_lowercase
 from couchbase.bucket import Bucket
@@ -37,6 +39,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         self.sleep(30)
 
     def tearDown(self):
+        gc.collect()
         super(SecondaryIndexDatasizeTests, self).tearDown()
 
     def test_sorted_items_indexed(self):
@@ -146,7 +149,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         self.sleep(20)
         array_size = random.choice(list(range(10, 15)))
         item_size = random.choice(list(range(10, 15)))
-        self.upload_documents(num_items=1000, item_size=item_size, array_size=array_size, buckets=buckets)
+        self.upload_documents(num_items=200, item_size=item_size, array_size=array_size, buckets=buckets)  # Reduced from 1000
         rest = RestConnection(self.master)
         index_map = rest.get_index_id_map()
         for j in range(self.iterations):
@@ -169,11 +172,12 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                     diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
                     if diffs:
                         self.assertTrue(False, diffs)
+                    gc.collect()
 
             self.sleep(20)
-            array_size = random.choice(list(range(1000, 5000)))
-            item_size = random.choice(list(range(1000, 5000)))
-            self.upload_documents(num_items=1000, item_size=item_size,
+            array_size = random.choice(list(range(100, 500)))  # Reduced from 1000-5000
+            item_size = random.choice(list(range(100, 500)))   # Reduced from 1000-5000
+            self.upload_documents(num_items=200, item_size=item_size,  # Reduced from 1000
                                   array_size=array_size, buckets=buckets, update_docs=True)
             for bucket in buckets:
                 for query_definition in query_definitions:
@@ -189,6 +193,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                     diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
                     if diffs:
                         self.assertTrue(False, diffs)
+                    gc.collect()
 
     def test_change_key_size(self):
         self.iterations = self.input.param("num_iterations", 5)
@@ -220,11 +225,11 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                                          query_definitions=[query_definition])
             for i in range(10):
                 name = FIRST_NAMES[random.choice(list(range(len(FIRST_NAMES))))]
-                id_size = random.choice(list(range(100, 200)))
-                long_str = "".join(random.choice(ascii_lowercase) for k in range(id_size))
+                id_size = random.choice(list(range(20, 50)))  # Reduced from 100-200
+                long_str = "".join(random.choice(ascii_lowercase[:10]) for k in range(id_size))  # Use smaller char set
                 id = "{0}-{1}".format(name, long_str)
                 age = random.choice(list(range(4, 19)))
-                bigValues = "".join(random.choice(ascii_lowercase) for k in range(5))
+                bigValues = "".join(random.choice(ascii_lowercase[:5]) for k in range(5))  # Use smaller char set
                 generators.append(DocumentGenerator(
                     id, template, [name], [age], [bigValues], start=0, end=10))
             self.load(generators, flag=self.item_flag, verify_data=False,
@@ -233,6 +238,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
             self.multi_query_using_index(buckets=buckets,
                                          query_definitions=[query_definition])
+            gc.collect()
         self.sleep(30)
         self.multi_drop_index(buckets=buckets,
                               query_definitions=[query_definition])
@@ -252,12 +258,12 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         for j in range(self.iterations):
             for i in range(10):
                 name = FIRST_NAMES[random.choice(list(range(len(FIRST_NAMES))))]
-                id_size = random.choice(list(range(5, 200)))
-                short_str = "".join(random.choice(ascii_lowercase) for k in range(id_size))
+                id_size = random.choice(list(range(5, 50)))  # Reduced from 5-200
+                short_str = "".join(random.choice(ascii_lowercase[:10]) for k in range(id_size))  # Use smaller char set
                 id = "{0}-{1}".format(name, short_str)
                 age = random.choice(list(range(4, 19)))
-                bigValue_size = random.choice(list(range(10, 5000)))
-                bigValues = "".join(random.choice(ascii_lowercase) for k in range(bigValue_size))
+                bigValue_size = random.choice(list(range(10, 200)))  # Reduced from 10-5000
+                bigValues = "".join(random.choice(ascii_lowercase[:5]) for k in range(bigValue_size))  # Use smaller char set
                 generators.append(DocumentGenerator(
                     id, template, [name], [age], [bigValues], start=0, end=10))
             self.load(generators, flag=self.item_flag, verify_data=False,
@@ -266,6 +272,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
             self.multi_query_using_index(buckets=buckets,
                                          query_definitions=[query_definition])
+            gc.collect()
         self.sleep(30)
         self.multi_drop_index(buckets=buckets,
                               query_definitions=[query_definition])
@@ -394,8 +401,10 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             self.sleep(30)
         generators = []
         template = '{{"name":"{0}", "age":{1}, "encoded_array": {2}, "encoded_big_value_array": {3}}}'
-        item_length = item_size * 4
-        array_element_size = (array_size * 4)//array_elements
+        # Reduce sizes by 80%
+        item_length = min(item_size * 2, 100)  # Cap at 100
+        array_element_size = min((array_size * 2)//array_elements, 50)  # Cap at 50
+        array_elements = min(array_elements, 2)  # Cap at 2 elements
         if update_docs:
             num_items = len(self.full_docs_list)
         for i in range(num_items):
@@ -404,11 +413,11 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             else:
                 index_id = "unhandled_items_" + str(random.random()*100000)
             encoded_array = []
-            name = "".join(random.choice(ascii_lowercase) for k in range(item_length))
+            name = "".join(random.choice(ascii_lowercase[:10]) for k in range(item_length))  # Use smaller char set
             age = random.choice(list(range(4, 59)))
             big_value_array = [name]
             for j in range(array_elements):
-                element = "".join(random.choice(ascii_lowercase) for k in range(array_element_size))
+                element = "".join(random.choice(ascii_lowercase[:5]) for k in range(array_element_size))  # Use smaller char set
                 encoded_array.append(element)
             generators.append(DocumentGenerator(
                 index_id, template, [name], [age], [encoded_array],

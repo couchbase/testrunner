@@ -1029,11 +1029,34 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
+            # Ensure query node is different from the node being failed over
+            failover_node = data_nodes[0]
+            selected_query_node = None
+            for node in query_node:
+                if node != failover_node:
+                    selected_query_node = node
+                    break
+            if selected_query_node is None:
+                # Fallback: use query_node[1] if no different node found
+                selected_query_node = query_node[1]
             executor.submit(self.gsi_util_obj.run_continous_query_load,
-                            select_queries=select_queries, query_node=query_node[1])
+                            select_queries=select_queries, query_node=selected_query_node)
 
             # perform auto failover of KV node
-            data_node = RemoteMachineShellConnection(data_nodes[0])
+            # Ensure we don't failover the master node
+            self.update_master_node()
+            failover_node = None
+            for node in data_nodes:
+                if node != self.master:
+                    failover_node = node
+                    break
+            if failover_node is None:
+                # Fallback: if all data nodes are master, use the first one
+                failover_node = data_nodes[0]
+                self.log.warning("All data nodes are master nodes, using first data node for failover")
+            else:
+                self.log.info(f"Selected non-master node {failover_node.ip} for failover")
+            data_node = RemoteMachineShellConnection(failover_node)
             data_node.stop_server()
             self.sleep(40, "Wait for autofailover")
             try:
