@@ -113,6 +113,7 @@ class rbacclitests(BaseTestCase):
                 final_result = False
             else:
                 final_result = True
+                break
         self.assertTrue(final_result, "Incorrect Message for the role")
 
     #Wrapper around auditmain
@@ -208,7 +209,7 @@ class rbacclitests(BaseTestCase):
         bucket_port = self.input.param("bucket_port", 11211)
         bucket_replica = self.input.param("bucket_replica", 1)
         bucket_password = self.input.param("bucket_password", None)
-        bucket_ramsize = self.input.param("bucket_ramsize", 200)
+        bucket_ramsize = self.input.param("bucket_ramsize", 512)
         wait = self.input.param("wait", False)
         enable_flush = self.input.param("enable_flush", None)
         enable_index_replica = self.input.param("enable_index_replica", None)
@@ -235,7 +236,7 @@ class rbacclitests(BaseTestCase):
         enable_index_replica_new = self.input.param("enable_index_replica_new", None)
         bucket_ramsize_new = self.input.param("bucket_ramsize_new", None)
         bucket = self.input.param("bucket", "default")
-        bucket_ramsize = self.input.param("bucket_ramsize", 200)
+        bucket_ramsize = self.input.param("bucket_ramsize", 512)
         bucket_replica = self.input.param("bucket_replica", 1)
         enable_flush = self.input.param("enable_flush", None)
         enable_index_replica = self.input.param("enable_index_replica", None)
