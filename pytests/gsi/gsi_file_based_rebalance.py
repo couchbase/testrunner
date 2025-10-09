@@ -1717,6 +1717,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                     elapsed_time = time.time() - start_time
                     if elapsed_time >= timeout_duration:
                         self.log.error(f"Timeout reached ({timeout_duration} seconds) while waiting for rebalance cleanup status to be done. Node statuses: {node_statuses}")
+                        self.fail("Timeout reached while waiting for rebalance cleanup status to be done")
                         break
 
                     time.sleep(10)

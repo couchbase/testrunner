@@ -505,16 +505,29 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         start_time = time.time()
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         while True:
+            all_nodes_done = True
+            node_statuses = {}
+
             for node in index_nodes:
                 rest = RestConnection(node)
                 status = rest.get_index_rebalance_token_cleanup_status()
-                if status == 'done':
-                    self.log.info("Rebalance cleanup status is done")
-                    break
-                elapsed_time = time.time() - start_time
-                if elapsed_time >= timeout_duration:
-                    self.log.error(f"Timeout reached ({timeout_duration} seconds) while waiting for rebalance cleanup status to be done. Last status: {status}")
-                    break
+                node_statuses[node.ip] = status
+                if status != 'done':
+                    all_nodes_done = False
+
+            if all_nodes_done:
+                self.log.info("Rebalance cleanup status is done on all indexer nodes")
+                break
+
+            # Check if timeout has been reached
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= timeout_duration:
+                self.log.error(f"Timeout reached ({timeout_duration} seconds) while waiting for rebalance cleanup status to be done. Node statuses: {node_statuses}")
+                self.fail("Timeout reached while waiting for rebalance cleanup status to be done")
+                break
+
+            time.sleep(10)
+            self.log.info(f"Rebalance cleanup status: {node_statuses} (elapsed: {elapsed_time:.1f}s)")
         task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[], to_remove=[])
         task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()
