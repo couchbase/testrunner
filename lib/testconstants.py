@@ -12,7 +12,8 @@ CB_VERSION_NAME = {"0.0": "master",
                    "7.5": "elixir",
                    "7.6": "trinity",
                    "7.7": "cypher",
-                   "8.0": "morpheus"}
+                   "8.0": "morpheus",
+                   "8.1": "totoro"}
 
 COLUMNAR_VERSION_NAME = {
     "1.0.0": ["1.0.0"],
@@ -39,7 +40,8 @@ CB_RELEASE_BUILDS = {"0.0.0": "0000",
                      "7.6.3": "4200", "7.6.4": "5146", "7.6.5": "5704",
                      "7.6.6": "6126", "7.6.7": "6706",
                      "7.7.0": "1000",
-                     "8.0.0": "0000"}
+                     "8.0.0": "0000", "8.0.1": "0000",
+                     "8.1.0": "0000"}
 
 MACOS_NAME = {"10.10": "Yosemite", "10.11": "El Capitan", "10.12": "Sierra",
               "10.13": "High Sierra", "10.14": "Mojave", "10.15": "Catalina",
@@ -48,13 +50,12 @@ MACOS_NAME = {"10.10": "Yosemite", "10.11": "El Capitan", "10.12": "Sierra",
 SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "suse 12", "suse 15",
                   "ubuntu 16.04", "ubuntu 18.04", "ubuntu 20.04", "ubuntu 22.04", "ubuntu 24.04",
-                  "debian 8", "debian 9", "debian 10",  "debian 11",
-                  "debian 12", "debian 13", "rhel 8", "rhel 9", "rhel 10",
+                  "debian 8", "debian 9", "debian 10",  "debian 11", "debian 12", "debian 13",
+                  "rhel 8", "rhel 9", "rhel 10", "rhel 11",
                   "oel 7", "oel 8", "oel 9",
                   "alma 9",
-                  "rocky 9",
-                  "amazon linux release 2 (karoo)",
-                  "amazon linux release 2023 (amazon linux)",
+                  "rocky 9", "rocky 10", "rocky 11",
+                  "amazon linux release 2 (karoo)", "amazon linux release 2023 (amazon linux)",
                   "cbl-mariner/linux 2"]
 
 WIN_NUM_ERLANG_PROCESS = 4
