@@ -855,12 +855,12 @@ def main():
                         only_pending = True
                     elif rerun_condition == "INST_FAIL":
                         only_install_failed = True
-                dispatch_job = \
-                    find_rerun_job.should_dispatch_job(
-                        options.os, testsToLaunch[i][
-                            'component'], dashboardDescriptor
-                        , options.version, parameters,
-                        only_pending, only_failed, only_unstable, only_install_failed)
+                    dispatch_job = \
+                        find_rerun_job.should_dispatch_job(
+                            options.os, testsToLaunch[i]['component'],
+                            dashboardDescriptor, options.version, parameters,
+                            only_pending, only_failed, only_unstable,
+                            only_install_failed)
 
                 # Skip server allocation if job should not be dispatched
                 if not dispatch_job and not options.noLaunch:
