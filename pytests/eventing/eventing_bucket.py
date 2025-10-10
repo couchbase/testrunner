@@ -355,6 +355,7 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_with_ephemeral_buckets_with_eviction_enabled(self):
         # delete src_bucket which will be created as part of setup
         self.rest.delete_bucket(self.src_bucket_name)
+        self.sleep(100)
         # create source bucket as ephemeral bucket with the same name
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas, bucket_type='ephemeral',
