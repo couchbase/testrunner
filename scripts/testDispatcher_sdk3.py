@@ -766,49 +766,6 @@ def main():
                 continue
             # this bit is Docker/VM dependent
 
-            # Check if job should be dispatched before checking server availability
-            if not (options.noLaunch or options.fresh_run):
-                # build the dashboard descriptor for rerun check
-                dashboardDescriptor = urllib.parse.quote(testsToLaunch[0]['subcomponent'])
-                if options.dashboardReportedParameters is not None:
-                    for o in options.dashboardReportedParameters.split(','):
-                        dashboardDescriptor += '_' + o.split('=')[1]
-
-                # Check rerun conditions
-                if runTimeTestRunnerParameters is None:
-                    parameters = testsToLaunch[0]['parameters']
-                else:
-                    if testsToLaunch[0]['parameters'] == 'None':
-                        parameters = runTimeTestRunnerParameters
-                    else:
-                        parameters = testsToLaunch[0]['parameters'] + ',' + runTimeTestRunnerParameters
-
-                rerun_condition = options.rerun_condition
-                only_failed = False
-                only_pending = False
-                only_unstable = False
-                only_install_failed = False
-                if rerun_condition == "FAILED":
-                    only_failed = True
-                elif rerun_condition == "UNSTABLE":
-                    only_unstable = True
-                elif rerun_condition == "PENDING":
-                    only_pending = True
-                elif rerun_condition == "INST_FAIL":
-                    only_install_failed = True
-
-                dispatch_job = find_rerun_job.should_dispatch_job(
-                    options.os, testsToLaunch[0]['component'],
-                    dashboardDescriptor, options.version, parameters,
-                    only_pending, only_failed, only_unstable, only_install_failed)
-
-                # Skip server availability check if job not to be dispatched
-                if not dispatch_job:
-                    print("!!! Skipping server check and job dispatching !!!")
-                    job_index += 1
-                    testsToLaunch.pop(0)
-                    continue
-
             # see if we can match a test
             haveTestToLaunch = False
             i = 0
@@ -875,6 +832,42 @@ def main():
                     for o in options.dashboardReportedParameters.split(','):
                         dashboardDescriptor += '_' + o.split('=')[1]
 
+                dispatch_job = True
+                if not options.fresh_run:
+                    if runTimeTestRunnerParameters is None:
+                        parameters = testsToLaunch[i]['parameters']
+                    else:
+                        if testsToLaunch[i]['parameters'] == 'None':
+                            parameters = runTimeTestRunnerParameters
+                        else:
+                            parameters = testsToLaunch[i][
+                                             'parameters'] + ',' + runTimeTestRunnerParameters
+                    rerun_condition = options.rerun_condition
+                    only_failed = False
+                    only_pending = False
+                    only_unstable = False
+                    only_install_failed = False
+                    if rerun_condition == "FAILED":
+                        only_failed = True
+                    elif rerun_condition == "UNSTABLE":
+                        only_unstable = True
+                    elif rerun_condition == "PENDING":
+                        only_pending = True
+                    elif rerun_condition == "INST_FAIL":
+                        only_install_failed = True
+                dispatch_job = \
+                    find_rerun_job.should_dispatch_job(
+                        options.os, testsToLaunch[i][
+                            'component'], dashboardDescriptor
+                        , options.version, parameters,
+                        only_pending, only_failed, only_unstable, only_install_failed)
+
+                # Skip server allocation if job should not be dispatched
+                if not dispatch_job and not options.noLaunch:
+                    print("Job had run successfully previously. Skipping server allocation and job dispatch.")
+                    job_index += 1
+                    testsToLaunch.pop(i)
+                    continue
 
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
