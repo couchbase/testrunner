@@ -855,12 +855,19 @@ def main():
                         only_pending = True
                     elif rerun_condition == "INST_FAIL":
                         only_install_failed = True
-                    dispatch_job = \
-                        find_rerun_job.should_dispatch_job(
-                            options.os, testsToLaunch[i][
-                                'component'], dashboardDescriptor
-                            , options.version, parameters,
-                            only_pending, only_failed, only_unstable, only_install_failed)
+                dispatch_job = \
+                    find_rerun_job.should_dispatch_job(
+                        options.os, testsToLaunch[i][
+                            'component'], dashboardDescriptor
+                        , options.version, parameters,
+                        only_pending, only_failed, only_unstable, only_install_failed)
+
+                # Skip server allocation if job should not be dispatched
+                if not dispatch_job and not options.noLaunch:
+                    print("Job had run successfully previously. Skipping server allocation and job dispatch.")
+                    job_index += 1
+                    testsToLaunch.pop(i)
+                    continue
 
                 # and this is the Jenkins descriptor
                 descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
