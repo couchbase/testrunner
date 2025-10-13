@@ -1001,6 +1001,7 @@ class JoinTests(QuerySanityTests):
         self.run_cbq_query('CREATE COLLECTION default.s1.c1 IF not exists')
         self.run_cbq_query('CREATE COLLECTION default.s1.c2 IF not exists')
         self.run_cbq_query('CREATE COLLECTION default.s1.c3 IF not exists')
+        self.sleep(3)
         # insert documents
         self.run_cbq_query(insert1)
         self.run_cbq_query(insert2)
