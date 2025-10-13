@@ -8622,6 +8622,8 @@ class QueriesIndexTests(QueryTests):
     def test_MB52090(self):
         self.fail_if_no_buckets()
         self.run_cbq_query("CREATE COLLECTION mb52090 IF NOT EXISTS", query_context='default._default')
+        # wait for collection to be created
+        self.sleep(3)
         self.run_cbq_query('CREATE INDEX ix2 IF NOT EXISTS ON mb52090(c1) WHERE type LIKE "airport%"', query_context='default._default')
 
         explain_query = '''
