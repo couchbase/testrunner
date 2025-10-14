@@ -84,8 +84,11 @@ class QuerySanityTLSTests(QueryTests):
     def test_dml_scope_collection(self):
         try:
             self.run_cbq_query('DROP SCOPE default.company IF EXISTS', server=self.query_node)
+            self.sleep(3)
             self.run_cbq_query('CREATE SCOPE default.company', server=self.query_node)
+            self.sleep(3)
             self.run_cbq_query('CREATE COLLECTION default.company.employees', server=self.query_node)
+            self.sleep(3)
             self.run_cbq_query('CREATE PRIMARY INDEX on default.company.employees', server=self.query_node)
             self.run_cbq_query('INSERT INTO default.company.employees (KEY UUID(), VALUE _employee) SELECT _employee FROM default _employee', server=self.query_node)
             queries = {
