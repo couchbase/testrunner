@@ -248,8 +248,9 @@ class QuerySeqScanTests(QueryTests):
         self.sleep(3)
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
+        self.sleep(3)
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
-
+        self.sleep(3)
         self.users = [{"id": "jackCollection", "name": "Jack Collection", "password": "password1"}]
         self.create_users()
         user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
@@ -312,9 +313,10 @@ class QuerySeqScanTests(QueryTests):
         self.sleep(3)
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection1 IF not exists')
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.scope1.collection2 IF not exists')
+        self.sleep(3)
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection1 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
         self.run_cbq_query(f'INSERT INTO {self.bucket}.scope1.collection2 (key k, value v) SELECT uuid() as k , {{"name": "San Francisco"}} as v FROM array_range(0,{self.doc_count}) d')
-
+        self.sleep(3)
         self.users = [{"id": "jackScope", "name": "Jack Scope", "password": "password1"}]
         self.create_users()
         user_id, user_pwd = self.users[0]['id'], self.users[0]['password']
@@ -415,7 +417,7 @@ class QuerySeqScanTests(QueryTests):
         self.sleep(3)
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.s1.col1 IF not exists')
         self.run_cbq_query(f'CREATE COLLECTION {self.bucket}.s1.col2 IF not exists')
-
+        self.sleep(3)
         self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col1 VALUES("k01", {{"c1": 1}})')
         self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col1 VALUES("k02", {{"c1": 1}})')
         self.run_cbq_query(f'UPSERT INTO {self.bucket}.s1.col1 VALUES("k03", {{"c10": 3}})')
