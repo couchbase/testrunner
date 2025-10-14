@@ -4930,6 +4930,7 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         # Create a collection
         self.run_cbq_query('CREATE COLLECTION default._default.test_prepared_star IF NOT EXISTS')
+        self.sleep(5, "Waiting for collection to be created")
 
         # Insert test data
         upsert_query = 'UPSERT INTO default._default.test_prepared_star (KEY, VALUE) VALUES ("key::1", {"type": "document", "id": 1}), ("key::2", {"type": "document", "id": 2}), ("key::3", {"type": "document", "name": "Raj", "timezone": "Local", "id": 3})'
