@@ -7,6 +7,7 @@ __git_user__ = "hrajput89"
 __created_on__ = "14/10/20 1:10 pm"
 """
 import re
+import time
 
 from concurrent.futures import ThreadPoolExecutor
 from itertools import combinations, chain
@@ -57,12 +58,6 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
         self.log.info("==============  ConcurrentIndexes tearDown has started ==============")
         super(CollectionIndexesRebalance, self).tearDown()
         self.log.info("==============  ConcurrentIndexes tearDown has completed ==============")
-
-    def suite_tearDown(self):
-        pass
-
-    def suite_setUp(self):
-        pass
 
     def test_multiple_type_indexes_with_rebalance(self):
         unique_index_type_per_collection = 8
@@ -294,11 +289,12 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
                 except Exception as err:
                     self.log.info(err)
             self.sleep(10)
-
+        self.sleep(300)
         result = self.wait_until_indexes_online()
         if not result:
             self.log.error("Timed out while checking for index status. Check index logs")
         index_meta_info = self.rest.get_indexer_metadata()['status']
+        self.log.info(f"Index metadata after rebalance {index_meta_info}")
         for index in index_meta_info:
             self.assertTrue(self.servers[1].ip not in index['hosts'][0])
             self.assertEqual(index['status'], 'Ready',
@@ -505,7 +501,33 @@ class CollectionIndexesRebalance(BaseSecondaryIndexingTests):
             query = f"select count(*) from {collection_namespace} where {index_field} is not null"
             count = self.run_cbq_query(query=query)['results'][0]['$1']
             self.assertEqual(count, num_of_docs, "No. indexed docs are not matching after rebalance")
+        timeout_duration = 3600  # 1 hour in seconds
+        start_time = time.time()
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        while True:
+            all_nodes_done = True
+            node_statuses = {}
 
+            for node in index_nodes:
+                rest = RestConnection(node)
+                status = rest.get_index_rebalance_token_cleanup_status()
+                node_statuses[node.ip] = status
+                if status != 'done':
+                    all_nodes_done = False
+
+            if all_nodes_done:
+                self.log.info("Rebalance cleanup status is done on all indexer nodes")
+                break
+
+            # Check if timeout has been reached
+            elapsed_time = time.time() - start_time
+            if elapsed_time >= timeout_duration:
+                self.log.error(f"Timeout reached ({timeout_duration} seconds) while waiting for rebalance cleanup status to be done. Node statuses: {node_statuses}")
+                self.fail("Timeout reached while waiting for rebalance cleanup status to be done")
+                break
+
+            time.sleep(10)
+            self.log.info(f"Rebalance cleanup status: {node_statuses} (elapsed: {elapsed_time:.1f}s)")
         task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[], to_remove=[])
         task.result()
         rebalance_status = RestHelper(self.rest).rebalance_reached()

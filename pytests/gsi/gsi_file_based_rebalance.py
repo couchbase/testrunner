@@ -607,6 +607,7 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                                   namespace=namespace, deploy_node_info=deploy_nodes)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=queries, database=namespace,
                                                      query_node=query_node)
+                self.wait_until_indexes_online()
                 create_queries.extend(queries)
                 shards_list = self.fetch_plasma_shards_list()
                 if len(shards_list) > allowed_num_shards:

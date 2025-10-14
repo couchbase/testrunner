@@ -17,9 +17,60 @@ from membase.api.exception import RebalanceFailedException, ServerUnavailableExc
 
 
 class GSIAutofailover(AutoFailoverBaseTest, BaseSecondaryIndexingTests):
+
+    def sync_cluster_time(self):
+        """
+        Synchronize time across all cluster nodes using systemd-timesyncd.
+        This ensures all nodes have synchronized time to prevent test failures due to clock skew.
+        """
+        self.log.info("=== Starting cluster time synchronization ===")
+        for server in self.servers:
+            try:
+                self.log.info(f"Synchronizing time on node: {server.ip}")
+                shell = RemoteMachineShellConnection(server)
+                # Check if systemd-timesyncd is already installed
+                output, error = shell.execute_command("which systemd-timesyncd")
+                if error:
+                    self.log.info(f"systemd-timesyncd not found on {server.ip}, installing...")
+                    # Update package list and install systemd-timesyncd
+                    install_cmd = "apt-get update && apt-get install -y systemd-timesyncd"
+                    output, error = shell.execute_command(install_cmd)
+                    if error:
+                        self.log.error(f"Failed to install systemd-timesyncd on {server.ip}: {error}")
+                        continue
+                    else:
+                        self.log.info(f"Successfully installed systemd-timesyncd on {server.ip}")
+                else:
+                    self.log.info(f"systemd-timesyncd already installed on {server.ip}")
+                shell.execute_command("systemctl enable systemd-timesyncd")
+                shell.execute_command("systemctl start systemd-timesyncd")
+                # Verify the service is running
+                output, error = shell.execute_command("systemctl is-active systemd-timesyncd")
+                if output and "active" in output[0]:
+                    self.log.info(f"systemd-timesyncd is active on {server.ip}")
+                    # Force immediate synchronization
+                    shell.execute_command("systemctl restart systemd-timesyncd")
+                    # Check sync status
+                    output, error = shell.execute_command("timedatectl status | grep 'NTP synchronized'")
+                    if output:
+                        self.log.info(f"Time sync status on {server.ip}: {output[0]}")
+                else:
+                    self.log.warning(f"systemd-timesyncd may not be running properly on {server.ip}")
+                shell.disconnect()
+                self.log.info(f"Time synchronization completed for node: {server.ip}")
+            except Exception as e:
+                self.log.error(f"Error synchronizing time on {server.ip}: {str(e)}")
+                if 'shell' in locals():
+                    shell.disconnect()
+        # Wait a bit for synchronization to take effect
+        self.log.info("Waiting 10 seconds for time synchronization to stabilize...")
+        self.sleep(10)
+        self.log.info("=== Cluster time synchronization completed ===")
+
     def setUp(self):
         super(GSIAutofailover, self).setUp()
         self.log.info("==============  GSIAutofailover setup has started ==============")
+        self.sync_cluster_time()
         self.rest.delete_all_buckets()
         self.index_field_set = powerset(['age', 'city', 'country', 'title', 'firstName', 'lastName', 'streetAddress',
                                          'suffix', 'filler1', 'phone', 'zipcode'])

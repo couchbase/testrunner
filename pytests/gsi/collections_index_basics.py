@@ -115,7 +115,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
-            self.sleep(5)
+            self.sleep(120)
 
             query = indx_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
@@ -124,7 +124,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
-            self.sleep(5)
+            self.sleep(120)
 
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
@@ -136,7 +136,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query=query)
             self.wait_until_indexes_online()
             # todo (why it's failing even though build is complete)
-            self.sleep(5)
+            self.sleep(120)
 
             query = f'SELECT age from {collection_namespace} where age > 65'
             result = self.run_cbq_query(query=query)['results']

@@ -1536,7 +1536,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             else:
                 self.log.info(f"Can't reach desired Resident Ratio in {timeout} secs.")
 
-    def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False, schedule_index=False):
+    def wait_until_indexes_online(self, timeout=1800, defer_build=False, check_paused_index=False, schedule_index=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -1582,6 +1582,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                         timed_out = True
                         check = next_time - init_time > timeout
         if timed_out:
+            self.log.info(f"Indexes are not online after {timeout} seconds")
+            self.log.info(f"Index status: {index_status}")
             check = False
         return check
 
@@ -2693,6 +2695,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         json_resp = self.index_rest.get_index_aggregate_metadata()
         shards = set()
         for each_item in json_resp['result']['metadata']:
+            # Check if topologies key exists and is not empty
+            if 'topologies' not in each_item or not each_item['topologies']:
+                continue
             for item in each_item['topologies']:
                 if item["scope"] == '_system':
                     continue

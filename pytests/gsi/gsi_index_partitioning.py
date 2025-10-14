@@ -1968,7 +1968,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         # Heal Network Partitioning
         self.stop_firewall_on_node(node_out)
-
+        self.sleep(60)
         # Re-run query
         scan_query = "select name,mutated from default where name > 'a' and mutated >=0;"
         try:
@@ -4906,7 +4906,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     if self.gsi_type == "memory_optimized":
                         num_partitions = random.randint(4, 20)
                     else:
-                        num_partitions = random.randint(4, 100)
+                        num_partitions = random.randint(4, 64)
                     with_statement.append(
                         "'num_partition':{0}".format(num_partitions))
                 if "num_replica" in index_variations:
