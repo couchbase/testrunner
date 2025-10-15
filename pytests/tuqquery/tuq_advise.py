@@ -641,6 +641,7 @@ class QueryAdviseTests(QueryTests):
     def test_advise_covered_index_join(self):
         # create mb66635 collection
         self.run_cbq_query('CREATE COLLECTION default._default.mb66635 IF NOT EXISTS')
+        self.sleep(5, "Waiting for collection to be created")
         insert1 = 'UPSERT INTO mb66635 (KEY,VALUE) VALUES("test11_advise", {"c11": 1, "c12": 10, "a11": [ 1, 2, 3, 4 ], "type": "left", "test_id": "advise"}), VALUES("test12_advise", {"c11": 2, "c12": 20, "a11": [ 3, 3, 5, 10 ], "type": "left", "test_id": "advise"}), VALUES("test13_advise", {"c11": 3, "c12": 30, "a11": [ 3, 4, 20, 40 ], "type": "left", "test_id": "advise"}), VALUES("test14_advise", {"c11": 4, "c12": 40, "a11": [ 30, 30, 30 ], "type": "left", "test_id": "advise"})'
         insert2 = 'UPSERT INTO mb66635 (KEY,VALUE) VALUES("test21_advise", {"c21": 1, "c22": 10, "a21": [ 1, 10, 20], "a22": [ 1, 2, 3, 4 ], "type": "right", "test_id": "advise"}), VALUES("test22_advise", {"c21": 2, "c22": 20, "a21": [ 2, 3, 30], "a22": [ 3, 5, 10, 3 ], "type": "right", "test_id": "advise"}), VALUES("test23_advise", {"c21": 2, "c22": 21, "a21": [ 2, 20, 30], "a22": [ 3, 3, 5, 10 ], "type": "right", "test_id": "advise"}), VALUES("test24_advise", {"c21": 3, "c22": 30, "a21": [ 3, 10, 30], "a22": [ 3, 4, 20, 40 ], "type": "right", "test_id": "advise"}), VALUES("test25_advise", {"c21": 3, "c22": 31, "a21": [ 3, 20, 40], "a22": [ 4, 3, 40, 20 ], "type": "right", "test_id": "advise"}), VALUES("test26_advise", {"c21": 3, "c22": 32, "a21": [ 4, 14, 24], "a22": [ 40, 20, 4, 3 ], "type": "right", "test_id": "advise"}), VALUES("test27_advise", {"c21": 5, "c22": 50, "a21": [ 5, 15, 25], "a22": [ 1, 2, 3, 4 ], "type": "right", "test_id": "advise"}), VALUES("test28_advise", {"c21": 6, "c22": 60, "a21": [ 6, 16, 26], "a22": [ 3, 3, 5, 10 ], "type": "right", "test_id": "advise"}), VALUES("test29_advise", {"c21": 7, "c22": 70, "a21": [ 7, 17, 27], "a22": [ 30, 30, 30 ], "type": "right", "test_id": "advise"}), VALUES("test30_advise", {"c21": 8, "c22": 80, "a21": [ 8, 18, 28], "a22": [ 30, 30, 30 ], "type": "right", "test_id": "advise"})'
         self.run_cbq_query(insert1, query_context='default:default._default')
@@ -649,7 +650,8 @@ class QueryAdviseTests(QueryTests):
         # update statistics
         update_stats = 'UPDATE STATISTICS FOR mb66635(c11, c12, c21, c22, DISTINCT a11, DISTINCT a21, DISTINCT a22, type, test_id)'
         self.run_cbq_query(update_stats, query_context='default:default._default')
-
+        self.sleep(5, "Waiting for statistics to be updated")
+        
         advise_query = 'ADVISE select a1.c12, a2.c22 from mb66635 a1 join mb66635 a2 on a1.c11=a2.c21 and a2.test_id = "advise" where a1.test_id = "advise" and a1.c12 < 40'
         result = self.run_cbq_query(advise_query, query_context='default:default._default')
         self.log.info(f"Advise result is: {result['results']}")
