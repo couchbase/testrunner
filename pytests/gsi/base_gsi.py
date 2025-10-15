@@ -1712,7 +1712,26 @@ class BaseSecondaryIndexingTests(QueryTests):
         if not buckets:
             self.fail('FAIL: This test requires buckets')
 
+    def _ensure_nft_installed(self, node):
+        """Check if nft is installed on the node, and install it if not."""
+        shell = RemoteMachineShellConnection(node)
+        # Check if nft is installed
+        output, error = shell.execute_command("which nft")
+        if not output or not output[0].strip():
+            self.log.info(f"nft not found on {node.ip}, installing nftables...")
+            shell.execute_command("apt-get update")
+            shell.execute_command("apt-get install -y nftables")
+            # Verify installation
+            output, error = shell.execute_command("which nft")
+            if output and output[0].strip():
+                self.log.info(f"nft successfully installed on {node.ip}")
+            else:
+                self.log.error(f"Failed to install nft on {node.ip}")
+        else:
+            self.log.info(f"nft is already installed on {node.ip}")
+
     def block_incoming_network_from_node(self, node1, node2):
+        self._ensure_nft_installed(node1)
         shell = RemoteMachineShellConnection(node1)
         shell.execute_command("nft add table ip filter")
         shell.execute_command("nft add chain ip filter INPUT '{ type filter hook input priority 0; }'")
