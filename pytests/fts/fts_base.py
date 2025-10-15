@@ -2183,16 +2183,15 @@ class CouchbaseCluster:
             self.__name, self.__master_node.ip)
 
     def __set_fts_ram_quota(self):
-        fts_quota = TestInputSingleton.input.param("fts_quota", None)
-        kv_quota = TestInputSingleton.input.param("kv_mem", None)
-        if fts_quota:
-            if self.modify_memory_quotas:
-                if kv_quota:
-                    RestConnection(self.__master_node).modify_memory_quota(kv_quota = int(kv_quota), fts_quota = fts_quota)
-                else:
-                    RestConnection(self.__master_node).modify_memory_quota(fts_quota = fts_quota)
-            else:
-                RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
+        is_n1ql = TestInputSingleton.input.param("is_n1ql", False)
+        fts_quota = 3000
+        index_quota = 600
+        if(is_n1ql):
+            fts_quota = 2400
+        try:
+            RestConnection(self.__master_node).modify_memory_quota(kv_quota = 3000, fts_quota = fts_quota, index_quota = index_quota)
+        except Exception as ex:
+            print(f"Error setting memory quota for the cluster.\nSource : fts_base.py.\nError : {ex}\n")
 
     def get_node(self, ip, port):
         for node in self.__nodes:

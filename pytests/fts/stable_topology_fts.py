@@ -26,11 +26,6 @@ class StableTopFTS(FTSBaseTest):
     def setUp(self):
         super(StableTopFTS, self).setUp()
         self.ignore_wiki = False
-        self.log.info("Modifying quotas for each services in the cluster")
-        try:
-            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
-        except Exception as e:
-            print(e)
 
 
     def tearDown(self):

@@ -1,4 +1,4 @@
-from distutils.core import setup 
+from distutils.core import setup
 
 
 def get_version():
