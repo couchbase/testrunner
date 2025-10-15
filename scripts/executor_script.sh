@@ -201,12 +201,6 @@ fi
 desc2=`echo $descriptor | awk '{split($0,r,"-");print r[1],r[2]}'`
 ${py_executable} scripts/ssh.py -i /tmp/testexec.$$.ini "iptables -F"
 
-if [ $majorRelease = "3" ]; then
-   echo have a 3.x release
-   git checkout 0b2bb7a53e350f90737112457877ef2c05ca482a
-elif [[ "$testrunner_tag" != "master" ]]; then
-   git checkout $testrunner_tag
-fi
 echo "Need to set ALLOW_HTP back to True to do git pull branch"
 sed -i 's/ALLOW_HTP.*/ALLOW_HTP = True/' lib/testconstants.py
 
