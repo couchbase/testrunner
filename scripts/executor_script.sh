@@ -9,14 +9,6 @@ py_executable=python3
 
 # Block was prev. in a separate shell block before
 echo Desc: $descriptor
-if [[ ${component} == "backup_recovery"  || ${component} == "xdcr" ]]; then
-  echo "Forcefully setting branch and testrunner_tag=master"
-  branch=master
-  testrunner_tag=master
-fi
-
-git checkout ${branch}
-git pull origin ${branch}
 
 touch rerun_props_file
 if [ ${fresh_run} == false ]; then
