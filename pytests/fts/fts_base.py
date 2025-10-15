@@ -1,6 +1,6 @@
 """
 Base class for FTS/CBFT/Couchbase Full Text Search
-""" 
+"""
 import ast
 import copy
 import datetime
@@ -910,15 +910,15 @@ class FTSIndex:
         if self.synonym_source:
             if 'mapping' not in self.index_definition['params']:
                 self.index_definition['params']['mapping'] = {}
-            
+
             # Check if 'analysis' exists, create if not
             if 'analysis' not in self.index_definition['params']['mapping']:
                 self.index_definition['params']['mapping']['analysis'] = {}
-            
+
             # Check if 'synonym_sources' exists, create if not
             if 'synonym_sources' not in self.index_definition['params']['mapping']['analysis']:
                 self.index_definition['params']['mapping']['analysis']['synonym_sources'] = {}
-            
+
             # Add the synonym source to the structure
             synonym_source_map = {
                 self.synonym_source[0] : {
@@ -944,7 +944,7 @@ class FTSIndex:
                 "CompactionPercentage": 0.6,
                 "CompactionLevelMultiplier": 3
             }
-        
+
         if TestInputSingleton.input.param("scoring_model", None):
             if 'mapping' not in list(self.index_definition['params'].keys()):
                 self.index_definition['params']['mapping'] = {}
@@ -1515,7 +1515,7 @@ class FTSIndex:
 
     def get_src_collections_doc_count(self, extra_collections = None):
         return self.__cluster.get_doc_count_in_collections(self.source_bucket, self.scope, self.collections, extra_collections = extra_collections)
-    
+
     def get_uuid(self):
         rest = RestConnection(self.__cluster.get_random_fts_node())
         return rest.get_fts_index_uuid(self.name, self._source_name, self.scope)
@@ -1655,8 +1655,8 @@ class FTSIndex:
                       consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
                       node=None, knn=None, fields=None,
                       raise_on_error=False, variable_node=None,bucket_name=None,validation_data=None,fts_nodes=None):
-        
-        
+
+
 
         vector_search = False
         if self.is_vector_query(query):
@@ -2225,16 +2225,15 @@ class CouchbaseCluster:
             self.__name, self.__master_node.ip)
 
     def __set_fts_ram_quota(self):
-        fts_quota = TestInputSingleton.input.param("fts_quota", None)
-        kv_quota = TestInputSingleton.input.param("kv_mem", None)
-        if fts_quota:
-            if self.modify_memory_quotas:
-                if kv_quota:
-                    RestConnection(self.__master_node).modify_memory_quota(kv_quota = int(kv_quota), fts_quota = fts_quota)
-                else:
-                    RestConnection(self.__master_node).modify_memory_quota(fts_quota = fts_quota)
-            else:
-                RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
+        is_n1ql = TestInputSingleton.input.param("is_n1ql", False)
+        fts_quota = TestInputSingleton.input.param("fts_quota", 3000)
+        index_quota = TestInputSingleton.input.param("index_quota", 600)
+        if(is_n1ql):
+            fts_quota = 2400
+        try:
+            RestConnection(self.__master_node).modify_memory_quota(kv_quota = 3000, fts_quota = fts_quota, index_quota = index_quota)
+        except Exception as ex:
+            print(f"Error setting memory quota for the cluster.\nSource : fts_base.py.\nError : {ex}\n")
 
     def get_node(self, ip, port):
         for node in self.__nodes:
@@ -2910,17 +2909,17 @@ class CouchbaseCluster:
                     filter_type = filter_['type']
                     filter_obj = filter_['filter']
                     doc_config['doc_filter'][filter_type] = filter_obj
-                
+
                 doc_config['mode'] = 'scope.collection.custom'
                 doc_config['type_field'] = "type"
-                
+
             else:
                 doc_config['mode'] = 'scope.collection.type_field'
                 doc_config['type_field'] = "type"
-            
+
             index.index_definition['params']['doc_config'] = {}
             index.index_definition['params']['doc_config'] = doc_config
-        
+
         if synonym_source:
             index.index_definition['params']['mapping']['types'][f"{synonym_source[3]}.{collections[0]}"]["default_synonym_source"] = synonym_source[0]
             index.index_definition['params']['mapping']['types'][f"{synonym_source[3]}.{collections[0]}"]["default_analyzer"] = analyzer
@@ -3000,10 +2999,10 @@ class CouchbaseCluster:
 
         total_hits, hit_list, time_taken, status = \
             rest.run_fts_query(index_name, query_dict, timeout=timeout, bucket=bucket_name, scope=scope_name,node=variable_node)
-        
+
 
         if validation_data:
-            target_node_stat = 0 
+            target_node_stat = 0
             rem_nodes_stat = 0
 
             for i in fts_nodes:
@@ -5883,13 +5882,13 @@ class FTSBaseTest(unittest.TestCase):
     def _create_fts_index_parameterized(self, index_replica=1, test_indexes=None, create_vector_index=False,
                                         vector_fields=None, field_type=None, field_name=None, extra_fields=None,
                                         wait_for_index_complete=True,xattr_flag = False, base64_flag = False, store_all_flag = False,filters=None,synonym_source=None,index_name=None):
-        
-        if store_all_flag: 
+
+        if store_all_flag:
             self.store_in_xattr = xattr_flag
             self.encode_base64_vector = base64_flag
 
         extra_collections = []
-        
+
         if synonym_source:
             extra_collections.append(synonym_source[1])
 
@@ -5907,7 +5906,7 @@ class FTSBaseTest(unittest.TestCase):
                                               index_name, collection_index=True, _type=_type,
                                               scope=index_scope, collections=index_collections,store_all_flag=store_all_flag,filters=filters,synonym_source=synonym_source,
                                               analyzer=self.analyzer)
-                
+
                 if field_name and field_type:
                     for collection in index_collections:
                         if create_vector_index:
@@ -6483,12 +6482,12 @@ class FTSBaseTest(unittest.TestCase):
             for fw in fuzzy_words:
                 extra_words.update(self.generate_fuzzy_words(fw, fuzziness - 1))
             fuzzy_words.update(extra_words)
-    
+
         for i in range(word_length - 1):
             swapped = list(word)
             swapped[i], swapped[i + 1] = swapped[i + 1], swapped[i]
             fuzzy_words.add("".join(swapped))
-        
+
         fuzzy_words.add(word)
 
         return list(fuzzy_words)
@@ -6502,7 +6501,7 @@ class FTSBaseTest(unittest.TestCase):
             query =  {"match": word}
 
             total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index_name,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
-            
+
             ids = []
             for hit in hit_list:
                 ids.append(hit['id'])
@@ -6511,7 +6510,7 @@ class FTSBaseTest(unittest.TestCase):
                 self.fail("Total hits : {}. Expected hits : {}".format(total_hits,len(groundtruth)))
             else:
                 self.log.info("SUCCESS. Total hits : {}. Expected hits : {}".format(total_hits,len(groundtruth)))
-            
+
             is_passed = True
 
             for id in ids:
@@ -6523,9 +6522,9 @@ class FTSBaseTest(unittest.TestCase):
                 self.fail("Mismatch in hits. Expected : {}. Actual : {}".format(groundtruth,ids))
             else:
                 self.log.info("SUCCESS. Expected : {}. Actual : {}".format(groundtruth,ids))
-    
+
     def run_wildcard_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
-        
+
         wordlist = list(synmap.keys())
 
         self.log.info(f"Wildcard operator : ?")
@@ -6565,7 +6564,7 @@ class FTSBaseTest(unittest.TestCase):
                         ex_res.append(hit['id'])
                 except Exception as ex:
                     pass
-                
+
                 if format==1:
                     if word in wordmap:
                         for syn in synmap[word]:
@@ -6583,7 +6582,7 @@ class FTSBaseTest(unittest.TestCase):
                             for item in v:
                                 if item in hash_map:
                                     continue
-                                hash_map[item] = 1 
+                                hash_map[item] = 1
                                 query = {"wildcard": item}
                                 total_hits, hit_list, _, _ = self._cb_cluster.run_fts_query(index_name=index,query_dict={"query": query, "size": self.query_size},bucket_name="default",scope_name="s1")
                                 try:
@@ -6593,7 +6592,7 @@ class FTSBaseTest(unittest.TestCase):
                                     pass
 
 
-            result_set = sorted(set(ex_res))            
+            result_set = sorted(set(ex_res))
             self.log.info(f"Document Hits for the expanded queries : {result_set}")
 
             if len(ids) != len(result_set):
@@ -6603,13 +6602,13 @@ class FTSBaseTest(unittest.TestCase):
                     self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
                 else:
                     self.log.info("SUCCESS. Document Hits match")
-        
+
 
         self.log.info(f"Wildcard operator : *")
 
         for itr in range(self.num_queries):
             self.log.info(f"Running QUERY {itr}\n")
-            
+
             word = ""
             while len(word) < 2:
                 word = wordlist[int(random.randint(0,len(wordlist)-1))]
@@ -6625,7 +6624,7 @@ class FTSBaseTest(unittest.TestCase):
             except Exception as ex:
                 pass
             self.log.info(f"Document Hits for the synonym query : {ids}\n")
-            
+
             ex_res = []
 
             self.log.info("Running expanded queries")
@@ -6679,7 +6678,7 @@ class FTSBaseTest(unittest.TestCase):
                             except Exception as ex:
                                 pass
 
-            result_set = sorted(set(ex_res))            
+            result_set = sorted(set(ex_res))
             self.log.info(f"Document Hits for the expanded queries : {result_set}")
 
             if len(ids) != len(result_set):
@@ -6689,9 +6688,9 @@ class FTSBaseTest(unittest.TestCase):
                     self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
                 else:
                     self.log.info("SUCCESS. Document Hits match")
-    
+
     def run_fuzzy_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
-        
+
         wordlist = list(synmap.keys())
 
         for itr in range(self.num_queries):
@@ -6767,7 +6766,7 @@ class FTSBaseTest(unittest.TestCase):
                             except Exception as ex:
                                 pass
 
-            result_set = sorted(set(ex_res))  
+            result_set = sorted(set(ex_res))
 
             self.log.info(f"Document Hits for the expanded queries : {result_set}")
 
@@ -6778,10 +6777,10 @@ class FTSBaseTest(unittest.TestCase):
                     self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
                 else:
                     self.log.info("SUCCESS. Document Hits match")
-    
+
 
     def run_match_phrase_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
-        
+
         wordlist = list(synmap.keys())
 
         for itr in range(self.num_queries):
@@ -6839,7 +6838,7 @@ class FTSBaseTest(unittest.TestCase):
                     except Exception as ex:
                         pass
 
-            result_set = sorted(set(ex_res))  
+            result_set = sorted(set(ex_res))
 
             self.log.info(f"Document Hits for the expanded queries : {result_set}")
 
@@ -6850,9 +6849,9 @@ class FTSBaseTest(unittest.TestCase):
                     self.fail(f"Document mismatch. Expected : {result_set}. Actual : {ids}")
                 else:
                     self.log.info("SUCCESS. Document Hits match")
-    
+
     def run_prefix_synonym_query_and_compare(self,synonym_index=None,index = None,rawmap=None,wordmap=None,synmap=None,format=1):
-        
+
         wordlist = list(synmap.keys())
 
         for itr in range(self.num_queries):
@@ -6861,7 +6860,7 @@ class FTSBaseTest(unittest.TestCase):
             word = ""
             while len(word) <= 3:
                 word = wordlist[int(random.randint(0,len(wordlist)-1))]
-            
+
             word = word[:3]
 
             query = {"prefix": word}
@@ -6927,7 +6926,7 @@ class FTSBaseTest(unittest.TestCase):
                                 pass
 
 
-            result_set = sorted(set(ex_res))  
+            result_set = sorted(set(ex_res))
 
             self.log.info(f"Document Hits for the expanded queries : {result_set}")
 
@@ -6971,14 +6970,14 @@ class FTSBaseTest(unittest.TestCase):
                 failed_queries.append(task.query_index + 1)
 
         if fail_count:
-            
+
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))
         else:
             self.log.info("SUCCESS: %s out of %s queries passed"
                           % (num_queries - fail_count, num_queries))
-            
+
 
     def grab_fts_diag(self):
         """
@@ -7214,7 +7213,7 @@ class FTSBaseTest(unittest.TestCase):
 
                     if doc_filter_test:
                         container_name = "upgrade"
-                        ei = 1000    
+                        ei = 1000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
                                               collection_name, dataset[0], False, "vect", start_key, ei+start_key, False,
@@ -7306,7 +7305,7 @@ class FTSBaseTest(unittest.TestCase):
                         govl.load_data(container_name)
 
         return bucketvsdataset
-    
+
     def gen_type_body(self,is_vector=False):
         type_body = {}
         type_body["dynamic"] = False
@@ -7345,12 +7344,12 @@ class FTSBaseTest(unittest.TestCase):
         })
         type_body["properties"].update(prop_v)
         return type_body
-    
+
     def construct_docfilter_index(self,filters,bucket,scope,collection,index_name,is_vector=False):
         index = {}
         index['type'] = "fulltext-index"
         index['name'] = index_name
-        index["sourceType"] = "gocbcore" 
+        index["sourceType"] = "gocbcore"
         index["sourceName"] = bucket
         index["planParams"] = {"maxPartitionsPerPIndex": 64,"indexPartitions": 1}
         index["params"] = {}
@@ -7386,13 +7385,13 @@ class FTSBaseTest(unittest.TestCase):
         mapping["scoring_model"] = "tf-idf"
         mapping["store_dynamic"] = False
         mapping["type_field"] = "_type"
-        
+
         types = {}
         type_body = self.gen_type_body(is_vector=is_vector)
 
         for filter in filters:
             types[scope + "." + collection + "." + filter[0]] = type_body
-        
+
         mapping["types"] = types
         index["params"]["mapping"] = mapping
 
@@ -7406,7 +7405,7 @@ class FTSBaseTest(unittest.TestCase):
         for i in data:
             res.append(int(i[4:]))
         return sorted(res)
-    
+
     def update_index_def(self,index,filter_type,filter,collection_name="c1",min_pass=1):
         store_ = None
         if filter_type == "conjunction_filter":
@@ -7438,7 +7437,7 @@ class FTSBaseTest(unittest.TestCase):
                     index.index_definition['params']['mapping']['types'][f"s1.{collection_name}.{'a'+str(i)}"] = self.gen_type_body()
         else:
             index.index_definition['params']['mapping']['types'][f"s1.{collection_name}.{filter_type}"] = self.gen_type_body()
-        
+
 
     def docfilter_data(self, bucket_name="default",scope_name="_default", collection_name="_default",prefix="doc-"):
 
@@ -7448,13 +7447,13 @@ class FTSBaseTest(unittest.TestCase):
                                 self._input.membase_settings.rest_password, bucket_name, scope_name,
                                 collection_name,prefix)
         return loader.load_data(container_name)
-    
+
     def synonym_datagen(self):
 
         container_name = self.generate_random_container_name()
         self.docker_containers.append(container_name)
         synonym_obj = SynonymDatagen().start_server(container_name=container_name)
-    
+
     def get_query_vectors(self, dataset_name, dimension=None):
         ds = VectorDataset(dataset_name)
         use_hdf5_datasets = True
