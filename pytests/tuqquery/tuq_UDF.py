@@ -2246,6 +2246,7 @@ class QueryUDFTests(QueryTests):
 
         # 1. Create collection if not exists
         self.run_cbq_query(f"CREATE COLLECTION {collection_name} IF NOT EXISTS", query_context="default._default")
+        self.sleep(3, "Waiting for collection to be created")
 
         try:
             # 2. Upsert 1000 docs into the new collection
@@ -2257,6 +2258,7 @@ class QueryUDFTests(QueryTests):
 
             # 3. Create primary index if not exists
             self.run_cbq_query(f'CREATE PRIMARY INDEX IF NOT EXISTS ON {fq_coll}')
+            self.sleep(3, "Waiting for primary index to be created")
 
             # 4. Create the UDF to select from the new collection
             udf = f'CREATE OR REPLACE FUNCTION func4() {{ (SELECT RAW t1 FROM {fq_coll} t1) }};'
