@@ -3432,6 +3432,12 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         node_out = self.servers[self.node_out]
         node_out_str = node_out.ip + ":" + str(self.node_port)
 
+        # Ensure self.rest is not the same node as node_out
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+
         # Get Index Names
         index_names = ["idx1"]
         if self.num_index_replica > 0:
@@ -3448,14 +3454,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_data_before[index] = {}
             index_data_before[index]["item_count"] = total_item_count_before
             index_data_before[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = rest.get_indexer_metadata()
 
         try:
             # rebalance out an indexer node
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [], [node_out])
 
-            reached = RestHelper(self.rest).rebalance_reached()
+            reached = RestHelper(rest).rebalance_reached()
 
             remote_client = RemoteMachineShellConnection(node_to_fail)
             if self.node_operation == "kill_indexer":
@@ -3479,7 +3485,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [node_out])
         self.sleep(30)
-        reached_rerun = RestHelper(self.rest).rebalance_reached()
+        reached_rerun = RestHelper(rest).rebalance_reached()
         self.assertTrue(reached_rerun,
                         "retry of the failed rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -3786,8 +3792,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         node_out = self.servers[self.node_out]
         node_out_str = node_out.ip + ":" + str(self.node_port)
 
+        # Ensure self.rest is not the same node as node_out
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+
         # failover and rebalance out a indexer node
-        nodes_all = self.rest.node_statuses()
+        nodes_all = rest.node_statuses()
         for node in nodes_all:
             if node.ip == node_out.ip:
                 break
@@ -3799,17 +3811,17 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         failover_task.result()
 
-        self.rest.set_recovery_type(node.id, self.recovery_type)
-        self.rest.add_back_node(node.id)
+        rest.set_recovery_type(node.id, self.recovery_type)
+        rest.add_back_node(node.id)
 
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [])
 
-        reached = RestHelper(self.rest).rebalance_reached()
+        reached = RestHelper(rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
-        index_metadata = self.rest.get_indexer_metadata()
+        index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata :::")
         self.log.info(index_metadata)
 
