@@ -3869,6 +3869,133 @@ class XDCRNewBaseTest(unittest.TestCase):
                 # collection_names.append(x.split(":name:")[1].strip())
         return collection_info, error
 
+    def get_incoming_replications(self, server_rest):
+
+        incoming_repl_uri = "xdcr/sourceClusters"
+        status, content, _ = server_rest._http_request(api = server_rest.baseUrl + incoming_repl_uri, method="GET", timeout=60)
+        if status:
+            return json.loads(content)
+        return None
+
+    def get_outgoing_replications(self, server_rest):
+        outgoing_repl_uri = "pools/default/remoteClusters"
+        status, content, _ = server_rest._http_request(api = server_rest.baseUrl + outgoing_repl_uri, method="GET", timeout=60)
+        if status:
+            return json.loads(content)
+        return None
+
+    def load_docs_with_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000, scope="_default", collection="_default", command_timeout=10):
+        server_shell = RemoteMachineShellConnection(server)
+        cmd = f"/opt/couchbase/bin/cbc-pillowfight -u Administrator -P password -U couchbase://localhost/"\
+            f"{bucket} -I {items} -m {docsize} -M {docsize} -B {batch} --rate-limit={rate_limit} --populate-only --collection {scope}.{collection}"
+        self.log.info("Executing '{0}'...".format(cmd))
+        output, error  = server_shell.execute_command(cmd, timeout=command_timeout, use_channel=True)
+        if output:
+            self.log.info(f"Output: {output}")
+        if error:
+            self.fail(f"Failed to load docs in cluster in {bucket}.{scope}.{collection}")
+        server_shell.disconnect()
+        self.log.info(f"Data loaded into {bucket}.{scope}.{collection} successfully")
+
+    def insert_docs_with_xattr(self, server, bucket_name, num_docs, num_xattrs, xattr_key_values={}):
+
+        """Uses docker image to insert xattrs """
+        """	Define command-line flags
+            clusterIP := flag.String("ip", "192.168.65.3", "Couchbase cluster IP address")
+            username := flag.String("username", "Administrator", "Couchbase username")
+            password := flag.String("password", "password", "Couchbase password")
+            bucketName := flag.String("bucket", "default", "Bucket name")
+            numDocs := flag.Int("num-docs", 50, "Number of documents to insert")
+            numXattrs := flag.Int("num-xattrs", 1, "Number of xattrs to set for each document")
+            xattrKVStr := flag.String("xattrs", "", "Comma-separated key-value pairs for xattrs (e.g., key1=val1,key2=val2)")
+        """
+        import subprocess
+        # Pull the xattr_modify docker image
+        pull_cmd = ["docker", "pull", "couchbaseqe/xattr_modify"]
+        try:
+            subprocess.run(pull_cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            self.fail(f"Failed to pull docker image: {e.stderr}")
+        # Run the container with specified parameters
+        run_cmd = [
+            "docker", "run", "couchbaseqe/xattr_modify",
+            "go", "run", "main.go",
+            "-ip", server.ip,
+            "-username", "Administrator",
+            "-password", "password", 
+            "-bucket", bucket_name,
+            "-num-docs", str(num_docs),
+            "-num-xattrs", str(num_xattrs),
+        ]
+        # Build xattr key-value string
+        if xattr_key_values:
+            xattr_str = ""
+            xattr_str = ",".join([f"{k}={v}" for k,v in xattr_key_values.items()])
+            run_cmd.extend(["-xattrs", xattr_str])
+        try:
+            result = subprocess.run(run_cmd, check=True, capture_output=True, text=True)
+            self.log.info(result.stdout)
+        except subprocess.CalledProcessError as e:
+            self.fail(f"Failed to run xattr_modify container: {e.stderr}")
+        self.log.info("Successfully added xattrs to documents")
+
+    def _if_docs_count_match_on_servers(self) -> bool:
+        src_cluster = self.__cb_clusters[0]
+        src_master = src_cluster.get_master_node()
+        src_rest = RestConnection(src_master)
+        filterexp_map = {}
+        docs_match_map = {}
+        replications = src_rest.get_replications()
+        for repl in replications:
+            bucket = repl['source']
+            if repl['filterExpression']:
+                exp_in_brackets = '( ' + str(repl['filterExpression']) + ' )'
+                if bucket in filterexp_map.keys():
+                    filterexp_map[bucket].add(exp_in_brackets)
+                else:
+                    filterexp_map[bucket] = {exp_in_brackets}
+        for remote_cluster in src_cluster.get_remote_clusters():
+            dest_cluster = remote_cluster.get_dest_cluster()
+            dest_master = dest_cluster.get_master_node()
+            for bucket in src_cluster.get_buckets():
+                exp = set()
+                src_count = 0
+                dest_count = -1  # Different values so they don't accidently satisfy equality
+                if bucket.name in filterexp_map.keys():  # check if filter exists for the bucket
+                    exp = filterexp_map[bucket.name]
+                    if len(exp) > 1:
+                        exp = " AND ".join(exp)
+                    else:
+                        exp = next(iter(exp))
+                try:
+                    if len(exp) != 0:
+                        res = RestConnection(src_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name +
+                                                     " WHERE " + exp, timeout=30)
+                    else:
+                        res = RestConnection(src_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name, timeout=30)
+                    src_count = res["results"][0]['$1']
+                except Exception as e:
+                    print("Exception while querying number of docs in source: ", str(e))
+                try:
+                    if len(exp) != 0:
+                        res = RestConnection(dest_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name +
+                                                     " WHERE " + exp, timeout=30)
+                    else:
+                        res = RestConnection(dest_master).query_tool("SELECT COUNT(*) FROM "
+                                                     + bucket.name, timeout=30)
+                    dest_count = res["results"][0]['$1']
+                except Exception as e:
+                    print("Exception while querying number of docs in target: ", str(e))
+                if src_count == dest_count:
+                    print(f"DOCS COUNT MATCHED SRC:{src_count}, TARGET:{dest_count}")
+                    docs_match_map[bucket.name] = True
+                else:
+                    print(f"DOCS COUNT DID NOT MATCH SRC:{src_count}, TARGET:{dest_count}")
+                    docs_match_map[bucket.name] = False
+        return all(docs_match_map.values())
     def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute"):
 
         _count1 = _count2 = 0
