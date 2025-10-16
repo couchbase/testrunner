@@ -250,7 +250,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
             scan_vectors_after_mutations = self.get_mutation_vectors()
             new_scan_vectors = scan_vectors_after_mutations - scan_vectors_before_mutations
             scan_vector = self.convert_mutation_vector_to_scan_vector(new_scan_vectors)
-
+            self.log.info(f"Scan vector: {scan_vector}")
             default_index_gen = QueryDefinition(index_name='default_idx', index_fields=['price', 'country', 'city'])
             default_meta_index_gen = QueryDefinition(index_name='default_meta_idx', index_fields=['meta().id'])
             query = default_index_gen.generate_index_create_query(namespace=bucket)
