@@ -8878,6 +8878,7 @@ class QueriesIndexTests(QueryTests):
     def test_MB68458(self):
         """
         Test MB-68458: Cardinality estimation for array index with DISTINCT ARRAY.
+        This test also covers MB-68471 for complex array index predicates with scenario 2.
         """
         self.fail_if_no_buckets()
         query_context = "default._default"
@@ -8901,7 +8902,7 @@ class QueriesIndexTests(QueryTests):
             """
             self.run_cbq_query(upsert_query, query_context=query_context)
 
-            # Create the array index
+            # Scenario 1: Index over DISTINCT ARRAY [v.name,v.val]
             create_index_query = f"CREATE INDEX ix1 ON {collection_name}(DISTINCT ARRAY [v.name,v.val] FOR v IN a1 END)"
             self.run_cbq_query(create_index_query, query_context=query_context)
             self.wait_for_all_indexes_online()
@@ -8909,7 +8910,7 @@ class QueriesIndexTests(QueryTests):
             # Wait for stats to be updated
             self.sleep(8)
 
-            # EXPLAIN the query
+            # EXPLAIN the query for scenario 1
             explain_query = f"""
             EXPLAIN SELECT d.*
             FROM {collection_name} AS d
@@ -8929,6 +8930,31 @@ class QueriesIndexTests(QueryTests):
             self.assertIsNotNone(card, "No cardinality found in optimizer_estimates under first child")
             self.log.info(f"First child optimizer_estimates.cardinality: {card}")
             self.assertLess(card, 1e-10, f"Expected cardinality to be close to 0, got {card}")
+
+            # ----
+            # Scenario 2: Index over DISTINCT ARRAY lower(v.val)
+            create_index_query2 = f"CREATE INDEX ix2 ON {collection_name}(DISTINCT ARRAY lower(v.val) FOR v IN a1 END)"
+            self.run_cbq_query(create_index_query2, query_context=query_context)
+            self.wait_for_all_indexes_online()
+            self.sleep(8)
+
+            explain_query2 = f"""
+            EXPLAIN SELECT d.*
+            FROM {collection_name} AS d
+            WHERE ANY v IN a1 SATISFIES v.name = "ac2" AND lower(v.val) = "b%" END
+            """
+            explain_result2 = self.run_cbq_query(explain_query2, query_context=query_context)
+            self.log.info(f"EXPLAIN result (ix2/ANY lower): {explain_result2}")
+
+            # Extract the plan for second index
+            plan2 = explain_result2['results'][0]['plan']
+            first_child2 = plan2['~children'][0]
+            opt_est2 = first_child2.get('optimizer_estimates', None)
+            self.assertIsNotNone(opt_est2, "No optimizer_estimates found under first child of plan2['~children']")
+            card2 = opt_est2.get('cardinality', None)
+            self.assertIsNotNone(card2, "No cardinality found in optimizer_estimates under first child in ix2 scenario")
+            self.log.info(f"First child optimizer_estimates.cardinality (ix2): {card2}")
+            self.assertLess(card2, 1e-10, f"Expected cardinality to be close to 0, got {card2}")
 
             # Find IndexScan3 operator and check its cardinality
             def find_indexscan3(node):
