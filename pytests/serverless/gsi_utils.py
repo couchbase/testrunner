@@ -32,6 +32,7 @@ class GSIUtils(object):
         self.run_query = query_obj
         self.batch_size = 0
         self.query_event = Event()
+        self.query_errors = []
 
     def generate_magma_doc_loader_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
@@ -386,6 +387,7 @@ class GSIUtils(object):
                     task.result()
             except Exception as err:
                 self.log.error(f"Error occurred during query load: {err}")
+                self.query_errors.append(str(err))
             time.sleep(sleep_timer)
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):

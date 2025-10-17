@@ -148,6 +148,49 @@ class RebalanceEncryption(BaseSecondaryIndexingTests):
 
             rebalance.result()
 
+    def test_refresh_connections_during_query_workload(self):
+        '''
+        This test is for MB-65153
+        Steps -
+        Run a continous query workload and during this workload refresh the certs
+        The queries shouldn't fail and the uptime stat should not be zero
+        '''
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        select_queries = []
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template='Hotel')
+        for namespace in self.namespaces:
+            definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     num_replica=1)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+
+            select_queries.extend(
+                self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
+        self.wait_until_indexes_online(timeout=600)
+        with ThreadPoolExecutor() as executor:
+            self.gsi_util_obj.query_event.set()
+            executor.submit(self.gsi_util_obj.run_continous_query_load,
+                            select_queries=select_queries, query_node=query_node, timeout=300, sleep_timer=5)
+            self.sleep(60, "sleeping for query workload")
+            for node in self.servers[:self.nodes_init]:
+                rest = RestConnection(node)
+                self.log.info("nodes connection reset")
+                rest.reload_certificate()
+        self.gsi_util_obj.query_event.clear()
+        self.log.info(f"The query failed are {self.gsi_util_obj.query_errors}")
+        # Assertions for whether queries have failed or not
+        self.assertEqual(len(self.gsi_util_obj.query_errors), 0,
+                         f'There are query failures {self.gsi_util_obj.query_errors}')
+        for node in index_nodes:
+            rest = RestConnection(node)
+            stats = rest.get_all_index_stats()
+            self.log.info(f"stats for uptime are {stats['uptime']}")
+            self.assertIsNot(stats['uptime'], '0', f"stats for uptime are {stats['uptime']}")
+
+
     def test_change_security_settings_during_rebalance(self):
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rest = RestConnection(indexer_node)
