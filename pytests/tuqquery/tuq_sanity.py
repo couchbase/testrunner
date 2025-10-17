@@ -4813,6 +4813,7 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         # create collection
         self.run_cbq_query('CREATE COLLECTION default._default.test_join_memory_quota IF NOT EXISTS')
+        self.sleep(3, "Waiting for collection to be created")
 
         with self.subTest("Test case 1: join with memory quota 1000"):
             # insert data into collection
@@ -4834,6 +4835,7 @@ class QuerySanityTests(QueryTests):
 
             # create index on collection
             self.run_cbq_query('CREATE INDEX ix111 IF NOT EXISTS ON test_join_memory_quota(purchaseId)', query_context='default._default')
+            self.sleep(3, "Waiting for index to be created")
 
             # insert data into collection
             upsert_query1 = '''
