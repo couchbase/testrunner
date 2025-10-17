@@ -8936,3 +8936,60 @@ class QueriesIndexTests(QueryTests):
         finally:
             # Clean up: drop the collection (which drops all indexes on it)
             self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
+
+    def test_MB68718(self):
+        """
+        Test MB-68718: CBO should consider built-in optimization in the indexer for MIN/MAX without GROUP BY
+        """
+        self.fail_if_no_buckets()
+        query_context = "default._default"
+        collection_name = "mb68718col"
+        bucket_name = "default"
+
+        try:
+            # Create a dedicated collection for this test
+            self.run_cbq_query(f"CREATE COLLECTION {collection_name}", query_context=query_context)
+            self.sleep(3)
+
+            upsert_query = f"""
+            UPSERT INTO {collection_name} (KEY doc.k, VALUE doc)
+            SELECT {{"k":TO_STR(d), "c1":d}} AS doc FROM ARRAY_RANGE(0,100000) AS d
+            """
+            self.run_cbq_query(upsert_query, query_context=query_context)
+
+            # create index ix1 on c1
+            create_index_query = f"CREATE INDEX ix1 ON {collection_name}(c1)"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.wait_for_all_indexes_online()
+
+            # create index ix2 on c1 desc
+            create_index_query = f"CREATE INDEX ix2 ON {collection_name}(c1 DESC)"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.wait_for_all_indexes_online()
+
+            ## Test with MAX query
+            explain_query = f"EXPLAIN SELECT RAW MAX(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+            self.log.info(f"EXPLAIN result: {explain_result}")
+            self.assertIn('ix2', str(explain_result['results'][0]['plan']), f"Expected ix2 to be used in the plan, but got: {explain_result['results'][0]['plan']}")
+
+            # run the query and check the result
+            query = f"SELECT RAW MAX(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            result = self.run_cbq_query(query, query_context=query_context)
+            self.assertEqual(len(result['results']), 1, f"Expected 1 result, got {len(result['results'])}")
+            self.assertEqual(result['results'][0], 99999, f"Expected c1 to be 99999, got {result['results']}")
+
+            ## Test with MIN query
+            explain_query = f"EXPLAIN SELECT RAW MIN(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+            self.log.info(f"EXPLAIN result: {explain_result}")
+            self.assertIn('ix1', str(explain_result['results'][0]['plan']), f"Expected ix1 to be used in the plan, but got: {explain_result['results'][0]['plan']}")
+
+            # run the query and check the result
+            query = f"SELECT RAW MIN(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            result = self.run_cbq_query(query, query_context=query_context)
+            self.assertEqual(len(result['results']), 1, f"Expected 1 result, got {len(result['results'])}")
+            self.assertEqual(result['results'][0], 0, f"Expected c1 to be 0, got {result['results']}")
+        finally:
+            # clean up
+            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
