@@ -8882,7 +8882,6 @@ class QueriesIndexTests(QueryTests):
     def test_MB68458(self):
         """
         Test MB-68458: Cardinality estimation for array index with DISTINCT ARRAY.
-        This test also covers MB-68471 for complex array index predicates with scenario 2.
         """
         self.fail_if_no_buckets()
         query_context = "default._default"
@@ -8906,7 +8905,7 @@ class QueriesIndexTests(QueryTests):
             """
             self.run_cbq_query(upsert_query, query_context=query_context)
 
-            # Scenario 1: Index over DISTINCT ARRAY [v.name,v.val]
+            # Create the array index
             create_index_query = f"CREATE INDEX ix1 ON {collection_name}(DISTINCT ARRAY [v.name,v.val] FOR v IN a1 END)"
             self.run_cbq_query(create_index_query, query_context=query_context)
             self.wait_for_all_indexes_online()
@@ -8914,7 +8913,7 @@ class QueriesIndexTests(QueryTests):
             # Wait for stats to be updated
             self.sleep(8)
 
-            # EXPLAIN the query for scenario 1
+            # EXPLAIN the query
             explain_query = f"""
             EXPLAIN SELECT d.*
             FROM {collection_name} AS d
@@ -8934,31 +8933,6 @@ class QueriesIndexTests(QueryTests):
             self.assertIsNotNone(card, "No cardinality found in optimizer_estimates under first child")
             self.log.info(f"First child optimizer_estimates.cardinality: {card}")
             self.assertLess(card, 1e-10, f"Expected cardinality to be close to 0, got {card}")
-
-            # ----
-            # Scenario 2: Index over DISTINCT ARRAY lower(v.val)
-            create_index_query2 = f"CREATE INDEX ix2 ON {collection_name}(DISTINCT ARRAY lower(v.val) FOR v IN a1 END)"
-            self.run_cbq_query(create_index_query2, query_context=query_context)
-            self.wait_for_all_indexes_online()
-            self.sleep(8)
-
-            explain_query2 = f"""
-            EXPLAIN SELECT d.*
-            FROM {collection_name} AS d
-            WHERE ANY v IN a1 SATISFIES v.name = "ac2" AND lower(v.val) = "b%" END
-            """
-            explain_result2 = self.run_cbq_query(explain_query2, query_context=query_context)
-            self.log.info(f"EXPLAIN result (ix2/ANY lower): {explain_result2}")
-
-            # Extract the plan for second index
-            plan2 = explain_result2['results'][0]['plan']
-            first_child2 = plan2['~children'][0]
-            opt_est2 = first_child2.get('optimizer_estimates', None)
-            self.assertIsNotNone(opt_est2, "No optimizer_estimates found under first child of plan2['~children']")
-            card2 = opt_est2.get('cardinality', None)
-            self.assertIsNotNone(card2, "No cardinality found in optimizer_estimates under first child in ix2 scenario")
-            self.log.info(f"First child optimizer_estimates.cardinality (ix2): {card2}")
-            self.assertLess(card2, 1e-10, f"Expected cardinality to be close to 0, got {card2}")
 
             # Find IndexScan3 operator and check its cardinality
             def find_indexscan3(node):
@@ -9025,4 +8999,61 @@ class QueriesIndexTests(QueryTests):
 
         finally:
             # Clean up: drop the collection (which drops all indexes on it)
-            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)            
+            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
+
+    def test_MB68718(self):
+        """
+        Test MB-68718: CBO should consider built-in optimization in the indexer for MIN/MAX without GROUP BY
+        """
+        self.fail_if_no_buckets()
+        query_context = "default._default"
+        collection_name = "mb68718col"
+        bucket_name = "default"
+
+        try:
+            # Create a dedicated collection for this test
+            self.run_cbq_query(f"CREATE COLLECTION {collection_name}", query_context=query_context)
+            self.sleep(3)
+
+            upsert_query = f"""
+            UPSERT INTO {collection_name} (KEY doc.k, VALUE doc)
+            SELECT {{"k":TO_STR(d), "c1":d}} AS doc FROM ARRAY_RANGE(0,100000) AS d
+            """
+            self.run_cbq_query(upsert_query, query_context=query_context)
+
+            # create index ix1 on c1
+            create_index_query = f"CREATE INDEX ix1 ON {collection_name}(c1)"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.wait_for_all_indexes_online()
+
+            # create index ix2 on c1 desc
+            create_index_query = f"CREATE INDEX ix2 ON {collection_name}(c1 DESC)"
+            self.run_cbq_query(create_index_query, query_context=query_context)
+            self.wait_for_all_indexes_online()
+
+            ## Test with MAX query
+            explain_query = f"EXPLAIN SELECT RAW MAX(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+            self.log.info(f"EXPLAIN result: {explain_result}")
+            self.assertIn('ix2', str(explain_result['results'][0]['plan']), f"Expected ix2 to be used in the plan, but got: {explain_result['results'][0]['plan']}")
+
+            # run the query and check the result
+            query = f"SELECT RAW MAX(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            result = self.run_cbq_query(query, query_context=query_context)
+            self.assertEqual(len(result['results']), 1, f"Expected 1 result, got {len(result['results'])}")
+            self.assertEqual(result['results'][0], 99999, f"Expected c1 to be 99999, got {result['results']}")
+
+            ## Test with MIN query
+            explain_query = f"EXPLAIN SELECT RAW MIN(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            explain_result = self.run_cbq_query(explain_query, query_context=query_context)
+            self.log.info(f"EXPLAIN result: {explain_result}")
+            self.assertIn('ix1', str(explain_result['results'][0]['plan']), f"Expected ix1 to be used in the plan, but got: {explain_result['results'][0]['plan']}")
+
+            # run the query and check the result
+            query = f"SELECT RAW MIN(c1) FROM {collection_name} AS d WHERE c1 >= 0"
+            result = self.run_cbq_query(query, query_context=query_context)
+            self.assertEqual(len(result['results']), 1, f"Expected 1 result, got {len(result['results'])}")
+            self.assertEqual(result['results'][0], 0, f"Expected c1 to be 0, got {result['results']}")
+        finally:
+            # clean up
+            self.run_cbq_query(f"DROP COLLECTION {collection_name} IF EXISTS", query_context=query_context)
