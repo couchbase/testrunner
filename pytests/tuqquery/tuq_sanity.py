@@ -5140,7 +5140,7 @@ class QuerySanityTests(QueryTests):
             # Clean up
             self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
 
-    def test_MB67241(self):
+    def test_prepared_mb67241(self):
         """
         MB-67241: Ensure that prepared statements use covers when executed on different nodes in a cluster.
         Note: MB-68885 was also triggered from this test.
