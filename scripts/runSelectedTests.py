@@ -20,8 +20,8 @@ from couchbase.n1ql import N1QLQuery
 # need a timeout param
 
 POLL_INTERVAL = 15
-SERVER_MANAGER = '172.23.104.162:8081'
-TEST_SUITE_DB = '172.23.104.162'
+SERVER_MANAGER = '172.23.105.178:8081'
+TEST_SUITE_DB = '172.23.105.178'
 
 
 def getNumberOfServers( iniFile):
@@ -94,7 +94,7 @@ def main():
     summary = []
 
     while len(testsToLaunch) > 0:
-        response, content = httplib2.Http(timeout=60).request('http://172.23.104.162:8081/getavailablecount/{0}'.format(options.os), 'GET')
+        response, content = httplib2.Http(timeout=60).request('http://172.23.105.178:8081/getavailablecount/{0}'.format(options.os), 'GET')
         if response.status != 200:
            print(time.asctime( time.localtime(time.time()) ), 'invalid server response', content)
            time.sleep(POLL_INTERVAL)
