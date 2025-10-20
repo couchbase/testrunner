@@ -10,6 +10,7 @@ from threading import Thread
 class GSIAlterIndexesTests(GSIIndexPartitioningTests):
     def setUp(self):
         super(GSIAlterIndexesTests, self).setUp()
+        self.num_index_replica = self.num_index_replicas
         self.num_change_replica = self.input.param("num_change_replica", 0)
         self.replica_index = self.input.param("replica_index", False)
         self.build_index = self.input.param("build_index", False)
