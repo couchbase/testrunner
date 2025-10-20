@@ -1508,9 +1508,11 @@ class VectorSearchTests(QueryTests):
         vector_one = np.ones(self.dimension).tolist()
         vector_scope = 'vector'
         vector_collection = 'zero'
-        query = f'SELECT id, KNN_DISTANCE(vec, {vector_one}, "{self.distance}") distance FROM default.{vector_scope}.{vector_collection} WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {vector_one}, "{self.distance}") LIMIT 10'
+        query = f'SELECT id, VECTOR_DISTANCE(vec, {vector_one}, "{self.distance}") distance FROM default.{vector_scope}.{vector_collection} WHERE size = 8 AND brand = "adidas" ORDER BY VECTOR_DISTANCE(vec, {vector_one}, "{self.distance}") LIMIT 10'
         self.run_cbq_query(f'create scope default.{vector_scope} if not exists')
+        self.sleep(3, "Waiting for scope to be created")
         self.run_cbq_query(f'create collection default.{vector_scope}.{vector_collection} if not exists')
+        self.sleep(3, "Waiting for collection to be created")
         data = np.zeros((1000,self.dimension), "float32")
         ones = np.array([np.ones(self.dimension)])
         data = np.append(data,ones,axis=0)
