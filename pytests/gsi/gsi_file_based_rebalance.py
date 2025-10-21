@@ -1182,6 +1182,40 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
         self.run_cbq_query(query=query, server=query_node)
         self.wait_until_indexes_online()
 
+    def test_disable_move_node_replicas_to_maintain_shard_affinity(self):
+        if self.cb_version[:5] < "7.6.6":
+            self.skipTest("Not applicable less than 7.6.6")
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template, load_default_coll=False)
+        time.sleep(10)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        namespace = self.namespaces[0]
+        query = f'create index idx on {namespace}(name)'
+        self.run_cbq_query(query=query, server=query_node)
+        time.sleep(10)
+        self.wait_until_indexes_online()
+        deploy_nodes = ",".join([f"\'{node.ip}:{node.port}\'" for node in indexer_nodes])
+
+        query = f'ALTER INDEX idx on {namespace} WITH {{"action": "replica_count" ,"num_replica": {self.num_index_replica}, "nodes": [{deploy_nodes}]}}'
+        message_alter_idx = "clause is disabled with alter index as file based rebalance (shard affinity) is enabled"
+        try:
+            self.run_cbq_query(query=query, server=query_node)
+        except Exception as err:
+            if message_alter_idx in str(err):
+                self.log.info(f"Error raised {str(err)} as expected while running a query with nodes clause")
+            else:
+                raise Exception(
+                    f"Message not seen as expected. Message seen {message_alter_idx}. Message expected {str(err)}")
+
     def test_with_nodes_full_capacity(self):
         if self.cb_version[:4] < "7.6.2":
             self.skipTest("Not applicable in 7.6.2")
@@ -1298,6 +1332,80 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 counter += 1
         self.assertEqual(counter, 1,
                          f"new slot id not created for the new node for with clause stats : {slot_id_map_post_with_query}")
+
+    def test_missing_partitions_during_shard_rebalance(self):
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes, collection_num=self.num_collections,
+                                                           scope_prefix=self.scope_prefix,
+                                                           collection_prefix=self.collection_prefix,
+                                                           bucket=self.test_bucket)
+        #creating namespaces and loading docs
+
+        scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
+        self.sleep(10, "Allowing time after collection creation")
+        for s_item in scopes:
+            collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
+            for c_item in collections:
+                self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                num_docs = 10000
+                if c_item == "test_collection_2":
+                    num_docs = 1000000
+                self.gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=s_item,
+                                                collection=c_item, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password)
+
+                task = self.cluster.async_load_gen_docs(self.master, bucket=self.test_bucket,
+                                                        generator=self.gen_create, pause_secs=1,
+                                                        timeout_secs=300, use_magma_loader=True)
+                task.result()
+        self.enable_shard_based_rebalance()
+        self.sleep(10)
+        index_nodes_before_rebalance = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+
+        for query in ['create index idx_1 on test_bucket.test_scope_1.test_collection_1(name) partition by hash(meta().id) with {"num_partition": 64}', f'create index idx_2 on test_bucket.test_scope_1.test_collection_2(city, reviews) with {{"nodes": ["{index_nodes_before_rebalance[0].ip}:8091"]}}']:
+            self.run_cbq_query(query=query)
+
+        #swap rebalancing out the second node with the third node
+        rebalance = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[self.servers[self.nodes_init]],
+                                                 to_remove=[index_nodes_before_rebalance[1]], services=['index'])
+        time.sleep(1)
+        status, _ = self.rest._rebalance_status_and_progress()
+        start_time = time.time()
+        timeout = 60  # 60 seconds timeout
+        while status != 'running':
+            if time.time() - start_time > timeout:
+                self.log.warning(f"Rebalance did not start running within {timeout} seconds. Current status: {status}")
+                break
+            time.sleep(1)
+            status, _ = self.rest._rebalance_status_and_progress()
+        self.log.info("Rebalance has started running.")
+        time.sleep(10)
+        reached = RestHelper(self.rest).rebalance_reached()
+        rebalance.result()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+
+        #loading 90k docs into collection 1
+        bucket, scope, collection = self.namespaces[0].split('.')
+        self.gen_create = SDKDataLoader(num_ops=90000, percent_create=100,key_prefix="doc_68",
+                                        percent_update=0, percent_delete=0, scope=scope,
+                                        collection=collection, json_template=self.json_template,
+                                        output=True, username=self.username, password=self.password)
+
+        task = self.cluster.async_load_gen_docs(self.master, bucket=self.test_bucket,
+                                                    generator=self.gen_create, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=True)
+        task.result()
+
+        result = self.run_cbq_query(query="select count(name) from test_bucket.test_scope_1.test_collection_1 where name is not null;")
+        self.log.info(f"result is {result}")
+        self.assertEqual(result['results'][0]["$1"], 100000, "docs not matching")
 
     # common methods
     def _return_maps(self):
