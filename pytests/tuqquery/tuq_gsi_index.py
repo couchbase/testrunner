@@ -8534,6 +8534,7 @@ class QueriesIndexTests(QueryTests):
         # create collection1 in default bucket
         self.query = "CREATE COLLECTION collection1"
         self.run_cbq_query(query_context='default._default')
+        self.sleep(3, "Waiting for collection to be created")
 
         # insert documents into collection1
         self.query = "insert into collection1 (key, value) values ('key::1', {'name':'John'})"
@@ -8544,6 +8545,7 @@ class QueriesIndexTests(QueryTests):
         self.run_cbq_query(query_context='default._default')
         self.query = "create index idx_name_2 on collection1(name)"
         self.run_cbq_query(query_context='default._default')
+        self.sleep(3, "Waiting for indexes to be created")
 
         # query collection1 with index index_name_1
         self.query = "select upper(name) from collection1 use index (idx_name_1) where name = 'John' group by name"
@@ -8563,10 +8565,12 @@ class QueriesIndexTests(QueryTests):
         self.fail_if_no_buckets()
         self.run_cbq_query("CREATE COLLECTION collection1 IF NOT EXISTS", query_context='default._default')
         self.run_cbq_query("CREATE COLLECTION collection2 IF NOT EXISTS", query_context='default._default')
+        self.sleep(3, "Waiting for collections to be created")
 
         # create index on collection2
         self.query = "CREATE INDEX idx_name_1 IF NOT EXISTS on collection2(`known_field` INCLUDE MISSING,`fx`,`jf1021067`,`jf1021072_copy`,`known_field2`)"
         self.run_cbq_query(query_context='default._default')
+        self.sleep(3, "Waiting for index to be created")
 
         # run query 1
         self.query = "SELECT * FROM collection2 AS t1 WHERE t1.known_field2 = 0 or NVL(t1.known_field,'') = 'something'"
