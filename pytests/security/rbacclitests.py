@@ -66,7 +66,7 @@ class rbacclitests(BaseTestCase):
                 self.set_user_role(rest, self.ldapUser, user_role=self.role)
         rest = RestConnection(self.master)
         param = {
-            'hosts': '{0}'.format("172.23.120.205"),
+            'hosts': '{0}'.format("172.23.124.20"),
             'port': '{0}'.format("389"),
             'encryption': '{0}'.format("None"),
             'bindDN': '{0}'.format("cn=admin,dc=couchbase,dc=com"),
