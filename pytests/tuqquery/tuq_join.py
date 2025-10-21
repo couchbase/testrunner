@@ -1266,3 +1266,102 @@ class JoinTests(QuerySanityTests):
                 self.run_cbq_query(f"DROP SCOPE `default`.`{scope_name}` IF EXISTS")
             except Exception as e:
                 self.log.warning(f"Cleanup failed: {e}")
+
+    def test_MB68858(self):
+        """
+        MB-68858: HJ vs NLJ for outer outer join and olap aggregation.
+        This test verifies that the queries with outer outer join and olap aggregation
+        return correct results.
+        """
+        try:
+            # create collection mb68858 if not exists
+            self.run_cbq_query("CREATE COLLECTION mb68858 IF NOT EXISTS", query_context='default._default')
+            self.sleep(3, "Waiting for collection to be created")
+            
+            # insert documents into mb68858 collection
+            self.run_cbq_query('UPSERT INTO default._default.mb68858 VALUES("p01", { "cid":123, "pid":1, "type":"p"})')
+            self.run_cbq_query('UPSERT INTO default._default.mb68858 VALUES("p02", { "cid":123, "pid":2, "type":"p"})')
+            self.run_cbq_query('UPSERT INTO default._default.mb68858 VALUES("f01", { "ctype":"ACCT_NO", "cval":"1", "pid":2, "type":"f"})')
+            self.run_cbq_query('UPSERT INTO default._default.mb68858 VALUES("f02", { "ctype":"ACCT_NO", "cval":"2", "pid":2, "type":"f"})')
+            self.run_cbq_query('UPSERT INTO default._default.mb68858 VALUES("a01", { "cid":123, "ano":"1", "bcode":"600", "type":"a"})')
+            
+            # create index on mb68858 collection
+            self.run_cbq_query("CREATE INDEX ix1 ON mb68858 (cid)", query_context='default._default')
+            self.run_cbq_query("CREATE PRIMARY INDEX ON mb68858", query_context='default._default')
+            self.sleep(3, "Waiting for indexes to be created")
+            
+            expected_result = [
+                {
+                    "cid": 123,
+                    "catVal": [{}],
+                    "catType": None
+                },
+                {
+                    "cid": 123,
+                    "catVal": [
+                        {
+                            "ACCT_NO": ["1", "2"]
+                        }
+                    ],
+                    "catType": ["ACCT_NO"]
+                }
+            ]
+            # run NLJ query
+            nlj_query = """
+                SELECT DISTINCT
+                    p.cid,
+                    ARRAY_AGG({ f.ctype: f.cval }) OVER (PARTITION BY p.pid) AS catVal,
+                    ARRAY_AGG(f.ctype) OVER (PARTITION BY p.pid) AS catType
+                FROM (
+                    SELECT cid
+                    FROM default._default.mb68858 AS a1
+                    WHERE type = 'a' AND cid = 123
+                    GROUP BY cid
+                ) AS a
+                JOIN default._default.mb68858 p USE NL ON a.cid = p.cid
+                LEFT JOIN (
+                    SELECT
+                        pid,
+                        ctype,
+                        ARRAY_DISTINCT(ARRAY_AGG(cval)) AS cval
+                    FROM default._default.mb68858 AS f1
+                    WHERE type = "f"
+                    GROUP BY pid, ctype
+                ) f USE NL ON p.pid = f.pid
+                WHERE p.type = "p" AND p.cid = 123
+            """
+            nlj_result = self.run_cbq_query(nlj_query)
+
+            # run HJ query
+            hj_query = """
+                SELECT DISTINCT
+                    p.cid,
+                    ARRAY_AGG({ f.ctype: f.cval }) OVER (PARTITION BY p.pid) AS catVal,
+                    ARRAY_AGG(f.ctype) OVER (PARTITION BY p.pid) AS catType
+                FROM (
+                    SELECT cid
+                    FROM default._default.mb68858 AS a1
+                    WHERE type = 'a' AND cid = 123
+                    GROUP BY cid
+                ) AS a
+                JOIN default._default.mb68858 p ON a.cid = p.cid
+                LEFT JOIN (
+                    SELECT
+                        pid,
+                        ctype,
+                        ARRAY_DISTINCT(ARRAY_AGG(cval)) AS cval
+                    FROM default._default.mb68858 AS f1
+                    WHERE type = "f"
+                    GROUP BY pid, ctype
+                ) f ON p.pid = f.pid
+                WHERE p.type = "p" AND p.cid = 123
+            """
+            hj_result = self.run_cbq_query(hj_query)
+
+            # check both queries return the same result
+            self.assertEqual(nlj_result['results'], expected_result,
+                           f"NLJ query should return {expected_result}, but got {nlj_result['results']}")
+            self.assertEqual(hj_result['results'], expected_result,
+                           f"HJ query should return {expected_result}, but got {hj_result['results']}")
+        finally:
+            self.run_cbq_query("DROP COLLECTION mb68858 IF EXISTS", query_context='default._default')
