@@ -86,6 +86,8 @@ class HANDLER_CODE_CURL:
     BUCKET_OP_WITH_CURL_BEARER = 'handler_code/curl/bucket_op_curl_bearer.js'
     BUCKET_OP_WITH_CURL_COOKIE = 'handler_code/curl/bucket_op_curl_get_cookies.js'
     CURL_MULTI_COLLECTION = 'handler_code/multi_collection/curl_multi_collection.js'
+    CURL_TIMEOUT_PARAM = 'handler_code/curl/curl_timeout_param.js'
+    CURL_SMALL_TIMEOUT_PARAM = 'handler_code/curl/curl_small_timeout_param.js'
 
 
 class HANDLER_CODE_ERROR:
