@@ -277,24 +277,61 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
                     username=username,
                     key_filename=ssh_key_path)
 
+        # Detect if this is RHEL9 which needs special handling
+        stdin, stdout, stderr = ssh.exec_command("cat /etc/redhat-release 2>/dev/null || echo 'unknown'")
+        os_info = stdout.read().decode().strip()
+        is_rhel9 = "Red Hat Enterprise Linux release 9" in os_info
+
         commands = ["echo -e 'couchbase\ncouchbase' | sudo passwd root",
                     "sudo sed -i '/#PermitRootLogin yes/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin no/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin prohibit-password/c\PermitRootLogin yes' /etc/ssh/sshd_config",
                     "sudo sed -i '/PermitRootLogin forced-commands-only/c\#PermitRootLogin forced-commands-only' /etc/ssh/sshd_config",
-                    "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config",
-                    "sudo rm -rf /etc/ssh/sshd_config.d/*",
-                    "sudo systemctl restart sshd.service",
-                    "sudo service sshd restart",
-                    "sudo systemctl restart sshd",
-                    "sudo systemctl restart ssh",
-                    "sudo shutdown -P +800"]
+                    "sudo sed -i '/PasswordAuthentication no/c\PasswordAuthentication yes' /etc/ssh/sshd_config"]
+
+        # Enhanced configuration for RHEL9
+        if is_rhel9:
+            commands.extend([
+                # Remove any SSH config overrides that might block password auth
+                "sudo rm -rf /etc/ssh/sshd_config.d/*",
+                # Force append critical settings to ensure they take precedence
+                "echo '' | sudo tee -a /etc/ssh/sshd_config",
+                "echo '# FORCED COUCHBASE TEST CONFIGURATION FOR RHEL9' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'PermitRootLogin yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'PasswordAuthentication yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'PubkeyAuthentication yes' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'ChallengeResponseAuthentication no' | sudo tee -a /etc/ssh/sshd_config",
+                "echo 'UsePAM yes' | sudo tee -a /etc/ssh/sshd_config",
+                # Test configuration before restart
+                "sudo sshd -t || echo 'SSH config test failed'",
+                # RHEL9 specific SSH restart sequence
+                "sudo systemctl stop sshd.service 2>/dev/null || true",
+                "sleep 3",
+                "sudo systemctl start sshd.service",
+                "sleep 10",
+                # Verify SSH service is running
+                "sudo systemctl is-active sshd.service && echo 'SSH service is active'",
+                "sudo systemctl status sshd.service --no-pager -l | head -5"])
+        else:
+            commands.extend([
+                "sudo rm -rf /etc/ssh/sshd_config.d/*",
+                "sudo systemctl restart sshd.service",
+                "sudo service sshd restart",
+                "sudo systemctl restart sshd",
+                "sudo systemctl restart ssh"])
+
+        commands.append("sudo shutdown -P +800")
 
         for command in commands:
             stdin, stdout, stderr = ssh.exec_command(command)
             exit_status = stdout.channel.recv_exit_status()
             if exit_status != 0:
                 print("The command {} failed and gave a exit staus {}".format(command, exit_status))
+
+        # Wait for SSH to stabilize, especially important for RHEL9
+        if is_rhel9:
+            print("Waiting 15 seconds for RHEL9 SSH service to fully stabilize...")
+            time.sleep(15)
 
         if check_root_login(host):
             print("root login to host {} successful.".format(host))
@@ -410,6 +447,7 @@ AWS_OS_USERNAME_MAP = {
     "ubuntu22": "ubuntu",
     "ubuntu22nonroot": "ubuntu",
     "ubuntu24": "ubuntu",
+    "ubuntu24nonroot": "ubuntu",
     "oel8": "ec2-user",
     "rhel8": "ec2-user",
     "rhel9": "ec2-user",
