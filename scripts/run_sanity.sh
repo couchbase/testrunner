@@ -141,9 +141,7 @@ cat node_conf.ini
 
 version_number=${VERSION}-${CURRENT_BUILD_NUMBER}
 echo version=${version_number}
-py_executable=python
-echo ${version_number} | grep "7\." && py_executable=python3
-echo ${version_number} | grep "0\." && py_executable=python3
+py_executable=python3
 
 PARAMS="version=${version_number},product=cb,parallel=True"
 if [ "x${BIN_URL}" != "x" ]; then
