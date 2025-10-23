@@ -159,6 +159,8 @@ elif [ $VERSION \< 6.5* ]; then
   COUCHBASE_NUM_VBUCKETS=64 ${py_executable} scripts/install.py -i node_conf.ini -p $PARAMS
 else
   echo "Running: COUCHBASE_NUM_VBUCKETS=64 python scripts/new_install.py -i node_conf.ini -p $PARAMS"
+  git submodule init
+  git submodule update --init --force --remote
   COUCHBASE_NUM_VBUCKETS=64 ${py_executable} scripts/new_install.py -i node_conf.ini -p $PARAMS
 fi
 
