@@ -371,7 +371,7 @@ class NodeHelper:
         time_sleep = 30
         if params["enable_ipv6"]:
             self.enable_ipv6 = True
-            time_sleep = 60
+            time_sleep = 60 # need more time due to dns resolution.
             if self.node.ip.startswith("["):
                 hostname = self.node.ip[self.node.ip.find("[") + 1:self.node.ip.find("]")]
             else:
@@ -456,6 +456,8 @@ class NodeHelper:
 
     def wait_for_couchbase_reachable(self):
         duration, event, timeout = 5, "Waiting {0}s for {1} to be reachable..", 180
+        if params["use_hostnames"]:
+            timeout = 360
         start_time = time.time()
         log.info("Waiting for couchbase to be reachable")
         while time.time() < start_time + timeout:
