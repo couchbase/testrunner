@@ -14,9 +14,14 @@ from itertools import (accumulate,
                        repeat)
 
 from ground.base import get_context
-from hypothesis_geometry.core.factories import (to_convex_vertices_sequence,
-                                                to_multicontour,
-                                                to_polygon)
+try:
+    from hypothesis_geometry.core.factories import (to_convex_vertices_sequence,
+                                                    to_multicontour,
+                                                    to_polygon)
+except ImportError:
+    to_convex_vertices_sequence = None
+    to_multicontour = None
+    to_polygon = None
 
 context = get_context()
 Point = context.point_cls
