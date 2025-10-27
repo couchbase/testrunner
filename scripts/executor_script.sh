@@ -16,14 +16,6 @@ if [ ${fresh_run} == false ]; then
 fi
 # End of block
 
-echo "Set ALLOW_HTP to False so test could run."
-sed -i 's/ALLOW_HTP.*/ALLOW_HTP = False/' lib/testconstants.py
-
-###### Added on 22/March/2018 to fix auto merge failures. Please revert this if this does not work.
-git fetch
-git reset --hard origin/${branch}
-######
-
 git submodule init
 git submodule update --init --force --remote
 
@@ -39,15 +31,18 @@ export PATH="$PYENV_ROOT/bin:$PATH"
 eval "$(pyenv init -)"
 pyenv local $PYENV_VERSION
 
+echo "##### Python packages check #####"
+if [ "$(python3 --version | cut -d' ' -f 2)" != "$PYENV_VERSION" ]; then
+  echo "Python version is not $PYENV_VERSION, exiting"
+  exit 1
+fi
+${py_executable} -m pip install -r requirements.txt
+${py_executable} -m easy_install httplib2 ground hypothesis_geometry
+
 set +e
 echo newState=available>propfile
 newState=available
 
-majorRelease=`echo ${version_number} | awk '{print substr($0,1,1)}'`
-echo the major release is $majorRelease
-echo ${servers}
-
-${py_executable} -m easy_install httplib2 ground hypothesis_geometry
 
 if [ -f /etc/redhat-release ]; then
   echo 'centos'
@@ -155,10 +150,6 @@ else
     # 6.5.x has install issue. Reverting to older style
     if [ "${SKIP_LOCAL_DOWNLOAD}" = "" ]; then
        SKIP_LOCAL_DOWNLOAD="False"
-    fi
-
-    if [ ! "$majorRelease" = "7" ]; then
-       SKIP_LOCAL_DOWNLOAD="True"
     fi
 
     echo "Starting server installation"
