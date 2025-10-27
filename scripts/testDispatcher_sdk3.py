@@ -950,10 +950,12 @@ def main():
                     # TAF jobs with support_py3=true
                     branch_to_trigger = "master_py3_dev"
                 elif (testsToLaunch[i]['framework'] == "testrunner"
-                        and float(options.version[:3]) >= 8.1
-                        and testsToLaunch[i]["support_py3"] == "true"):
+                        and float(options.version[:3]) >= 8.1):
                     # testrunner jobs with support_py3=true
                     slave_to_use = "deb12_jython_slave"
+                    # Force update target_jenkins URL to point to specific IP
+                    testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
+
                 url = launchString.format(options.version,
                                           testsToLaunch[i]['confFile'],
                                           descriptor,
@@ -1003,8 +1005,9 @@ def main():
                         print(s)
 
                 # optional add [-docker] [-Jenkins extension]
-                launchStringBase = testsToLaunch[i]['target_jenkins'] \
-                                   + '/job/' + str(options.launch_job)
+                launchStringBase = "%s/job/%s" % (
+                    testsToLaunch[i]['target_jenkins'],
+                    str(options.launch_job))
                 launchStringBaseF = launchStringBase
                 if options.serverType == DOCKER:
                     launchStringBaseF = launchStringBase + '-docker'
