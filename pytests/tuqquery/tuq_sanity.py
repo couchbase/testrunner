@@ -4716,10 +4716,12 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         # create collection
         self.run_cbq_query('CREATE COLLECTION default._default.test_unnest_aggregate IF NOT EXISTS')
+        self.sleep(3, "Waiting for collection to be created")
         self.run_cbq_query('UPSERT INTO default._default.test_unnest_aggregate VALUES("k001", {"id":100, "a1" : [{"c1":10}, {"c1":10}, {"c1":20}]})')
 
         # create index on collection
         self.run_cbq_query('CREATE INDEX ix11 IF NOT EXISTS ON default._default.test_unnest_aggregate(ALL ARRAY u.c1 FOR u IN a1 END,id)')
+        self.sleep(3, "Waiting for index to be created")
 
         # query the data with array_distinct
         query = 'SELECT  d.id, SUM(u.c1) as c1_cnt FROM default._default.test_unnest_aggregate AS d UNNEST d.a1 AS u WHERE u.c1 > 0 GROUP BY d.id ORDER BY d.id'
