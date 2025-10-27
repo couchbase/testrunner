@@ -82,10 +82,8 @@ cat /tmp/testexec_reformat.$$.ini
 # To make sure the files exists
 touch /tmp/testexec_reformat.$$.ini /tmp/testexec.$$.ini
 
-if [[ "${slave}" = "bhive_slave_test" ]]; then
-  echo "Running on bhive_slave_test"
-  export PATH=/opt/maven/bin:/opt/java-8/bin:/root/.pyenv/shims:/root/.pyenv/bin:$PATH
-  echo "PATH is: $PATH"
+if [[ "${slave}" = "bhive_slave" ]]; then
+  echo "Running on bhive_slave"
   cd magma_loader/DocLoader
   mvn clean install
   cd ../..
