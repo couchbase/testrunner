@@ -267,7 +267,7 @@ class SAMLTest(BaseTestCase):
                     "External user addition returned empty response - user might already exist or API failed")
                 # Try to verify the user exists
                 try:
-                    users_response = RbacBase().get_all_users()
+                    users_response = RbacBase().get_all_users(self.rest)
                     self.log.info(f"Checking if user {self.saml_user} exists in current users...")
                     if self.saml_user in str(users_response):
                         self.log.info(f"✅ User {self.saml_user} found in existing users")
