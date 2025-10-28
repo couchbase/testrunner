@@ -16,6 +16,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from lib import testconstants
 from basetestcase import BaseTestCase
 from lib.Cb_constants.CBServer import CbServer
+from pytests.security.rbac_base import RbacBase
 from pytests.security.saml_util import SAMLUtils
 from lib.membase.api.rest_client import RestConnection
 from pytests.security.x509_multiple_CA_util import x509main
@@ -266,7 +267,7 @@ class SAMLTest(BaseTestCase):
                     "External user addition returned empty response - user might already exist or API failed")
                 # Try to verify the user exists
                 try:
-                    users_response = self.rest.get_all_users()
+                    users_response = RbacBase().get_all_users()
                     self.log.info(f"Checking if user {self.saml_user} exists in current users...")
                     if self.saml_user in str(users_response):
                         self.log.info(f"✅ User {self.saml_user} found in existing users")
