@@ -356,7 +356,7 @@ class SAMLTest(BaseTestCase):
                       format(status, content, header))
         # Include few non-admin roles
         self.log.info("Add few non-admin users")
-        roles = ['cluster_admin', 'ro_admin', 'ro_security_admin']
+        roles = ['cluster_admin', 'ro_admin']
         for role in roles:
             user_name = "user_" + role
             role = role
