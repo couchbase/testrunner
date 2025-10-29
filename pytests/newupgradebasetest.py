@@ -2,7 +2,6 @@ import copy, json
 import re
 import testconstants
 import gc
-import sys
 import traceback
 import queue
 from threading import Thread
@@ -17,7 +16,6 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_helper import N1QLHelper
 from pytests.eventing.eventing_helper import EventingHelper
-from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from random import randint
@@ -38,17 +36,6 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
                                   "3.1.0", "3.1.0-1776", "3.1.1", "3.1.1-1807",
                                   "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823",
                                   "4.0.0", "4.0.0-4051", "4.1.0", "4.1.0-5005"]
-        self.use_hostnames = self.input.param("use_hostnames", False)
-        self.product = self.input.param('product', 'couchbase-server')
-        self.initial_version = self.input.param('initial_version', '6.5.1-6299')
-        self.use_domain_name = self.input.param('use_domain_names', 0)
-        self.initial_vbuckets = self.input.param('initial_vbuckets', 128)
-        self.clean_upgrade_install = self.input.param("clean_upgrade_install", True)
-        self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
-        self.upgrade_versions = self.upgrade_versions.split(";")
-        self.skip_cleanup = self.input.param("skip_cleanup", False)
-        self.debug_logs = self.input.param("debug_logs", False)
-        self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
         if self.is_downgrade:
@@ -61,8 +48,6 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
         if self.input.param('released_upgrade_version', None) is not None:
             self.upgrade_versions = [self.input.param('released_upgrade_version', None)]
 
-        self.initial_build_type = self.input.param('initial_build_type', None)
-        self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
         self.stop_persistence = self.input.param('stop_persistence', False)
         self.rest_settings = self.input.membase_settings
         self.rest = None
@@ -181,54 +166,9 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
-            if self.upgrade_servers:
+            if self.upgrade_servers and not self.combine_tests:
                 self._install(self.upgrade_servers, version=self.initial_version)
         self.sleep(20, "sleep 20 seconds before run next test")
-
-    def _install(self, servers, version=None, community_to_enterprise=False):
-        params = {}
-        params['num_nodes'] = len(servers)
-        params['product'] = self.product
-        params['version'] = self.initial_version
-        params['vbuckets'] = [self.initial_vbuckets]
-        params['init_nodes'] = self.init_nodes
-        params['debug_logs'] = self.debug_logs
-        params['use_domain_names'] = self.use_domain_name
-        if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
-            params['fts_query_limit'] = 10000000
-        if version:
-            params['version'] = version
-        if self.initial_build_type is not None:
-            params['type'] = self.initial_build_type
-        if community_to_enterprise:
-            params['type'] = self.upgrade_build_type
-        self.log.info("will install {0} on {1}".format(params['version'], [s.ip for s in servers]))
-        InstallerJob().parallel_install(servers, params)
-        self.add_built_in_server_user()
-        if self.product in ["couchbase", "couchbase-server", "cb"]:
-            success = True
-            for server in servers:
-                shell = RemoteMachineShellConnection(server)
-                info = shell.extract_remote_info()
-                success &= shell.is_couchbase_installed()
-                self.sleep(5, "sleep 5 seconds to let cb up completely")
-                ready = RestHelper(RestConnection(server)).is_ns_server_running(60)
-                if not ready:
-                    if "cento 7" in info.distribution_version.lower():
-                        self.log.info("run systemctl daemon-reload")
-                        shell.execute_command("systemctl daemon-reload", debug=False)
-                        shell.start_server()
-                    else:
-                        self.log.error("Couchbase-server did not start...")
-                shell.disconnect()
-                if not success:
-                    sys.exit("some nodes were not install successfully!")
-        if self.rest is None:
-            self._new_master(self.master)
-        if self.use_hostnames:
-            for server in self.servers[:self.nodes_init]:
-                hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
-                server.hostname = hostname
 
     def operations(self, servers, services=None):
         set_services = services
@@ -402,11 +342,6 @@ class NewUpgradeBaseTest(QueryHelperTests, FTSBaseTest):
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads
-
-    def _new_master(self, server):
-        self.master = server
-        self.rest = RestConnection(self.master)
-        self.rest_helper = RestHelper(self.rest)
 
     def verification(self, servers, check_items=True):
         if self.use_hostnames:

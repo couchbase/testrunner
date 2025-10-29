@@ -47,6 +47,8 @@ from scripts.java_sdk_setup import JavaSdkSetup
 from scripts.magma_docloader_setup import MagmaDocloaderSetup
 from tasks.future import Future
 from membase.api.rest_client import RestConnection
+from scripts.install import InstallerJob
+import sys
 
 
 try:
@@ -98,6 +100,22 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.kv_servers = []
         self.otpNodes = []
         self.collection_name = {}
+
+        # upgrade related params
+        self.product = self.input.param('product', 'couchbase-server')
+        self.initial_version = self.input.param('initial_version', '6.5.1-6299')
+        self.use_domain_name = self.input.param('use_domain_names', 0)
+        self.initial_vbuckets = self.input.param('initial_vbuckets', 128)
+        self.clean_upgrade_install = self.input.param("clean_upgrade_install", True)
+        self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
+        self.upgrade_versions = self.upgrade_versions.split(";")
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.debug_logs = self.input.param("debug_logs", False)
+        self.init_nodes = self.input.param('init_nodes', True)
+        self.use_hostnames = self.input.param("use_hostnames", False)
+        self.initial_build_type = self.input.param('initial_build_type', None)
+        self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
+
         for server in self.servers:
             if "cbas" in server.services:
                 self.cbas_servers.append(server)
@@ -207,6 +225,16 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.log.info("Building docker image with magma docloader")
                 MagmaDocloaderSetup()
 
+            '''
+            The param self.combine_tests is primarily used for upgrade tests where it
+            facilitates the test runs of multiple initial versions
+            in a single conf file
+            '''
+            self.combine_tests = self.input.param("combine_tests", False)
+            if self.combine_tests:
+                self.rest = RestConnection(self.master)
+                self.log.info(f"start installing")
+                self._install(self.servers, version=self.initial_version)
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
             if str(self.__class__).find('newupgradetests') != -1 or \
@@ -228,7 +256,7 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
                 return
-
+    
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 self.reset_cluster()
@@ -958,6 +986,55 @@ class OnPremBaseTestCase(unittest.TestCase):
                 remote_client.disconnect()
         return quota
 
+    def _new_master(self, server):
+        self.master = server
+        self.rest = RestConnection(self.master)
+        self.rest_helper = RestHelper(self.rest)
+
+    def _install(self, servers, version=None, community_to_enterprise=False):
+        params = {}
+        params['num_nodes'] = len(servers)
+        params['product'] = self.product
+        params['version'] = self.initial_version
+        params['vbuckets'] = [self.initial_vbuckets]
+        params['init_nodes'] = self.init_nodes
+        params['debug_logs'] = self.debug_logs
+        params['use_domain_names'] = self.use_domain_name
+        if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
+            params['fts_query_limit'] = 10000000
+        if version:
+            params['version'] = version
+        if self.initial_build_type is not None:
+            params['type'] = self.initial_build_type
+        if community_to_enterprise:
+            params['type'] = self.upgrade_build_type
+        self.log.info("will install {0} on {1}".format(params['version'], [s.ip for s in servers]))
+        InstallerJob().parallel_install(servers, params)
+        self.add_built_in_server_user()
+        if self.product in ["couchbase", "couchbase-server", "cb"]:
+            success = True
+            for server in servers:
+                shell = RemoteMachineShellConnection(server)
+                info = shell.extract_remote_info()
+                success &= shell.is_couchbase_installed()
+                self.sleep(5, "sleep 5 seconds to let cb up completely")
+                ready = RestHelper(RestConnection(server)).is_ns_server_running(60)
+                if not ready:
+                    if "cento 7" in info.distribution_version.lower():
+                        self.log.info("run systemctl daemon-reload")
+                        shell.execute_command("systemctl daemon-reload", debug=False)
+                        shell.start_server()
+                    else:
+                        self.log.error("Couchbase-server did not start...")
+                shell.disconnect()
+                if not success:
+                    sys.exit("some nodes were not install successfully!")
+        if self.rest is None:
+            self._new_master(self.master)
+        if self.use_hostnames:
+            for server in self.servers[:self.nodes_init]:
+                hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
+                server.hostname = hostname
     def _create_bucket_params(self, server, replicas=1, size=256, port=11211,
                               password=None,
                               bucket_type='membase', enable_replica_index=1, eviction_policy='fullEviction',
