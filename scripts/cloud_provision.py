@@ -430,10 +430,11 @@ def post_provisioner(host, username, ssh_key_path, modify_hosts=False):
         log.info(f"DEBUG: Detected OS on {host}: {os_info}")
 
         # Check for modern distributions that may have stricter SSH defaults
+        is_rhel9_or_newer = "Red Hat Enterprise Linux release 9" in os_info or "rhel:9" in os_info
         is_rhel10_or_newer = "Red Hat Enterprise Linux release 10" in os_info or "rhel:10" in os_info
         is_debian13_or_newer = "debian" in os_info.lower() and ("13" in os_info or "bookworm" in os_info.lower())
         is_rocky10_or_newer = "rocky" in os_info.lower() and "10" in os_info
-        is_modern_distro = is_rhel10_or_newer or is_debian13_or_newer or is_rocky10_or_newer
+        is_modern_distro = is_rhel10_or_newer or is_debian13_or_newer or is_rocky10_or_newer or is_rhel9_or_newer
 
         log.info(f"DEBUG: Modern distribution detected: {is_modern_distro} (RHEL10+: {is_rhel10_or_newer}, Debian13+: {is_debian13_or_newer}, Rocky10+: {is_rocky10_or_newer})")
 
