@@ -3777,11 +3777,12 @@ class RemoteMachineShellConnection(KeepRefs):
                     else:
                         return "{0}.{1}".format(info.hostname[0], info.domain[0][0])
                 else:
-                    mesg = "Need to set domain name in server {0} like 'sc.couchbase.com'"\
+                    mesg = "Need to set domain name in server {0} like 'sc.couchbase.com or qe.couchbase.com (in ipv6)'"\
                                                                            .format(self.ip)
                     raise Exception(mesg)
             else:
-                return "{0}.{1}".format(info.hostname[0], 'sc.couchbase.com')
+                domain = 'qe.couchbase.com' if "ip6" in info.hostname[0] else 'sc.couchbase.com'
+                return "{0}.{1}".format(info.hostname[0], domain)
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
