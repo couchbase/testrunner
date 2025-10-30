@@ -274,7 +274,7 @@ class Installer(object):
                                     "3.0.3", "3.1.0", "3.1.1", "3.1.2", "3.1.3", "3.1.5", "3.1.6",
                                     "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0"]
             build_repo = MV_LATESTBUILD_REPO
-            if toy is not "":
+            if toy != "":
                 build_repo = CB_REPO
             elif "server-analytics" in names:
                 build_repo = CB_REPO.replace("couchbase-server", "server-analytics") + CB_VERSION_NAME[version[:3]] + "/"

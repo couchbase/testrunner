@@ -1,3 +1,7 @@
+azure-identity
+azure-mgmt-resource
+azure-mgmt-storage
+azure-storage-blob
 bcrypt==3.1.7
 docutils==0.16
 beautifulsoup4==4.9.3
@@ -9,6 +13,7 @@ deepdiff==5.0.2
 docutils==0.16
 Faker
 Geohash==1.0
+ground==9.0.0
 paramiko==2.7.1
 pycparser==2.20
 urllib3==1.26.2
