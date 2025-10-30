@@ -991,11 +991,11 @@ def main():
                 branch_to_trigger = options.branch
                 slave_to_use = testsToLaunch[i]['slave']
                 if (testsToLaunch[i]['framework'] == "TAF"
-                        and float(options.version[:3]) >= 8
-                        and options.branch == "master"
-                        and testsToLaunch[i]["support_py3"] == "true"):
-                    # TAF jobs with support_py3=true
-                    branch_to_trigger = "master_py3_dev"
+                        and str(options.version[:3]) == "8.0"
+                        and options.branch == "morpheus"
+                        and testsToLaunch[i]["support_py3"] == "false"):
+                    # TAF jobs with support_py3=false on master_jython branch
+                    branch_to_trigger = "master_jython"
                 elif (testsToLaunch[i]['framework'] == "testrunner"
                         and float(options.version[:3]) >= 8.1):
                     # testrunner jobs with support_py3=true
