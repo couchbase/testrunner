@@ -767,6 +767,12 @@ VERSION_DATA = {
             },
             "testrunner_branch": "neo",
     },
+    "7.2.9": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "neo",
+    },
     "7.5.0": {
         "platforms": {
             "debian12": True
@@ -820,6 +826,12 @@ VERSION_DATA = {
                 "debian12": True
             },
             "testrunner_branch": "trinity",
+    },
+    "7.6.8": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "trinity",
     },
     "8.0.0": {
         "platforms": {
@@ -1007,4 +1019,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
