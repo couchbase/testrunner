@@ -825,7 +825,19 @@ VERSION_DATA = {
         "platforms": {
             "debian12": True
         },
-        "testrunner_branch": "master",
+        "testrunner_branch": "morpheus",
+    },
+    "8.0.1": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "morpheus",
+    },
+    "8.0.2": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "morpheus",
     },
     "0.0.0": {
         "platforms": {
@@ -1001,4 +1013,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
