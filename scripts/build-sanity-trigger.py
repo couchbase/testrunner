@@ -839,6 +839,12 @@ VERSION_DATA = {
         },
         "testrunner_branch": "morpheus",
     },
+    "8.0.1": {
+        "platforms": {
+            "debian12": True
+        },
+        "testrunner_branch": "morpheus",
+    },
     "8.1.0": {
         "platforms": {
             "debian12": True
