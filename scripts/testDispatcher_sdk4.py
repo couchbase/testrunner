@@ -999,7 +999,7 @@ def main():
                 elif (testsToLaunch[i]['framework'] == "testrunner"
                         and float(options.version[:3]) >= 8.1):
                     # testrunner jobs with support_py3=true
-                    slave_to_use = "deb12_jython_slave"
+                    slave_to_use = "deb12_P0_slave"
                     # Force update target_jenkins URL to point to specific IP
                     testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
 
