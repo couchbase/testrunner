@@ -950,7 +950,8 @@ def main():
                     # TAF jobs with support_py3=false on master_jython branch
                     branch_to_trigger = "master_jython"
                 elif (testsToLaunch[i]['framework'] == "testrunner"
-                        and float(options.version[:3]) >= 8.1):
+                        and float(options.version[:3]) >= 8.1
+                        and slave_to_use == "P0"):
                     # testrunner jobs with support_py3=true
                     slave_to_use = "deb12_P0_slave"
                     # Force update target_jenkins URL to point to specific IP
