@@ -1,15 +1,16 @@
+import logging
+import subprocess
+import time
+
 try:
     import docker
-    import logging
-    import subprocess
-    import time
-    import os
 except ImportError:
     print("WARN: fail to import docker")
 
 from basetestcase import BaseTestCase
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class RandomQueryGenerator(BaseTestCase):
     def __init__(self, username, password, debug=False):
@@ -82,11 +83,6 @@ class RandomQueryGenerator(BaseTestCase):
             except Exception as e:
                 print(f"Exception while getting docker output: {e}")
                 raise Exception(e)
-
-
-
         except Exception as e:
             print(f"Exception while running docker container: {e}")
             raise Exception(e)
-
-
