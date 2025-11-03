@@ -158,7 +158,7 @@ class GSIUtils(object):
                                f" '{similarity}', {scan_nprobes})")
 
         if not index_name_prefix:
-            index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
+            index_name_prefix = "composite" + str(uuid.uuid4()).replace("-", "")
 
         # Primary Query
         if not skip_primary:
@@ -425,7 +425,7 @@ class GSIUtils(object):
         scan_desc_vec_2 = f"ANN_DISTANCE({desc_vecfield}, {descVec2}, '{similarity}', {scan_nprobes}, true)"
 
         if not index_name_prefix:
-            index_name_prefix = "docloader" + str(uuid.uuid4()).replace("-", "")
+            index_name_prefix = "bhive" + str(uuid.uuid4()).replace("-", "")
 
         # Primary Query
         if not skip_primary:
@@ -651,6 +651,26 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("*",
                                                                       'ANY sf IN evaluation[0].`smart features` '
                                                                       'SATISFIES sf LIKE "%%display%%" END')))
+        # GSI index with Flatten Keys
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'flatten_keys',
+                            index_fields=[
+                                'DISTINCT ARRAY FLATTEN_KEYS(cv.comfort, cv.performance) FOR cv IN evaluation WHEN cv.performance IS NOT NULL END',
+                                'category', 'manufacturer', 'fuel'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("model",
+                                                                      "ANY cv IN evaluation SATISFIES cv.comfort LIKE 'P%%' "
+                                                                      "AND cv.performance = 'Hybrid and electric powertrains' END AND "
+                                                                      "fuel = 'Diesel' AND manufacturer IS NOT NULL order by model")))
+
+        # GSI index with missing keys
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'missing_keys',
+                            index_fields=['manufacturer', 'rating', 'category'],
+                            missing_indexes=True, missing_field_desc=True,
+                            query_template=RANGE_SCAN_TEMPLATE.format("model",
+                                                                      'rating > 3 AND '
+                                                                      'manufacturer like "%%F%%" order by manufacturer')))
+
         self.batch_size = len(definitions_list)
         return definitions_list
 
@@ -2189,7 +2209,7 @@ class GSIUtils(object):
                 print(err)
 
     def aysnc_run_select_queries(self, select_queries, database=None, capella_run=False, query_node=False,
-                                 scan_consistency=None):
+                                 scan_consistency=None, verbose=True):
         with ThreadPoolExecutor() as executor:
             tasks = []
             for query in select_queries:
@@ -2198,7 +2218,7 @@ class GSIUtils(object):
                                            scan_consistency=scan_consistency)
                 else:
                     task = executor.submit(self.run_query, query=query, server=query_node,
-                                           scan_consistency=scan_consistency)
+                                           scan_consistency=scan_consistency, verbose=verbose)
                 tasks.append(task)
         return tasks
 

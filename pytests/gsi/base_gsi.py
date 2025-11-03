@@ -777,10 +777,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                                   'chattr +i /data; mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext4 '
                                   '/data; rm -rf /data/*; chmod -R 777 /data')
 
-    def _run_queries_continously(self, select_queries):
+    def _run_queries_continously(self, select_queries, verbose=True):
         while self.run_continous_query:
             tasks_list = self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
-                                                                    query_node=self.query_node)
+                                                                    query_node=self.query_node, verbose=verbose)
             for task in tasks_list:
                 task.result()
 
