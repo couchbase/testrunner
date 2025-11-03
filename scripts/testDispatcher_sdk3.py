@@ -899,13 +899,16 @@ def main():
                             and testsToLaunch[i]["support_py3"] == "false"):
                         # TAF and 8.0 morpheus branch with support_py3=false
                         branch_to_trigger = "master_jython"
-                elif (testsToLaunch[i]['framework'] == "testrunner"
-                        and float(options.version[:3]) >= 8.1
-                        and slave_to_use == "P0"):
-                    # testrunner jobs with support_py3=true
-                    slave_to_use = "deb12_P0_slave"
-                    # Force update target_jenkins URL to point to specific IP
-                    testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
+                elif testsToLaunch[i]['framework'] == "testrunner":
+                    if float(options.version[:3]) >= 8.1:
+                        if slave_to_use == "P0":
+                            # Force to use qe jenkins and deb12 slave
+                            slave_to_use = "deb12_P0_slave"
+                            testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
+                        elif slave_to_use in ["magma_slave", "magma_sdk2"]:
+                            # Force to use qe jenkins and deb12 slave
+                            slave_to_use = "deb12_P0_slave"
+                            testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
 
                 # Find if the targetted slave executor is free
                 response = requests.get(f"{testsToLaunch[i]['target_jenkins']}/computer/api/json?depth=1")
