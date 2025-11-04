@@ -13,7 +13,6 @@ from security.rbac_base import RbacBase
 import os, subprocess
 import copy
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
 from ep_mc_bin_client import MemcachedClient
 from security.ntonencryptionBase import ntonencryptionBase
 
