@@ -905,7 +905,7 @@ def main():
                             # Force to use qe jenkins and deb12 slave
                             slave_to_use = "deb12_P0_slave"
                             testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
-                        elif slave_to_use in ["magma_slave", "magma_sdk2"]:
+                        elif slave_to_use in ["magma_slave", "magma_sdk2", "bkrs3"]:
                             # Force to use qe jenkins and deb12 slave
                             slave_to_use = "deb12_P0_slave"
                             testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
