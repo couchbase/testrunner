@@ -6,7 +6,10 @@ import random
 import string
 import urllib.parse
 import six.moves.urllib.parse
+from couchbase.options import ClusterOptions
+from couchbase.cluster import Cluster
 from couchbase.bucket import Bucket
+from couchbase.auth import PasswordAuthenticator
 
 class SAMLUtils:
     def __init__(self, logger, okta_account):
@@ -32,8 +35,11 @@ class SAMLUtils:
         ip = self.qe_server_ip
         username = "saml_test_user"
         password = "password"
-        url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
-        bucket = Bucket(url, username=username, password=password)
+        url = 'couchbase://{ip}/'.format(ip=ip)
+        authenticator = PasswordAuthenticator(username=username, password=password)
+        cluster_ops = ClusterOptions(authenticator)
+        cluster = Cluster.connect(url, cluster_ops)
+        bucket = Bucket(cluster, bucket_name).collection("_default")
         self.saml_resources = bucket.get("saml_resources_new").value
         self.idp_metadata = bucket.get("idpMetadata_new").value
         self.idp_id = bucket.get("idp_id_new").value
@@ -43,8 +49,11 @@ class SAMLUtils:
         ip = self.qe_server_ip
         username = "saml_test_user"
         password = "password"
-        url = 'couchbase://{ip}/{name}'.format(ip=ip, name=bucket_name)
-        bucket = Bucket(url, username=username, password=password)
+        url = 'couchbase://{ip}/'.format(ip=ip)
+        authenticator = PasswordAuthenticator(username=username, password=password)
+        cluster_ops = ClusterOptions(authenticator)
+        cluster = Cluster.connect(url, cluster_ops)
+        bucket = Bucket(cluster, bucket_name).collection("_default")
         bucket.upsert('idpMetadata_new', {'idpMetadata': idp_metadata})
         bucket.upsert('idp_id_new', {'idp_id': idp_id})
 
