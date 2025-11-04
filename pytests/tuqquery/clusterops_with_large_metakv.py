@@ -1,6 +1,7 @@
 from .tuq import QueryTests
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
-from collections import Mapping, Sequence, Set, deque
+from collections.abc import Mapping, Sequence, Set
+from collections import deque
 import json
 import threading
 from pytests.fts.fts_base import CouchbaseCluster

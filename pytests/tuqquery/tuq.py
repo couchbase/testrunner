@@ -3652,9 +3652,9 @@ class QueryTests(BaseTestCase):
         def convert(data):
             if isinstance(data, str):
                 return str(data)
-            elif isinstance(data, collections.Mapping):
+            elif isinstance(data, collections.abc.Mapping):
                 return dict(list(map(convert, iter(data.items()))))
-            elif isinstance(data, collections.Iterable):
+            elif isinstance(data, collections.abc.Iterable):
                 return type(data)(list(map(convert, data)))
             else:
                 return data
