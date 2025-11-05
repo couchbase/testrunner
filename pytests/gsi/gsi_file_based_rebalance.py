@@ -2,7 +2,12 @@ import math
 import random
 import time
 import os
+import huggingface_hub
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+
 from sentence_transformers import SentenceTransformer
+
 from membase.api.rest_client import RestConnection, RestHelper
 from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader

@@ -99,6 +99,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         if self.enable_dgm:
             self.assertTrue(self._is_dgm_reached())
         if self.upgrade_to >= "8.0":
+            import huggingface_hub
+            if not hasattr(huggingface_hub, "cached_download"):
+                huggingface_hub.cached_download = huggingface_hub.hf_hub_download
             from sentence_transformers import SentenceTransformer
             self.encoder = SentenceTransformer(self.data_model, device="cpu")
             self.encoder.cpu()

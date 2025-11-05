@@ -16,6 +16,9 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 
 from requests.auth import HTTPBasicAuth
+import huggingface_hub
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
 from sentence_transformers import SentenceTransformer
 
 from couchbase_helper.documentgenerator import SDKDataLoader

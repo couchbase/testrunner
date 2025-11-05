@@ -10,6 +10,9 @@ __created_on__ = 17/07/23 4:24 pm
 
 """
 
+import huggingface_hub
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
 from sentence_transformers import SentenceTransformer
 from membase.api.capella_rest_client import RestConnection as RestConnectionCapella
 from membase.api.rest_client import RestConnection

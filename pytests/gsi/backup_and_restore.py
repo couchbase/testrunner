@@ -2415,6 +2415,10 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                     backup_client.remove_backup()
 
     def test_backup_restore_vector_indexes(self):
+        import huggingface_hub
+        if not hasattr(huggingface_hub, "cached_download"):
+            huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+
         from sentence_transformers import SentenceTransformer
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
         self.encoder.cpu()

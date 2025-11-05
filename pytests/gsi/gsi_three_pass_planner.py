@@ -12,7 +12,12 @@ Test case link - https://docs.google.com/spreadsheets/d/1WRbJwqOUJ1NPr4Ufjqsz5np
 '''
 import random
 
+import huggingface_hub
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
+
 from sentence_transformers import SentenceTransformer
+
 
 from couchbase_helper.query_definitions import QueryDefinition
 from gsi.base_gsi import BaseSecondaryIndexingTests

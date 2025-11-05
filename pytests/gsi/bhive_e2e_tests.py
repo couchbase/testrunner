@@ -7,6 +7,9 @@ __git_user__ = "dananjay-s"
 from copy import deepcopy
 import logging
 from concurrent.futures import ThreadPoolExecutor
+import huggingface_hub
+if not hasattr(huggingface_hub, "cached_download"):
+    huggingface_hub.cached_download = huggingface_hub.hf_hub_download
 from sentence_transformers import SentenceTransformer
 from couchbase_helper.documentgenerator import SDKDataLoader
 from remote.remote_util import RemoteMachineShellConnection
