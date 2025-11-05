@@ -6,7 +6,10 @@ import numpy as np
 from numpy import dot
 from numpy.linalg import norm
 import os
-from couchbase.cluster import QueryOptions
+try:
+    from couchbase.options import QueryOptions
+except ImportError:
+    from couchbase.cluster import QueryOptions
 import couchbase.subdocument as SD
 import base64
 import struct
