@@ -10,10 +10,7 @@ from couchbase.cluster import Cluster
 
 import couchbase.subdocument as SD
 
-try:
-    from couchbase.exceptions import CouchbaseTransientError as CouchbaseTransientException
-except ImportError:
-    from couchbase.exceptions import CouchbaseTransientException
+from couchbase.exceptions import CouchbaseException
 
 from .constants import Constants as constants
 from .ValueGenerator import ValueGenerator
@@ -55,21 +52,16 @@ class JSONDoc(object):
         if "ip6" in self.server or self.server.startswith("["):
             connection = connection + "?ipv6=allow"
         try:
-            from couchbase.cluster import PasswordAuthenticator
-            cluster = Cluster(connection)
-            authenticator = PasswordAuthenticator(self.username, self.password)
-            cluster.authenticate(authenticator)
-            cb = cluster.open_bucket(self.bucket)
-            cb.timeout = 100
-        except Exception:
-            from couchbase.cluster import ClusterOptions
-            from couchbase_core.cluster import PasswordAuthenticator
+            from couchbase.auth import PasswordAuthenticator
+            from couchbase.options import ClusterOptions
             cluster = Cluster(connection, ClusterOptions(
                 PasswordAuthenticator(self.username, self.password)))
             cb = cluster.bucket(self.bucket).default_collection()
+        except Exception:
+            logging.error("Connection error\n" + traceback.format_exc())
         finally:
             if not cb:
-                logging.error("Connection error\n" + traceback.format_exc())
+                logging.error("Connection error: Failed to establish connection")
         json_docs = {}
         for i in range(self.startseqnum, self.startseqnum + self.num_docs):
             self.createContent()
@@ -97,7 +89,7 @@ class JSONDoc(object):
                 cb.upsert_multi(batch)
                 num_completed += len(batch)
                 batches.pop()
-            except CouchbaseTransientException as e:
+            except CouchbaseException as e:
                 logging.error(e)
                 ok, fail = e.split_results()
                 new_batch = {}
