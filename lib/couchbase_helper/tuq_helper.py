@@ -204,7 +204,7 @@ class N1QLHelper():
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         self.log.info(f'{query_response}')
         if fields_set is None and using is None:
-            if status is "any":
+            if status == "any":
                 desired_index = (index_name, bucket_name)
                 current_indexes = [(i['indexes']['name'],
                                     i['indexes']['keyspace_id']) for i in query_response['results']]
@@ -214,7 +214,7 @@ class N1QLHelper():
                                 i['indexes']['keyspace_id'],
                                 i['indexes']['state']) for i in query_response['results']]
         else:
-            if status is "any":
+            if status == "any":
                 desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), using)
                 current_indexes = [(i['indexes']['name'],
                                     i['indexes']['keyspace_id'],

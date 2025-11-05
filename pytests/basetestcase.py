@@ -256,7 +256,7 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
                 return
-    
+
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 self.reset_cluster()
@@ -1654,9 +1654,9 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.pre_warmup_stats[bucket_name] = {}
         self.stats_monitor = self.input.param("stats_monitor", "")
         self.warmup_stats_monitor = self.input.param("warmup_stats_monitor", "")
-        if self.stats_monitor is not '':
+        if self.stats_monitor != '':
             self.stats_monitor = self.stats_monitor.split(";")
-        if self.warmup_stats_monitor is not '':
+        if self.warmup_stats_monitor != '':
             self.warmup_stats_monitor = self.warmup_stats_monitor.split(";")
         for server in self.servers:
             mc_conn = MemcachedClientHelper.direct_client(server, bucket_name, self.timeout)

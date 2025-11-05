@@ -379,7 +379,7 @@ class ClusterOperationHelper(object):
         log.info("Setting flush param on server {0}, {1} to {2} on {3}".format(server, key, val, bucket))
         # Workaround for CBQE-249, ideally this should be node.version
         index_path = node.storage[0].get_index_path()
-        if index_path is '':
+        if index_path == '':
             # Indicates non 2.0 build
             rv = mc.set_flush_param(key, str(val))
         else:

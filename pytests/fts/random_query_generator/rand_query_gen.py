@@ -198,18 +198,18 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     def inject_type_filter(self, query_dict, type_value):
         if "bool" in query_dict:
             filters = query_dict["bool"].get("filter", [])
-            
+
             # If filter is a dict, convert it into a list
             if isinstance(filters, dict):
                 filters = [filters]
-            
+
             # If filter is missing, start with an empty list
             if not isinstance(filters, list):
                 filters = []
 
             # Add the type filter
             filters.append({"term": {"type": type_value}})
-            
+
             # Update back the filters
             query_dict["bool"]["filter"] = filters
 
@@ -546,7 +546,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             term = self.construct_terms_query_string_query()
 
             connector = self.get_random_value(connectors)
-            
+
             match_str = connector + term
 
             # another term
@@ -665,7 +665,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         coord.append(temp)
         temp = []
         for i in range(len(p.holes)):
-            for j in range(len(p.holes[i].vertices)): 
+            for j in range(len(p.holes[i].vertices)):
                 hole = p.holes[i].vertices[j]
                 temp.append([hole.x,hole.y])
         if len(temp) > 0:
@@ -680,7 +680,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         x_min = random.randint(0,58)
         x_max = x_min + random.random()/4
         y_min = random.randint(0,88)
-        y_max = y_min + random.random()/4 
+        y_max = y_min + random.random()/4
         result = {FTSESQueryGenerator.random_point(x_min = x_min,x_max = x_max,y_min = y_min,y_max = y_max) for _ in repeat(None, count)}
         while len(result) < count:
             result.add(FTSESQueryGenerator.random_point())
@@ -707,7 +707,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         coord = []
         n = random.randint(2,10)
         for v in range(1,n+1):
-            lat1,lon1 = FTSESQueryGenerator.generate_random_point() 
+            lat1,lon1 = FTSESQueryGenerator.generate_random_point()
             coord.append([lat1,lon1])
         return coord
 
@@ -715,16 +715,16 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         coord = []
         n = random.randint(4,10)
         for v in range(1,n+1):
-                lat,lon = FTSESQueryGenerator.generate_random_point() 
+                lat,lon = FTSESQueryGenerator.generate_random_point()
                 coord.append([lat,lon])
         return coord
-    
+
     def generate_random_multilinestring():
         coord = []
         n = random.randint(4,10)
         for v in range(1,n+1):
-                line = FTSESQueryGenerator.generate_random_linestring() 
-                coord.append(line) 
+                line = FTSESQueryGenerator.generate_random_linestring()
+                coord.append(line)
         return coord
 
     def generate_random_multipolygon():
@@ -737,16 +737,16 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     def generate_random_envelope():
         lat1 = -80 + random.random()*160
         lon1 = -80 + random.random()*160
-        diff = random.random() 
+        diff = random.random()
         lat2 = lat1 + diff
         lon2 = lon1 - diff
         coord = [[lat1,lon1],[lat2,lon2]]
         return coord
 
     def generate_random_circle():
-        lat,lon = FTSESQueryGenerator.generate_random_point() 
+        lat,lon = FTSESQueryGenerator.generate_random_point()
         coord = [lat,lon]
-        distance_units = ["m","km","mi"] 
+        distance_units = ["m","km","mi"]
         radius = str(random.randint(5,100)) + random.choice(distance_units)
         return coord,radius
 
@@ -758,7 +758,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 fts_queries.append(fts_query)
                 if compare_es:
                     es_queries.append(es_query)
-    
+
     @staticmethod
     def construct_geo_shape_queries(shape="",num_queries=9,compare_es=True):
        num_queries_per_shape = num_queries
@@ -774,7 +774,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
        relations = ['intersects','within','contains']
        if shape == 'linestring' or shape == 'multilinestring':
             relations = ['intersects','contains']
-            
+
        # relation-query count map
        relation_query_count = dict()
        query_count = 0
@@ -783,7 +783,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                     relation_query_count[relation] = 0
             relation_query_count[relation] += 1
             query_count+=1
-        
+
        while query_count < num_queries_per_shape:
             relation = random.choice(relations)
             relation_query_count[relation] += 1
@@ -791,12 +791,12 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
        FTSESQueryGenerator.construct_geo_shape_queries_helper(shape=shape,relation=relation,
             compare_es=compare_es,fts_queries=fts_queries,es_queries=es_queries,\
-            relation_query_count=relation_query_count) 
+            relation_query_count=relation_query_count)
 
        return fts_queries,es_queries
 
     @staticmethod
-    def construct_geo_shape_query(shape="point",relation = "intersects"):    
+    def construct_geo_shape_query(shape="point",relation = "intersects"):
         fts_query = dict()
         es_query = dict()
         coord = []
@@ -805,9 +805,9 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         'envelope','geometrycollection']
 
         if shape == 'point':
-            lat,lon = FTSESQueryGenerator.generate_random_point() 
+            lat,lon = FTSESQueryGenerator.generate_random_point()
             coord = [lat,lon]
-        
+
         if shape == 'multipoint':
             coord = FTSESQueryGenerator.generate_random_multipoint()
 
@@ -821,17 +821,17 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
            coord = FTSESQueryGenerator.generate_random_polygon()
 
         elif shape == 'multipolygon':
-           coord = FTSESQueryGenerator.generate_random_multipolygon() 
+           coord = FTSESQueryGenerator.generate_random_multipolygon()
 
         elif shape == "envelope":
-           coord = FTSESQueryGenerator.generate_random_envelope() 
+           coord = FTSESQueryGenerator.generate_random_envelope()
 
         elif shape == "circle":
-            coord,radius = FTSESQueryGenerator.generate_random_circle() 
+            coord,radius = FTSESQueryGenerator.generate_random_circle()
 
         elif shape == "geometrycollection":
             contains_linestring = False
-            n = random.randint(1,5) 
+            n = random.randint(1,5)
             for i in range(n):
                 coll_shape = random.choice(shapes[:-1])
                 temp = dict()
@@ -841,7 +841,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                    if relation == "within":
                         relation = random.choice(["intersects","contains"])
                 if coll_shape == "point":
-                    lat,lon = FTSESQueryGenerator.generate_random_point() 
+                    lat,lon = FTSESQueryGenerator.generate_random_point()
                     point_coord = [lat,lon]
                     temp['coordinates'] = point_coord
                 if coll_shape == "multipoint":
@@ -878,10 +878,10 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             "size": 10000,
             "query": {
                 "bool": {
-                    "must": [ 
+                    "must": [
                         {"match_all": {}}
                     ],
-                    "filter": [ 
+                    "filter": [
                         {
                             "geo_shape": {
                                 "location": {
@@ -1650,7 +1650,7 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
             num_of_predicates = random.randint(2,5)
             for x in range(num_of_predicates):
                 fieldname = self.get_random_value(self.query_types)
-                while fieldname is "conjunction_disjunction": fieldname = self.get_random_value(self.query_types)
+                while fieldname == "conjunction_disjunction": fieldname = self.get_random_value(self.query_types)
                 query_predicate_list = eval("self.construct_flex_%s_query()" % fieldname)
                 if query_predicate == "":
                     query_predicate = self.get_random_value(query_predicate_list)
