@@ -1,7 +1,8 @@
 from .tuq import QueryTests
 from membase.api.rest_client import RestHelper
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+from couchbase.auth import PasswordAuthenticator
+from couchbase.options import ClusterOptions
 import couchbase.subdocument as SD
 from deepdiff import DeepDiff
 
@@ -2501,10 +2502,10 @@ class QueryXattrTests(QueryTests):
     """
 
     def create_xattr_data(self, type="system"):
-        cluster = Cluster('couchbase://' + str(self.master.ip))
         authenticator = PasswordAuthenticator(self.username, self.password)
-        cluster.authenticate(authenticator)
-        cb = cluster.open_bucket(self.default_bucket_name)
+        cluster = Cluster('couchbase://{0}'.format(self.master.ip), ClusterOptions(authenticator))
+        bucket = cluster.bucket(self.default_bucket_name)
+        cb = bucket.default_collection()
         docs = self.get_meta_ids()
         self.log.info("Docs: " + str(docs[0:5]))
         xattr_data = []
@@ -2512,29 +2513,29 @@ class QueryXattrTests(QueryTests):
         val = 0
         for doc in docs:
             if type == "system":
-                cb.mutate_in(doc["id"], SD.upsert('_system1', val, xattr=True, create_parents=True))
+                cb.mutate_in(doc["id"], [SD.upsert('_system1', val, xattr=True, create_parents=True)])
                 xattr_data.append({'_system1': val})
-                cb.mutate_in(doc["id"], SD.upsert('_system2', {'field1': val, 'field2': val * val}, xattr=True,
-                                                  create_parents=True))
+                cb.mutate_in(doc["id"], [SD.upsert('_system2', {'field1': val, 'field2': val * val}, xattr=True,
+                                                  create_parents=True)])
                 xattr_data.append({'_system2': {'field1': val, 'field2': val * val}})
-                cb.mutate_in(doc["id"], SD.upsert('_system3',
+                cb.mutate_in(doc["id"], [SD.upsert('_system3',
                                                   {'field1': {'sub_field1a': val, 'sub_field1b': val * val},
                                                    'field2': {'sub_field2a': 2 * val,
                                                               'sub_field2b': 2 * val * val}}, xattr=True,
-                                                  create_parents=True))
+                                                  create_parents=True)])
                 xattr_data.append({'_system3': {'field1': {'sub_field1a': val, 'sub_field1b': val * val},
                                                 'field2': {'sub_field2a': 2 * val, 'sub_field2b': 2 * val * val}}})
             if type == "user":
-                cb.mutate_in(doc["id"], SD.upsert('user1', val, xattr=True, create_parents=True))
+                cb.mutate_in(doc["id"], [SD.upsert('user1', val, xattr=True, create_parents=True)])
                 xattr_data.append({'user1': val})
-                cb.mutate_in(doc["id"], SD.upsert('user2', {'field1': val, 'field2': val * val}, xattr=True,
-                                                  create_parents=True))
+                cb.mutate_in(doc["id"], [SD.upsert('user2', {'field1': val, 'field2': val * val}, xattr=True,
+                                                  create_parents=True)])
                 xattr_data.append({'user2': {'field1': val, 'field2': val * val}})
-                cb.mutate_in(doc["id"], SD.upsert('user3',
+                cb.mutate_in(doc["id"], [SD.upsert('user3',
                                                   {'field1': {'sub_field1a': val, 'sub_field1b': val * val},
                                                    'field2': {'sub_field2a': 2 * val,
                                                               'sub_field2b': 2 * val * val}}, xattr=True,
-                                                  create_parents=True))
+                                                  create_parents=True)])
                 xattr_data.append({'user3': {'field1': {'sub_field1a': val, 'sub_field1b': val * val},
                                              'field2': {'sub_field2a': 2 * val, 'sub_field2b': 2 * val * val}}})
             val = val + 1
@@ -2547,11 +2548,11 @@ class QueryXattrTests(QueryTests):
     """
 
     def write_xattr(self, doc_id, xattr_id, value):
-        cluster = Cluster('couchbase://' + str(self.master.ip))
         authenticator = PasswordAuthenticator(self.username, self.password)
-        cluster.authenticate(authenticator)
-        cb = cluster.open_bucket(self.default_bucket_name)
-        rv = cb.mutate_in(doc_id, SD.upsert(xattr_id, value, xattr=True, create_parents=True))
+        cluster = Cluster('couchbase://{0}'.format(self.master.ip), ClusterOptions(authenticator))
+        bucket = cluster.bucket(self.default_bucket_name)
+        cb = bucket.default_collection()
+        rv = cb.mutate_in(doc_id, [SD.upsert(xattr_id, value, xattr=True, create_parents=True)])
         self.assertTrue(rv.success)
         if '_' in xattr_id:
             self.system_xattr_data.append({xattr_id: value})

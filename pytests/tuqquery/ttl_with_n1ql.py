@@ -4,7 +4,7 @@ import time
 from couchbase.cluster import Cluster
 try:
     from couchbase.auth import PasswordAuthenticator
-    from couchbase.cluster import ClusterOptions
+    from couchbase.options import ClusterOptions
 except ImportError:
     from couchbase.cluster import PasswordAuthenticator
 from membase.api.rest_client import RestConnection

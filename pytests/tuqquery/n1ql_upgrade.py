@@ -2275,10 +2275,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.create_primary_index_for_3_0_and_greater()
 
     def create_xattr_data(self, type="system"):
-        cluster = Cluster('couchbase://'+str(self.master.ip))
         authenticator = PasswordAuthenticator(self.username, self.password)
-        cluster.authenticate(authenticator)
-        cb = cluster.open_bucket('default')
+        cluster = Cluster('couchbase://{0}'.format(self.master.ip), ClusterOptions(authenticator))
+        bucket = cluster.bucket(self.default_bucket_name)
+        cb = bucket.default_collection()
         docs = self.get_meta_ids()
         self.log.info("Docs: " + str(docs[0:5]))
         xattr_data = []
@@ -2286,18 +2286,18 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         val = 0
         for doc in docs:
             if type == "system":
-                rv = cb.mutate_in(doc["id"], SD.upsert('_system1', val, xattr=True, create_parents=True))
+                rv = cb.mutate_in(doc["id"], [SD.upsert('_system1', val, xattr=True, create_parents=True)])
                 xattr_data.append({'_system1': val})
-                rv = cb.mutate_in(doc["id"], SD.upsert('_system2', {'field1': val, 'field2': val*val}, xattr=True, create_parents=True))
+                rv = cb.mutate_in(doc["id"], [SD.upsert('_system2', {'field1': val, 'field2': val*val}, xattr=True, create_parents=True)])
                 xattr_data.append({'_system2': {'field1': val, 'field2': val*val}})
-                rv = cb.mutate_in(doc["id"], SD.upsert('_system3', {'field1': {'sub_field1a': val, 'sub_field1b': val*val}, 'field2': {'sub_field2a': 2*val, 'sub_field2b': 2*val*val}}, xattr=True, create_parents=True))
+                rv = cb.mutate_in(doc["id"], [SD.upsert('_system3', {'field1': {'sub_field1a': val, 'sub_field1b': val*val}, 'field2': {'sub_field2a': 2*val, 'sub_field2b': 2*val*val}}, xattr=True, create_parents=True)])
                 xattr_data.append({'_system3': {'field1': {'sub_field1a': val, 'sub_field1b': val*val}, 'field2': {'sub_field2a': 2*val, 'sub_field2b': 2*val*val}}})
             if type == "user":
-                rv = cb.mutate_in(doc["id"], SD.upsert('user1', val, xattr=True, create_parents=True))
+                rv = cb.mutate_in(doc["id"], [SD.upsert('user1', val, xattr=True, create_parents=True)])
                 xattr_data.append({'user1': val})
-                rv = cb.mutate_in(doc["id"], SD.upsert('user2', {'field1': val, 'field2': val*val}, xattr=True, create_parents=True))
+                rv = cb.mutate_in(doc["id"], [SD.upsert('user2', {'field1': val, 'field2': val*val}, xattr=True, create_parents=True)])
                 xattr_data.append({'user2': {'field1': val, 'field2': val*val}})
-                rv = cb.mutate_in(doc["id"], SD.upsert('user3', {'field1': {'sub_field1a': val, 'sub_field1b': val*val}, 'field2': {'sub_field2a': 2*val, 'sub_field2b': 2*val*val}}, xattr=True, create_parents=True))
+                rv = cb.mutate_in(doc["id"], [SD.upsert('user3', {'field1': {'sub_field1a': val, 'sub_field1b': val*val}, 'field2': {'sub_field2a': 2*val, 'sub_field2b': 2*val*val}}, xattr=True, create_parents=True)])
                 xattr_data.append({'user3': {'field1': {'sub_field1a': val, 'sub_field1b': val*val}, 'field2': {'sub_field2a': 2*val, 'sub_field2b': 2*val*val}}})
             val = val + 1
 
