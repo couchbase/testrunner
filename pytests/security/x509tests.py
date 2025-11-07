@@ -1,16 +1,12 @@
 from basetestcase import BaseTestCase
 from security.x509main import x509main
-# from newupgradebasetest import NewUpgradeBaseTest
 from membase.api.rest_client import RestConnection, RestHelper
-import subprocess
 import json
-import socket
 from couchbase.bucket import Bucket
-from threading import Thread, Event
+from threading import Thread
 from remote.remote_util import RemoteMachineShellConnection
 from security.auditmain import audit
-from security.rbac_base import RbacBase
-import os, subprocess
+import subprocess
 import copy
 from couchbase.cluster import Cluster
 from ep_mc_bin_client import MemcachedClient
