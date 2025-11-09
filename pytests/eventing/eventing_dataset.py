@@ -2,12 +2,9 @@
 # coding=utf-8
 import copy
 import logging
-from couchbase.bucket import Bucket
 from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator, JSONNonDocGenerator
-from lib.couchbase_helper.tuq_helper import N1QLHelper
-from lib.membase.api.rest_client import RestConnection
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
-from lib.testconstants import STANDARD_BUCKET_PORT
+from lib.sdk_client3 import SDKClient
 from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
 import couchbase.subdocument as SD
@@ -143,8 +140,10 @@ class EventingDataset(EventingBaseTest):
             "Promise",
             "Proxy"
         ]
-        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket = SDKClient(hosts=[self.master.ip],
+                           bucket=self.src_bucket_name,
+                           username="cbadminbucket",
+                           password="password")
         for key in keys:
             bucket.upsert(key, "Test with different key values")
         # create a doc using n1ql query
@@ -175,8 +174,10 @@ class EventingDataset(EventingBaseTest):
     def test_eventing_processes_mutations_when_mutated_through_subdoc_api_and_set_expiry_through_sdk(self):
         # set expiry pager interval
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
-        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket = SDKClient(hosts=[self.master.ip],
+                           bucket=self.src_bucket_name,
+                           username="cbadminbucket",
+                           password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.insert(docid, {'some': 'value'})
         body = self.create_save_function_body(self.function_name, self.handler_code,
@@ -184,11 +185,14 @@ class EventingDataset(EventingBaseTest):
         # deploy eventing function
         self.deploy_function(body)
         # upserting a new sub-document
-        bucket.mutate_in('customer123', SD.upsert('fax', '775-867-5309'))
+        bucket.mutate_in('customer123', scope=None, collection=None,
+                         specs=[SD.upsert('fax', '775-867-5309')])
         # inserting a sub-document
-        bucket.mutate_in('customer1234', SD.insert('purchases.complete', [42, True, None], create_parents=True))
+        bucket.mutate_in('customer1234', scope=None, collection=None,
+                         specs=[SD.insert('purchases.complete', [42, True, None], create_parents=True)])
         # Creating and populating an array document
-        bucket.mutate_in('customer12345', SD.array_append('purchases.complete', ['Hello'], create_parents=True))
+        bucket.mutate_in('customer12345', scope=None, collection=None,
+                         specs=[SD.array_append('purchases.complete', ['Hello'], create_parents=True)])
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         for docid in ['customer123', 'customer1234', 'customer12345']:
             # set expiry on all the docs created using sub doc API
@@ -199,8 +203,10 @@ class EventingDataset(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_eventing_processes_mutation_when_xattrs_is_updated(self):
-        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket = SDKClient(hosts=[self.master.ip],
+                           bucket=self.src_bucket_name,
+                           username="cbadminbucket",
+                           password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {})
         body = self.create_save_function_body(self.function_name, self.handler_code,
@@ -209,9 +215,12 @@ class EventingDataset(EventingBaseTest):
         self.deploy_function(body)
         # update multiple xattrs and update the documents
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            bucket.mutate_in(docid, SD.upsert('my1', {'value': 1}, xattr=True))
-            bucket.mutate_in(docid, SD.upsert('my2', {'value': 2}, xattr=True))
-            bucket.mutate_in(docid, SD.upsert('fax', '775-867-5309'))
+            bucket.mutate_in(docid, scope=None, collection=None,
+                             specs=[SD.upsert('my1', {'value': 1}, xattr=True)])
+            bucket.mutate_in(docid, scope=None, collection=None,
+                             specs=[SD.upsert('my2', {'value': 2}, xattr=True)])
+            bucket.mutate_in(docid, scope=None, collection=None,
+                             specs=[SD.upsert('fax', '775-867-5309')])
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         self.sleep(60)
         # add new multiple xattrs , delete old xattrs and delete the documents
@@ -267,46 +276,55 @@ class EventingDataset(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
-        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket = SDKClient(hosts=[self.master.ip],
+                           bucket=self.src_bucket_name,
+                           username="cbadminbucket",
+                           password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         # add new multiple xattrs , delete old xattrs and delete the documents
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            r = bucket.mutate_in(docid, SD.get('eventing', xattr=True))
+            r = bucket.mutate_in(docid, scope=None, collection=None,
+                                 specs=[SD.get('eventing', xattr=True)])
             log.info(r)
             if "Could not execute one or more multi lookups or mutations" not in str(r):
                 self.fail("eventing is still using xattrs for timers")
-            r = bucket.mutate_in(docid, SD.get('_eventing', xattr=True))
+            r = bucket.mutate_in(docid, scope=None, collection=None,
+                                 specs=[SD.get('_eventing', xattr=True)])
             log.info(r)
             if "Could not execute one or more multi lookups or mutations" not in str(r):
                 self.fail("eventing is still using xattrs for timers")
         self.undeploy_and_delete_function(body)
-
 
     def test_eventing_crc_and_fiid(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
-        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket = SDKClient(hosts=[self.master.ip],
+                           bucket=self.src_bucket_name,
+                           username="cbadminbucket",
+                           password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         # check for fiid and crc
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
+            fiid = bucket.lookup_in(docid, scope=None, collection=None,
+                                    specs=[SD.exists('_eventing.fiid', xattr=True)])
             self.log.info(fiid.exists('_eventing.fiid'))
-            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            crc = bucket.lookup_in(docid, scope=None, collection=None,
+                                   specs=[SD.exists('_eventing.crc', xattr=True)])
             self.log.info(crc.exists('_eventing.crc'))
             if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
                 self.fail("No fiid : {} or crc : {} found:".format(fiid, crc))
         self.undeploy_function(body)
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
-            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            fiid = bucket.lookup_in(docid, scope=None, collection=None,
+                                    specs=[SD.exists('_eventing.fiid', xattr=True)])
+            crc = bucket.lookup_in(docid, scope=None, collection=None,
+                                   specs=[SD.exists('_eventing.crc', xattr=True)])
             if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
                 self.fail("No fiid : {} or crc : {} found after undeployment:".format(fiid, crc))
 
@@ -315,19 +333,25 @@ class EventingDataset(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # deploy eventing function
         self.deploy_function(body)
-        url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=self.src_bucket_name)
-        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket = SDKClient(hosts=[self.master.ip],
+                           bucket=self.src_bucket_name,
+                           username="cbadminbucket",
+                           password="password")
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         #get fiid and crc
-        fiid_value = bucket.lookup_in('customer123', SD.exists('_eventing.fiid', xattr=True))['_eventing.fiid']
-        crc_value = bucket.lookup_in('customer123', SD.exists('_eventing.crc', xattr=True))['_eventing.crc']
+        fiid_value = bucket.lookup_in('customer123', scope=None, collection=None,
+                                      specs=[SD.exists('_eventing.fiid', xattr=True)])['_eventing.fiid']
+        crc_value = bucket.lookup_in('customer123', scope=None, collection=None,
+                                     specs=[SD.exists('_eventing.crc', xattr=True)])['_eventing.crc']
         self.log.info("Fiid: {} and CRC: {}".format(fiid_value, crc_value))
         # check for fiid and crc
         for docid in ['customer1234', 'customer12345']:
-            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
-            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            fiid = bucket.lookup_in(docid, scope=None, collection=None,
+                                    specs=[SD.exists('_eventing.fiid', xattr=True)])
+            crc = bucket.lookup_in(docid, scope=None, collection=None,
+                                   specs=[SD.exists('_eventing.crc', xattr=True)])
             if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
                 self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))
         self.pause_function(body)
@@ -336,12 +360,13 @@ class EventingDataset(EventingBaseTest):
         self.resume_function(body)
         self.verify_eventing_results(self.function_name, 6, skip_stats_validation=True)
         for docid in ['customer12553', 'customer1253', 'customer12531', 'customer123', 'customer1234', 'customer12345']:
-            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
-            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            fiid = bucket.lookup_in(docid, scope=None, collection=None,
+                                    specs=[SD.exists('_eventing.fiid', xattr=True)])
+            crc = bucket.lookup_in(docid, scope=None, collection=None,
+                                   specs=[SD.exists('_eventing.crc', xattr=True)])
             if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
                 self.fail("fiid {} or crc {} values are not same:".format(fiid,crc))
         self.undeploy_and_delete_function(body)
-
 
     def test_read_cas_bucket_op(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

@@ -1,15 +1,11 @@
 import copy
-import os, shutil, ast, re, subprocess
+import os, shutil, re, subprocess
 import json
 import uuid
 import random
-import queue
 import urllib.request, urllib.parse, urllib.error, datetime
 
-from boto3 import s3, resource
-from botocore.exceptions import ClientError
 from basetestcase import BaseTestCase
-from TestInput import TestInputSingleton, TestInputServer
 from couchbase_helper.data_analysis_helper import DataCollector
 from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
@@ -39,6 +35,7 @@ from ent_backup_restore.provider.s3 import S3
 from ent_backup_restore.provider.gcp import GCP
 from ent_backup_restore.provider.azure import AZURE
 
+from lib.sdk_client3 import SDKClient
 from pytests.security.x509_multiple_CA_util import x509main
 
 SOURCE_CB_PARAMS = {
@@ -3479,7 +3476,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         RbacBase().add_user_role(role_list, RestConnection(cluster_host), 'builtin')
 
         try:
-            cb = Bucket('couchbase://' + ip + '/' + bucket.name, password='password')
+            cb = SDKClient(hosts=[ip], bucket=bucket.name,
+                           username="Administrator", password='password')
             if cb is not None:
                 self.log.info("Established connection to bucket " + bucket.name + " on " + ip + " using python SDK")
             else:

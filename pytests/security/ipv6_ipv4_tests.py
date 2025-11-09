@@ -1,16 +1,16 @@
+import json
+import socket
+import subprocess
+
 from basetestcase import BaseTestCase
 from security.IPv6_IPv4_grub_level import IPv6_IPv4
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
+from lib.sdk_client3 import SDKClient
 from security.x509main import x509main
-import json
-import subprocess
-import socket
-import requests
-from couchbase.cluster import PasswordAuthenticator
-from couchbase.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_cli import CouchbaseCLI
+
 
 class ipv6_ipv4_tests(BaseTestCase):
     REST_PORT = "8091"
@@ -212,12 +212,11 @@ class ipv6_ipv4_tests(BaseTestCase):
             self.assertEqual(json.loads(output)['num_eventing_nodes'], 1, "Eventing Node is not up")
 
         elif service == "kv":
-            cluster = Cluster("couchbase://{0}".format(nodes.ip))
-            authenticator = PasswordAuthenticator("Administrator", "password")
-            cluster.authenticate(authenticator)
-            cb = cluster.open_bucket("default")
-            cb.upsert("key1", "value1")
-            self.assertEqual(cb.get("key1").value, "value1")
+            client = SDKClient(hosts=[nodes.ip], bucket="default",
+                               username='Administrator', password='password')
+            client.upsert("key1", "value1")
+            self.assertEqual(client.get("key1").value, "value1")
+            client.close()
 
     def check_ports_for_service(self,ports,nodes):
         nodes_obj = IPv6_IPv4(nodes)

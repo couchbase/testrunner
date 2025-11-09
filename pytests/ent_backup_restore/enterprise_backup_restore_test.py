@@ -1,9 +1,7 @@
-import os, re, copy, json, subprocess, datetime
-import time
+import re, copy, json, subprocess, datetime
 from random import randrange, randint, choice
 from threading import Thread
 
-import paramiko
 from couchbase_helper.cluster import Cluster
 from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
@@ -11,24 +9,20 @@ from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRe
 from ent_backup_restore.backup_service_upgrade import BackupServiceHook
 from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from membase.helper.bucket_helper import BucketOperationHelper
-from pytests.query_tests_helper import QueryHelperTests
 from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 from security.rbac_base import RbacBase
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
 from couchbase_helper.document import View
-from eventing.eventing_base import EventingBaseTest
 from tasks.future import Future, TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
                           ENT_BKRS, ENT_BKRS_FTS
-from datetime import datetime, timedelta, timezone
-from sdk_client3 import SDKClient
-import requests
-from requests.auth import HTTPBasicAuth
+from datetime import datetime, timedelta
 from collection.collections_cli_client import CollectionsCLI
+from lib.sdk_client3 import SDKClient
 
 AUDITBACKUPID = 20480
 AUDITRESTOREID = 20485
@@ -2929,8 +2923,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         self.add_built_in_server_user(testuser, rolelist, self.backupset.restore_cluster_host)
         try:
-            cb = Bucket('couchbase://' + self.backupset.restore_cluster_host.ip + '/default',
-                                                                         password="password")
+            cb = SDKClient(hosts=[self.backupset.restore_cluster_host.ip],
+                           bucket="default", username="Administrator",
+                           password='password')
             if cb is not None:
                 self.log.info("Established connection to bucket on restore host " \
                               "using python SDK")

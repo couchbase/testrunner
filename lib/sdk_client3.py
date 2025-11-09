@@ -3,25 +3,20 @@
 Python based SDK client interface
 
 """
-import json
 import sys
 import time
+from datetime import timedelta
 
-#import couchbase_core
 import crc32
 import logger
 from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions
 from couchbase.auth import PasswordAuthenticator
-#from couchbase.cluster import _N1QLQuery
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-#from couchbase_core.cluster import PasswordAuthenticator
 
-from lib.Cb_constants import CBServer
 from lib.Cb_constants.CBServer import CbServer
 from mc_bin_client import MemcachedError
 from memcached.helper.old_kvstore import ClientKeyValueStore
-#from couchbase_core.connstr import ConnectionString
 
 
 class SDKClient(object):
@@ -206,21 +201,39 @@ class SDKClient(object):
     def mutate_in(self, key, scope=None, collection=None, *specs, **kwargs):
         try:
             print("collection is {}".format(collection))
+            # SDK 4.x requires 'spec' as a positional list argument
+            # Handle 'specs' keyword arg (from tests) - this takes precedence
+            if 'specs' in kwargs:
+                spec_list = kwargs.pop('specs')
+            elif specs:
+                spec_list = list(specs)
+            else:
+                spec_list = []
+
             if collection:
                 self.collection_connect(scope, collection)
-                self.collection.mutate_in(key, *specs, **kwargs)
+                self.collection.mutate_in(key, spec_list, **kwargs)
             else:
-                self.default_collection.mutate_in(key, *specs, **kwargs)
+                self.default_collection.mutate_in(key, spec_list, **kwargs)
         except CouchbaseException as e:
             raise
 
     def lookup_in(self, key, scope=None, collection=None, *specs, **kwargs):
         try:
+            # SDK 4.x requires 'spec' as a positional list argument
+            # Handle 'specs' keyword arg (from tests) - this takes precedence
+            if 'specs' in kwargs:
+                spec_list = kwargs.pop('specs')
+            elif specs:
+                spec_list = list(specs)
+            else:
+                spec_list = []
+
             if collection:
                 self.collection_connect(scope, collection)
-                self.collection.lookup_in(key, *specs, **kwargs)
+                return self.collection.lookup_in(key, spec_list, **kwargs)
             else:
-                self.default_collection.lookup_in(key, *specs, **kwargs)
+                return self.default_collection.lookup_in(key, spec_list, **kwargs)
         except CouchbaseException as e:
             raise
 
@@ -579,17 +592,17 @@ class SDKClient(object):
         try:
             if collection:
                 self.collection_connect(scope, collection)
-                self.collection.touch(key, ttl=ttl)
+                self.collection.touch(key, timedelta(seconds=ttl))
             else:
-                self.default_collection.touch(key, ttl=ttl)
+                self.default_collection.touch(key, timedelta(seconds=ttl))
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
                     self.collection_connect(scope, collection)
-                    self.collection.touch(key, ttl=ttl)
+                    self.collection.touch(key, timedelta(seconds=ttl))
                 else:
-                    self.default_collection.touch(key, ttl=ttl)
+                    self.default_collection.touch(key, timedelta(seconds=ttl))
             except CouchbaseException as e:
                 raise
 
@@ -597,17 +610,17 @@ class SDKClient(object):
         try:
             if collection:
                 self.collection_connect(scope, collection)
-                self.collection.touch_multi(keys, ttl=ttl)
+                self.collection.touch_multi(keys, timedelta(seconds=ttl))
             else:
-                self.default_collection.touch_multi(keys, ttl=ttl)
+                self.default_collection.touch_multi(keys, timedelta(seconds=ttl))
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
                     self.collection_connect(scope, collection)
-                    self.collection.touch_multi(keys, ttl=ttl)
+                    self.collection.touch_multi(keys, timedelta(seconds=ttl))
                 else:
-                    self.default_collection.touch_multi(keys, ttl=ttl)
+                    self.default_collection.touch_multi(keys, timedelta(seconds=ttl))
             except CouchbaseException as e:
                 raise
 
