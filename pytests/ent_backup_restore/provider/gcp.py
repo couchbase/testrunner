@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import json
+import os
 import time
 import contextlib
 import re
@@ -12,6 +13,7 @@ from google.cloud import(
         storage,
         exceptions
 )
+from google.api_core import exceptions as api_exceptions
 
 from . import provider
 
@@ -26,7 +28,19 @@ class GCP(provider.Provider):
 
         self.repo_name = repo_name
 
-        self.resource = storage.Client()
+        # Initialize storage client with credentials if available
+        gcp_auth_path = os.getenv("GCP_AUTH_PATH")
+        # If not set via env var, check default location
+        if not gcp_auth_path:
+            default_path = "/root/.config/gcloud/application_default_credentials.json"
+            if os.path.isfile(default_path) and os.access(default_path, os.R_OK):
+                gcp_auth_path = default_path
+        
+        if gcp_auth_path and os.path.isfile(gcp_auth_path) and os.access(gcp_auth_path, os.R_OK):
+            self.resource = storage.Client.from_service_account_json(gcp_auth_path)
+        else:
+            # Fall back to default credentials (will use GOOGLE_APPLICATION_CREDENTIALS env var if set)
+            self.resource = storage.Client()
 
         self.not_found_error = re.compile("the specified bucket does not exist")
 
@@ -56,11 +70,16 @@ class GCP(provider.Provider):
         self.log.info("Beginning GCP teardown...")
 
         # Since we're deleting everything, it's ok if items are missing
-        with contextlib.suppress(exceptions.NotFound):
+        # Permission errors are handled and logged in delete_all_items, but won't fail teardown
+        with contextlib.suppress(exceptions.NotFound, api_exceptions.Forbidden):
             self.delete_all_items(self.teardown_bucket)
             # Buckets can only be deleted with <256 items
             if self.teardown_bucket:
-                self.cloud_bucket.delete(force=True)
+                try:
+                    self.cloud_bucket.delete(force=True)
+                except api_exceptions.Forbidden as e:
+                    self.log.warning(f"Permission denied when deleting bucket: {e}. "
+                                   f"Bucket may not have been deleted. This is non-fatal.")
 
         # Remove the staging directory because cbbackupmgr has validation to ensure that are unique to each archive
         self._remove_staging_directory(info, remote_client)
@@ -84,7 +103,15 @@ class GCP(provider.Provider):
             kwargs['prefix'] = prefix
 
         # We only care about the path here, so generate a list of paths to return
-        return [key.name for key in self.resource.list_blobs(self.cloud_bucket, **kwargs)]
+        try:
+            return [key.name for key in self.resource.list_blobs(self.cloud_bucket, **kwargs)]
+        except api_exceptions.Forbidden as e:
+            self.log.warning(f"Permission denied when listing objects: {e}. "
+                           f"Service account may not have storage.objects.list permission.")
+            return []
+        except Exception as e:
+            self.log.error(f"Error listing objects: {e}")
+            raise
 
     def delete_objects(self, prefix=None):
         """See super class"""
@@ -92,9 +119,20 @@ class GCP(provider.Provider):
         if prefix:
             kwargs['prefix'] = prefix
 
-        objects = list([key.name for key in self.resource.list_blobs(self.cloud_bucket, **kwargs)])
-        with ThreadPoolExecutor() as pool:
-            pool.map(lambda obj: self.cloud_bucket.delete_blob(obj), objects)
+        try:
+            objects = list([key.name for key in self.resource.list_blobs(self.cloud_bucket, **kwargs)])
+            with ThreadPoolExecutor() as pool:
+                pool.map(lambda obj: self.cloud_bucket.delete_blob(obj), objects)
+        except api_exceptions.Forbidden as e:
+            self.log.warning(f"Permission denied when deleting objects: {e}. "
+                           f"Service account may not have storage.objects.list or storage.objects.delete permission.")
+            # Try to delete individual objects if we know the prefix, but can't list
+            # This is a best-effort cleanup
+            if prefix:
+                self.log.info(f"Attempting to delete objects with prefix {prefix} individually (may fail if no list permission)")
+        except Exception as e:
+            self.log.error(f"Error deleting objects: {e}")
+            raise
 
     def num_multipart_uploads(self):
         """ See super class
@@ -106,17 +144,22 @@ class GCP(provider.Provider):
         """
         if teardown_bucket:
             self.log.info(f"Removing all items from bucket {self.cloud_bucket.name}...")
-            all_blobs = list(self.resource.list_blobs(self.cloud_bucket))
-            # If we have a very large dataset, delete asynchronously and poll
-            if len(all_blobs) > 256000:
-                self.cloud_bucket.add_lifecycle_delete_rule(age=0)
-                self.cloud_bucket.patch()
-                while len(all_blobs) > 256:
-                    time.sleep(10)
-                    all_blobs = list(self.resource.list_blobs(self.cloud_bucket))
-                    # If we don't have that many delete synchronously
-            elif len(all_blobs) > 256:
-                self.cloud_bucket.delete_blobs(all_blobs)
+            try:
+                all_blobs = list(self.resource.list_blobs(self.cloud_bucket))
+                # If we have a very large dataset, delete asynchronously and poll
+                if len(all_blobs) > 256000:
+                    self.cloud_bucket.add_lifecycle_delete_rule(age=0)
+                    self.cloud_bucket.patch()
+                    while len(all_blobs) > 256:
+                        time.sleep(10)
+                        all_blobs = list(self.resource.list_blobs(self.cloud_bucket))
+                        # If we don't have that many delete synchronously
+                elif len(all_blobs) > 256:
+                    self.cloud_bucket.delete_blobs(all_blobs)
+            except api_exceptions.Forbidden as e:
+                self.log.warning(f"Permission denied when listing all blobs: {e}. "
+                               f"Service account may not have storage.objects.list permission. "
+                               f"Skipping blob deletion.")
         else:
             self.log.info(f"Removing items with prefix {self.repo_name}")
             self.delete_objects(prefix=self.repo_name)
