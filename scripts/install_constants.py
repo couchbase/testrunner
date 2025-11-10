@@ -124,7 +124,29 @@ CMDS = {
             "rm -rf /tmp/entbackup*;" +
             "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
-            "systemctl restart systemd-timesyncd; "
+
+            # ### Block for fixing ntp service issues
+            # 1. Remove chrony if installed and disable its service
+            "systemctl disable --now chrony 2>/dev/null;"
+            "apt purge -y chrony;"
+            "apt autoremove -y;"
+
+            # 2. Disable systemd-timesyncd
+            "systemctl disable --now systemd-timesyncd 2>/dev/null;"
+
+            # 3. Install NTP if not installed
+            "if ! command -v ntpd >/dev/null 2>&1; then apt update ; apt install -y ntp ; fi;"
+
+            # 4. Reload systemd daemon to pick up any changes
+            "systemctl daemon-reload;"
+
+            # 5. Enable and start NTP service
+            "systemctl enable --now ntp;"
+
+            # 6. Optional: Force immediate sync if the clock is off
+            "service ntp stop ; ntpd -gq ; service ntp start;"
+            # ### End of block for fixing ntp service issues
+
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
             "dpkg --purge $(dpkg -l | grep -e couchbase -e enterprise-analytics | awk '{print $2}'"
             " | xargs echo); sleep 10; "
@@ -135,6 +157,7 @@ CMDS = {
             " > /dev/null && echo 1 || echo 0; "
             "dpkg -P couchbase-server; dpkg -P couchbase-columnar; dpkg -P enterprise-analytics; "
             "rm -rf /var/lib/dpkg/info/couchbase-*;"
+            "apt install -y wget curl; "
             "dpkg --configure -a; apt-get update; "
             "journalctl --vacuum-size=100M; journalctl --vacuum-time=10d; "
             "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
