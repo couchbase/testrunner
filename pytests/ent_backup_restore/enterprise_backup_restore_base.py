@@ -358,10 +358,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                         self.backupset.objstore_secret_access_key,
                                         self.backupset.objstore_staging_directory)
         elif provider == "gcp":
+            GCP_AUTH_PATH_src = os.getenv("GCP_AUTH_PATH", GCP_AUTH_PATH)
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
                 shell.execute_command("mkdir -p /root/.config/gcloud")
-                shell.copy_file_local_to_remote(GCP_AUTH_PATH, GCP_AUTH_PATH)
+                shell.copy_file_local_to_remote(GCP_AUTH_PATH_src, GCP_AUTH_PATH)
             self.objstore_provider = GCP(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                          self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
                                          self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
@@ -456,7 +457,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
         if not self.input.param("skip_cleanup", False):
-            self.clean_up(self.input.clusters[1][0])
+            try:
+                self.clean_up(self.input.clusters[1][0])
+            except AssertionError as e:
+                if "bucket \"default\" was not deleted" in e:
+                    self.log.info("Ignore trying to delete the default bucket.")
+                else:
+                    raise e
         if self.enforce_tls:
             self.master.port = '8091'
             self.master.protocol = "http://"
