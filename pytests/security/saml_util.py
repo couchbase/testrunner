@@ -13,7 +13,7 @@ from couchbase.auth import PasswordAuthenticator
 
 class SAMLUtils:
     def __init__(self, logger, okta_account):
-        self.qe_server_ip = "172.23.105.178"
+        self.qe_server_ip = "172.23.217.21"
         self.log = logger
         self.saml_resources = None
         self.idp_metadata = None
