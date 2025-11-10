@@ -34,7 +34,8 @@ class SDKClient(object):
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
                  sasl_mech=False):
         if CbServer.use_https:
-            sasl_mech = True
+            # One of PLAIN / SCRAM-SHA1 / SCRAM-SHA256 / SCRAM-SHA512
+            sasl_mech = "PLAIN"
             scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
