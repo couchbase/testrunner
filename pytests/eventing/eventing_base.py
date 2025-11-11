@@ -1,11 +1,10 @@
+import datetime
 import json
+import os
 import logging
 import random
-import datetime
-import os, sys
 import socket
 
-from TestInput import TestInputSingleton
 from collection.collections_rest_client import CollectionsRest
 from couchbase_helper.tuq_helper import N1QLHelper
 from lib.couchbase_helper.documentgenerator import BlobGenerator, SDKDataLoader
@@ -14,8 +13,7 @@ from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
-from basetestcase import BaseTestCase
-from testconstants import INDEX_QUOTA, MIN_KV_QUOTA, EVENTING_QUOTA
+from lib.testconstants import EVENTING_QUOTA
 from pytests.query_tests_helper import QueryHelperTests
 from lib.Cb_constants.CBServer import CbServer
 from collection.collections_stats import CollectionsStats

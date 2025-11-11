@@ -363,12 +363,15 @@ class ClusterOperationHelper(object):
     def flushctl_set(master, key, val, bucket='default'):
         rest = RestConnection(master)
         servers = rest.get_nodes()
-        for server in servers:
-            if "kv" in server.services:
-                _server = {"ip": server.ip, "port": server.port,
-                           "username": master.rest_username,
-                           "password": master.rest_password}
-                ClusterOperationHelper.flushctl_set_per_node(_server, key, val, bucket)
+        if key == "exp_pager_stime":
+            rest.change_bucket_props(bucket, expiryPagerSleepTime=val)
+        else:
+            for server in servers:
+                if "kv" in server.services:
+                    _server = {"ip": server.ip, "port": server.port,
+                               "username": master.rest_username,
+                               "password": master.rest_password}
+                    ClusterOperationHelper.flushctl_set_per_node(_server, key, val, bucket)
 
     @staticmethod
     def flushctl_set_per_node(server, key, val, bucket='default'):

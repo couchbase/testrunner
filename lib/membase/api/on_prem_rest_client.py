@@ -3057,8 +3057,8 @@ class RestConnection(object):
             log.info("Stat {0} not available yet".format(stat_name))
             time.sleep(1)
         log.error("ERROR: Stat {0} error on {1} on bucket {2}".
-                  format(stat_name, index_name, bucket_name)) 
-             
+                  format(stat_name, index_name, bucket_name))
+
     def get_specific_nsstats(self, node, creds):
         try:
             endpoint = f"https://{node}:18094/api/nsstats"
@@ -3352,19 +3352,15 @@ class RestConnection(object):
                       maxTTL=None,
                       compressionMode=None,
                       enableCrossClusterVersioning=None,
-                      versionPruningWindowHrs=None):
-        api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket)
-        if isinstance(bucket, Bucket):
-            api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name)
-        params = urllib.parse.urlencode({})
+                      versionPruningWindowHrs=None,
+                      expiryPagerSleepTime=None):
+        bucket_name = bucket.name if isinstance(bucket, Bucket) else bucket
+        api = '{0}{1}{2}'.format(self.baseUrl, 'pools/default/buckets/', bucket_name)
         params_dict = {}
-        existing_bucket = self.get_bucket_json(bucket)
         if ramQuotaMB:
             params_dict["ramQuotaMB"] = ramQuotaMB
         if replicaNumber:
             params_dict["replicaNumber"] = replicaNumber
-        #if proxyPort:
-        #    params_dict["proxyPort"] = proxyPort
         if replicaIndex:
             params_dict["replicaIndex"] = replicaIndex
         if flushEnabled:
@@ -3379,6 +3375,8 @@ class RestConnection(object):
             params_dict["enableCrossClusterVersioning"] = enableCrossClusterVersioning
         if versionPruningWindowHrs:
             params_dict["versionPruningWindowHrs"] = versionPruningWindowHrs
+        if expiryPagerSleepTime:
+            params_dict["expiryPagerSleepTime"] = expiryPagerSleepTime
 
         params = urllib.parse.urlencode(params_dict)
 
@@ -3386,11 +3384,11 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         if timeSynchronization:
             if status:
-                raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket))
+                raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket_name))
             return status, content
         if not status:
-            raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket))
-        log.info("bucket %s updated" % bucket)
+            raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket_name))
+        log.info("bucket %s updated" % bucket_name)
         return status
 
     # return AutoFailoverSettings
@@ -3847,11 +3845,11 @@ class RestConnection(object):
         status, content, _ = self.urllib_request(api, verb="PUT", params=json.dumps(params, ensure_ascii=False))
         if status:
             log.info("SUCCESS: FTS maxDCPAgents set to {0}".format(value))
-        return status 
+        return status
 
     def load_synonyms(self,bucket="default",scope="_default",collection="_default",workers=100,host="localhost",user="Administrator",password="password",format=1,analyzer="simple"):
         params = {'bucket': bucket,'scope':scope,'collection':collection,'workers':workers,'host':host,'user':user,'pass':password,'format':format,'analyzer':analyzer}
-        
+
         """ generate and push the synonyms to kv"""
         json_parsed = {}
         api = self.synonym_baseUrl + "run/syn-loader"
@@ -3859,7 +3857,7 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
         return status, json_parsed
-    
+
     def load_synonym_source(self,bucket="default",scope="_default",collection="_default",workers=100,host="localhost",user="Administrator",password="password",numDocs=50000,analyzer="simple"):
         params = {"bucket":bucket,"scope":scope,"collection":collection,"workers":workers,"host":host,"user":user,"pass":password,"numDocs":numDocs,"analyzer":analyzer}
 
@@ -4101,9 +4099,9 @@ class RestConnection(object):
             verb="POST",
             params=json.dumps(query_json, ensure_ascii=False).encode('utf8'),
             timeout=timeout)
-        
+
         content = json.loads(content)
-        
+
         if status:
             return content['total_hits'], content['hits'], content['took'], content['status']
         else:
@@ -4118,7 +4116,7 @@ class RestConnection(object):
             api,
             verb="POST",
             params=json.dumps(query_json, ensure_ascii=False).encode('utf8'))
-        
+
         content = json.loads(content)
         return content
 
