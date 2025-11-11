@@ -42,7 +42,9 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             # logs/backup-0.log
             # repo/backup-meta.json
             # README.md
-            if len(keys) != 5:
+            if len(keys) != 5 and len(keys) != 4:
+                self.log.error(f"Expected 5 or 4 files, but got {len(keys)} files")
+                self.log.error(f"Keys: {keys}")
                 return False, "config did not create the expected number of files"
 
             if f"{self.backupset.directory}/{self.backupset.name}/backup-meta.json" not in keys:

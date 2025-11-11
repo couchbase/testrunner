@@ -68,7 +68,7 @@ class AZURE(provider.Provider):
             self.__create_storage_container__(self.region)
 
         except Exception as error:
-            if error.code != 409:
+            if "ResourceExistsError" not in str(error):
                 raise error
             self.log.info("Bucket already exists, this is fine.")
 
@@ -118,6 +118,12 @@ class AZURE(provider.Provider):
             self.__delete_test_resource_group__()
 
         self.log.info("Creating Azure resoce group, storage and container")
+        self.log.info(f"Resource group name: {self.resource_group_name}")
+        self.log.info(f"Subscription ID: {self.subscription_id}")
+        self.log.info(f"Region: {region}")
+        self.log.info(f"Storage name: {self.storage_name}")
+        self.log.info(f"Container name: {self.container_name}")
+
         # Obtain the management object for resources.
         self.resource_management_client = ResourceManagementClient(self.credential, self.subscription_id)
         RESOURCE_GROUP_NAME = self.resource_group_name

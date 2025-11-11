@@ -659,6 +659,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_create_validate(self):
         output, error = self.backup_create()
         if error or "Backup repository `{0}` created successfully".format(self.backupset.name) not in output[0]:
+            self.log.error(f"Backup create failed. Output: {output}, Error: {error}")
             self.fail("Creating backupset failed.")
         status, msg = self.validation_helper.validate_backup_create()
         if not status:
@@ -2206,12 +2207,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     for x in output:
                         if ele.lower() in str(x.lower()):
                             self.log.info("Found '{0} in CLI output".format(ele))
+                            self.log.info("CLI output: {0}".format(output))
                             found = True
                             break
             elif isinstance(word_check, str):
                 for x in output:
                     if word_check.lower() in str(x.lower()):
                         self.log.info("Found '{0}' in CLI output".format(word_check))
+                        self.log.info("CLI output: {0}".format(output))
                         found = True
                         break
             else:
