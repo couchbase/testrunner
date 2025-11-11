@@ -1,6 +1,9 @@
 from mc_bin_client import MemcachedClient
 import logger
-
+from couchbase.options import ClusterOptions
+from couchbase.cluster import Cluster
+from couchbase.bucket import Bucket
+from couchbase.auth import PasswordAuthenticator
 log = logger.Logger.get_logger()
 import couchbase.subdocument as SD
 import time
@@ -86,12 +89,15 @@ class TestSDK:
             "Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user,
                                                                                                     password))
         result = False
-        connection_string = 'couchbase://' + client_ip + '/' + bucket_name + '?username=' + user + '&select_bucket=true'
+        connection_string = 'couchbase://' + client_ip + '/'
         log.info("Value of connection string is - {0}".format(connection_string))
         time.sleep(2)
         try:
-            url = 'couchbase://{ip}/{name}'.format(ip=client_ip, name=bucket_name)
-            bucket = Bucket(url, username=user, password=password)
+            url = 'couchbase://{ip}/'.format(ip=client_ip)
+            authenticator = PasswordAuthenticator(username=user, password=password)
+            cluster_ops = ClusterOptions(authenticator)
+            cluster = Cluster.connect(url, cluster_ops)
+            bucket = Bucket(cluster, bucket_name)
             if bucket is not None:
                 result = True
                 return bucket, result

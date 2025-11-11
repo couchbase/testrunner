@@ -6,6 +6,9 @@ import os
 import copy
 import string
 import time
+from couchbase.auth import CertificateAuthenticator
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
 import requests
 import logger
 import httplib2
@@ -1256,8 +1259,10 @@ class Validation:
         # bucket = Bucket('couchbases://{hostname}/{bucketname}?certpath={certpath}'
         #                 '&truststorepath={truststorepath}&keypath={keypath}'.
         #                 format(hostname=self.server.ip, bucketname=bucket_name, **options))
-        bucket = Bucket('couchbases://{hostname}/{bucketname}?certpath={certpath}'
-                        '&ssl=no_verify&keypath={keypath}'.
-                        format(hostname=self.server.ip, bucketname=bucket_name, **options))
-        self.log.info("Nodes are {0}".format(bucket.server_nodes))
+        authenticator = CertificateAuthenticator(cert_path=self.client_cert_path_tuple[0],
+                                                 truststore_path=self.cacert,
+                                                 keypath=self.client_cert_path_tuple[1])
+        cluster_ops = ClusterOptions(authenticator)
+        cluster = Cluster.connect("couchbases://{hostname}", cluster_ops)
+        bucket = cluster.bucket(bucket_name)
         return bucket
