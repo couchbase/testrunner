@@ -1260,9 +1260,9 @@ class Validation:
         #                 '&truststorepath={truststorepath}&keypath={keypath}'.
         #                 format(hostname=self.server.ip, bucketname=bucket_name, **options))
         authenticator = CertificateAuthenticator(cert_path=self.client_cert_path_tuple[0],
-                                                 truststore_path=self.cacert,
-                                                 keypath=self.client_cert_path_tuple[1])
+                                                 trust_store_path=self.cacert,
+                                                 key_path=self.client_cert_path_tuple[1])
         cluster_ops = ClusterOptions(authenticator)
-        cluster = Cluster.connect("couchbases://{hostname}", cluster_ops)
+        cluster = Cluster.connect(f"couchbases://{self.server.ip}", cluster_ops)
         bucket = cluster.bucket(bucket_name)
         return bucket
