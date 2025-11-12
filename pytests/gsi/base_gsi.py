@@ -2795,10 +2795,10 @@ class BaseSecondaryIndexingTests(QueryTests):
             for namespace in collection_namespaces:
                 _, keyspace = namespace.split(':')
                 bucket, scope, collection = keyspace.split('.')
-                self.gen_create = SDKDataLoader(num_ops=num_docs_mutating, percent_create=100,
-                                                percent_update=10, percent_delete=0, scope=scope,
+                self.gen_create = SDKDataLoader(num_ops=num_docs_mutating, percent_create=50,
+                                                percent_update=50, percent_delete=0, scope=scope,
                                                 collection=collection, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password)
+                                                output=True, username=self.username, password=self.password, create_end=num_docs_mutating, update_end=num_docs_mutating)
                 if self.use_magma_loader:
                     task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
                                                             generator=self.gen_create, pause_secs=1,
@@ -3291,6 +3291,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
             if "ANN" not in query:
                 continue
+            if "embVector" in query:
+                query = query.replace("embVector", str(self.bhive_sample_vector))
             redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                            similarity=similarity)
             query_stats_map[redacted_query] = [recall, accuracy]

@@ -324,10 +324,52 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
+    def generate_shoe_scalar_index_definition(self, index_name_prefix=None, skip_primary=False, limit=10):
+        definitions_list = []
+        if not index_name_prefix:
+            index_name_prefix = "shoe_scalar_idx_" + str(uuid.uuid4()).replace("-", "")[5]
+
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color",
+                                                                          "type = 'Shoes'"),
+                                is_primary=True))
+
+        # Single scalar field - size
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'size_scalar',
+                            index_fields=['size'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("meta().id", "size >= 5")))
+
+        # Composite scalar fields - color, brand
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'color_brand',
+                            index_fields=['color', 'brand'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("brand, color",
+                                                                      "brand in ['Nike', 'Adidas'] AND color like 'G%%'")))
+
+        # Partitioned scalar index - brand
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partitioned_brand',
+                            index_fields=['brand'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("brand", "brand = 'Nike'"),
+                            partition_by_fields=['brand'], capella_run=True))
+
+        # Missing keys scalar index
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'missing_keys',
+                            index_fields=['size', 'brand', 'country'],
+                            missing_indexes=True, missing_field_desc=True,
+                            query_template=RANGE_SCAN_TEMPLATE.format("brand",
+                                                                      'size > 4 AND country like "US%%"')))
+        return definitions_list
     def generate_shoe_vector_index_defintion_bhive(self, index_name_prefix=None, similarity="L2",
                                                    train_list=None, scan_nprobes=1, skip_primary=False,
                                                    limit=10, quantization_algo_description_vector=None,
-                                                   persist_full_vector=True):
+                                                   persist_full_vector=True, skip_extra_indexes=True):
         definitions_list = []
 
         query_vec = f"ANN_DISTANCE(embedding, embVector,  '{similarity}', {scan_nprobes})"
@@ -351,51 +393,98 @@ class GSIUtils(object):
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"embedding, {query_vec}", query_vec)))
 
         # Single vector field single scalar (leading)
-        # definitions_list.append(
-        #     QueryDefinition(index_name=index_name_prefix + 'leading_scalar',
-        #                     index_fields=['embedding VECTOR'],
-        #                     dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-        #                     similarity=similarity, persist_full_vector=persist_full_vector,
-        #                     scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
-        #                     query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, {query_vec}", f"size = 5",
-        #                                                                        query_vec),
-        #                     include_fields=['size']))
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'leading_scalar',
+                            index_fields=['embedding VECTOR'],
+                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity, persist_full_vector=persist_full_vector,
+                            scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}", f"size = 5",
+                                                                               query_vec),
+                            include_fields=['size']))
 
-        # # Single vector field (middle) multiple scalar (leading)
-        # definitions_list.append(
-        #     QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
-        #                     index_fields=['embedding VECTOR'],
-        #                     dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-        #                     similarity=similarity, persist_full_vector=persist_full_vector,
-        #                     scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
-        #                     query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, {query_vec}",
-        #                                                                        "size = 5 AND color = 'Green'",
-        #                                                                        query_vec),
-        #                     include_fields=['size, color']))
+        if not skip_extra_indexes:
+            # Single vector field (middle) multiple scalar (leading)
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
+                                index_fields=['embedding VECTOR'],
+                                dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                                similarity=similarity, persist_full_vector=persist_full_vector,
+                                scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}",
+                                                                                   "size = 5 AND color = 'Green'",
+                                                                                   query_vec),
+                                include_fields=['size, color']))
 
-        # # multiple scalar (leading) partitioned
-        # definitions_list.append(
-        #     QueryDefinition(index_name=index_name_prefix + 'multi_scalar_partitioned',
-        #                     index_fields=['embedding VECTOR'],
-        #                     dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-        #                     similarity=similarity, partition_by_fields=['meta().id'], scan_nprobes=scan_nprobes,
-        #                     train_list=train_list, limit=limit, persist_full_vector=persist_full_vector,
-        #                     query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, {query_vec}, color",
-        #                                                                        "size > 4 AND size < 6 AND brand = 'Nike'",
-        #                                                                        query_vec),
-        #                     include_fields=['size, color, brand']))
+        return definitions_list
 
-        # # vector leading multiple scalar (leading) partitioned by vector
-        # definitions_list.append(
-        #     QueryDefinition(index_name=index_name_prefix + 'leading_vec_partitioned',
-        #                     index_fields=['embedding VECTOR'],
-        #                     dimension=128, description=f"IVF,{quantization_algo_description_vector}",
-        #                     similarity=similarity, partition_by_fields=['embedding'], scan_nprobes=scan_nprobes,
-        #                     train_list=train_list, limit=limit, persist_full_vector=persist_full_vector,
-        #                     query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, {query_vec}, type",
-        #                                                                        "size < 6 AND country = 'USA'",
-        #                                                                        query_vec),
-        #                     include_fields=['size, color, brand, country, type']))
+    def generate_shoe_vector_index_definitions_composite(self, index_name_prefix=None, similarity="L2",
+                                                               train_list=None, scan_nprobes=1, skip_primary=False,
+                                                               limit=10, quantization_algo_description_vector=None):
+        definitions_list = []
+
+        query_vec = f"ANN_DISTANCE(embedding, embVector,  '{similarity}', {scan_nprobes})"
+        if not index_name_prefix:
+            index_name_prefix = "shoe_comp_idx_" + str(uuid.uuid4()).replace("-", "")[5]
+
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color",
+                                                                          "type = 'Shoes'"),
+                                is_primary=True))
+
+        # Composite: scalar leading, vector trailing
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'scalar_leading_vector',
+                            index_fields=['size', 'embedding VECTOR'],
+                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}",
+                                                                               "size = 5",
+                                                                               query_vec)))
+
+        # Composite: vector in the middle with multiple scalars
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
+                            index_fields=['brand', 'embedding VECTOR', 'color'],
+                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}",
+                                                                               "size = 5 AND color = 'Green'",
+                                                                               query_vec)))
+
+        # Composite: multiple scalars leading, partitioned by scalar
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_partitioned',
+                            index_fields=['type', 'size', 'embedding VECTOR'],
+                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id,embedding, {query_vec}, type",
+                                                                               "size > 4 AND size < 6 AND brand = 'Nike'",
+                                                                               query_vec),
+                            partition_by_fields=['type']))
+
+        # Composite: vector leading, multiple scalars, partitioned by vector
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'leading_vec_partitioned',
+                            index_fields=['embedding VECTOR', 'brand', 'country'],
+                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}, country",
+                                                                               "size < 6 AND country = 'USA'",
+                                                                               query_vec),
+                            partition_by_fields=['embedding']))
 
         return definitions_list
 
@@ -2318,7 +2407,7 @@ class GSIUtils(object):
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
                                   quantization_algo_description_vector=None, is_base64=False, bhive_index=False,
-                                  xattr_indexes=False, description_dimension=384, persist_full_vector=True, scalar=False):
+                                  xattr_indexes=False, description_dimension=384, persist_full_vector=True, scalar=False, skip_extra_indexes=True):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -2344,14 +2433,27 @@ class GSIUtils(object):
             definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix,
                                                                               skip_primary=skip_primary)
         elif dataset == "siftBigANN":
-            definition_list = self.generate_shoe_vector_index_defintion_bhive(index_name_prefix=prefix,
-                                                                              skip_primary=skip_primary,
-                                                                              similarity=similarity,
-                                                                              train_list=train_list,
-                                                                              scan_nprobes=scan_nprobes,
-                                                                              limit=limit,
-                                                                              persist_full_vector=persist_full_vector,
-                                                                              quantization_algo_description_vector=quantization_algo_description_vector)
+            if scalar:
+                definition_list = self.generate_shoe_scalar_index_definition(index_name_prefix=prefix,
+                                                                                  skip_primary=skip_primary)
+            elif bhive_index:
+                definition_list = self.generate_shoe_vector_index_defintion_bhive(index_name_prefix=prefix,
+                                                                                  skip_primary=skip_primary,
+                                                                                  similarity=similarity,
+                                                                                  train_list=train_list,
+                                                                                  scan_nprobes=scan_nprobes,
+                                                                                  limit=limit,
+                                                                                  persist_full_vector=persist_full_vector,
+                                                                                  quantization_algo_description_vector=quantization_algo_description_vector, skip_extra_indexes=skip_extra_indexes)
+            else:
+                definition_list = self.generate_shoe_vector_index_definitions_composite(index_name_prefix=prefix,
+                                                                                  skip_primary=skip_primary,
+                                                                                  similarity=similarity,
+                                                                                  train_list=train_list,
+                                                                                  scan_nprobes=scan_nprobes,
+                                                                                  limit=limit,
+                                                                                  quantization_algo_description_vector=quantization_algo_description_vector)
+
         elif dataset == 'Cars':
             self.log.info(f"scalar is {scalar}")
             if scalar:

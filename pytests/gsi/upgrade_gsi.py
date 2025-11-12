@@ -1548,6 +1548,96 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 event.set()
                 if self.continuous_mutations:
                     future.result()
+    def test_upgrade_with_mutations(self):
+        self.rest.delete_all_buckets()
+        self.sleep(30)
+        if self.initial_version[:3] >= "7.6" and self.start_test_with_fbr:
+            self.enable_shard_based_rebalance()
+            self.sleep(10)
+
+
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        self.sleep(10)
+
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event = Event()
+                self.enable_redistribute_indexes()
+                select_queries_scalar = self.create_index_in_batches(replica_count=1, scalar=True, dataset=self.json_template,
+                                                                     bhive=False)
+                if self.initial_version >= "8.0":
+                    select_queries_composite = self.create_index_in_batches(replica_count=1, scalar=False,
+                                                                            dataset=self.json_template, bhive=False)
+                    select_queries_bhive = self.create_index_in_batches(replica_count=1, scalar=False,
+                                                                        dataset=self.json_template, bhive=True, skip_extra_indexes=False)
+                self.wait_until_indexes_online()
+                self.sleep(120)
+
+                if self.upgrade_mode == 'offline' or self.upgrade_to >= "8.0":
+                    index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
+                if self.initial_version >= "8.0":
+                    select_queries = list(select_queries_composite) + list(select_queries_scalar) + list(select_queries_bhive)
+                else:
+                    select_queries = select_queries_scalar
+                future = executor_main.submit(self.perform_continuous_kv_mutations, event, 4800)
+                self.upgrade_and_validate(select_queries=select_queries, scan_results_check=False)
+                event.set()
+                future.result()
+                self.update_master_node()
+                if self.upgrade_to >= "8.0" and not self.dcp_rebalance:
+                    self.enable_shard_based_rebalance(provisioned=None)
+                self.create_index_in_batches(num_batches=1, replica_count=1, dataset=self.json_template, scalar=True)
+                self.wait_until_indexes_online()
+                if self.upgrade_to >= "8.0":
+                    self.item_count_related_validations()
+                if self.upgrade_mode == 'offline' or self.upgrade_to >= "8.0":
+                    index_names_after_upgrade = self.get_all_indexes_in_the_cluster()
+                    indexes_created_post_upgrade = []
+                    self.log.info(f'Indexes created before upgrade {index_names_before_upgrade}')
+                    self.log.info(f'Indexes created after upgrade {index_names_after_upgrade}')
+                    for name in index_names_after_upgrade:
+                        if name not in index_names_before_upgrade:
+                            indexes_created_post_upgrade.append(name)
+                    self.log.info(f'new indexes created after upgrade {indexes_created_post_upgrade}')
+                    self.validate_shard_affinity(specific_indexes=indexes_created_post_upgrade)
+                else:
+                    self.validate_shard_affinity()
+
+                if self.upgrade_to >= "8.0":
+                    self.disable_redistribute_indexes()
+                    self.sleep(10)
+                    index_names_after_upgrade_before_vector = self.get_all_indexes_in_the_cluster()
+                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade_before_vector,
+                                                            cluster_profile=None, dataset="siftBigANN")
+                    indexes_post_creating_vector_indexes = self.get_all_indexes_in_the_cluster()
+                    index_list_post_creating_vector_indexes = []
+                    self.log.info(f'Indexes created before upgrade {index_names_before_upgrade}')
+                    self.log.info(f'Indexes list after creating vector indexes {indexes_post_creating_vector_indexes}')
+                    for name in indexes_post_creating_vector_indexes:
+                        if name not in index_names_after_upgrade_before_vector:
+                            index_list_post_creating_vector_indexes.append(name)
+                    self.log.info(f'new indexes created after  {index_list_post_creating_vector_indexes}')
+                    if not self.dcp_rebalance:
+                        self.validate_shard_affinity(specific_indexes=index_list_post_creating_vector_indexes)
+
+                self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
+
+            finally:
+                event.set()
+                future.result()
+
+
+
 
     def test_offline_file_based_rebalance_with_multiple_rebalances(self):
         redistribute = {"indexer.settings.rebalance.redistribute_indexes": True}
@@ -2472,7 +2562,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             node_rest = RestConnection(node)
             self.log.info(f"nodes are {node_rest.get_complete_version()==self.upgrade_to.split('-')[0][:5]}")
 
-    def post_upgrade_validate_vector_index(self, cluster_profile=None, services=None, index_list_before=[], existing_bucket=None):
+    def post_upgrade_validate_vector_index(self, cluster_profile=None, services=None, index_list_before=[], existing_bucket=None, dataset="Cars"):
         if services is None:
             services = ["index"]
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -2500,7 +2590,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             namespace_index_map[namespace] = []
             # if bhive index is false composite index is created
             for bhive_index in [True, False]:
-                definitions = self.gsi_util_obj.get_index_definition_list(dataset="Cars",
+                definitions = self.gsi_util_obj.get_index_definition_list(dataset=dataset,
                                                                           similarity=self.similarity, train_list=None,
                                                                           scan_nprobes=self.scan_nprobes,
                                                                           array_indexes=False,
@@ -3075,7 +3165,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         else:
             self.validate_shard_affinity(node_in=node_in, provisioned=provisioned)
 
-    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True, scalar=False, dataset="Hotel", bhive=False):
+    def create_index_in_batches(self, num_batches=2, replica_count=None, randomise_replica_count=True, scalar=False, dataset="Hotel", bhive=False, skip_extra_indexes=True):
         select_queries = set()
         query_node = self.get_nodes_from_services_map(service_type="n1ql")
         for _ in range(num_batches):
@@ -3096,7 +3186,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                                                       limit=self.scan_limit,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                      bhive_index=bhive, scalar=scalar)
+                                                                      bhive_index=bhive, scalar=scalar, skip_extra_indexes=skip_extra_indexes)
             for namespace in self.namespaces:
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace))
@@ -3454,6 +3544,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.log.info("upgrade successful")
                     self.sleep(20)
                     self.wait_until_indexes_online()
+                    self.update_master_node()
 
                     map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
