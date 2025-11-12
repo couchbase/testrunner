@@ -5,17 +5,13 @@ from threading import Thread
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from couchbase.bucket import Bucket
-from couchbase.cluster import Cluster
-try:
-    from couchbase.exceptions import DocumentNotFoundException
-except:
-    from couchbase.exceptions import NotFoundError as DocumentNotFoundException
-
+from couchbase.exceptions import DocumentNotFoundException
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.memcached.helper.data_helper import VBucketAwareMemcached
 from couchbase_helper.document import DesignDocument, View
 from remote.remote_util import RemoteMachineShellConnection
+
+from lib.sdk_client3 import SDKClient
 
 
 class RebalanceHighOpsWithPillowFight(BaseTestCase):
@@ -285,27 +281,13 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         return errors
 
     def check_dataloss(self, server, bucket, num_items):
-        if RestConnection(server).get_nodes_version()[:5] < '5':
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
-        else:
-            try:
-                from couchbase.cluster import PasswordAuthenticator
-                connection = "couchbase://" + server.ip
-                if "ip6" in server.ip or server.ip.startswith("["):
-                    connection = connection+"?ipv6=allow"
-                cluster = Cluster(connection)
-                authenticator = PasswordAuthenticator(server.rest_username, server.rest_password)
-                cluster.authenticate(authenticator)
-                bkt = cluster.open_bucket(bucket.name)
-                bkt.timeout = 100
-            except ImportError:
-                from couchbase.cluster import ClusterOptions
-                from couchbase_core.cluster import PasswordAuthenticator
-                cluster = Cluster(self.connection_string, ClusterOptions(
-                    PasswordAuthenticator(server.rest_username, server.rest_password)))
-                bkt = cluster.bucket(bucket).default_collection()
-            except Exception as e:
-                self.log.error("Connection error\n" + traceback.format_exc())
+        client = None
+        try:
+            ipv6 = True if "ip6" in server.ip or server.ip.startswith("[") else False
+            client = SDKClient(hosts=[server.ip], bucket=bucket.name,
+                               ipv6=ipv6)
+        except Exception as e:
+            self.log.error(f"Connection error: {e}")
 
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
@@ -320,7 +302,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             for i in range(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
-                bkt.get_multi(keys)
+                client.default_collection.get_multi(keys)
                 self.log.info(
                     "Able to fetch keys starting from {0} to {1}".format(
                         keys[0], keys[len(keys) - 1]))
@@ -330,12 +312,13 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                 key = ''
                 try:
                     for key in keys:
-                        bkt.get(key)
+                        client.get(key)
                 except DocumentNotFoundException:
                     vBucketId = VBucketAware._get_vBucket_id(key)
                     errors.append("Missing key: {0}, VBucketId: {1}".
                                   format(key, vBucketId))
             batch_start += batch_size
+        client.close()
         return errors
 
     def check_data(self, server, bucket, num_items=0, start_document=0,

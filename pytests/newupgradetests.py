@@ -1,5 +1,7 @@
 import queue
 import copy
+
+from lib.sdk_client3 import SDKClient
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -8,8 +10,7 @@ from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
 from testconstants import CB_RELEASE_BUILDS
-from couchbase.cluster import Cluster, PasswordAuthenticator
-from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
+from couchbase.exceptions import CouchbaseException
 from security.rbac_base import RbacBase
 from threading import Thread
 
@@ -3040,17 +3041,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
 
     def check_dataloss(self, server, bucket, num_items):
-        from couchbase.bucket import Bucket
-        from couchbase.exceptions import NotFoundError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        if RestConnection(server).get_nodes_version()[:5] < '5':
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
-        else:
-            cluster = Cluster("couchbase://{}".format(server.ip))
-            auth = PasswordAuthenticator(server.rest_username,
-                                         server.rest_password)
-            cluster.authenticate(auth)
-            bkt = cluster.open_bucket(bucket.name)
+        client = SDKClient(hosts=[server.ip], bucket=bucket.name)
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
@@ -3067,37 +3059,38 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for i in range(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
-                bkt.get_multi(keys)
+                client.default_collection.get_multi(keys)
                 self.log.info("Able to fetch keys starting from {0} to {1}".format(keys[0], keys[len(keys) - 1]))
-            except CouchbaseError as e:
+            except CouchbaseException as e:
                 self.log.error(e)
                 ok, fail = e.split_results()
                 if fail:
                     for key in fail:
                         try:
-                            bkt.get(key)
-                        except NotFoundError:
+                            client.get(key)
+                        except Exception:
                             vBucketId = VBucketAware._get_vBucket_id(key)
                             errors.append("Missing key: {0}, VBucketId: {1}".
                                           format(key, vBucketId))
                             missing_keys.append(key)
             try:
-                bkt.get_multi(keys, replica=True)
+                client.default_collection.get_all_replicas_multi(keys)
                 self.log.info(
                     "Able to fetch keys starting from {0} to {1} in replica ".format(keys[0], keys[len(keys) - 1]))
-            except CouchbaseError as e:
+            except CouchbaseException as e:
                 self.log.error(e)
                 ok, fail = e.split_results()
                 if fail:
                     for key in fail:
                         try:
-                            bkt.get(key, replica=True)
-                        except NotFoundError:
+                            client.default_collection.get_all_replicas(key)
+                        except Exception:
                             vBucketId = VBucketAware._get_vBucket_id(key)
                             errors_replica.append("Missing key in replica: {0}, VBucketId: {1}".
                                                   format(key, vBucketId))
                             missing_keys_replica.append(key)
             batch_start += batch_size
+        client.close()
         return errors, missing_keys, errors_replica, missing_keys_replica
 
     def failover_upgrade_recovery_with_data_load(self, master, items, cluster_nodes, failed_over_node, recovery_type,

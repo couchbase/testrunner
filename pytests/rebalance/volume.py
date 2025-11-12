@@ -1,10 +1,11 @@
 from threading import Thread
-import threading
-from lib.testconstants import STANDARD_BUCKET_PORT
+
+from couchbase.exceptions import CouchbaseException, DocumentNotFoundException
 from couchbase_helper.document import DesignDocument, View
 from basetestcase import BaseTestCase
-from rebalance.rebalance_base import RebalanceBaseTest
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection
+
+from lib.sdk_client3 import SDKClient
 
 
 class VolumeTests(BaseTestCase):
@@ -42,12 +43,11 @@ class VolumeTests(BaseTestCase):
             self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
 
     def check_dataloss(self, server, bucket, num_items):
-        from couchbase.bucket import Bucket
-        from couchbase.exceptions import NotFoundError, CouchbaseError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         self.log.info("########## validating data for bucket : {} ###########".format(bucket))
-        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), username=server.rest_username,
-                     password=server.rest_password, timeout=5000)
+        client = SDKClient(hosts=[server.ip], bucket=bucket.name,
+                           username=server.rest_username,
+                           password=server.rest_password)
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
@@ -61,20 +61,21 @@ class VolumeTests(BaseTestCase):
             for i in range(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
-                bkt.get_multi(keys)
+                client.default_collection.get_multi(keys)
                 self.log.info("Able to fetch keys starting from {0} to {1}".format(keys[0], keys[len(keys) - 1]))
-            except CouchbaseError as e:
+            except CouchbaseException as e:
                 self.log.error(e)
                 ok, fail = e.split_results()
                 if fail:
                     for key in fail:
                         try:
-                            bkt.get(key)
-                        except NotFoundError:
+                            client.default_collection.get(key)
+                        except DocumentNotFoundException:
                             vBucketId = VBucketAware._get_vBucket_id(key)
                             errors.append("Missing key: {0}, VBucketId: {1}".
                                           format(key, vBucketId))
             batch_start += batch_size
+        client.close()
         self.log.info("Total missing keys:{}".format(len(errors)))
         self.log.info(errors)
         return errors

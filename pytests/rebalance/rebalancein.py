@@ -1,8 +1,9 @@
-import time, os
-
-from threading import Thread
+import time
 import threading
+from threading import Thread
+
 from basetestcase import BaseTestCase
+from couchbase.exceptions import DocumentNotFoundException
 from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection, RestHelper
@@ -10,6 +11,9 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+
+from lib.sdk_client3 import SDKClient
+
 
 class RebalanceInTests(RebalanceBaseTest):
 
@@ -816,10 +820,9 @@ class RebalanceWithPillowFight(BaseTestCase):
             self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
 
     def check_dataloss(self, server, bucket):
-        from couchbase.bucket import Bucket
-        from couchbase.exceptions import NotFoundError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), username="cbadminbucket", password="password")
+        client = SDKClient(hosts=[server.ip], bucket=bucket.name,
+                           username="cbadminbucket", password="password")
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
@@ -833,7 +836,7 @@ class RebalanceWithPillowFight(BaseTestCase):
             for i in range(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
-                bkt.get_multi(keys)
+                client.default_collection.get_multi(keys)
                 self.log.info("Able to fetch keys starting from {0} to {1}".format(keys[0], keys[len(keys)-1]))
             except Exception as e:
                 self.log.error(e)
@@ -841,12 +844,13 @@ class RebalanceWithPillowFight(BaseTestCase):
                 key = ''
                 try:
                     for key in keys:
-                        bkt.get(key)
-                except NotFoundError:
+                        client.default_collection.get(key)
+                except DocumentNotFoundException:
                     vBucketId = VBucketAware._get_vBucket_id(key)
                     errors.append("Missing key: {0}, VBucketId: {1}".
                                   format(key, vBucketId))
             batch_start += batch_size
+        client.close()
         return errors
 
     def test_dataloss_rebalance_in(self):

@@ -1,4 +1,5 @@
 import re, copy, json, subprocess, datetime
+from datetime import datetime, timedelta
 from random import randrange, randint, choice
 from threading import Thread
 
@@ -13,14 +14,12 @@ from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from security.auditmain import audit
 from security.rbac_base import RbacBase
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
-from couchbase.bucket import Bucket
 from couchbase_helper.document import View
 from tasks.future import Future, TimeoutError
 from xdcr.xdcrnewbasetests import NodeHelper
 from couchbase_helper.stats_tools import StatsCommon
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH, \
                           ENT_BKRS, ENT_BKRS_FTS
-from datetime import datetime, timedelta
 from collection.collections_cli_client import CollectionsCLI
 from lib.sdk_client3 import SDKClient
 
@@ -2896,54 +2895,45 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         testuser = [{'id': 'default', 'name': 'default', 'password': 'password'}]
         rolelist = [{'id': 'default', 'name': 'default', 'roles': 'admin'}]
         self.add_built_in_server_user(testuser, rolelist)
+        client = None
         try:
-            cb = Bucket('couchbase://' + self.backupset.cluster_host.ip + '/default',
-                                                                 password="password")
-            if cb is not None:
-                self.log.info("Established connection to bucket on cluster host"
-                              " using python SDK")
-            else:
-                self.fail("Failed to establish connection to bucket on cluster host"
-                          " using python SDK")
+            client = SDKClient(hosts=[self.backupset.cluster_host.ip],
+                               bucket="default")
         except Exception as ex:
             self.fail(str(ex))
         self.log.info("Loading bucket with data using python SDK")
         for i in range(1, self.num_items + 1):
-            cb.upsert("doc" + str(i), "value" + str(i))
+            client.default_collection.upsert("doc" + str(i), "value" + str(i))
         cluster_host_data = {}
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
-            value_obj = cb.get(key=key)
+            value_obj = client.default_collection.get(key=key)
             cluster_host_data[key] = {}
             cluster_host_data[key]["cas"] = str(value_obj.cas)
             cluster_host_data[key]["flags"] = str(value_obj.flags)
+        client.close()
         self.backup_create()
         self.backup_cluster_validate()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
 
         self.add_built_in_server_user(testuser, rolelist, self.backupset.restore_cluster_host)
+        client = None
         try:
-            cb = SDKClient(hosts=[self.backupset.restore_cluster_host.ip],
-                           bucket="default", username="Administrator",
-                           password='password')
-            if cb is not None:
-                self.log.info("Established connection to bucket on restore host " \
-                              "using python SDK")
-            else:
-                self.fail("Failed to establish connection to bucket on restore " \
-                          "host using python SDK")
+            client = SDKClient(hosts=[self.backupset.restore_cluster_host.ip],
+                               bucket="default")
         except Exception as ex:
             self.fail(str(ex))
         restore_host_data = {}
 
-        self.sleep(100)
+        self.sleep(30)
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
-            value_obj = cb.get(key=key)
+            value_obj = client.default_collection.get(key=key)
             restore_host_data[key] = {}
             restore_host_data[key]["cas"] = str(value_obj.cas)
             restore_host_data[key]["flags"] = str(value_obj.flags)
         self.log.info("Comparing cluster host data cas and flags against restore host data")
+        client.close()
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
             if cluster_host_data[key]["cas"] != restore_host_data[key]["cas"]:

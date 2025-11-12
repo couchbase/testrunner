@@ -1,12 +1,14 @@
 #!/usr/bin/python
-import json
-import requests
 import argparse
-import random
-from random import randint
 import datetime
-from couchbase.bucket import Bucket
-from couchbase.exceptions import TimeoutError
+import json
+import random
+import requests
+from random import randint
+
+from lib.sdk_client3 import SDKClient
+
+from couchbase.exceptions import TimeoutException
 
 doc_template = "{\\\"AirItinerary\\\":" +\
                             "{\\\"DirectionInd\\\":$18," +\
@@ -234,18 +236,19 @@ def runSDKQuery(keys, servers_ips, buckets):
     if isinstance(servers_ips, list):
         srv = ','.join(servers_ips)
     if isinstance(buckets, str):
-        cbs.append(Bucket('couchbase://%s/%s' % (srv, buckets)))
+        cbs.append(SDKClient(hosts=[srv], bucket=buckets))
     else:
         for bucket in buckets:
-            cbs.append(Bucket('couchbase://%s/%s' % (srv, bucket)))
+            cbs.append(SDKClient(hosts=[srv], bucket=bucket))
 
     for cb in cbs:
+        print('Inserting %s docs' % len(keys))
         try:
-            print('Inserting %s docs...' % len(keys))
-            out = cb.insert_multi(keys)
-        except TimeoutError as ex:
+            out = cb.default_collection.insert_multi(keys)
+        except TimeoutException as ex:
             out = str(ex)
             print('WARNING: Not all documents were inserted because of timeout error!! Please decrease batch size')
+        cb.close()
     return out
 
 

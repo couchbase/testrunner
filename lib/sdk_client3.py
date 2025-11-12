@@ -25,7 +25,7 @@ class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
     def __init__(self, bucket, scheme="couchbases", hosts=["localhost"],
-                 ssl_path=None, uhm_options=None, username= None, password=None,
+                 ssl_path=None, uhm_options=None, username=None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True,
                  sasl_mech=False):
         if CbServer.use_https:
@@ -34,17 +34,13 @@ class SDKClient(object):
             scheme = "couchbases"
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
-                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression, sasl_mech=sasl_mech)
+                               certpath=certpath, uhm_options=uhm_options,
+                               ipv6=ipv6, compression=compression,
+                               sasl_mech=sasl_mech)
         self.bucket = bucket
         sys.setrecursionlimit(100)
-        if username == None:
-            self.username = 'Administrator'
-        else:
-            self.username = username
-        if password == None:
-            self.password ='password'
-        else:
-            self.password = password
+        self.username = 'Administrator' if username is None else username
+        self.password = 'password' if password is None else password
         self.quiet = quiet
         self.transcoder = transcoder
         self.default_timeout = 1
