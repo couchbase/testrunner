@@ -450,7 +450,7 @@ class x509main:
         else:
             main_url = final_verb + "  --cacert " + x509main.CERT_FILE
 
-        main_url = main_url + " --tls-max 1.2"
+        main_url = main_url
         cmd = str(main_url) + " " + str(headers) + " " + str(final_url)
         if data is not None:
             cmd = cmd + " -d " + data

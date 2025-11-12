@@ -104,7 +104,8 @@ class MultipleCA(BaseTestCase):
                 if not status:
                     self.fail("Could not login using client cert auth {0}".format(content))
                 # 1b) sdk
-                client = self.x509_validation.sdk_connection()
+                bucket = self.x509_validation.sdk_connection()
+                client = bucket.default_collection()
                 self.x509_validation.creates_sdk(client)
 
                 # 2) using basic auth

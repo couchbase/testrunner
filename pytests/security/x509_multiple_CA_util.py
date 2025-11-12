@@ -385,7 +385,7 @@ class x509main:
         self.log.info("Converting node {} cert to pkcs 12".format(node_ip))
         convert_cmd = "openssl pkcs12 -export -out " + tmp_encrypted_key_path + " -inkey " + \
                         key_path + " -in " + node_chain_ca_path + \
-                        " -passout pass:" + passw
+                        " -passout 'pass:" + passw + "'"
         output, error = shell.execute_command(convert_cmd)
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
@@ -437,8 +437,8 @@ class x509main:
                 passw = response.content.decode('utf-8')
 
             # convert cmd
-            convert_cmd = "openssl pkcs8 -in " + key_path + " -passout pass:" + passw + \
-                          " -topk8 -v2 " + self.encryption_type + \
+            convert_cmd = "openssl pkcs8 -in " + key_path + " -passout 'pass:" + passw + "' " + \
+                          "-topk8 -v2 " + self.encryption_type + \
                           " -out " + tmp_encrypted_key_path
             output, error = shell.execute_command(convert_cmd)
             self.log.info('Output message is {0} and error message is {1}'.format(output, error))
@@ -1096,8 +1096,8 @@ class x509main:
         """
         copy chain.pem & pkey.key there to inbox of server
         """
-        self.create_inbox_folder_on_server(server=server)
-        self.create_scripts_folder_on_server(server=server)
+        # self.create_inbox_folder_on_server(server=server)
+        # self.create_scripts_folder_on_server(server=server)
         if self.standard == "pkcs12":
             node_ca_key_path = self.get_node_cert(server)
             dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/couchbase.p12"

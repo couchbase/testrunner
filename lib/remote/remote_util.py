@@ -1600,10 +1600,9 @@ class RemoteMachineShellConnection(KeepRefs):
         sftp = self._ssh_client.open_sftp()
         try:
             sftp.put(src_path, des_path)
-        except IOError:
-            log.error('Can not copy file')
-        finally:
-            sftp.close()
+        except Exception as e:
+            log.error(f'Can not copy file: {e}')
+        sftp.close()
 
     def copy_file_remote_to_local(self, rem_path, des_path):
         sftp = self._ssh_client.open_sftp()
