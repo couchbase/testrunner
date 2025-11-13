@@ -902,7 +902,8 @@ def main():
                 elif testsToLaunch[i]['framework'] == "testrunner":
                     if float(options.version[:3]) >= 8.1:
                         if slave_to_use in ["P0", "magma_slave", "magma_sdk2",
-                                            "bkrs3", "IPv6", "P3XDCR"]:
+                                            "bkrs3", "IPv6", "P3XDCR",
+                                            "rqg_testing"]:
                             # Force to use qe jenkins and deb12 slave
                             slave_to_use = "deb12_P0_slave"
                             testsToLaunch[i]['target_jenkins'] = 'http://172.23.121.80'
