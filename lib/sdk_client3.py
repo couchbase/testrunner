@@ -109,15 +109,15 @@ class SDKClient(object):
             raise e
 
     def reconnect(self):
-        self.cb.close()
+        self.cluster.close()
         self._createConn()
 
     def disconnect(self):
-        self.cb.close()
+        self.close()
 
     def close(self):
         SDKClient.sdk_disconnections += 1
-        self.cb._close()
+        self.cluster.close()
 
     def counter_in(self, key, path, delta, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
                    scope=None, collection=None):
