@@ -4791,8 +4791,10 @@ class QueriesIndexTests(QueryTests):
                              'FROM {0} where name is not null'.format(query_bucket)
                 res = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(res)
-                self.assertTrue(plan['~children'][0]["~children"][0]['~children'][0]["index"] == index_name,
-                                "Index should be {0}, but is: {0}".format(index_name, plan))
+                self.log.info(plan)
+                plan_index_name = plan['~children'][0]["~children"][0]['~children'][0]["index"]
+                self.assertTrue(plan_index_name.strip() == index_name,
+                                "Index should be {0}, but is: {1}".format(index_name, plan_index_name))
             finally:
                 self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, index_name, self.index_type)
                 try:
