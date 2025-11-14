@@ -56,7 +56,7 @@ class QueryN1QLBackfillTests(QueryTests):
                 if bucket.name == self.standard_bucket_name:
                     self._wait_for_index_online(bucket, 'join_day')
             thread1 = threading.Thread(name='monitor_backfill', target=self.monitor_backfill)
-            thread1.setDaemon(True)
+            thread1.daemon = True
             thread2 = threading.Thread(name='execute_query', target=self.execute_query)
 
             thread1.start()
@@ -67,7 +67,7 @@ class QueryN1QLBackfillTests(QueryTests):
             # Check to see if the monitoring thread is still alive after query completes, monitoring thread should
             # return once it sees backfill being used, if that has not happened by the time the query completes,
             # we can determine backfill was not used
-            if thread1.isAlive():
+            if thread1.is_alive():
                 self.assertTrue(False, "The backfill thread never registered any files")
             else:
                 self.log.info("The backfill directory was being used during the query")
