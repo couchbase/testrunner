@@ -29,7 +29,7 @@ class QueryHashBytesTests(QueryTests):
         else:
             string = value
         if algorithm.upper() == "MD4":
-            cmd = subprocess.getoutput(f'/bin/echo -n {string} | openssl md4')
+            cmd = subprocess.getoutput(f'/bin/echo -n {string} | openssl md4 -provider legacy')
             return cmd.replace("(stdin)= ", "")
         if algorithm.upper() == "MD5":
             return hashlib.md5(string.encode()).hexdigest()
