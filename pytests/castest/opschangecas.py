@@ -1,15 +1,12 @@
+import json
 import time
-from memcacheConstants import ERR_NOT_FOUND
+
 from castest.cas_base import CasBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError
-
 from membase.api.rest_client import RestConnection, RestHelper
+from memcacheConstants import ERR_NOT_FOUND
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
-import json
-from couchbase.exceptions import NotFoundError
-
-
 from remote.remote_util import RemoteMachineShellConnection
 
 
@@ -280,10 +277,10 @@ class OpsChangeCasTests(CasBaseTest):
                         'Corrupted cas (%s) != curr_cas (%s)'
                         % (corrupt_cas, curr_cas))
 
-    #MB-21448 bug test
-    #Description: REPLACE_WITH_CAS on a key that has recently been deleted and then requested 
-    #sometimes returns key exists with different CAS instead of key not exists error, this test
-    #only requires one node 
+    # MB-21448 bug test
+    # Description: REPLACE_WITH_CAS on a key that has recently been deleted and then requested
+    # sometimes returns key exists with different CAS instead of key not exists error, this test
+    # only requires one node
     def key_not_exists_test(self):
         self.assertTrue(len(self.buckets) > 0, 'at least 1 bucket required')
         bucket = self.buckets[0].name
