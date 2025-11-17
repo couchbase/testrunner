@@ -5,7 +5,7 @@ import pdb
 
 from string import ascii_lowercase
 from .base_gsi import BaseSecondaryIndexingTests
-from couchbase.bucket import Bucket
+from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase_helper.documentgenerator import  DocumentGenerator
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
@@ -687,11 +687,15 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
 
     def _update_document(self, bucket_name, key, document):
         if self.use_https:
-            url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=bucket_name)
+            url = 'couchbases://' + str(self.master.ip) + '?ssl=no_verify'
         else:
-            url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
-        bucket = Bucket(url, username=bucket_name, password="password")
-        bucket.upsert(key, document)
+            url = 'couchbase://' + str(self.master.ip)
+        sdk_cluster = Cluster(url)
+        authenticator = PasswordAuthenticator(bucket_name, "password")
+        sdk_cluster.authenticate(authenticator)
+        cb = sdk_cluster.open_bucket(bucket_name)
+        cb.upsert(key, document)
+        cb.close()
 
     def _get_size_of_array(self, array):
         arr_len = 0
