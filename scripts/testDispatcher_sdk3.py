@@ -520,12 +520,13 @@ def main():
           Timeout..............{}
           nolaunch.............{}
           is_dynamic_vms.......{}
+          Columnar version.....{}
           """.format(options.run, options.version, RELEASE_VERSION,
                      options.branch, options.os, options.url,
                      options.cherrypick, options.dashboardReportedParameters,
                      options.rerun_params, options.SERVER_MANAGER,
                      options.TIMEOUT, options.noLaunch,
-                     options.is_dynamic_vms))
+                     options.is_dynamic_vms, options.columnar_version))
 
     if options.SERVER_MANAGER:
         SERVER_MANAGER = options.SERVER_MANAGER

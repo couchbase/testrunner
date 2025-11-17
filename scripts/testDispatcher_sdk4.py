@@ -530,11 +530,12 @@ def main():
           Timeout..............{}
           nolaunch.............{}
           is_dynamic_vms.......{}
+          Columnar version.....{}
           """.format(options.run, options.version, RELEASE_VERSION,
                      options.branch, options.os, options.url,
                      options.cherrypick, options.dashboardReportedParameters,
                      options.rerun_params, options.TIMEOUT, options.noLaunch,
-                     options.is_dynamic_vms))
+                     options.is_dynamic_vms, options.columnar_version))
 
     if options.TEST_SUITE_DB:
         TEST_SUITE_DB = options.TEST_SUITE_DB
