@@ -924,10 +924,16 @@ def main():
                 slave_to_use = testsToLaunch[i]['slave']
                 if testsToLaunch[i]['framework'] == "TAF":
                     if float(options.version[:3]) >= 8.1:
-                        # TAF and 8.1 or greater
-                        slave_to_use = "deb12_jython_slave"
-                        testsToLaunch[i][
-                            'target_jenkins'] = 'http://172.23.121.80'
+                        if testsToLaunch[i]["component"] == "analytics" \
+                                and str(options.columnar_version) == "None":
+                            # TAF::analytics and 8.1 or greater and EA is None
+                            # Force to use this branch
+                            branch_to_trigger = "master_jython"
+                        else:
+                            # TAF and 8.1 or greater
+                            slave_to_use = "deb12_jython_slave"
+                            testsToLaunch[i][
+                                'target_jenkins'] = 'http://172.23.121.80'
                     elif (str(options.version[:3]) == "8.0"
                           and options.branch == "morpheus"
                           and testsToLaunch[i]["support_py3"] == "false"):
