@@ -892,7 +892,7 @@ def main():
                 if testsToLaunch[i]['framework'] == "TAF":
                     if float(options.version[:3]) >= 8.1:
                         if testsToLaunch[i]["component"] == "analytics" \
-                                and str(options.columnar_version) == "None":
+                                and str(options.columnar_version) == "0":
                             # TAF::analytics and 8.1 or greater and EA is None
                             # Force to use this branch
                             branch_to_trigger = "master_jython"
