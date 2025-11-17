@@ -5,7 +5,9 @@ import gc
 import psutil
 
 from string import ascii_lowercase
-from couchbase.bucket import Bucket
+from couchbase.auth import PasswordAuthenticator
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
 from couchbase_helper.documentgenerator import  DocumentGenerator
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
 from couchbase_helper.query_definitions import QueryDefinition
@@ -89,8 +91,17 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                         for bucket in buckets:
                             url = "couchbase://{0}/{1}".format(self.master.ip,
                                                                bucket.name)
-                            cb = Bucket(url, username=bucket.name, password="password")
-                            cb.remove(doc_gen["_id"])
+                            auth = PasswordAuthenticator(bucket.name, "password")
+
+                            # Connect to the cluster
+                            cluster = Cluster(
+                                f"couchbase://{self.master.ip}",
+                                ClusterOptions(auth)
+                            )
+                            bucket_obj = cluster.bucket(bucket.name)
+                            # cb.remove(doc_gen["_id"])
+                            collection = bucket_obj.default_collection()
+                            collection.remove(doc_gen["_id"])
                             temp_list.append(doc_gen)
                 if not self.multi_intervals:
                     break
@@ -125,10 +136,14 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                 for character in interval:
                     if doc_gen["name"].lower().startswith(character):
                         for bucket in buckets:
-                            url = "couchbase://{0}/{1}".format(self.master.ip,
-                                                               bucket.name)
-                            cb = Bucket(url, username=bucket.name, password="password")
-                            cb.remove(doc_gen["_id"])
+                            auth = PasswordAuthenticator(bucket.name, "password")
+                            cluster = Cluster(
+                                f"couchbase://{self.master.ip}",
+                                ClusterOptions(auth)
+                            )
+                            bucket_obj = cluster.bucket(bucket.name)
+                            collection = bucket_obj.default_collection()
+                            collection.remove(doc_gen["_id"])
                             temp_list.append(doc_gen)
                 if not self.multi_intervals:
                     break
@@ -322,8 +337,14 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=bucket_name)
         else:
             url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
-        bucket = Bucket(url, username=bucket_name, password="password")
-        bucket.upsert(key, document)
+        auth = PasswordAuthenticator(bucket_name, "password")
+        cluster = Cluster(
+            f"couchbase://{self.master.ip}",
+            ClusterOptions(auth)
+        )
+        bucket_obj = cluster.bucket(bucket_name)
+        collection = bucket_obj.default_collection()
+        collection.upsert(key, document)
 
     def _get_expected_results_for_scan(self, query):
         index_settings = self.rest.get_index_settings()
