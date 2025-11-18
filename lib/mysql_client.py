@@ -43,9 +43,17 @@ class MySQLClient(object):
     def _db_execute_query(self, query=""):
         cur = self.mysql_connector_client.cursor()
         try:
-            rows = cur.execute(query, multi=True)
-            for row in rows:
-                print(row)
+            # Split multiple statements and execute them individually
+            statements = [stmt.strip() for stmt in query.split(';') if stmt.strip()]
+            for statement in statements:
+                cur.execute(statement)
+                # Check if there are results to fetch
+                if cur.description:
+                    rows = cur.fetchall()
+                    for row in rows:
+                        print(row)
+                # Commit after each statement
+                self.mysql_connector_client.commit()
         except Exception as ex:
             print(ex)
             raise
