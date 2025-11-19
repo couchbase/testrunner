@@ -931,9 +931,23 @@ class OnPremBaseTestCase(unittest.TestCase):
             pass
 
     def is_test_failed(self):
-        if hasattr(self, "_outcome") and len(self._outcome.errors) > 0:
-            for i in self._outcome.errors:
-                if i[1] is not None:
+        if not hasattr(self, "_outcome"):
+            return False
+
+        import sys
+        if sys.version_info >= (3, 11):
+            # Python 3.11+
+            result = getattr(self._outcome, "result", None)
+            if result:
+                # Check both errors and failures
+                for exc_list in (result.errors, result.failures):
+                    for test, exc_info in exc_list:
+                        if exc_info is not None:
+                            return True
+        else:
+            # Python < 3.11
+            for test, exc_info in getattr(self._outcome, "errors", []):
+                if exc_info is not None:
                     return True
         return False
 
