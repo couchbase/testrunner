@@ -336,14 +336,24 @@ class N1QLHelper():
             except Exception as ex:
                 self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {ex}" )
                 self.log.error("INCORRECT DOCUMENT IS: " + str(output))
-        if isinstance(result, str) or 'errors' in result:
+        # Check if result is valid and contains errors
+        if result is None:
+            raise CBQError("Query returned None result", server.ip)
+
+        if isinstance(result, str):
+            raise CBQError(result, server.ip)
+
+        if isinstance(result, dict) and 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
             if length_display > 500:
                 error_result = error_result[:500]
             raise CBQError(error_result, server.ip)
 
-        self.log.info(f"TOTAL ELAPSED TIME: {result['metrics']['elapsedTime']}")
+        # Log metrics if available
+        if isinstance(result, dict) and 'metrics' in result and 'elapsedTime' in result['metrics']:
+            self.log.info(f"TOTAL ELAPSED TIME: {result['metrics']['elapsedTime']}")
+
         return result
 
     def wait_for_all_indexes_online(self,verbose=True):

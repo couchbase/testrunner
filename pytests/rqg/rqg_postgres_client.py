@@ -21,6 +21,8 @@ from psycopg2 import Timestamp
 
 class RQGPostgresClient(PostgresClient):
 
+    def __init__(self, host='localhost', user='root', password='password', database='test', port=5432):
+        super(RQGPostgresClient, self).__init__(host=host, user=user, password=password, database=database, port=port)
 
     def reset_database_add_data(self, database="", items=1000, sql_file_definiton_path="/tmp/definition.sql", populate_data=True, number_of_tables=None):
         self._gen_data_simple_table(number_of_rows=items)
@@ -30,21 +32,41 @@ class RQGPostgresClient(PostgresClient):
         helper = RQGQueryHelper()
         cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
 
-        drop_table_query = "drop table if exists simple_table"
-        cursor.execute(drop_table_query)
-        self.connection.commit()
-        create_table_query = "create table simple_table(bool_field1 boolean, char_field1 char(1), datetime_field1 timestamp, decimal_field1 numeric, int_field1 numeric, primary_key_id text, varchar_field1 text)"
+        try:
+            print(f"[PostgreSQL] Dropping table if exists...")
+            # Use CASCADE to drop table even if it has dependencies
+            drop_table_query = "DROP TABLE IF EXISTS simple_table CASCADE"
+            cursor.execute(drop_table_query)
+            print(f"[PostgreSQL] Table dropped successfully.")
+        except Exception as ex:
+            print(f"[PostgreSQL] Warning during drop table: {str(ex)}")
+
+        print(f"[PostgreSQL] Creating simple_table...")
+        create_table_query = "CREATE TABLE simple_table(bool_field1 boolean, char_field1 char(1), datetime_field1 timestamp, decimal_field1 numeric, int_field1 numeric, primary_key_id text, varchar_field1 text)"
         try:
             cursor.execute(create_table_query)
-            self.connection.commit()
+            print(f"[PostgreSQL] Table created successfully.")
         except Exception as ex:
-            print(("##### Cannot create table - "+str(ex)))
+            print(f"[PostgreSQL] ERROR: Cannot create table - {str(ex)}")
+            raise
+
+        print(f"[PostgreSQL] Inserting {number_of_rows} rows (this may take a while)...")
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
+        batch_size = 100
+
         for table_name in list(map.keys()):
             for x in range(0, number_of_rows):
-                statement = self._generate_insert_statement(helper, table_name, map[table_name], "\'" + str(x + 1) + "\'")
-                cursor.execute(statement)
-                self.connection.commit()
+                try:
+                    statement = self._generate_insert_statement(helper, table_name, map[table_name], "\'" + str(x + 1) + "\'")
+                    cursor.execute(statement)
+                    # Progress logging
+                    if (x + 1) % batch_size == 0:
+                        print(f"[PostgreSQL] Inserted {x + 1}/{number_of_rows} rows...")
+                except Exception as ex:
+                    print(f"[PostgreSQL] Error inserting row {x + 1}: {str(ex)}")
+                    raise
+
+        print(f"[PostgreSQL] Successfully inserted all {number_of_rows} rows!")
 
 
 

@@ -83,6 +83,8 @@ class BaseRQGTests(BaseTestCase):
             self.items = self.input.param("items", 1000)
             self.mysql_url = self.input.param("mysql_url", "localhost")
             self.mysql_url = self.mysql_url.replace("_", ".")
+            self.postgres_url = self.input.param("postgres_url", self.mysql_url)
+            self.postgres_url = self.postgres_url.replace("_", ".")
             self.gen_secondary_indexes = self.input.param("gen_secondary_indexes", False)
             self.gen_gsi_indexes = self.input.param("gen_gsi_indexes", True)
             self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql")
@@ -1045,7 +1047,7 @@ class BaseRQGTests(BaseTestCase):
             if self.use_mysql:
                 client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
             elif self.use_postgres:
-                client = RQGPostgresClient()
+                client = RQGPostgresClient(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
 
             if test == 51:
                 columns = []
@@ -1196,7 +1198,7 @@ class BaseRQGTests(BaseTestCase):
                 if self.use_mysql:
                     client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
                 elif self.use_postgres:
-                    client = RQGPostgresClient()
+                    client = RQGPostgresClient(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
 
                 if expected_result is None:
                     columns, rows = client._execute_query(query=sql_query)
@@ -1517,8 +1519,8 @@ class BaseRQGTests(BaseTestCase):
             self.client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
 
     def _initialize_postgres_client(self):
-        self.client = RQGPostgresClient()
-        self.client.reset_database_add_data()
+        self.client = RQGPostgresClient(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
+        self.client.reset_database_add_data(items=self.items)
 
     def _copy_table_for_merge(self):
         table_list = self.client._get_table_list()
@@ -1775,7 +1777,7 @@ class BaseRQGTests(BaseTestCase):
         if self.use_mysql:
             client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
         elif self.use_postgres:
-            client = RQGPostgresClient()
+            client = RQGPostgresClient(host=self.postgres_url, user=self.user_id, password=self.password, database=self.database)
         client.dump_database(data_dump_path=database_dump)
         client._close_connection()
         f_write_index_file.write(json.dumps(self.sec_index_map))
