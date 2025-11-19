@@ -15,7 +15,7 @@ import sys
 import copy
 import time
 import zlib
-import imp
+import importlib
 import datetime
 
 sys.path=["../lib"] + sys.path
@@ -33,7 +33,7 @@ from random import randint
 
 import testcfg as cfg
 
-### import sdk ###
+# import sdk
 try:
     # workaround required to remove relative paths
     while True:
@@ -41,7 +41,7 @@ try:
 except ValueError:
     pass
 
-imp.reload(couchbase)
+importlib.reload(couchbase)
 from couchbase.bucket import Bucket
 
 class PersistedCB(Task):

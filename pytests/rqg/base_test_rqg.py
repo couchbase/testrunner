@@ -233,7 +233,7 @@ class BaseRQGTests(BaseTestCase):
     def test_rqg(self):
         try:
             # Get Data Map
-            run_seed = random.seed(uuid.uuid4())
+            run_seed = random.seed(uuid.uuid4().int)
             self.log.info("SEED: {0}".format(run_seed))
             table_list = self.client._get_table_list()
             table_map = self.client._get_values_with_type_for_fields_in_table()
@@ -364,7 +364,7 @@ class BaseRQGTests(BaseTestCase):
                         except Exception as ex:
                             self.log.error(str(ex))
                             break
-                        random.seed(uuid.uuid4())
+                        random.seed(uuid.uuid4().int)
                         percentage = random.randint(1, 100)
                         if percentage <= 50:
                             query_type = random.choice(['select','select','select','select','select','select','update','update','update', 'update'])

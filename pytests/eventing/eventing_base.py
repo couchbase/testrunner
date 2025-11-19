@@ -34,7 +34,7 @@ class EventingBaseTest(QueryHelperTests):
             self.rest = RestConnection(self.restServer)
             self.rest.set_indexer_storage_mode()
             self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
-        random.seed(datetime.datetime.now())
+        random.seed(datetime.datetime.now().timestamp())
         function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
         # See MB-28447, From now function name can only be max of 100 chars
         self.function_name = function_name[0:90]
