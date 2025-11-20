@@ -222,10 +222,10 @@ CMDS = {
             "yes | yum remove '" + CB_ENTERPRISE_ANALYTICS + "*' > /dev/null; " +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
-            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + ";" +
-            "du -ch /data | grep total; rm -rf /data/*;" +
-            " > /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + "; " +
+            "du -ch /data | grep total; rm -rf /data/* " +
+            "> /dev/null && echo 1 || echo 0",
         "pre_install": "kill -9 `lsof -ti:4369`;" +
                        "kill -9 `lsof -ti:8091`;" +
                        "kill -9 `lsof -ti:21100`;" +
@@ -244,9 +244,9 @@ CMDS = {
             "zypper --ignore-unknown rm -y 'couchbase*' > /dev/null; " +
             "rm -rf /var/cache/zypper/RPMS/couchbase* ;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
-            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0 ; " +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + ";" +
-            " > /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + " " +
+            "> /dev/null && echo 1 || echo 0",
         "mariner_install" : "tdnf -y install buildpath > /dev/null && echo 1 || echo 0",
         "mariner_uninstall" : "tdnf -y remove couchbase-server.x86_64 > /dev/null; rm -rf /opt/couchbase",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
