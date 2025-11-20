@@ -125,26 +125,19 @@ CMDS = {
             "systemctl -q stop couchbase-server;" +
             UNMOUNT_NFS_CMD +
 
-            # ### Block for fixing ntp service issues
-            # 1. Remove chrony if installed and disable its service
-            "systemctl disable --now chrony 2>/dev/null;"
-            "apt purge -y chrony;"
-            "apt autoremove -y;"
+            # ### Block for fixing ntp service using chrony
+            # Disable/remove conflicting services
+            "systemctl disable --now systemd-timesyncd 2>/dev/null || true ;"
+            "systemctl disable --now ntp 2>/dev/null || true;"
+            "apt purge -y ntp 2>/dev/null || true;"
+            "apt autoremove -y 2>/dev/null || true;"
 
-            # 2. Disable systemd-timesyncd
-            "systemctl disable --now systemd-timesyncd 2>/dev/null;"
-
-            # 3. Install NTP if not installed
-            "if ! command -v ntpd >/dev/null 2>&1; then apt update ; apt install -y ntp ; fi;"
-
-            # 4. Reload systemd daemon to pick up any changes
-            "systemctl daemon-reload;"
-
-            # 5. Enable and start NTP service
-            "systemctl enable --now ntp;"
-
-            # 6. Optional: Force immediate sync if the clock is off
-            "service ntp stop ; ntpd -gq ; service ntp start;"
+            # Install chrony
+            "apt update && apt install -y chrony ; "
+            # Enable and start chrony
+            "systemctl enable --now chrony;"
+            # Force immediate sync
+            "chronyc makestep;"
             # ### End of block for fixing ntp service issues
 
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
