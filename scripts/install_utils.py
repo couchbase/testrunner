@@ -219,8 +219,8 @@ class NodeHelper:
 
             # Explicitly set the profile mode value (if provided by user)
             c_profile = self.profile or params["cluster_profile"]
-            if c_profile in ["default", "serverless", "provisioned", "columnar"]:
-                cmd = install_constants.CREATE_SERVERLESS_PROFILE_FILE[key] \
+            if c_profile in ["default", "serverless", "provisioned", "columnar", "analytics"]:
+                cmd = install_constants.CREATE_PROFILE_FILE[key] \
                       % c_profile
                 self.shell.execute_command(cmd)
         # End of Serverless changes
@@ -471,7 +471,7 @@ class NodeHelper:
 
     def init_cb(self):
         # Skip init for columnar profile
-        if self.profile == "columnar":
+        if self.profile in ["columnar", "analytics"]:
             return
         self.wait_for_couchbase_reachable()
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
@@ -711,7 +711,7 @@ def _parse_user_input():
             params["columnar"] = True \
                 if value.lower() == "true" else False
             params["cluster_profile"] = "columnar"
-            params["cb_edition"] = install_constants.CB_COLUMNAR
+            params["cb_edition"] = install_constants.CB_ENTERPRISE_ANALYTICS
             params["install_tasks"] = install_constants.DEFAULT_INSTALL_COLUMNAR_TASKS
 
         if key == "type" or key == "edition":
@@ -816,7 +816,7 @@ def pre_install_steps_columnar(node_helpers):
     install_debug_info = params["install_debug_info"]
     is_release_build = check_for_columnar_release_or_latest_build()
     for node in node_helpers:
-        if not(params["columnar"] or node.profile == "columnar"):
+        if not(params["columnar"] or node.profile in ["columnar", "analytics"]):
             # Continue if not columnar for this node
             continue
 
@@ -864,7 +864,7 @@ def pre_install_steps(node_helpers):
             if node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True
                 for node in node_helpers:
-                    if params["columnar"] or node.profile == "columnar":
+                    if params["columnar"] or node.profile in ["columnar", "analytics"]:
                         build_binary = __get_columnar_build_binary_name(node)
                     else:
                         build_binary = __get_build_binary_name(node)
@@ -879,7 +879,7 @@ def pre_install_steps(node_helpers):
             pre_install_steps_columnar(node_helpers)
             install_debug_info = params["install_debug_info"]
             for node in node_helpers:
-                if params["columnar"] or node.profile == "columnar":
+                if params["columnar"] or node.profile in ["columnar", "analytics"]:
                     # Continue if columnar for this node
                     continue
                 is_release_build = check_for_release_or_latest_build(node)
@@ -1296,7 +1296,7 @@ def __get_columnar_build_binary_name(node, is_release_build=False):
         raise NotImplementedError("Not Implemented")
 
     cb_version = node.cb_version or params["version"]
-    cb_edition = install_constants.CB_COLUMNAR
+    cb_edition = install_constants.CB_ENTERPRISE_ANALYTICS
     if node.get_os() in install_constants.X86:
         return "{0}-{1}-{2}.{3}.{4}".format(cb_edition,
                                             cb_version,
