@@ -993,7 +993,7 @@ def __get_columnar_build_url(node, build_binary):
             break
 
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
-        testconstants.CB_COLUMNAR_REPO, build_folder_name, build_number,
+        testconstants.CB_ENTERPRISE_ANALYTICS_REPO, build_folder_name, build_number,
         build_binary)
     # Release url to be implemented post release
     # release_url = ""

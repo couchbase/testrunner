@@ -54,10 +54,12 @@ NON_ROOT_DOWNLOAD_DIR = {"LINUX_DISTROS": "/home/nonroot/",
 
 DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase",
                        "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
-                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
+                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server",
+                       "LINUX_DISTROS_EA": "/opt/enterprise-analytics"}
 DEFAULT_NONROOT_INSTALL_DIR = {"LINUX_DISTROS": "/home/nonroot/cb/opt/couchbase/",
                        "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
-                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
+                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server",
+                       "LINUX_DISTROS_EA": "/home/nonroot/cb/opt/enterprise-analytics/"}
 
 CB_NON_PACKAGE_INSTALLER_URL = "https://packages.couchbase.com/cb-non-package-installer/cb-non-package-installer"
 CB_NON_PACKAGE_INSTALLER_NAME = "cb-non-package-installer"
@@ -82,7 +84,7 @@ CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
-CB_COLUMNAR =  "couchbase-columnar-enterprise"
+CB_ENTERPRISE_ANALYTICS = "enterprise-analytics"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
 CB_DOWNLOAD_SERVER = "172.23.126.166"
 
@@ -101,28 +103,25 @@ PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "vbucketmigrator", "couchdb",
 
 UNMOUNT_NFS_CMD = "umount -a -t nfs,nfs4 -f -l;"
 
-# Serverless changes (MB-52406)
+# server profile change
 RM_CONF_PROFILE_FILE = {
     "LINUX_DISTROS": "rm -f /etc/couchbase.d/config_profile"
 }
-CREATE_SERVERLESS_PROFILE_FILE = {
+CREATE_PROFILE_FILE = {
     "LINUX_DISTROS": "mkdir -p /etc/couchbase.d ; "
                      "echo %s > /etc/couchbase.d/config_profile ; "
                      "chmod ugo+r /etc/couchbase.d/"
 }
-# End of serverless change
+# End of profile change
 
 CMDS = {
     "deb": {
         "uninstall":
-            "rm /var/lib/dpkg/lock;" +
-            "rm /var/lib/dpkg/lock-frontend;" +
-            "rm /var/cache/apt/archives/lock;" +
-            "dpkg --configure -a;" +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf /tmp/cbbackupmgr-staging;" +
             "rm -rf /tmp/entbackup*;" +
             "systemctl -q stop couchbase-server;" +
+            "systemctl -q stop " + CB_ENTERPRISE_ANALYTICS + ";" +
             UNMOUNT_NFS_CMD +
 
             # ### Block for fixing ntp service using chrony
@@ -141,26 +140,25 @@ CMDS = {
             # ### End of block for fixing ntp service issues
 
             "apt-get purge -y 'couchbase*' > /dev/null; sleep 10;"
-            "dpkg --purge $(dpkg -l | grep -e couchbase -e enterprise-analytics | awk '{print $2}'"
+            "dpkg --purge $(dpkg -l | grep -e couchbase -e " + CB_ENTERPRISE_ANALYTICS + " | awk '{print $2}'"
             " | xargs echo); sleep 10; "
             "rm /var/lib/dpkg/info/couchbase-*; sleep 10;"
-            "rm /var/lib/dpkg/info/enterprise-analytics; sleep 10;"
+            "rm /var/lib/dpkg/info/" + CB_ENTERPRISE_ANALYTICS + "*; sleep 10;"
             "kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
             " > /dev/null && echo 1 || echo 0; "
-            "dpkg -P couchbase-server; dpkg -P couchbase-columnar; dpkg -P enterprise-analytics; "
+            "dpkg -P couchbase-server; dpkg -P " + CB_ENTERPRISE_ANALYTICS + "; "
             "rm -rf /var/lib/dpkg/info/couchbase-*;"
+            "rm -rf /var/lib/dpkg/info/" + CB_ENTERPRISE_ANALYTICS + "*;"
+            "du -ch /data | grep total; rm -rf /data/*;"
             "apt install -y wget curl; "
             "dpkg --configure -a; apt-get update; "
             "journalctl --vacuum-size=100M; journalctl --vacuum-time=10d; "
             "grep 'kernel.dmesg_restrict=0' /etc/sysctl.conf || "
             "(echo 'kernel.dmesg_restrict=0' >> /etc/sysctl.conf "
             "&& service procps restart) ; "
-            "rm /var/lib/dpkg/lock;"
-            "rm /var/lib/dpkg/lock-frontend;"
-            "rm /var/cache/apt/archives/lock;"
-            "dpkg --configure -a;"
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + ";" +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + ";",
         "pre_install": "kill -9 `lsof -ti:4369`;" +
                        "kill -9 `lsof -ti:8091`;" +
                        "kill -9 `lsof -ti:21100`;" +
@@ -170,8 +168,10 @@ CMDS = {
                        "kill -9 `lsof -ti:21250`;" +
                        "kill -9 `lsof -ti:21350`;",
         "install": "DEBIAN_FRONTEND='noninteractive' apt-get -y -f install buildpath > /dev/null && echo 1 || echo 0",
-        "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
-        "post_install_retry": "systemctl restart couchbase-server.service",
+        "post_install": "usermod -aG adm couchbase && systemctl -q is-active couchbase-server.service && echo 1" +
+        " || systemctl -q is-active " + CB_ENTERPRISE_ANALYTICS + " && echo 1" +
+        " || echo 0",
+        "post_install_retry": "systemctl restart couchbase-server.service; systemctl restart " + CB_ENTERPRISE_ANALYTICS + ".service",
         "init": None,
         "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
@@ -219,9 +219,13 @@ CMDS = {
         "uninstall":
             UNMOUNT_NFS_CMD +
             "yes | yum remove 'couchbase*' > /dev/null; " +
+            "yes | yum remove '" + CB_ENTERPRISE_ANALYTICS + "*' > /dev/null; " +
             "rm -rf /tmp/tmp* ; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + ";" +
+            "du -ch /data | grep total; rm -rf /data/*;" +
+            " > /dev/null && echo 1 || echo 0",
         "pre_install": "kill -9 `lsof -ti:4369`;" +
                        "kill -9 `lsof -ti:8091`;" +
                        "kill -9 `lsof -ti:21100`;" +
@@ -240,7 +244,9 @@ CMDS = {
             "zypper --ignore-unknown rm -y 'couchbase*' > /dev/null; " +
             "rm -rf /var/cache/zypper/RPMS/couchbase* ;" +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
-            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0 ; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS_EA"] + ";" +
+            " > /dev/null && echo 1 || echo 0",
         "mariner_install" : "tdnf -y install buildpath > /dev/null && echo 1 || echo 0",
         "mariner_uninstall" : "tdnf -y remove couchbase-server.x86_64 > /dev/null; rm -rf /opt/couchbase",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
@@ -259,7 +265,14 @@ NON_ROOT_CMDS = {
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb ",
-        "pre_install": None,
+        "pre_install": "kill -9 `lsof -ti:4369`;" +
+                       "kill -9 `lsof -ti:8091`;" +
+                       "kill -9 `lsof -ti:21100`;" +
+                       "kill -9 `lsof -ti:21200`;" +
+                       "kill -9 `lsof -ti:21300`;" +
+                       "kill -9 `lsof -ti:21150`;" +
+                       "kill -9 `lsof -ti:21250`;" +
+                       "kill -9 `lsof -ti:21350`;",
         "install":
             "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
@@ -464,8 +477,9 @@ WAIT_TIMES = {
         "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "pre_install": (0, "No need to wait after pre install commands", 0),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "pre_install": (20, "Waiting {0}s to remove previous yum repo on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }
 }

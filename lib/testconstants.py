@@ -19,6 +19,9 @@ COLUMNAR_VERSION_NAME = {
     "1.0.0": ["1.0.0"],
     "goldfish": ["1.0.1", "1.0.2", "1.0.3", "1.0.4", "1.0.5"],
     "ionic": ["1.1.0"],
+    "doric": ["1.2.0"],
+    "phoenix": ["2.0.0", "2.0.1", "2.1.0"],
+    "lumina": ["2.2.0"]
 }
 
 CB_RELEASE_BUILDS = {"0.0.0": "0000",
@@ -56,7 +59,8 @@ SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "oel 7", "oel 8", "oel 9",
                   "alma 9",
                   "rocky 9", "rocky 10", "rocky 11",
-                  "amazon linux release 2 (karoo)", "amazon linux release 2023 (amazon linux)",
+                  "amazon linux release 2 (karoo)",
+                  "amazon linux release 2023 (amazon linux)",
                   "cbl-mariner/linux 2"]
 
 WIN_NUM_ERLANG_PROCESS = 4
@@ -66,8 +70,9 @@ WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchb
 WIN_CB_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/"
 WIN_CB_PATH_PARA = "/cygdrive/c/Program Files/Couchbase/Server/"
 WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
-WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "ISBEW64.*",
-                        "bash.exe", "chrome.exe", "cbq-engine.exe"]
+WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
+                        "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",
+                        "chrome.exe", "cbq-engine.exe"]
 WIN_PROCESSES_SPAWNED = ["backup.exe", "cbas.exe", "cbft.exe", "cbq-engine.exe", "erl.exe", "eventing-producer.exe",
                          "goxdcr.exe", "indexer.exe", "java.exe", "memcached.exe", "projector.exe" "prometheus.exe",
                          "saslauthd-port.exe", "eventing-consumer.exe"]
@@ -167,7 +172,7 @@ COUCHBASE_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DO
 CB_LATESTBUILDS_REPO = "http://{0}/builds/latestbuilds/"
 #CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
 CB_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
-CB_COLUMNAR_REPO = "http://{0}/builds/latestbuilds/couchbase-columnar/".format(CB_DOWNLOAD_SERVER)
+CB_ENTERPRISE_ANALYTICS_REPO = "http://{0}/builds/latestbuilds/enterprise-analytics/".format(CB_DOWNLOAD_SERVER)
 CB_FQDN_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER_FQDN)
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 CB_RELEASE_REPO = "http://{0}/builds/releases/".format(CB_DOWNLOAD_SERVER)
