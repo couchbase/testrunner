@@ -155,6 +155,190 @@ def install_zip_unzip(host, username="root", password="couchbase"):
     ssh.close()
 
 
+def diagnose_debian13_networking(host, username="root", password="couchbase"):
+    """
+    Comprehensive networking diagnostics for Debian 13 to identify issues
+    that could cause rebalance failures on AWS but not on server pool VMs
+    """
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        log.info(f"=== Starting comprehensive network diagnostics for {host} ===")
+        ssh.connect(host,
+                    username=username,
+                    password=password)
+
+        diagnostic_commands = [
+            # 1. NSSwitch Configuration
+            ("NSSwitch Config", "cat /etc/nsswitch.conf"),
+
+            # 2. Systemd-resolved status and configuration
+            ("Systemd-resolved Status", "systemctl status systemd-resolved --no-pager || echo 'systemd-resolved not running'"),
+            ("Systemd-resolved Config", "cat /etc/systemd/resolved.conf 2>/dev/null || echo 'No resolved.conf'"),
+            ("Current DNS Settings", "resolvectl status 2>/dev/null || systemd-resolve --status 2>/dev/null || cat /etc/resolv.conf"),
+
+            # 3. Hostname and DNS resolution
+            ("Hostname", "hostname"),
+            ("FQDN", "hostname -f 2>/dev/null || echo 'FQDN resolution failed'"),
+            ("Hostname Resolution", "getent hosts $(hostname)"),
+            ("Reverse DNS Check", "dig -x $(hostname -I | awk '{print $1}') +short 2>/dev/null || echo 'Reverse DNS check failed'"),
+
+            # 4. /etc/hosts file
+            ("/etc/hosts Content", "cat /etc/hosts"),
+
+            # 5. DNS resolver configuration
+            ("/etc/resolv.conf", "cat /etc/resolv.conf"),
+            ("DNS Server Test", "nslookup google.com 2>&1 | head -10 || dig google.com +short"),
+
+            # 6. Network interfaces and IPs
+            ("Network Interfaces", "ip addr show"),
+            ("Routing Table", "ip route show"),
+            ("DNS via NetworkManager", "nmcli dev show 2>/dev/null | grep DNS || echo 'NetworkManager not available'"),
+
+            # 7. MTU settings (important for AWS)
+            ("MTU Settings", "ip link show | grep -i mtu"),
+
+            # 8. Cloud-init network config (AWS specific)
+            ("Cloud-init Network", "cat /etc/netplan/*.yaml 2>/dev/null || cat /etc/network/interfaces 2>/dev/null || echo 'No network config found'"),
+
+            # 9. Check if systemd-resolved is intercepting DNS
+            ("Resolved.conf Symlink", "ls -la /etc/resolv.conf"),
+
+            # 10. Test actual DNS resolution
+            ("Test Local Hostname Resolution", "ping -c 1 $(hostname) 2>&1 | head -5 || echo 'Cannot ping own hostname'"),
+
+            # 11. Check for any DNS caching services
+            ("DNS Cache Services", "ps aux | grep -E 'dnsmasq|nscd|systemd-resolved' | grep -v grep || echo 'No DNS caching services found'"),
+
+            # 12. Network connectivity test
+            ("Network Connectivity", "timeout 3 nc -zv 8.8.8.8 53 2>&1 || echo 'DNS port unreachable'"),
+        ]
+
+        for label, command in diagnostic_commands:
+            log.info(f"\n--- {label} ---")
+            stdin, stdout, stderr = ssh.exec_command(command)
+            exit_status = stdout.channel.recv_exit_status()
+            output = stdout.read().decode().strip()
+            error_output = stderr.read().decode().strip()
+
+            if output:
+                log.info(f"{output}")
+            if error_output and exit_status != 0:
+                log.warning(f"Error: {error_output}")
+
+        log.info(f"=== Completed network diagnostics for {host} ===")
+        ssh.close()
+
+    except Exception as e:
+        log.error(f"Error during diagnostics on {host}: {e}")
+        ssh.close()
+        raise
+
+
+def fix_debian13_nsswitch(host, username="root", password="couchbase"):
+    """
+    Fix DNS resolution on Debian 13 by modifying /etc/nsswitch.conf
+    Changes 'hosts: files resolve [NOTFOUND=return] dns' to 'hosts: files dns'
+    This bypasses systemd-resolved which can cause DNS issues in cloud environments
+    """
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+    try:
+        log.info(f"Checking and fixing nsswitch.conf for Debian 13 on {host}")
+        ssh.connect(host,
+                    username=username,
+                    password=password)
+
+        # Print current configuration
+        log.info(f"Reading current /etc/nsswitch.conf on {host}")
+        stdin, stdout, stderr = ssh.exec_command("cat /etc/nsswitch.conf")
+        current_config = stdout.read().decode().strip()
+        log.info(f"Current /etc/nsswitch.conf on {host}:\n{current_config}")
+
+        # Check for various problematic configurations
+        stdin, stdout, stderr = ssh.exec_command("grep '^hosts:' /etc/nsswitch.conf")
+        hosts_line = stdout.read().decode().strip()
+        log.info(f"Current hosts line: {hosts_line}")
+
+        needs_fix = False
+        reason = ""
+
+        # Check if using systemd-resolved with NOTFOUND=return
+        stdin, stdout, stderr = ssh.exec_command("grep 'hosts:.*resolve.*NOTFOUND.*dns' /etc/nsswitch.conf")
+        if stdout.read().decode().strip():
+            needs_fix = True
+            reason = "Found 'resolve [NOTFOUND=return] dns' configuration"
+
+        # Also check if systemd-resolved is being used at all (might cause issues)
+        if not needs_fix:
+            stdin, stdout, stderr = ssh.exec_command("grep 'hosts:.*resolve' /etc/nsswitch.conf")
+            if stdout.read().decode().strip():
+                needs_fix = True
+                reason = "Found 'resolve' in hosts line which may cause issues in AWS"
+
+        if needs_fix:
+            log.info(f"Fixing nsswitch.conf on {host}: {reason}")
+
+            # Backup the original file
+            commands = [
+                "sudo cp /etc/nsswitch.conf /etc/nsswitch.conf.backup.$(date +%s)",
+                # More comprehensive sed that handles various resolve configurations
+                "sudo sed -i 's/^hosts:.*$/hosts:          files dns/' /etc/nsswitch.conf",
+                "echo 'Modified /etc/nsswitch.conf - New configuration:' && grep '^hosts:' /etc/nsswitch.conf"
+            ]
+
+            for command in commands:
+                log.info(f"Executing: {command}")
+                stdin, stdout, stderr = ssh.exec_command(command)
+                exit_status = stdout.channel.recv_exit_status()
+                output = stdout.read().decode().strip()
+                error_output = stderr.read().decode().strip()
+
+                if output:
+                    log.info(f"Output: {output}")
+                if error_output and exit_status != 0:
+                    log.warning(f"Error: {error_output}")
+
+                if exit_status != 0 and "grep" not in command:
+                    log.error(f"Failed to modify nsswitch.conf on {host}")
+                    ssh.close()
+                    raise Exception(f"Failed to modify nsswitch.conf on {host}")
+
+            log.info(f"Successfully modified /etc/nsswitch.conf on {host}")
+
+            # Also disable or reconfigure systemd-resolved if it's running
+            log.info(f"Checking systemd-resolved status on {host}")
+            stdin, stdout, stderr = ssh.exec_command("systemctl is-active systemd-resolved")
+            if stdout.read().decode().strip() == "active":
+                log.info(f"systemd-resolved is active, configuring it to not interfere with DNS")
+                resolved_fix_commands = [
+                    # Configure systemd-resolved to use traditional /etc/resolv.conf
+                    "sudo mkdir -p /etc/systemd/resolved.conf.d/",
+                    "echo -e '[Resolve]\\nDNSStubListener=no' | sudo tee /etc/systemd/resolved.conf.d/nostub.conf",
+                    "sudo systemctl restart systemd-resolved",
+                    # Replace the symlink with a real file pointing to the right resolver
+                    "sudo rm -f /etc/resolv.conf",
+                    "sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf",
+                    "echo 'New /etc/resolv.conf:' && cat /etc/resolv.conf"
+                ]
+                for cmd in resolved_fix_commands:
+                    stdin, stdout, stderr = ssh.exec_command(cmd)
+                    exit_status = stdout.channel.recv_exit_status()
+                    output = stdout.read().decode().strip()
+                    if output:
+                        log.info(f"Output: {output}")
+        else:
+            log.info(f"No problematic nsswitch configuration found on {host} (current: {hosts_line})")
+
+        ssh.close()
+
+    except Exception as e:
+        log.error(f"Error fixing nsswitch.conf on {host}: {e}")
+        ssh.close()
+        raise
+
 def create_non_root_user(host, username="root", password="couchbase"):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -832,6 +1016,11 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
             install_zip_unzip(ip)
         else:
             increase_suse_linux_default_tasks_max(ip)
+        if os == "debian13":
+            # Run diagnostics first to capture the original state
+            diagnose_debian13_networking(ip)
+            # Then apply the fix
+            fix_debian13_nsswitch(ip)
         if "nonroot" in os:
             create_non_root_user(ip)
             check_root_login(ip,username="nonroot",password="couchbase")
