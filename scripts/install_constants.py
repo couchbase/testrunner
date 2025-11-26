@@ -134,6 +134,8 @@ CMDS = {
             # Restart just in case to make apt-update work
             # which can fail due to TLS errors due to time mismatch
             "systemctl restart systemd-timesyncd ;"
+            # Force set the date from a reliable source
+            "date -s \"$(curl -k -s --head https://www.google.com | grep ^date: | sed 's/date: //g')\" ;"
 
             # Install chrony
             "apt update && apt install -y chrony ; "
