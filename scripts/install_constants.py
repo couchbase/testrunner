@@ -131,6 +131,10 @@ CMDS = {
             "apt purge -y ntp 2>/dev/null || true;"
             "apt autoremove -y 2>/dev/null || true;"
 
+            # Restart just in case to make apt-update work
+            # which can fail due to TLS errors due to time mismatch
+            "systemctl restart systemd-timesyncd ;"
+
             # Install chrony
             "apt update && apt install -y chrony ; "
             # Enable and start chrony
