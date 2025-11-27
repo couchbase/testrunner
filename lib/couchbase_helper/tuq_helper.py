@@ -148,22 +148,48 @@ class N1QLHelper():
         actual_result = self.run_cbq_query()
         return actual_result, expected_result
 
-    def drop_all_indexes(self, bucket=None, leave_primary=True):
-        current_indexes = self.get_parsed_indexes()
-        if bucket is not None:
-            current_indexes = [index for index in current_indexes if index['bucket'] == bucket]
-        if leave_primary:
-            current_indexes = [index for index in current_indexes if index['is_primary'] is False]
-        for index in current_indexes:
-            bucket = index['bucket'].replace("()","")
-            index_name = index['name']
-            if index['using'] != 'fts':
-                self.run_cbq_query("drop index {0}.`{1}`".format(bucket, index_name))
-        for index in current_indexes:
-            bucket = index['bucket']
-            index_name = index['name']
-            if index['using'] != 'fts':
-                self.wait_for_index_drop(bucket, index_name)
+    # def drop_all_indexes(self, bucket=None, leave_primary=True):
+    #     current_indexes = self.get_parsed_indexes()
+    #     if bucket is not None:
+    #         current_indexes = [index for index in current_indexes if index['bucket'] == bucket]
+    #     if leave_primary:
+    #         current_indexes = [index for index in current_indexes if index['is_primary'] is False]
+    #     for index in current_indexes:
+    #         bucket = index['bucket'].replace("()","")
+    #         index_name = index['name']
+    #         if index['using'] != 'fts':
+    #             self.run_cbq_query("drop index {0}.`{1}`".format(bucket, index_name))
+    #     for index in current_indexes:
+    #         bucket = index['bucket']
+    #         index_name = index['name']
+    #         if index['using'] != 'fts':
+    #             self.wait_for_index_drop(bucket, index_name)
+
+    def drop_all_indexes(self):
+        """
+        Drops all indexes in the cluster except system indexes
+        """
+        self.log.info("Dropping all indexes...")
+        query = "SELECT bucket_id, scope_id, keyspace_id, name FROM system:all_indexes WHERE `using`='gsi'"
+        result = self.run_cbq_query(query=query)
+        self.log.info(f"Result for drop_all_indexes: {result}")
+        for index in result['results']:
+            try:
+                if 'bucket_id' not in index:
+                    bucket = index['keyspace_id']
+                    scope = '_default'
+                    collection = '_default'
+                else:
+                    bucket = index['bucket_id']
+                    collection = index.get('keyspace_id', '_default')
+                    scope = index.get('scope_id', '_default')
+                index_name = index['name']
+                drop_query = f"DROP INDEX `{index_name}` ON default:`{bucket}`.`{scope}`.`{collection}`"
+                self.log.info(f"Executing: {drop_query}")
+                self.run_cbq_query(query=drop_query)
+            except Exception as e:
+                self.log.error(f"Error dropping index {index_name}: {str(e)}")
+        self.log.info("Finished dropping indexes")
 
     def drop_all_indexes_on_keyspace(self, bucket=None, leave_primary=True):
         current_indexes = self.get_parsed_indexes_online()

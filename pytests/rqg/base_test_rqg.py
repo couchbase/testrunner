@@ -334,7 +334,7 @@ class BaseRQGTests(BaseTestCase):
             if self.crud_ops:
                 i = 1
                 for table_name in table_list:
-                    if i < self.number_of_buckets:
+                    if i <= self.number_of_buckets:
                         if len(batches[table_name]) > 0:
                             self._crud_ops_worker(batches[table_name], table_name, table_map, result_queue, failure_queue)
                     i = i + 1
@@ -472,7 +472,7 @@ class BaseRQGTests(BaseTestCase):
                     start_test_case_number += len(test_query_template_list)
                 i = 1
                 for table_name in table_list:
-                    if i < self.number_of_buckets:
+                    if i <= self.number_of_buckets:
                         # Create threads based on number of tables (each table has its own thread)
                         self._rqg_worker(table_name, table_map, input_queue, result_queue,
                                                    failure_queue)
@@ -1036,7 +1036,10 @@ class BaseRQGTests(BaseTestCase):
             summary += "\n [ FAILURE TYPE DISTRIBUTION ] \n"
             for keyword in list(failure_reason_map.keys()):
                 summary += keyword+" :: " + str((failure_reason_map[keyword]*100)/total)+"%\n "
-        self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Percentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total)))
+        if total > 0:
+            self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Percentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total)))
+        else:
+            self.log.info(" Total Queries Run = 0, No results in queue")
         result = self._generate_result(failure_map)
         return success, summary, result
 
