@@ -2942,12 +2942,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(
-                        level=getattr(
-                            logging,
-                            self._input.param(
-                                "log_level",
-                                None)))
+                    log_level = self._input.param("log_level", None)
+                    if log_level:
+                        log_level = str(log_level).upper()
+                        hd.setLevel(level=getattr(logging, log_level))
 
     def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
         if testuser is None:
@@ -2957,8 +2955,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
                          'roles': 'admin'}]
 
-        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
-                                                                       node.ip))
+        self.log.info(f"Add built-in '{testuser[0]['name']}' user to node {node.ip}")
         RbacBase().create_user_source(testuser, 'builtin', node)
         # Some times in upgraded envs, user creation is taking some time. Added a small sleep to mitigate failures in subsequent steps.
         self.sleep(5)
