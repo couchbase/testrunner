@@ -79,8 +79,13 @@ class FailoverBaseTest(BaseTestCase):
                                                       end=self.num_items / 4)
         self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size,
                                                       start=self.num_items * .5, end=self.num_items * 0.75)
-        if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
-            self.total_vbuckets = self.vbuckets
+        if self.vbuckets is not None:
+            if (self.bucket_storage != "magma" or
+                    (self.total_vbuckets not in [128, 1024])):
+                # Consider test input param total_vbuckets only if it's not 128 or 1024
+                # Because magma officially supports only 128 and 1024 vbuckets
+                # So we should not override in other cases
+                self.total_vbuckets = self.vbuckets
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} ==============" \
                       .format(self.case_number, self._testMethodName))
 
