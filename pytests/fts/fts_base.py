@@ -4665,12 +4665,8 @@ class FTSBaseTest(unittest.TestCase):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(
-                        level=getattr(
-                            logging,
-                            self._input.param(
-                                "log_level",
-                                None)))
+                    log_level = str(self._input.param("log_level", "INFO")).upper()
+                    hd.setLevel(level=getattr(logging, log_level))
 
     def _set_bleve_max_result_window(self):
         bmrw_value = self._input.param("bmrw_value", 100000000)

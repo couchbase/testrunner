@@ -84,7 +84,8 @@ class XDCRBaseTest(unittest.TestCase):
                     if str(hd.__class__).find('FileHandler') != -1:
                         hd.setLevel(level=logging.DEBUG)
                     else:
-                        hd.setLevel(level=getattr(logging, self._input.param("log_level", None)))
+                        log_level = str(self._input.param("log_level", "INFO")).upper()
+                        hd.setLevel(level=getattr(logging, log_level))
             self._init_parameters()
             if not hasattr(self, 'cluster'):
                 self.cluster = Cluster()

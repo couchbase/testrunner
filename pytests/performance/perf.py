@@ -39,7 +39,8 @@ class PerfBase(unittest.TestCase):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(level=getattr(logging, self.input.param("log_level", None)))
+                    log_level = str(self.input.param("log_level", "INFO")).upper()
+                    hd.setLevel(level=getattr(logging, log_level))
         self.vbucket_count = PerfDefaults.vbuckets
         self.sc = None
         if self.parami("tear_down_on_setup",

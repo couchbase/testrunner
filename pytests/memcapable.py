@@ -804,7 +804,8 @@ class WarmUpMemcachedTest(unittest.TestCase):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(level=getattr(logging, TestInputSingleton.input.param("log_level", None)))
+                    log_level = str(TestInputSingleton.input.param("log_level", "INFO")).upper()
+                    hd.setLevel(level=getattr(logging, log_level))
         self.master = TestInputSingleton.input.servers[0]
         rest = RestConnection(self.master)
         rest.init_cluster(self.master.rest_username, self.master.rest_password)
