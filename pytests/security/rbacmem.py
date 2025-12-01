@@ -212,7 +212,7 @@ class RbacTestMemcached(BaseTestCase):
                 final_roles = user_role_param[0]
         else:
             for role in user_role_param:
-                if role in ('data_reader', 'data_writer', 'bucket_admin', 'views_admin', 'data_dcp_reader', 'data_monitoring', 'data_backup') and bool((self.all_bucket)):
+                if role in ('data_reader', 'data_writer', 'bucket_admin', 'views_admin', 'data_dcp_reader', 'data_monitoring', 'data_backup') and bool((self.all_buckets)):
                     role = role + "[*]"
                 final_roles = final_roles + ":" + role
         return final_roles
@@ -242,11 +242,11 @@ class RbacTestMemcached(BaseTestCase):
             for users in self.ldap_users:
                     if self.no_bucket_access:
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.no_access_bucket_name, users[0], users[1],
-                                                                      vbucket_count=self.vbuckets)
+                                                                    vbucket_count=self.vbuckets)
                     else:
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.bucket_name, users[0], users[1],
-                                                                      vbucket_count=self.vbuckets)
-                        sdk_conn, result = TestSDK().connection(self.master.ip, self.bucket_name, users[0], users[1])
+                                                                    vbucket_count=self.vbuckets)
+                        sdk_conn, sdk_result = TestSDK().connection(self.master.ip, self.bucket_name, users[0], users[1])
                     time.sleep(10)
                     if (result):
                         result_action = None
@@ -263,18 +263,18 @@ class RbacTestMemcached(BaseTestCase):
                         elif temp_action[0] == 'WriteMeta':
                             result_action = TestMemcachedClient().set_meta(self.master.ip, mc, self.bucket_name,
                                                                             vbucket_count=self.vbuckets)
-                        elif temp_action[0] == 'WriteXattr':
+                        elif temp_action[0] in ('WriteXattr', 'ReadXattr'):
                             if self.no_bucket_access:
                                 self.log.info ("No access to bucket via SDK")
                                 result_action = True
+                            elif sdk_result and sdk_conn:
+                                if temp_action[0] == 'WriteXattr':
+                                    result_action = TestSDK().set_xattr(sdk_conn)
+                                else:
+                                    result_action = TestSDK().get_xattr(self.master.ip, sdk_conn, self.bucket_name)
                             else:
-                                result_action = TestSDK().set_xattr(sdk_conn)
-                        elif temp_action[0] == 'ReadXattr':
-                            if self.no_bucket_access:
-                                self.log.info ("No access to bucket via SDK")
-                                result_action = True
-                            else:
-                                result_action = TestSDK().get_xattr(self.master.ip, sdk_conn, self.bucket_name)
+                                self.log.info("SDK connection failed, cannot perform {0}".format(temp_action[0]))
+                                result_action = False
                         self.log.info ("Result of action - {0} is {1}".format(action, result_action))
                         if temp_action[1] == 'False':
                             self.assertFalse(result_action)

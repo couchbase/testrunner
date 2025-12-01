@@ -103,7 +103,7 @@ class TestSDK:
                 return bucket, result
         except Exception as ex:
             log.info("Exception in creating an SDK connection {0}".format(ex))
-            return result
+            return  None,result
 
     def set_xattr(self, sdk_conn):
         try:
