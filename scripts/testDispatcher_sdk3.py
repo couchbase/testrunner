@@ -910,12 +910,18 @@ def main():
                     if float(options.version[:3]) >= 8.1:
                         # Force to use qe jenkins and deb12 slave for all
                         # testrunner jobs on 8.1 and above
-                        slave_to_use = "deb12_P0_slave"
                         testsToLaunch[i][
                             'target_jenkins'] = 'http://172.23.121.80'
                         if slave_to_use in ["rqg_testing"]:
                             # Force to use qe jenkins and deb12_rqg slave
                             slave_to_use = "deb12_rqg_slave"
+                        elif slave_to_use in ["bhive_slave"]:
+                            # No need to update the slave, since this is
+                            # already present on QE jenkins
+                            pass
+                        else:
+                            # If nothing matches, fallback to default slave
+                            slave_to_use = "deb12_P0_slave"
 
                 # Find if the targeted slave executor is free
                 response = requests.get(f"{testsToLaunch[i]['target_jenkins']}/computer/api/json?depth=1")
