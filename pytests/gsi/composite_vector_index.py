@@ -1048,6 +1048,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             # perform auto failover of KV node
             # Ensure we don't failover the master node
             self.update_master_node()
+            self.rest = RestConnection(self.master)
             failover_node = None
             for node in data_nodes:
                 if node != self.master:
