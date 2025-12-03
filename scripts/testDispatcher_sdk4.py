@@ -510,8 +510,8 @@ def main():
     # Setup logging with user-specified log level
     setup_logging(options.log_level)
 
-    # Fix the OS for addPoolServers. See CBQE-5609 for details
-    addPoolServer_os = "centos"
+    # Using debian since we have now upgraded all elastic-fts VMs to debian
+    addPoolServer_os = "debian"
     RELEASE_VERSION = float('.'.join(options.version.split('.')[:2]))
 
     columnar_rel_version = float('.'.join(options.columnar_version.split('.')[:2])) \
