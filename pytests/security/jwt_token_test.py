@@ -17,6 +17,7 @@ from basetestcase import OnPremBaseTestCase
 from pytests.autofailovertests import AutoFailoverBaseTest
 from pytests.security.internal_user import InternalUser
 from pytests.security.external_user import ExternalUser
+from pytests.security.jwt_utils import JWTUtils
 
 class JWTTokenTest(OnPremBaseTestCase):
     def setUp(self):
@@ -33,7 +34,8 @@ class JWTTokenTest(OnPremBaseTestCase):
         self.subject = self.input.param("subject", "This is a subject")
         self.ttl = self.input.param("ttl", 300)
         self.nbf_seconds = self.input.param("nbf_seconds", 0)
-        self.private_key, self.pub_key = self._generate_key_pair(algorithm=self.algorithm, key_size=self.key_size)
+        self.jwt_utils = JWTUtils(log=self.log)
+        self.private_key, self.pub_key = self.jwt_utils.generate_key_pair(algorithm=self.algorithm, key_size=self.key_size)
         self._enable_dev_preview()
 
     def _enable_dev_preview(self):
@@ -49,92 +51,31 @@ class JWTTokenTest(OnPremBaseTestCase):
         if err:
             self.fail("Failed to enable Developer Preview Mode")
 
-    def _generate_key_pair(self, algorithm: str, key_size: int):
-        """Generate a key pair for JWT signing.
-        Args:
-            algorithm: JWT signing algorithm (RS256, ES256, etc.)
-            key_size: Key size in bits for RSA algorithms (minimum 2048)
-        Returns:
-            tuple: (private_key_pem, public_key_pem) as strings
-        """
-        EC_CURVE_MAP = {
-            "ES256": ec.SECP256R1(),
-            "ES384": ec.SECP384R1(),
-            "ES512": ec.SECP521R1(),
-            "ES256K": ec.SECP256K1(),
-        }
-        algorithm = algorithm.upper()
-        self.log.info(f"Generating key pair for algorithm: {algorithm}")
-        if algorithm.startswith("RS") or algorithm.startswith("PS"):
-            if key_size < 2048:
-                self.fail(f"RSA key size must be 2048 or greater. Got {key_size}")
-            private_key = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=key_size,
-            )
-        elif algorithm in EC_CURVE_MAP:
-            curve = EC_CURVE_MAP[algorithm]
-            private_key = ec.generate_private_key(curve)
-        else:
-            self.fail(f"Unsupported algorithm: {algorithm}. Supported: RS*, PS*, ES*")
-        if not private_key:
-            self.fail("Error while creating key pair")
-        private_key_pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-        public_key = private_key.public_key()
-        public_key_pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        self.log.info("Key pair generated successfully.")
-        return private_key_pem.decode(), public_key_pem.decode()
-
     def _get_jwt_config(self, jit_provisioning=True):
         """Get JWT configuration with configurable JIT provisioning
         Args:
             jit_provisioning (bool): Enable/disable JIT user provisioning. Default: True
         """
-        return {
-          "enabled": True,
-          "issuers": [
-            {
-              "name": self.issuer_name,
-              "signingAlgorithm": self.algorithm,
-              "publicKeySource": "pem",
-              "publicKey": self.pub_key,
-              "jitProvisioning": jit_provisioning,
-              "subClaim": "sub",
-              "audClaim": "aud",
-              "audienceHandling": "any",
-              "audiences": self.token_audience,
-              "groupsClaim": "groups",
-              "groupsMaps": self.token_group_matching_rule
-            }
-          ]
-        }
+        return self.jwt_utils.get_jwt_config(
+            issuer_name=self.issuer_name,
+            algorithm=self.algorithm,
+            pub_key=self.pub_key,
+            token_audience=self.token_audience,
+            token_group_matching_rule=self.token_group_matching_rule,
+            jit_provisioning=jit_provisioning
+        )
 
     def create_token(self):
-        curr_time  = int(time.time())
-        payload = {
-            "iss": self.issuer_name,
-            "sub": self.user_name,
-            "exp": curr_time+self.ttl,
-            "iat": curr_time,
-            "nbf": curr_time-self.nbf_seconds,
-            "jti": str(uuid.uuid4()),
-        }
-        if self.token_audience:
-            payload['aud'] = self.token_audience
-        if self.user_groups:
-            payload['groups'] = self.user_groups
-        self.log.info(f"Creating JWT token with payload: {json.dumps(payload, indent=2)}")
-        jwt_token = jwt.encode(payload=payload,
-                               algorithm=self.algorithm,
-                               key=self.private_key)
-        return jwt_token
+        return self.jwt_utils.create_token(
+            issuer_name=self.issuer_name,
+            user_name=self.user_name,
+            algorithm=self.algorithm,
+            private_key=self.private_key,
+            token_audience=self.token_audience,
+            user_groups=self.user_groups,
+            ttl=self.ttl,
+            nbf_seconds=self.nbf_seconds
+        )
 
     def _debug_jwt_config(self, rest_conn):
         """Debug method to check JWT configuration"""
