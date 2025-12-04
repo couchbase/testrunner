@@ -915,7 +915,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                     key_prefix="doc_77",
                                                     create_start=self.num_of_docs_per_collection,
                                                     create_end=self.num_of_docs_per_collection + 10000)
-                    self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
+                    task = self.cluster.async_load_gen_docs(data_nodes, bucket=bucket,
+                                                            generator=self.gen_create, pause_secs=1,
+                                                            timeout_secs=300, use_magma_loader=True)
+                    task.result()
             if self.post_rebalance_action == "mutations":
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
@@ -2365,7 +2368,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=self.num_of_docs_per_collection * 2)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=True)
+            task.result()
+            # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for index_node in index_nodes:
             remote_client = RemoteMachineShellConnection(index_node)
@@ -2672,7 +2680,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=self.num_of_docs_per_collection * 2)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=True)
+            task.result()
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         for data_node in data_nodes:
             remote_client = RemoteMachineShellConnection(data_node)
@@ -2749,7 +2760,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             percent_update=0, percent_delete=0, scope=scope,
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=self.num_of_docs_per_collection * 2)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=True)
+            task.result()
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         for data_node in data_nodes:
             remote_client = RemoteMachineShellConnection(data_node)
@@ -3154,7 +3168,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", timeout=2000,
                                             op_type="update", mutate=1, dim=384,
                                             update_start=0, update_end=self.num_of_docs_per_collection)
-            self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update, pause_secs=1,
+                                                    timeout_secs=300, use_magma_loader=True)
+            task.result()
 
             self.item_count_related_validations()
 
