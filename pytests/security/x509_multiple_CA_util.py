@@ -385,7 +385,7 @@ class x509main:
         self.log.info("Converting node {} cert to pkcs 12".format(node_ip))
         convert_cmd = "openssl pkcs12 -export -out " + tmp_encrypted_key_path + " -inkey " + \
                         key_path + " -in " + node_chain_ca_path + \
-                        " -passout 'pass:" + passw + "'"
+                        " -passout 'pass:" + passw + "'" + " -keypbe AES-256-CBC -certpbe AES-256-CBC -macalg SHA256"
         output, error = shell.execute_command(convert_cmd)
         self.log.info('Output message is {0} and error message is {1}'.format(output, error))
 
@@ -1096,30 +1096,38 @@ class x509main:
         """
         copy chain.pem & pkey.key there to inbox of server
         """
-        # self.create_inbox_folder_on_server(server=server)
-        # self.create_scripts_folder_on_server(server=server)
+        self.create_inbox_folder_on_server(server=server)
+        self.create_scripts_folder_on_server(server=server)
+        shell = RemoteMachineShellConnection(server)
+
+        copy_func = None
+        is_remote_slave = self.slave_host.ip == '127.0.0.1'
+        if is_remote_slave:
+            copy_func = self.copy_file_from_slave_to_server
+        else:
+            copy_func = self.copy_file_from_host_to_slave
+
         if self.standard == "pkcs12":
             node_ca_key_path = self.get_node_cert(server)
             dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/couchbase.p12"
             self.log.info("Copying node pkcs 12 key from {}:{} to {}:{}".
                           format(self.slave_host.ip, node_ca_key_path, server.ip, dest_pem_path))
-            if self.slave_host.ip != '127.0.0.1':
-                self.copy_file_from_host_to_server(server, node_ca_key_path, dest_pem_path)
-            else:
-                self.copy_file_from_slave_to_server(server, node_ca_key_path, dest_pem_path)
-            dest_pem_folder = self.install_path + x509main.CHAINFILEPATH
-            shell = RemoteMachineShellConnection(server)
-            shell.execute_command("chown -R couchbase " + dest_pem_folder)
+            copy_func(server, node_ca_key_path, dest_pem_path)
         else:
             node_ca_key_path, node_ca_path = self.get_node_cert(server)
             dest_pem_path = self.install_path + x509main.CHAINFILEPATH + "/chain.pem"
-            self.copy_file_from_slave_to_server(server, node_ca_path, dest_pem_path)
             dest_pkey_path = self.install_path + x509main.CHAINFILEPATH + "/pkey.key"
-            self.copy_file_from_slave_to_server(server, node_ca_key_path, dest_pkey_path)
+            self.log.info("Copying node certificate from {}:{} to {}:{}".
+                          format(self.slave_host.ip, node_ca_path, server.ip, dest_pem_path))
+            copy_func(server, node_ca_path, dest_pem_path)
+            copy_func(server, node_ca_key_path, dest_pkey_path)
+
+        dest_pem_folder = self.install_path + x509main.CHAINFILEPATH
+        shell.execute_command("chown -R couchbase " + dest_pem_folder)
+
         if (self.standard == "pkcs8" or self.standard == "pkcs12") and self.encryption_type and \
                 self.passphrase_type == "script":
             node_key_passphrase_path = self.get_node_private_key_passphrase_script(server)
-            shell = RemoteMachineShellConnection(server)
             if shell.extract_remote_info().distribution_type == "windows":
                 dest_node_key_passphrase_path = self.install_path + x509main.SCRIPTSPATH + \
                                                 x509main.SCRIPTWINDOWSFILEPATH
@@ -1150,7 +1158,7 @@ class x509main:
                                                       dest_node_key_passphrase_path)
                 self.log.info('Output message is {0} and error message is {1}'.
                               format(output, error))
-            shell.disconnect()
+        shell.disconnect()
 
     @staticmethod
     def regenerate_certs(server):
