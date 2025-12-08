@@ -15,6 +15,15 @@ if [[ ${component} == "backup_recovery"  || ${component} == "xdcr" ]]; then
   testrunner_tag=master
 fi
 
+if [ "${slave}" == "deb12_P0_slave" ]; then
+  # Component - backup_recovery / xdcr needs Couchbase SDK4 slave to run
+  export PYENV_VERSION="3.10.13"
+  export PYENV_ROOT="$HOME/.pyenv"
+  export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+  pyenv local $PYENV_VERSION
+fi
+
 git checkout ${branch}
 git pull origin ${branch}
 
