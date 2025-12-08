@@ -1,5 +1,4 @@
 import zlib
-import json
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
 from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
