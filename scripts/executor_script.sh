@@ -10,6 +10,15 @@ py_executable=python3
 # Block was prev. in a separate shell block before
 echo Desc: $descriptor
 
+if [ "${slave}" == "deb12_P0_slave" ]; then
+  # Component - backup_recovery / xdcr needs Couchbase SDK4 slave to run
+  export PYENV_VERSION="3.10.13"
+  export PYENV_ROOT="$HOME/.pyenv"
+  export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init -)"
+  pyenv local $PYENV_VERSION
+fi
+
 touch rerun_props_file
 if [ ${fresh_run} == false ]; then
   ${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --manual_run
