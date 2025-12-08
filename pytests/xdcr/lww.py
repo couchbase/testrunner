@@ -1,5 +1,4 @@
 import zlib
-import json
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
 from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
@@ -17,12 +16,10 @@ try:
 except:
     from couchbase.exceptions import NotFoundError as DocumentNotFoundException
 
-# from couchbase.bucket import Bucket
 from couchbase_helper.cluster import Cluster
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.exception import XDCRCheckpointException
 from memcached.helper.data_helper import VBucketAwareMemcached
-from security.rbac_base import RbacBase
 from collection.collections_rest_client import CollectionsRest
 
 
