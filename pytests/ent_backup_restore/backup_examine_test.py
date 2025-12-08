@@ -3,7 +3,12 @@ import json
 import math
 import re
 import couchbase.subdocument as SD
-from couchbase.collection import MutateInOptions
+try:
+    from couchbase.options import MutateInOptions  # SDK 4.x
+except ImportError:
+    # Older SDK (if it ever had this symbol here)
+    from couchbase.collection import MutateInOptions
+
 from enum import (
     Enum
 )
@@ -754,7 +759,10 @@ class Clients:
 
     def close(self):
         for client in self.clients:
-            client.close()
+            try:
+                client.close()
+            except Exception as e:
+                print(f"Error closing client: {e}")
 
     def __del__(self):
         self.close()
