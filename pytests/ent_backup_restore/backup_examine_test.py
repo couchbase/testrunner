@@ -1,7 +1,6 @@
 import copy
 import json
 import math
-import re
 import couchbase.subdocument as SD
 try:
     from couchbase.options import MutateInOptions  # SDK 4.x
@@ -278,7 +277,7 @@ class ExamineSimulation:
         return len(self.backups)
 
     def run_examine(self, backup, optional_args=None):
-        """ Examines things and check they match the contents of the backup object 
+        """ Examines things and check they match the contents of the backup object
         Event types (THESE MAY CHANGE):
         1: Created
         2: Full Backup
@@ -308,7 +307,7 @@ class ExamineSimulation:
                     doc = doc[-1]
                 examine_results = self.examine.examine(ExamineArguments(self.backup_base.backupset, str(cs), doc.key, objstore_provider=self.backup_base.objstore_provider, **final))
                 print(examine_results[-1].__dict__)
-                    
+
                 if doc.tag == Tag.DELETED:
                     self.backup_base.assertTrue(examine_results[-1].document.deleted)
                 elif doc.tag == Tag.UNCHANGED:
@@ -498,14 +497,14 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         """ Single key test """
         mutations = []
 
-        mutations.append([ 
+        mutations.append([
             CreateBucketMutation("default"),
             CreateCollectionMutation("default.fruit.red_fruit"),
             CreateCollectionMutation("default.fruit.green_fruit"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
         ])
 
-        mutations.append([ 
+        mutations.append([
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "a_different_value")
         ])
 
@@ -520,13 +519,13 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
             "end": "3"
         }
 
-        mutations.append([ 
+        mutations.append([
             CreateBucketMutation("default"),
             CreateCollectionMutation("default.fruit.red_fruit"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
         ])
 
-        mutations.append([ 
+        mutations.append([
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "a_different_value"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key2", "another_one"),
             CreateCollectionMutation("default.fruit.green_fruit")
@@ -542,7 +541,7 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         """ Add document then delete in a later backup """
         mutations = []
 
-        mutations.append([ 
+        mutations.append([
             CreateBucketMutation("default"),
             CreateCollectionMutation("default.fruit.red_fruit"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
@@ -555,14 +554,14 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         mutations.append([
             SetDocumentMutation("default.fruit.red_fruit", "another_key", "another_value")
         ])
-        
+
         self.run_simulation(mutations)
 
     def test_reinsert_document(self):
         """ Add a document, delete it then reinsert it """
         mutations = []
 
-        mutations.append([ 
+        mutations.append([
             CreateBucketMutation("default"),
             CreateCollectionMutation("default.fruit.red_fruit"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
@@ -581,7 +580,7 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
     def test_with_merge(self):
         mutations = []
 
-        mutations.append([ 
+        mutations.append([
             CreateBucketMutation("default"),
             CreateCollectionMutation("default.fruit.red_fruit"),
             SetDocumentMutation("default.fruit.red_fruit", "my_key", "my_value")
@@ -648,11 +647,11 @@ class BackupExamineTest(EnterpriseBackupRestoreBase):
         self.run_simulation(mutations)
 
 class SetSubDocMutation:
-    """ Set a sub-document 
+    """ Set a sub-document
     TODO: Add support for create_as_deleted
     As of 27/04/21 does not exist in python SDK
     Main point of contact is Jared Casey """
-    
+
 
     def __init__(self, collection_string, key, path, value):
         self.collection_string, self.key, self.path, self.value = CollectionString(collection_string), key, path, value
@@ -685,7 +684,7 @@ class SetSubDocMutation:
         #                                  collection=self.collection_string.collection_name,
         #                                  scope=self.collection_string.scope_name
         #                                  )
-            
+
 class MergeBackupMutation:
     """ Merge backups """
 
