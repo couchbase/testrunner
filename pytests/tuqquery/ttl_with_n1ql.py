@@ -2,7 +2,12 @@ import sys
 import time
 
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from .tuq import QueryTests

@@ -1,16 +1,21 @@
-import json
 import ast
-import testconstants
+import json
 import time
+import traceback
+
+import testconstants
 from couchbase_helper.tuq_generators import TuqGenerators
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
-import traceback
 from deepdiff import DeepDiff
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
-
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
 from lib.Cb_constants.CBServer import CbServer
 
 
