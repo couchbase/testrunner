@@ -7,17 +7,15 @@ from membase.api.rest_client import RestConnection
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
-from membase.api.rest_client import RestHelper
-from security.audittest import auditTest
 from security.auditmain import audit
 import socket
 import urllib.request, urllib.parse, urllib.error
 from SystemEventLogLib.SystemEventOperations import SystemEventRestHelper
 from security.rbac_base import RbacBase
 from deepdiff import DeepDiff
-import threading
 import time
 import json
+
 
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
@@ -634,7 +632,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         query = "select * from default d1 INNER JOIN `travel-sample` t on (d1.join_day == t.id)"
         queries_to_run.append((query, 288)) # 288 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
-    
+
     def run_test_outer_join(self):
         idx_list = []
         queries_to_run = []
@@ -653,7 +651,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         subquery = "SELECT name, city from `travel-sample` WHERE type = 'hotel' and city in ( SELECT RAW a.city FROM `travel-sample` a WHERE type = 'airport' and country = 'France')"
         subquery_results = self.run_cbq_query(subquery)
         self.assertEqual(subquery_results['metrics']['resultCount'], 86)
-    
+
     def run_test_grant_revoke_role(self,phase):
         if phase == "pre-upgrade":
             testuser = [
@@ -685,7 +683,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.fail("User does not have permissions")
         except Exception as e:
             pass
-    
+
     def run_test_filter(self):
         filter_query = "SELECT COUNT(*) FILTER (WHERE city = 'Paris') as count_paris FROM `travel-sample` WHERE type = 'airport'"
         case_query = "SELECT COUNT(CASE WHEN city = 'Paris' THEN 1 ELSE NULL END) as count_paris FROM `travel-sample` WHERE type = 'airport'"
@@ -823,7 +821,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query("DROP FUNCTION func1")
             except Exception as e:
                 self.log.error(str(e))
-    
+
     def run_test_udf_inline_nested_inline(self, phase, scoping):
         try:
             if phase == "pre-upgrade" or int(self.initial_version[0]) < 7:
@@ -836,7 +834,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nested_funcss(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default:default._default.nested_funcss2(a,b,c) { (SELECT RAW default:default._default.nested_funcss(a,b,c)) }")
                 else:
-                    #global calling global 
+                    #global calling global
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION nested_funcgg(a,b,c) { (SELECT RAW SUM((a+b+c-40))) }')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nested_funcgg2(a,b,c) { (SELECT RAW nested_funcgg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
@@ -868,7 +866,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION nested_funcgg2")
             except Exception as e:
                 self.log.error(str(e))
-    
+
     '''There are two ways of creating JS functions currently, this one tests the old js library method'''
     def run_test_udf_inline_nested_js_library(self, phase, scoping):
         try:
@@ -901,7 +899,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query('CREATE or REPLACE FUNCTION default:`travel-sample`.inventory.nestedjslibraryss(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedinventory" AT "n1ql2"')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default:`travel-sample`.inventory.nestedinliness3(a,b,c) { (SELECT RAW default:`travel-sample`.inventory.nestedjslibraryss(a,b,c)) }")
                 else:
-                    #global calling global 
+                    #global calling global
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg(a,b,c) LANGUAGE JAVASCRIPT AS "selectnestedglobal" AT "n1ql2"')
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg3(a,b,c) { (SELECT RAW nestedjslibrarygg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
@@ -949,7 +947,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query("CREATE or REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedinliness2(a,b,c) { (SELECT RAW default._default.nestedjsinliness(a,b,c)) }")
                 else:
-                    #global calling global 
+                    #global calling global
                     self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegg(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegg(a,b,c) { return a+b+c-40; }'")
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION nestedinlinegg2(a,b,c) { (SELECT RAW nestedjsinlinegg(a,b,c)) }")
             if phase == "mixed-mode" or phase == "post-upgrade":
@@ -981,7 +979,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION nestedinlinegg2")
             except Exception as e:
                 self.log.error(str(e))
-    
+
     '''This inline js calls inline udf'''
     def run_test_udf_js_inline_nested_inline(self, phase, scoping):
         try:
@@ -1027,7 +1025,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION inlinegg")
             except Exception as e:
                 self.log.error(str(e))
-    
+
     '''There inline js calls js inline udf'''
     def run_test_udf_js_inline_nested_js_inline(self, phase, scoping):
         try:
@@ -1035,7 +1033,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if scoping == "global_scoped":
                     #global calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinlinegs(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs(a,b,c) { return a+b+c-40; }'")
-                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {var queryres = SELECT RAW default._default.nestedjsinlinegs($a,$b,$c); var res =[]; for (const doc of queryres) { res.push(doc);} return res;}'") 
+                    self.run_cbq_query("CREATE or REPLACE FUNCTION nestedjsinlinegs3(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinlinegs3(a,b,c) {var queryres = SELECT RAW default._default.nestedjsinlinegs($a,$b,$c); var res =[]; for (const doc of queryres) { res.push(doc);} return res;}'")
                 elif scoping == "scoped_scoped":
                     #scoped calling scoped
                     self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.nestedjsinliness(a,b,c) LANGUAGE JAVASCRIPT as 'function nestedjsinliness(a,b,c) { return a+b+c-40; }'")
@@ -1073,7 +1071,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                         self.run_cbq_query("DROP FUNCTION nestedjsinlinegg")
             except Exception as e:
                 self.log.error(str(e))
-    
+
     '''JS Library calls inline udf'''
     def run_test_js_library_nested_udf_inline(self, phase, scoping):
         try:
@@ -1114,7 +1112,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                     self.run_cbq_query('CREATE or REPLACE FUNCTION default:default._default.nestedjslibraryss2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedinventoryinline" AT "n1ql3"')
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION default:default._default.nestedinlinesslibrary(doctype,cityname) { (SELECT airportname FROM default:`travel-sample`.inventory.airport WHERE type = doctype AND city = cityname ORDER BY airportname) }')
                 else:
-                    #global calling global 
+                    #global calling global
                     self.run_cbq_query('CREATE or REPLACE FUNCTION nestedjslibrarygg2(doctype,cityname) LANGUAGE JAVASCRIPT AS "selectnestedglobalinline" AT "n1ql3"')
                     self.run_cbq_query('CREATE OR REPLACE FUNCTION nestedinlinegglibrary(doctype,cityname) { (SELECT airportname FROM `travel-sample` WHERE type = doctype AND city = cityname ORDER BY airportname)  }')
             if phase == "mixed-mode" or phase == "post-upgrade":
@@ -1675,7 +1673,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if phase == "mixed-mode" or phase == "post-upgrade":
             results = self.run_cbq_query(query=execute_query)
             self.assertEqual(results['results'][0]['$1'], lyon_airport)
-    
+
     def run_test_prepare_cte(self, phase):
         prepare_query = "prepare p1 FROM WITH a AS (1), b AS (2) SELECT a, b"
         execute_query = "execute p1"
@@ -1869,12 +1867,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
             result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
             self.assertEqual(result['results'], expected_default)
-            
-            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertEqual(nextval['results'][0]['val'], 0) 
 
             nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertEqual(nextval['results'][0]['val'], 1) 
+            self.assertEqual(nextval['results'][0]['val'], 0)
+
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertEqual(nextval['results'][0]['val'], 1)
 
             prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
             self.assertEqual(prevval['results'][0]['val'], 1)
@@ -1888,42 +1886,42 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.run_cbq_query(f"CREATE SEQUENCE `default`.`_default`.{sequence_name} IF NOT EXISTS")
             result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
             self.assertEqual(result['results'], expected_default)
-            
-            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 0 or nextval['results'][0]['val'] == 3 or nextval['results'][0]['val'] == 50) 
 
             nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51) 
+            self.assertTrue(nextval['results'][0]['val'] == 0 or nextval['results'][0]['val'] == 3 or nextval['results'][0]['val'] == 50)
+
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51)
 
             prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51) 
+            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51)
 
             prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51) 
+            self.assertTrue(nextval['results'][0]['val'] == 1 or nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 51)
 
             nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 2 or nextval['results'][0]['val'] == 5 or nextval['results'][0]['val'] == 52) 
+            self.assertTrue(nextval['results'][0]['val'] == 2 or nextval['results'][0]['val'] == 5 or nextval['results'][0]['val'] == 52)
         elif phase == "post-upgrade":
             result = self.run_cbq_query(f"SELECT `cache`, `cycle`, `increment`, `max`, `min`, `path` FROM system:sequences WHERE name = '{sequence_name}'")
             self.assertEqual(result['results'], expected_default)
-            
-            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 3 or nextval['results'][0]['val'] == 6 or nextval['results'][0]['val'] == 53) 
 
             nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54) 
+            self.assertTrue(nextval['results'][0]['val'] == 3 or nextval['results'][0]['val'] == 6 or nextval['results'][0]['val'] == 53)
+
+            nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
+            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54)
 
             prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54) 
+            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54)
 
             prevval = self.run_cbq_query(f"SELECT PREVVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54) 
+            self.assertTrue(nextval['results'][0]['val'] == 4 or nextval['results'][0]['val'] == 7 or nextval['results'][0]['val'] == 54)
 
             nextval = self.run_cbq_query(f"SELECT NEXTVAL FOR `default`.`_default`.{sequence_name} as val")
-            self.assertTrue(nextval['results'][0]['val'] == 5 or nextval['results'][0]['val'] == 8  or nextval['results'][0]['val'] == 55) 
+            self.assertTrue(nextval['results'][0]['val'] == 5 or nextval['results'][0]['val'] == 8  or nextval['results'][0]['val'] == 55)
 
 
-    
+
     ###############################
     #
     # Curl Whitelist Tests

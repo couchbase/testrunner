@@ -1,18 +1,22 @@
-import os, datetime
-import json
-import socket
-import uuid
+import ast
+import boto3
 import copy
+import datetime
+import json
+import logging
+import os
 import pprint
 import re
-import logging
-import boto3
-from boto3 import s3
+import socket
+import time
+import traceback
+import uuid
+
+from couchbase.cluster import Cluster
+from couchbase.auth import PasswordAuthenticator
 
 import httplib2
 import testconstants
-import time
-import traceback
 import collections
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from couchbase_helper.documentgenerator import WikiJSONGenerator
@@ -25,12 +29,8 @@ from membase.api.exception import CBQError, ReadDocumentException
 from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
-# from sdk_client import SDKClient
 from couchbase_helper.tuq_generators import TuqGenerators
-# from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
-import couchbase.subdocument as SD
-import ast
 from deepdiff import DeepDiff
 from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
 from pytests.fts.fts_base import FTSIndex
@@ -243,9 +243,6 @@ class QueryTests(BaseTestCase):
                     self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 # self.sleep(30, 'wait for analytics setup')
-            if self.testrunner_client == 'python_sdk':
-                from couchbase.cluster import Cluster
-                from couchbase.cluster import PasswordAuthenticator
             if self.load_collections:
                 self.collections_helper.create_scope(bucket_name="default",scope_name=self.scope)
                 self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[0])
@@ -1526,8 +1523,6 @@ class QueryTests(BaseTestCase):
 
         if self.testrunner_client == 'python_sdk' and not is_prepared:
             try:
-                from couchbase.cluster import Cluster
-                from couchbase.cluster import PasswordAuthenticator
                 from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
             except ImportError:
                 print("Warning: failed to import couchbase lib")
@@ -4028,7 +4023,7 @@ class QueryTests(BaseTestCase):
     #
     #   UDF helpers
     #
-    ##############################################################################################            
+    ##############################################################################################
 
     '''Create a library with functions, check to see that the library was created and the functions were created'''
     def create_library(self, library_name='', functions={}, function_names=[], replace= False, filename=None, error=False):

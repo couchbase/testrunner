@@ -8,10 +8,7 @@ from datetime import datetime
 
 from lib import testconstants
 from couchbase.bucket import Bucket
-try:
-    from couchbase.exceptions import CouchbaseException as CBException
-except:
-    from couchbase.exceptions import  CouchbaseError as CBException
+from couchbase.exceptions import CouchbaseException as CBException
 from basetestcase import BaseTestCase
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection

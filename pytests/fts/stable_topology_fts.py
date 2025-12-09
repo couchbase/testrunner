@@ -5,7 +5,6 @@ import json
 import random
 import time
 from threading import Thread
-import docker
 
 import Geohash
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -13,7 +12,6 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
-from tasks.taskmanager import TaskManager
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
 from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
@@ -4927,5 +4925,3 @@ class StableTopFTS(FTSBaseTest):
             for err in errors:
                 self.log.error(err)
             self.fail()
-
-

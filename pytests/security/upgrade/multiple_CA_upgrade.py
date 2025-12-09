@@ -8,11 +8,10 @@ from lib.Cb_constants.CBServer import CbServer
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from pytests.security.ntonencryptionBase import ntonencryptionBase
-from pytests.security.x509main import x509main as x509mainold
 from pytests.security.x509_multiple_CA_util import x509main, Validation
 from pytests.upgrade.newupgradebasetest import NewUpgradeBaseTest
 from couchbase.bucket import Bucket
-from couchbase.exceptions import CouchbaseError, CouchbaseInputError
+from couchbase.exceptions import CouchbaseException
 
 log = logging.getLogger()
 
@@ -315,7 +314,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
                     else:
                         self.fail("Validation failed. The user should have permission to "
                                   "write to the given bucket")
-                except CouchbaseError:
+                except CouchbaseException:
                     if any("data_writer" in role for role in data_roles) or any("data_backup" \
                        in role for role in data_roles):
                         self.log.info("Write permission granted as expected")
@@ -340,7 +339,7 @@ class MultipleCAUpgrade(NewUpgradeBaseTest):
                     else:
                         self.fail("Validation failed. The user should have permission to "
                                   "read the given bucket")
-                except CouchbaseError:
+                except CouchbaseException:
                     if any("data_reader" in role for role in data_roles) or any("data_dcp_reader" \
                         in role for role in data_roles) or any("data_backup" in role for role \
                         in data_roles):

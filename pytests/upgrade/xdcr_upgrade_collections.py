@@ -1,15 +1,8 @@
 import queue
-import copy, json
 from .newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper
-from membase.api.exception import RebalanceFailedException
-from membase.helper.cluster_helper import ClusterOperationHelper
-from memcached.helper.kvstore import KVStore
-from fts.stable_topology_fts import StableTopFTS
-from pytests.fts.fts_callable import FTSCallable
-from couchbase.cluster import Cluster, PasswordAuthenticator
 from security.rbac_base import RbacBase
 from threading import Thread
 from collection.collections_cli_client import CollectionsCLI
@@ -110,7 +103,7 @@ class XDCRUpgradeCollectionsTests(NewUpgradeBaseTest):
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
             src_upgrade_threads = self._async_update(upgrade_version, src_nodes)
- 
+
             for upgrade_thread in src_upgrade_threads:
                 upgrade_thread.join()
             src_success_upgrade = True
