@@ -292,7 +292,12 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
         else:
             try:
-                from couchbase.cluster import PasswordAuthenticator
+                try:
+                    # For SDK2 (legacy) runs
+                    from couchbase.cluster import PasswordAuthenticator
+                except ImportError:
+                    # For SDK4 compatible runs
+                    from couchbase.auth import PasswordAuthenticator
                 connection = "couchbase://" + server.ip
                 if "ip6" in server.ip or server.ip.startswith("["):
                     connection = connection+"?ipv6=allow"

@@ -16,8 +16,16 @@ from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
 from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_CHESHIRE_CAT
-from couchbase.cluster import Cluster, PasswordAuthenticator
-from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
+from couchbase.cluster import Cluster
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+    from couchbase.exceptions import CouchbaseError as CouchbaseException
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
+    from couchbase.exceptions import CouchbaseException
+
 from security.rbac_base import RbacBase
 from threading import Thread
 
@@ -3113,7 +3121,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             try:
                 bkt.get_multi(keys)
                 self.log.info("Able to fetch keys starting from {0} to {1}".format(keys[0], keys[len(keys) - 1]))
-            except CouchbaseError as e:
+            except CouchbaseException as e:
                 self.log.error(e)
                 ok, fail = e.split_results()
                 if fail:
@@ -3129,7 +3137,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 bkt.get_multi(keys, replica=True)
                 self.log.info(
                     "Able to fetch keys starting from {0} to {1} in replica ".format(keys[0], keys[len(keys) - 1]))
-            except CouchbaseError as e:
+            except CouchbaseException as e:
                 self.log.error(e)
                 ok, fail = e.split_results()
                 if fail:

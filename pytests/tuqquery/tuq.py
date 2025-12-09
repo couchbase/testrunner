@@ -28,7 +28,12 @@ from couchbase_helper.tuq_generators import TuqGenerators
 # from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
 import couchbase.subdocument as SD
 import ast
 from deepdiff import DeepDiff
@@ -223,7 +228,12 @@ class QueryTests(BaseTestCase):
                 # self.sleep(30, 'wait for analytics setup')
             if self.testrunner_client == 'python_sdk':
                 from couchbase.cluster import Cluster
-                from couchbase.cluster import PasswordAuthenticator
+                try:
+                    # For SDK2 (legacy) runs
+                    from couchbase.cluster import PasswordAuthenticator
+                except ImportError:
+                    # For SDK4 compatible runs
+                    from couchbase.auth import PasswordAuthenticator
             if self.load_collections:
                 self.collections_helper.create_scope(bucket_name="default",scope_name=self.scope)
                 self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[0])
@@ -3895,7 +3905,7 @@ class QueryTests(BaseTestCase):
     #
     #   UDF helpers
     #
-    ##############################################################################################            
+    ##############################################################################################
 
     '''Create a library with functions, check to see that the library was created and the functions were created'''
     def create_library(self, library_name='', functions={}, function_names=[], replace= False, filename=None, error=False):

@@ -5,10 +5,13 @@ from .flex_index_phase1 import FlexIndexTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
 import couchbase.subdocument as SD
-from membase.api.rest_client import RestHelper
-from security.audittest import auditTest
 from security.auditmain import audit
 import socket
 import urllib.request, urllib.parse, urllib.error
@@ -842,7 +845,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         results = self.run_cbq_query(query=query_all_keyspaces_info)
         all_keyspaces_info = results['results'][0]['$1']
         self.assertEqual(all_keyspaces_info, system_keyspaces_info)
-    
+
     ###############################
     #
     # Curl Whitelist Tests

@@ -5,7 +5,14 @@ from lib.membase.api.rest_client import RestConnection, RestHelper
 from security.x509main import x509main
 import json
 import subprocess
-from couchbase.cluster import PasswordAuthenticator
+
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
+
 from couchbase.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_cli import CouchbaseCLI
@@ -385,4 +392,3 @@ class IPv4_IPv6_only(BaseTestCase):
             self.check_ip_family_enforcement(ip_family="ipv4_only")
         elif self.ipv6_only:
             self.check_ip_family_enforcement(ip_family="ipv6_only")
-

@@ -3,7 +3,6 @@
 import copy
 import json
 import random
-import time
 from threading import Thread
 
 import Geohash
@@ -12,7 +11,6 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
-from tasks.taskmanager import TaskManager
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
 from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
@@ -669,11 +667,11 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
-            
+
         if self.dataset == "all" and int(TestInputSingleton.input.param("doc_maps", 1)) == 1:
             #ignoring wiki results from the elastic result to match couchbase behaviour
             self.ignore_wiki = True
-        
+
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index,ignore_wiki=self.ignore_wiki)
 
     def test_collection_index_data_mutations(self):
@@ -2338,7 +2336,13 @@ class StableTopFTS(FTSBaseTest):
         dic['array'] = ['element1', 1234, True]
         try:
             from couchbase.cluster import Cluster
-            from couchbase.cluster import PasswordAuthenticator
+            try:
+                # For SDK2 (legacy) runs
+                from couchbase.cluster import PasswordAuthenticator
+            except ImportError:
+                # For SDK4 compatible runs
+                from couchbase.auth import PasswordAuthenticator
+
             cluster = Cluster('couchbase://{0}'.format(master.ip))
             authenticator = PasswordAuthenticator('Administrator', 'password')
             cluster.authenticate(authenticator)
@@ -4117,4 +4121,3 @@ class StableTopFTS(FTSBaseTest):
             for err in errors:
                 self.log.error(err)
             self.fail()
-
