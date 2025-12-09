@@ -85,6 +85,7 @@ six==1.17.0
 soupsieve==2.8
 symba==2.2.1
 sympy==1.14.0
+hypothesis-geometry==8.0.0
 threadpoolctl==3.6.0
 tokenizers==0.22.1
 tqdm==4.67.1
