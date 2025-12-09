@@ -8,6 +8,7 @@ from membase.api.rest_client import RestConnection
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster, ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
+from lib.vector.vector import SparseVector as sparse
 from lib.vector.vector import LoadVector, QueryVector, UtilVector, IndexVector
 
 class VectorSearchTests(QueryTests):
@@ -32,13 +33,22 @@ class VectorSearchTests(QueryTests):
         self.use_bhive = self.input.param("use_bhive", False)
         self.rerank = self.input.param("rerank", False)
         self.train = self.input.param("train", 10000)
+        self.vector_type = self.input.param("vector_type", "dense")
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
-        sift().download_sift()
-        self.xb = sift().read_base()
-        self.xq = sift().read_query()
-        self.gt = sift().read_groundtruth()
+        if self.vector_type == "dense":
+            sift().download_sift()
+            self.xb = sift().read_base()
+            self.xq = sift().read_query()
+            self.gt = sift().read_groundtruth()
+        elif self.vector_type == "sparse":
+            sparse().download_dataset()
+            self.xb = sparse().read_vector()
+            self.xq = sparse().read_query()
+            self.gt = sparse().read_groundtruth()
+        else:
+            self.fail(f"Invalid vector type: {self.vector_type}")
         # Extend dimension beyond 128
         if self.dimension > 128:
             add_dimension = self.dimension - 128
@@ -52,8 +62,8 @@ class VectorSearchTests(QueryTests):
         super(VectorSearchTests, self).suite_setUp()
         threads = []
         self.log.info("Start loading vector data")
-        for i in range(0, len(self.xb), 1000): # load in batches of 1000 docs per thread
-            thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian))
+        for i in range(0, self.xb.shape[0], 1000): # load in batches of 1000 docs per thread
+            thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian, self.vector_type))
             threads.append(thread)
         # Start threads
         for i in range(len(threads)):

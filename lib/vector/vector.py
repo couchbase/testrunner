@@ -107,6 +107,118 @@ class FAISSVector(object):
         distances, indices = index.search(faiss_query_vector, k)
         return distances, indices
 
+class SparseVector(object):
+    def __init__(self, version="small"):
+        """
+        version: one of {"small", "1M", "full"}
+        """
+        # Supported sparse dataset versions
+        versions = {
+            "small": (100000, "base_small.csr.gz", "base_small.dev.gt"),
+            "1M": (1000000, "base_1M.csr.gz", "base_1M.dev.gt"),
+            "full": (8841823, "base_full.csr.gz", "base_full.dev.gt"),
+        }
+        assert version in versions, f'version="{version}" is invalid. Please choose one of {list(versions.keys())}.'
+
+        self.version = version
+        self.nb = versions[version][0]
+        self.ds_fn = versions[version][1]
+        self.gt_fn = versions[version][2]
+        self.nq = 6980
+        self.dataset_location = os.path.abspath("data/sparse")
+        self.base_url = "https://storage.googleapis.com/ann-challenge-sparse-vectors/csr/"
+        self.qs_fn = "queries.dev.csr.gz"
+
+        # Make sure directory exists
+        if not os.path.exists(self.dataset_location):
+            os.makedirs(self.dataset_location)
+
+    def download_dataset(self):
+        """
+        Download and unzip the sparse dataset and queries file, if not present.
+        """
+        import gzip
+
+        file_list = [self.ds_fn, self.qs_fn, self.gt_fn]
+        for fn in file_list:
+            # Download gzipped file
+            url = os.path.join(self.base_url, fn)
+            gz_path = os.path.join(self.dataset_location, fn)
+            unzipped_path = gz_path[:-3] if gz_path.endswith(".gz") else gz_path
+
+            if os.path.exists(unzipped_path):
+                print(f"Unzipped file already exists: {unzipped_path}")
+                continue
+            if os.path.exists(gz_path):
+                print(f"Gzipped file already exists: {gz_path}")
+            else:
+                print(f"Downloading {url} -> {gz_path}")
+                request.urlretrieve(url, gz_path, quiet=True)
+            # Unzip if needed
+            if gz_path.endswith(".gz"):
+                print(f"Unzipping {gz_path} ...")
+                with gzip.open(gz_path, 'rb') as f_in, open(unzipped_path, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+                os.remove(gz_path)
+                print(f"Done unzipping: {unzipped_path}")
+
+    def read_vector(self):
+        """
+        Read the base dataset vectors as csr_matrix.
+        """
+        from scipy.sparse import csr_matrix
+
+        fname = os.path.join(self.dataset_location, self.ds_fn.replace(".gz", ""))
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"Dataset file not found: {fname}")
+        return self._read_sparse_matrix(fname)
+
+    def read_query(self):
+        """
+        Read the queries as csr_matrix.
+        """
+        fname = os.path.join(self.dataset_location, self.qs_fn.replace(".gz", ""))
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"Query file not found: {fname}")
+        return self._read_sparse_matrix(fname)
+
+    def read_groundtruth(self):
+        """
+        Read the groundtruth file and return (I, D) as in knn_result_read.
+        """
+        fname = os.path.join(self.dataset_location, self.gt_fn)
+        if not os.path.exists(fname):
+            raise FileNotFoundError(f"Groundtruth file not found: {fname}")
+        return self._knn_result_read(fname)
+
+    def _read_sparse_matrix(self, fname):
+        """
+        Internal: Read a CSR matrix in 'spmat'/sparse format.
+        """
+        from scipy.sparse import csr_matrix
+        with open(fname, "rb") as f:
+            sizes = np.fromfile(f, dtype='int64', count=3)
+            nrow, ncol, nnz = sizes
+            indptr = np.fromfile(f, dtype='int64', count=nrow + 1)
+            indices = np.fromfile(f, dtype='int32', count=nnz)
+            data = np.fromfile(f, dtype='float32', count=nnz)
+        return csr_matrix((data, indices, indptr), shape=(nrow, ncol))
+
+    def _knn_result_read(self, fname):
+        """
+        Internal: Read the groundtruth as per scripts/sparse.py/knn_result_read.
+        Returns (I, D) where I are the indices and D the distances.
+        """
+        n, d = np.fromfile(fname, dtype="uint32", count=2)
+        expected_size = 8 + n * d * (4 + 4)
+        file_size = os.stat(fname).st_size
+        assert file_size == expected_size, f"File size mismatch: expected {expected_size}, got {file_size}"
+        with open(fname, "rb") as f:
+            f.seek(8)
+            I = np.fromfile(f, dtype="int32", count=n * d).reshape(n, d)
+            D = np.fromfile(f, dtype="float32", count=n * d).reshape(n, d)
+        return I, D
+
 class SiftVector(object):
     def __init__(self):
         self.dataset = "siftsmall"
@@ -147,7 +259,36 @@ class LoadVector(object):
             endian = '<'
         buf = struct.pack(f'{endian}%sf' % len(vector), *vector)
         return base64.b64encode(buf).decode()
-    def load_batch_documents(self, cluster, docs, batch, is_xattr=False, is_base64=False, is_bigendian=False, bucket='default', scope='_default', collection='_default', vector_field='vec'):
+
+    def encode_sparse_vector(self, indices, values, is_bigendian=False):
+        # encodes two lists: indices (int) and values (float)
+        if is_bigendian:
+            endian = '>'
+        else:
+            endian = '<'
+        idx_buf = struct.pack(f"{endian}{len(indices)}i", *indices)
+        val_buf = struct.pack(f"{endian}{len(values)}f", *values)
+        return [base64.b64encode(idx_buf).decode(), base64.b64encode(val_buf).decode()]
+
+    def load_batch_documents(
+        self,
+        cluster,
+        docs,
+        batch,
+        is_xattr=False,
+        is_base64=False,
+        is_bigendian=False,
+        vector_type='dense',
+        bucket='default',
+        scope='_default',
+        collection='_default',
+        vector_field='vec'
+    ):
+        """
+        Loads batch docs into Couchbase, supporting both dense (default) and sparse.
+        - If vector_type='dense', `docs` should be a sequence of ndarrays.
+        - If vector_type='sparse', `docs` should be a sequence of 2-tuples/lists: (indices, values)
+        """
         cb = cluster.bucket(bucket)
         cb_coll = cb.scope(scope).collection(collection)
         documents = {}
@@ -155,28 +296,46 @@ class LoadVector(object):
             for ib, brand in enumerate(cfg["brands"]):
                 documents = {}
                 for idx, x in enumerate(docs):
-                    vector = x.tolist()
-                    if is_base64:
-                        vector = self.encode_vector(vector, is_bigendian)
+                    if vector_type == 'sparse':
+                        # Expect x to be (indices, values) or a scipy.sparse row-like object
+                        if hasattr(x, "indices") and hasattr(x, "data"):
+                            indices = x.indices.tolist()
+                            values = x.data.tolist()
+                        elif isinstance(x, (tuple, list)) and len(x) == 2:
+                            indices, values = x
+                        else:
+                            raise ValueError("When vector_type='sparse', each doc must be (indices, values)")
+                        if is_base64:
+                            vector = self.encode_sparse_vector(indices, values, is_bigendian)
+                        else:
+                            vector = [indices, values]
+                    else:
+                        vector = x.tolist()
+                        if is_base64:
+                            vector = self.encode_vector(vector, is_bigendian)
                     key = f"vec_{brand}_{size}_{idx+batch}"
                     doc = {
                         "id": idx + batch,
-                        "size":size,
-                        "sizeidx":is1,
-                        "brand":brand,
-                        "brandidx":ib,
+                        "size": size,
+                        "sizeidx": is1,
+                        "brand": brand,
+                        "brandidx": ib,
                         vector_field: vector
                     }
-                    # if is_xattr:
-                    #     del doc[vector_field]
+                    # if is_xattr: remove vector_field from doc and store as xattr below
                     documents[key] = doc
                 try:
-                    upsert = cb_coll.upsert_multi(documents)
+                    cb_coll.upsert_multi(documents)
                 except Exception as e:
                     print(e)
                 if is_xattr:
                     for key in documents:
-                        cb_coll.mutate_in(key, [SD.upsert(vector_field, documents[key][vector_field], xattr=is_xattr), SD.remove(vector_field)])
+                        cb_coll.mutate_in(
+                            key,
+                            [SD.upsert(vector_field, documents[key][vector_field], xattr=True),
+                             SD.remove(vector_field)]
+                        )
+
     def multi_upsert_document_into_cb(self, cb_coll, documents):
         try:
             cb_coll.upsert_multi(documents)
