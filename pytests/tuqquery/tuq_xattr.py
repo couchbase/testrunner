@@ -1,7 +1,12 @@
 from .tuq import QueryTests
 from membase.api.rest_client import RestHelper
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
 import couchbase.subdocument as SD
 from deepdiff import DeepDiff
 

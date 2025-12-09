@@ -3,7 +3,6 @@
 import copy
 import json
 import random
-import time
 from threading import Thread
 import docker
 
@@ -13,7 +12,6 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
-from tasks.taskmanager import TaskManager
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
 from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
@@ -34,7 +32,7 @@ class StableTopFTS(FTSBaseTest):
             print(e)
         self.doc_filter_query = {"match": "search", "field": "search_string"}
         self.index_wait_time = 20
-        
+
         if TestInputSingleton.input.param("synonym_source", None):
             self.synonym_source = eval(TestInputSingleton.input.param("synonym_source", None))
         else:
@@ -44,11 +42,11 @@ class StableTopFTS(FTSBaseTest):
         self.num_docs = TestInputSingleton.input.param("num_docs", 50000)
         self.analyzer = TestInputSingleton.input.param("analyzer", "simple")
         self.format = TestInputSingleton.input.param("format", 1)
-        
+
         self.idx = None
         if TestInputSingleton.input.param("idx", None):
             self.idx = eval(TestInputSingleton.input.param("idx", None))
-        
+
         self.read_from_replica = TestInputSingleton.input.param("read_from_replica", False)
         self.parition_selection = TestInputSingleton.input.param("parition_selection", "")
 
@@ -96,7 +94,7 @@ class StableTopFTS(FTSBaseTest):
                             key = a.split('.')[2]
                         except:
                             key = a
-                        
+
                         if index_name in key:
                             for m,n in b.items():
                                 if m == 'nodes':
@@ -105,7 +103,7 @@ class StableTopFTS(FTSBaseTest):
                                             partition_map[node_map[i]] += 1
                                         else:
                                             rep_partition_map[node_map[i]] += 1
-            
+
             if TestInputSingleton.input.param("check_default_mode", False):
                 self.validation_data = [self.num_index_partitions // len(self.fts_nodes), self.num_index_partitions - (self.num_index_partitions // len(self.fts_nodes))]
             else:
@@ -278,7 +276,7 @@ class StableTopFTS(FTSBaseTest):
         else:
             n1ql_executor = None
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
-    
+
     def test_query_type_rfr(self):
         """
         uses RQG
@@ -296,10 +294,10 @@ class StableTopFTS(FTSBaseTest):
             if self._update:
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
-        
+
         if self.read_from_replica:
             self.read_from_replica_setup()
-        
+
         self.generate_random_queries(index, self.num_queries, self.query_types)
         if self.run_via_n1ql:
             n1ql_executor = self._cb_cluster
@@ -318,7 +316,7 @@ class StableTopFTS(FTSBaseTest):
         self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
 
 
-        #load synonym data  
+        #load synonym data
         status, _ = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
         if not status:
             self.fail("Failed to load synonym data")
@@ -327,11 +325,11 @@ class StableTopFTS(FTSBaseTest):
         status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
         if not status:
             self.fail("Failed to load synonym source data")
-        
+
         #groundtruth store
         raw_map = response['word_doc_map']
         word_map = response['final_word_doc_map']
-        
+
         #create index
         _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
         time.sleep(30)
@@ -349,22 +347,22 @@ class StableTopFTS(FTSBaseTest):
         self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
 
 
-        #load synonym data  
+        #load synonym data
         status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
         if not status:
             self.fail("Failed to load synonym data")
-        
+
         syn_map = response['synonym_map']
 
         #load source data
         status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
         if not status:
             self.fail("Failed to load synonym source data")
-        
+
         #groundtruth store
         raw_map = response['word_doc_map']
         word_map = response['final_word_doc_map']
-        
+
 
         #create index
         _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
@@ -372,7 +370,7 @@ class StableTopFTS(FTSBaseTest):
         time.sleep(10)
 
         self.run_wildcard_synonym_query_and_compare(synonym_index="i1",index="i2",rawmap=raw_map,wordmap=word_map,synmap=syn_map,format=self.format)
-    
+
     def test_fuzzy_synonym_search(self):
 
         #start the synonym datagen server on port 5100
@@ -384,22 +382,22 @@ class StableTopFTS(FTSBaseTest):
         self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
 
 
-        #load synonym data  
+        #load synonym data
         status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
         if not status:
             self.fail("Failed to load synonym data")
-        
+
         syn_map = response['synonym_map']
 
         #load source data
         status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
         if not status:
             self.fail("Failed to load synonym source data")
-        
+
         #groundtruth store
         raw_map = response['word_doc_map']
         word_map = response['final_word_doc_map']
-        
+
 
         #create index
         _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
@@ -419,22 +417,22 @@ class StableTopFTS(FTSBaseTest):
         self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
 
 
-        #load synonym data  
+        #load synonym data
         status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
         if not status:
             self.fail("Failed to load synonym data")
-        
+
         syn_map = response['synonym_map']
 
         #load source data
         status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
         if not status:
             self.fail("Failed to load synonym source data")
-        
+
         #groundtruth store
         raw_map = response['word_doc_map']
         word_map = response['final_word_doc_map']
-        
+
 
         #create index
         _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
@@ -442,7 +440,7 @@ class StableTopFTS(FTSBaseTest):
         time.sleep(10)
 
         self.run_match_phrase_synonym_query_and_compare(synonym_index="i1",index="i2",rawmap=raw_map,wordmap=word_map,synmap=syn_map,format=self.format)
-    
+
     def test_prefix_synonym_search(self):
 
         #start the synonym datagen server on port 5100
@@ -454,22 +452,22 @@ class StableTopFTS(FTSBaseTest):
         self._cb_cluster.create_collection_using_rest(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1])
 
 
-        #load synonym data  
+        #load synonym data
         status, response = RestConnection(self._cb_cluster.get_master_node()).load_synonyms(bucket=self.bucket_name,scope=self.scope,collection=self.synonym_source[0][1],host=self.master.ip,analyzer=self.analyzer,format=self.format)
         if not status:
             self.fail("Failed to load synonym data")
-        
+
         syn_map = response['synonym_map']
 
         #load source data
         status,response = RestConnection(self._cb_cluster.get_master_node()).load_synonym_source(bucket=self.bucket_name,scope=self.scope,collection=self.collection,host=self.master.ip,analyzer=self.analyzer,numDocs=self.num_docs)
         if not status:
             self.fail("Failed to load synonym source data")
-        
+
         #groundtruth store
         raw_map = response['word_doc_map']
         word_map = response['final_word_doc_map']
-        
+
 
         #create index
         _ = self._create_fts_index_parameterized(synonym_source=self.synonym_source[0])[0]
@@ -967,7 +965,7 @@ class StableTopFTS(FTSBaseTest):
         self._cb_cluster.create_scope_using_rest(bucket="default",scope="s1")
         self._cb_cluster.create_collection_using_rest(bucket="default",scope="s1",collection=collection_list[0])
         result = None
-            
+
         try:
             result = self.docfilter_data("default","s1",collection_list[0])
         except Exception as ex:
@@ -1000,7 +998,7 @@ class StableTopFTS(FTSBaseTest):
         filter_3_docs = res["filter_3_docs"]
 
         min_pass = res["min_pass"]
-        
+
         """ individual filter tests """
         #only term filter
         index_ = self.construct_docfilter_index([("term_filter",term_filter)],"default","s1",collection_list[0],"i1")
@@ -1014,14 +1012,14 @@ class StableTopFTS(FTSBaseTest):
 
         if len(term_data) != hits:
             self.fail(f"term filter failed. Expected Hits : {len(term_data)} , Actual Hits : {hits}")
-        
+
         if term_data != self.set_groundtruth(matches):
             self.fail(f"term filter failed. Expected Matches : {term_data} , Actual Matches : {matches}")
-        
+
         self.log.info("Term filter test successful")
 
         #bool filter
-        self.update_index_def(index,"bool_filter",bool_filter,collection_name=collection_list[0])   
+        self.update_index_def(index,"bool_filter",bool_filter,collection_name=collection_list[0])
         index.update()
         time.sleep(self.index_wait_time)
 
@@ -1029,10 +1027,10 @@ class StableTopFTS(FTSBaseTest):
 
         if len(bool_filter_match) != hits:
             self.fail(f"Bool filter failed. Expected Hits : {len(bool_filter_match)} , Actual Hits : {hits}")
-        
+
         if bool_filter_match  != self.set_groundtruth(matches):
             self.fail(f"Bool filter failed. Expected Matches : {bool_filter_match} , Actual Matches : {matches}")
-        
+
         self.log.info("Bool filter test successful")
 
         #numeric filter
@@ -1045,15 +1043,15 @@ class StableTopFTS(FTSBaseTest):
 
         if len(numeric_filter_match) != hits:
             self.fail(f"Numeric filter failed. Expected Hits : {len(numeric_filter_match)} , Actual Hits : {hits}")
-        
+
         if numeric_filter_match  != self.set_groundtruth(matches):
             self.fail(f"Numeric filter failed. Expected Matches : {numeric_filter_match} , Actual Matches : {matches}")
-        
+
         self.log.info("Numeric filter test successful")
 
 
         #date time filter
-        self.update_index_def(index,"date_filter",date_filter,collection_name=collection_list[0])   
+        self.update_index_def(index,"date_filter",date_filter,collection_name=collection_list[0])
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         time.sleep(self.index_wait_time)
@@ -1062,10 +1060,10 @@ class StableTopFTS(FTSBaseTest):
 
         if len(date_filter_match) != hits:
             self.fail(f"Date time filter failed. Expected Hits : {len(date_filter_match)} , Actual Hits : {hits}")
-        
+
         if date_filter_match  != self.set_groundtruth(matches):
             self.fail(f"Date time filter failed. Expected Matches : {date_filter_match} , Actual Matches : {matches}")
-        
+
         self.log.info("Date filter test successful")
 
         #conjunction filter
@@ -1078,15 +1076,15 @@ class StableTopFTS(FTSBaseTest):
 
         if len(conjunction_res) != hits:
             self.fail(f"Conjunction filter failed. Expected Hits : {len(conjunction_res)} , Actual Hits : {hits}")
-        
+
         if conjunction_res  != self.set_groundtruth(matches):
             self.fail(f"Conjunction filter failed. Expected Matches : {conjunction_res} , Actual Matches : {matches}")
-        
+
         self.log.info("Conjunction filter test successful")
 
         #disjunction filter
         self.update_index_def(index,"disjunction_filter",disjunction_filter,min_pass=min_pass,collection_name=collection_list[0])
-        index.index_definition['uuid'] = index.get_uuid() 
+        index.index_definition['uuid'] = index.get_uuid()
         index.update()
         time.sleep(self.index_wait_time)
 
@@ -1094,10 +1092,10 @@ class StableTopFTS(FTSBaseTest):
 
         if len(disjunction_res) != hits:
             self.fail(f"Disjuntion filter failed. Expected Hits : {len(disjunction_res)} , Actual Hits : {hits}")
-        
+
         if disjunction_res  != self.set_groundtruth(matches):
             self.fail(f"Disjuntion filter failed. Expected Matches : {disjunction_res} , Actual Matches : {matches}")
-        
+
         self.log.info("Disjunction filter test successful")
 
 
@@ -1113,10 +1111,10 @@ class StableTopFTS(FTSBaseTest):
 
         if len(filter_1_docs) != hits:
             self.fail(f"Filter 1 failed. Expected Hits : {len(filter_1_docs)} , Actual Hits : {hits}")
-        
+
         if filter_1_docs  != self.set_groundtruth(matches):
             self.fail(f"Filter 1 failed. Expected Matches : {filter_1_docs} , Actual Matches : {matches}")
-        
+
         self.log.info("Filter 1 test successful")
 
         #filter2
@@ -1132,7 +1130,7 @@ class StableTopFTS(FTSBaseTest):
 
         if filter_2_docs != self.set_groundtruth(matches):
             self.fail(f"Filter 2 failed. Expected Matches : {filter_2_docs} , Actual Matches : {matches}")
-        
+
         self.log.info("Filter 2 test successful")
 
         #filter3
@@ -1145,10 +1143,10 @@ class StableTopFTS(FTSBaseTest):
 
         if len(filter_3_docs) != hits:
             self.fail(f"Filter 3 failed. Expected Hits : {len(filter_3_docs)} , Actual Hits : {hits}")
-        
+
         if filter_3_docs != self.set_groundtruth(matches):
             self.fail(f"Filter 3 failed. Expected Matches : {filter_3_docs} , Actual Matches : {matches}")
-        
+
         self.log.info("Filter 3 test successful")
 
 
@@ -1188,10 +1186,11 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
+
         if self.dataset == "all" and int(TestInputSingleton.input.param("doc_maps", 1)) == 1:
             #ignoring wiki results from the elastic result to match couchbase behaviour
             self.ignore_wiki = True
-        
+
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor, use_collections=collection_index,ignore_wiki=self.ignore_wiki)
 
     def test_collection_index_data_mutations(self):
@@ -2861,7 +2860,13 @@ class StableTopFTS(FTSBaseTest):
         dic['array'] = ['element1', 1234, True]
         try:
             from couchbase.cluster import Cluster
-            from couchbase.cluster import PasswordAuthenticator
+            try:
+                # For SDK2 (legacy) runs
+                from couchbase.cluster import PasswordAuthenticator
+            except ImportError:
+                # For SDK4 compatible runs
+                from couchbase.auth import PasswordAuthenticator
+
             cluster = Cluster('couchbase://{0}'.format(master.ip))
             authenticator = PasswordAuthenticator('Administrator', 'password')
             cluster.authenticate(authenticator)
@@ -3998,7 +4003,7 @@ class StableTopFTS(FTSBaseTest):
                     if search_before_results_ids[i] != all_results_ids[partial_start_index+1+i]:
                         fails.append(str(sort_mode))
         self.assertEqual(len(fails), 0, "Tests for the following sort modes are failed: "+str(fails))
-    
+
     def test_search_after_multi_fields_rfr(self):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self._load_search_before_search_after_test_data(bucket.name, self.test_data)
@@ -4063,7 +4068,7 @@ class StableTopFTS(FTSBaseTest):
             self.assertTrue(str(response['error']).index(expected_error) > 0, "Cannot find expected error message.")
         else:
             self.fail("Incorrect query was executed successfully.")
-    
+
     def test_search_before_search_after_negative_rfr(self):
         expected_error = "cannot use search after and search before together"
         bucket = self._cb_cluster.get_bucket_by_name('default')
@@ -4236,7 +4241,7 @@ class StableTopFTS(FTSBaseTest):
         for match in n1ql_results:
             n1ql_ids.append(match['id'])
         self.assertEqual(fts_ids, n1ql_ids, "Results for fts and n1ql queries are different.")
-    
+
     def test_search_before_after_n1ql_function_rfr(self):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         self._load_search_before_search_after_test_data(bucket.name, self.test_data)
@@ -4927,5 +4932,3 @@ class StableTopFTS(FTSBaseTest):
             for err in errors:
                 self.log.error(err)
             self.fail()
-
-

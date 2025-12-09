@@ -6,8 +6,13 @@ from security.x509main import x509main
 import json
 import subprocess
 import socket
-import requests
-from couchbase.cluster import PasswordAuthenticator
+try:
+    # For SDK2 (legacy) runs
+    from couchbase.cluster import PasswordAuthenticator
+except ImportError:
+    # For SDK4 compatible runs
+    from couchbase.auth import PasswordAuthenticator
+
 from couchbase.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_cli import CouchbaseCLI
