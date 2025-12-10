@@ -14,6 +14,7 @@ import os
 import copy
 import subprocess
 import json
+import time
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 
 
@@ -90,7 +91,7 @@ class x509main:
         dir = dir.strip('"')
         return str(dir)
 
-    def _generate_cert(self, servers, root_cn='Root Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
+    def _generate_cert(self, servers, root_cn='Root Authority', type='go', encryption="", key_length=2048, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir -p " + x509main.CACERTFILEPATH)
@@ -328,6 +329,7 @@ class x509main:
         # self._move_file_to_inbox(x509main.CACERTFILE)
         rest = RestConnection(self.host)
         rest.load_trusted_CAs()
+        time.sleep(6)
         rest.reload_certificate()
 
     # Upload security setting for client cert

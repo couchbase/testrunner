@@ -26,7 +26,7 @@ class x509tests(BaseTestCase):
         self.root_ca_path = x509main.CACERTFILEPATH + x509main.CACERTFILE
         SSLtype = self.input.param("SSLtype", "go")
         encryption_type = self.input.param('encryption_type', "")
-        key_length = self.input.param("key_length", 1024)
+        key_length = self.input.param("key_length", 2048)
         # Input parameters for state, path, delimeters and prefixes
         self.client_cert_state = self.input.param("client_cert_state", "disable")
         self.paths = self.input.param('paths', "subject.cn:san.dnsname:san.uri").split(":")
