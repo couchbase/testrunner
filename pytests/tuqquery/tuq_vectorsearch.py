@@ -117,6 +117,29 @@ class VectorSearchTests(QueryTests):
             self.log.info(f"Check distance for query {i + begin} with FAISS")
             self.assertTrue(np.allclose(distances[i], faiss_distances[begin+i]), f"Couchbase distances: {distances[i]} do not match FAISS: {faiss_distances[begin+i]}")
 
+    def test_knn_distances_sparse(self):
+        begin = random.randrange(0, self.xq.shape[0] - self.query_count)
+        self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
+        distances, indices = QueryVector().search(
+            self.database, 
+            self.xq[begin:begin+self.query_count], 
+            search_function=self.distance, 
+            is_xattr=self.use_xattr, 
+            is_base64=self.use_base64, 
+            is_bigendian=self.use_bigendian, 
+            vector_type='sparse'
+        )
+        for i in range(self.query_count):
+            self.log.info(f"Check distance for query {i + begin} with Sparse")
+            fail_count = UtilVector().check_distance(
+                self.xq[i + begin], 
+                self.xb, 
+                indices[i], 
+                distances[i], 
+                vector_type='sparse'
+            )
+            self.assertEqual(fail_count, 0, "We got some diff! Check log above.")
+
     def test_knn_search(self):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         begin = random.randint(0, len(self.xq) - self.query_count)

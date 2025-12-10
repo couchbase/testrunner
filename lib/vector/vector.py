@@ -23,24 +23,51 @@ cfg = {
 }
 
 class UtilVector(object):
-    def check_distance(self, query_vector, xb, vector_results, vector_distances, distance="L2"):
+    def check_distance(self, query_vector, xb, vector_results, vector_distances, distance="L2", vector_type='dense'):
+        """
+        Check that vector search result distances match expected calculation.
+        For sparse, only use dot product.
+        """
         fail_count = 0
         for idx, vector in enumerate(vector_results):
             actual_distance = vector_distances[idx]
-            if distance == "L2" or distance == "EUCLIDEAN":
-                expected_distance = self.l2_dist(query_vector, xb[vector])
-            if distance == "L2_SQUARED" or distance == "EUCLIDEAN_SQUARED":
-                expected_distance = self.l2_dist_sq(query_vector, xb[vector])
-            if distance == "DOT":
-                expected_distance = - self.dot_product_dist(query_vector, xb[vector])
-            if distance == "COSINE":
-                expected_distance = self.cosine_dist(query_vector, xb[vector])
-            if not(np.isclose(expected_distance,actual_distance)):
+            if vector_type == 'sparse':
+                # Only dot product supported for sparse
+                query = (query_vector.indices.tolist(), query_vector.data.tolist())
+                base = (xb[vector].indices.tolist(), xb[vector].data.tolist())
+                expected_distance = -self.sparse_dot_product_dist(query, base)
+            else:
+                if distance == "L2" or distance == "EUCLIDEAN":
+                    expected_distance = self.l2_dist(query_vector, xb[vector])
+                elif distance == "L2_SQUARED" or distance == "EUCLIDEAN_SQUARED":
+                    expected_distance = self.l2_dist_sq(query_vector, xb[vector])
+                elif distance == "DOT":
+                    expected_distance = - self.dot_product_dist(query_vector, xb[vector])
+                elif distance == "COSINE":
+                    expected_distance = self.cosine_dist(query_vector, xb[vector])
+                else:
+                    expected_distance = None
+            if expected_distance is not None and not np.isclose(expected_distance, actual_distance):
                 fail_count += 1
                 print(f"FAIL: expected: {expected_distance} actual: {actual_distance}")
                 continue
             print(f"PASS: expected: {expected_distance} actual: {actual_distance}")
         return fail_count
+
+    def sparse_dot_product_dist(self, v1, v2):
+        """
+        Compute dot product distance between two sparse vectors.
+        v1, v2: each is a tuple (indices, values), where indices is a list of indices and values is a list of corresponding values
+        """
+        # Create index->value mappings for fast lookup
+        v1_dict = dict(zip(v1[0], v1[1]))
+        v2_dict = dict(zip(v2[0], v2[1]))
+        # Compute sum of (value1 * value2) for all common indices
+        dot = 0.0
+        for idx in set(v1_dict.keys()) & set(v2_dict.keys()):
+            dot += v1_dict[idx] * v2_dict[idx]
+        return float(dot)
+
     def compare_vector(self, actual, expected):
         recall_count = 0
         accuracy_count = 0
@@ -431,35 +458,99 @@ class IndexVector(object):
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
 
 class QueryVector(object):
-    def vector_knn_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, direction='ASC', k=100):
+    def vector_knn_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, vector_type='dense', direction='ASC', k=100):
         if is_xattr:
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
-            vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        query = f'SELECT id, VECTOR_DISTANCE({vector_field}, $qvec, "{search_function}") as distance FROM {collection} WHERE size IN $size AND brand IN $brand ORDER BY KNN_DISTANCE({vector_field}, $qvec, "{search_function}") {direction} LIMIT {k}'
+            if vector_type == 'dense':
+                vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order}, 'dense')"
+            elif vector_type == 'sparse':
+                vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order}, 'sparse')"
+        if vector_type == 'sparse':
+            query = (
+                f"SELECT id, SPARSE_VECTOR_DISTANCE({vector_field}, $qvec) as distance "
+                f"FROM {collection} "
+                f"WHERE size IN $size AND brand IN $brand "
+                f"ORDER BY SPARSE_VECTOR_DISTANCE({vector_field}, $qvec) {direction} LIMIT {k}"
+            )
+        elif vector_type == 'dense':
+            query = (
+                f"SELECT id, VECTOR_DISTANCE({vector_field}, $qvec, \"{search_function}\") as distance "
+                f"FROM {collection} "
+                f"WHERE size IN $size AND brand IN $brand "
+                f"ORDER BY KNN_DISTANCE({vector_field}, $qvec, \"{search_function}\") {direction} LIMIT {k}"
+            )
         return query
-    def vector_ann_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, nprobes=3, direction='ASC', k=100):
+
+    def vector_ann_query(self, vector_field='vec', collection='_default', search_function='L2', is_xattr=False, is_base64=False, network_byte_order=False, nprobes=3, direction='ASC', k=100, vector_type='dense'):
         if is_xattr:
             vector_field = f"meta().xattrs.{vector_field}"
         if is_base64:
-            vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
-        size_predicate = ["size in $size", "size = $size[0]", "size < $size[0]+1 AND size > $size[0]-1", "size between $size[0] and $size[0]", "size <= $size[0] AND size > $size[0]-1"]
-        query = f'SELECT id, ANN_DISTANCE({vector_field}, $qvec, "{search_function}", {nprobes}) as distance FROM {collection} WHERE {size_predicate[random.randint(0,4)]} AND brand IN $brand ORDER BY ANN_DISTANCE({vector_field}, $qvec, "{search_function}", {nprobes}) {direction} LIMIT {k}'
+            if vector_type == 'dense':
+                vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order}, 'dense')"
+            elif vector_type == 'sparse':
+                vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order}, 'sparse')"
+        size_predicate = [
+            "size in $size",
+            "size = $size[0]",
+            "size < $size[0]+1 AND size > $size[0]-1",
+            "size between $size[0] and $size[0]",
+            "size <= $size[0] AND size > $size[0]-1"
+        ]
+        if vector_type == 'sparse':
+            query = (
+                f"SELECT id, SPARSE_ANN_DISTANCE({vector_field}, $qvec, {nprobes}) as distance "
+                f"FROM {collection} "
+                f"WHERE {size_predicate[random.randint(0,4)]} AND brand IN $brand "
+                f"ORDER BY SPARSE_ANN_DISTANCE({vector_field}, $qvec, {nprobes}) {direction} LIMIT {k}"
+            )
+        else:
+            query = (
+                f"SELECT id, ANN_DISTANCE({vector_field}, $qvec, \"{search_function}\", {nprobes}) as distance "
+                f"FROM {collection} "
+                f"WHERE {size_predicate[random.randint(0,4)]} AND brand IN $brand "
+                f"ORDER BY ANN_DISTANCE({vector_field}, $qvec, \"{search_function}\", {nprobes}) {direction} LIMIT {k}"
+            )
         return query
-    def run_queries(self, cluster, xb, qdocs, gdocs, search_function="L2", bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
+
+    def run_queries(self, cluster, xb, qdocs, gdocs, search_function="L2", bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False, vector_type='dense'):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         for idx, x in enumerate(qdocs):
             print("-"*30)
             print(f"Running query#{idx} with vector {x.tolist()[:9]} ...")
-            qdoc = {"size":[random.choice(cfg["sizes"])], "brand":[random.choice(cfg["brands"])],"qvec": x.tolist(), "sizeidx":0, "brandidx":0}
-            self.n1ql_query(xb, cb_scope, qdoc, gdocs[idx], search_function, collection, vector_field, is_xattr, is_base64, is_bigendian)
-    def n1ql_query(self, xb, cb_scope, qdoc, gdoc, search_function="L2", collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False):
-        vector_query = self.vector_knn_query(vector_field, collection, search_function, is_xattr, is_base64, network_byte_order=is_bigendian)
+            qdoc = {
+                "size": [random.choice(cfg["sizes"])],
+                "brand": [random.choice(cfg["brands"])],
+                "qvec": x.tolist(),
+                "sizeidx": 0,
+                "brandidx": 0
+            }
+            self.n1ql_query(
+                xb, cb_scope, qdoc, gdocs[idx], search_function, collection, vector_field,
+                is_xattr, is_base64, is_bigendian, vector_type=vector_type
+            )
+
+    def n1ql_query(self, xb, cb_scope, qdoc, gdoc, search_function="L2", collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False, vector_type='dense'):
+        vector_query = self.vector_knn_query(
+            vector_field=vector_field,
+            collection=collection,
+            search_function=search_function,
+            is_xattr=is_xattr,
+            is_base64=is_base64,
+            network_byte_order=is_bigendian,
+            vector_type=vector_type
+        )
         actual = []
         expected = gdoc.tolist()
         query_vector = qdoc["qvec"]
-        params = {"size": qdoc["size"], "brand":qdoc["brand"],"qvec":query_vector, "sizeidx": qdoc["sizeidx"], "brandidx":qdoc["brandidx"]}
+        params = {
+            "size": qdoc["size"],
+            "brand": qdoc["brand"],
+            "qvec": query_vector,
+            "sizeidx": qdoc["sizeidx"],
+            "brandidx": qdoc["brandidx"]
+        }
         result = cb_scope.query(
             vector_query,
             QueryOptions(named_parameters=params), metrics=True, timeout=timedelta(seconds=300))
@@ -468,27 +559,57 @@ class QueryVector(object):
         print(f"Execution time: {result.metadata().metrics().execution_time()}")
         recall, accuracy = UtilVector().compare_result(expected, actual)
         print(f"Recall rate: {recall}% with accuracy: {accuracy}%")
-    def search(self, cluster, xq, search_function="L2", type = 'KNN', bucket='default', scope='_default', collection='_default', vector_field='vec', is_xattr=False, is_base64=False, is_bigendian=False, nprobes=3):
+
+    def search(self, cluster, xq, search_function="L2", type='KNN', bucket='default', scope='_default', collection='_default', vector_field='vec',
+               is_xattr=False, is_base64=False, is_bigendian=False, nprobes=3, vector_type='dense'):
+        """
+        Handles both dense and sparse vector search.
+        Pass vector_type='sparse' for sparse search, 'dense' for dense search.
+        """
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         vectors = []
         distances = []
         for idx, x in enumerate(xq):
-            qdoc = {"size":[random.choice(cfg["sizes"])], "brand":[random.choice(cfg["brands"])],"qvec": x.tolist(), "sizeidx":0, "brandidx":0}
-            vectors_distance, vectors_id = self.n1ql_search(cb_scope, qdoc, search_function, type, collection, vector_field, is_xattr, is_base64, is_bigendian, nprobes)
+            qdoc = {
+                "size": [random.choice(cfg["sizes"])],
+                "brand": [random.choice(cfg["brands"])],
+                "qvec": x.tolist() if hasattr(x, "tolist") else (x.indices.tolist(), x.data.tolist()) if hasattr(x, "indices") and hasattr(x, "data") else x,
+                "sizeidx": 0,
+                "brandidx": 0
+            }
+            vectors_distance, vectors_id = self.n1ql_search(
+                cb_scope, qdoc, search_function, type, collection,
+                vector_field, is_xattr, is_base64, is_bigendian, nprobes, vector_type=vector_type
+            )
             vectors.append(vectors_id)
             distances.append(vectors_distance)
         return np.array(distances, dtype=np.float32), np.array(vectors, dtype=np.int32)
-    def n1ql_search(self, cb_scope, qdoc, search_function, type, collection, vector_field, is_xattr, is_base64, is_bigendian, nprobes):
+
+    def n1ql_search(self, cb_scope, qdoc, search_function, type, collection, vector_field, is_xattr, is_base64, is_bigendian, nprobes, vector_type='dense'):
         if type == 'KNN':
-            vector_query = self.vector_knn_query(vector_field, collection, search_function, is_xattr, is_base64, network_byte_order=is_bigendian)
-        if type == 'ANN':
-            vector_query = self.vector_ann_query(vector_field, collection, search_function, is_xattr, is_base64, network_byte_order=is_bigendian, nprobes=nprobes)
+            vector_query = self.vector_knn_query(
+                vector_field, collection, search_function, is_xattr, is_base64,
+                network_byte_order=is_bigendian, vector_type=vector_type
+            )
+        elif type == 'ANN':
+            vector_query = self.vector_ann_query(
+                vector_field, collection, search_function, is_xattr, is_base64,
+                network_byte_order=is_bigendian, nprobes=nprobes, vector_type=vector_type
+            )
+        else:
+            raise ValueError(f"Unknown search type: {type}")
         vectors = []
         distances = []
         print(f"Query: {vector_query}")
         query_vector = qdoc["qvec"]
-        params = {"size": qdoc["size"], "brand":qdoc["brand"],"qvec":query_vector, "sizeidx": qdoc["sizeidx"], "brandidx":qdoc["brandidx"]}
+        params = {
+            "size": qdoc["size"],
+            "brand": qdoc["brand"],
+            "qvec": query_vector,
+            "sizeidx": qdoc["sizeidx"],
+            "brandidx": qdoc["brandidx"]
+        }
         result = cb_scope.query(
             vector_query,
             QueryOptions(named_parameters=params), metrics=True, timeout=timedelta(seconds=300))
