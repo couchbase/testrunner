@@ -279,23 +279,29 @@ class SiftVector(object):
         return gt
 
 class LoadVector(object):
-    def encode_vector(self, vector, is_bigendian=False):
+    def encode_vector(self, vector, is_bigendian=False, vector_type='dense'):
+        """
+        Encodes the vector with endianess, supports both dense (list/ndarray)
+        and sparse (tuple/list: (indices, values)) input.
+        Returns base64 encoded string for dense or sparse.
+        For sparse, encode as: [int32 count][int32 indices...][float32 values...]
+        """
         if is_bigendian:
             endian = '>'
         else:
             endian = '<'
-        buf = struct.pack(f'{endian}%sf' % len(vector), *vector)
-        return base64.b64encode(buf).decode()
-
-    def encode_sparse_vector(self, indices, values, is_bigendian=False):
-        # encodes two lists: indices (int) and values (float)
-        if is_bigendian:
-            endian = '>'
+        if vector_type == 'dense':
+            buf = struct.pack(f'{endian}%sf' % len(vector), *vector)
+            return base64.b64encode(buf).decode()
+        elif vector_type == 'sparse':
+            indices, values = vector
+            count = len(indices)
+            # First pack count as int32, then indices as int32[count], then values as float32[count]
+            fmt = f"{endian}i{count}i{count}f"
+            buf = struct.pack(fmt, count, *indices, *values)
+            return base64.b64encode(buf).decode()
         else:
-            endian = '<'
-        idx_buf = struct.pack(f"{endian}{len(indices)}i", *indices)
-        val_buf = struct.pack(f"{endian}{len(values)}f", *values)
-        return [base64.b64encode(idx_buf).decode(), base64.b64encode(val_buf).decode()]
+            raise ValueError(f"Unknown vector_type: {vector_type}")
 
     def load_batch_documents(
         self,
@@ -333,7 +339,7 @@ class LoadVector(object):
                         else:
                             raise ValueError("When vector_type='sparse', each doc must be (indices, values)")
                         if is_base64:
-                            vector = self.encode_sparse_vector(indices, values, is_bigendian)
+                            vector = self.encode_vector([indices, values], is_bigendian, 'sparse')
                         else:
                             vector = [indices, values]
                     else:
