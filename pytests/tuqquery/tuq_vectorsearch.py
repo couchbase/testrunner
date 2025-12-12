@@ -6,7 +6,8 @@ import ast
 from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
 from couchbase.auth import PasswordAuthenticator
-from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
 from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
 from lib.vector.vector import SparseVector as sparse
 from lib.vector.vector import LoadVector, QueryVector, UtilVector, IndexVector
@@ -142,12 +143,16 @@ class VectorSearchTests(QueryTests):
 
     def test_knn_search(self):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
-        begin = random.randint(0, len(self.xq) - self.query_count)
-        self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
-        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian)
+        begin = random.randint(0, self.xq.shape[0] - self.query_count)
+        self.log.info(f"Running KNN {self.vector_type} query for range [{begin}:{begin+self.query_count}]")
+        distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, vector_type=self.vector_type)
         for i in range(self.query_count):
-            self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
-            recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
+            if self.vector_type == 'dense':
+                self.log.info(f"Check recall rate for {self.vector_type} query {begin+i} compare to GT for SIFT ({self.distance})")
+                recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
+            elif self.vector_type == 'sparse':
+                self.log.info(f"Check recall rate for {self.vector_type} query {begin+i} compare to GT")
+                recall, accuracy = UtilVector().compare_result(self.gt[0][begin+i].tolist(), indices[i][:10].tolist())
             self.log.info(f'Recall rate: {recall}% with acccuracy: {accuracy}%')
             if recall < self.recall_knn:
                 self.fail(f"Recall rate of {recall} is less than expected {self.recall_knn}")
