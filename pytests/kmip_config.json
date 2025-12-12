@@ -1,0 +1,7 @@
+{
+  "kmip_ip": "172.23.104.199",
+  "host_name": "amer.smartkey.io",
+  "certs": {
+    "path": "/etc/pykmip/certs/"
+  }
+}

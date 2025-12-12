@@ -1,6 +1,8 @@
 import ast
 import copy
 import logging
+import os
+import json
 import random
 import string
 import subprocess
@@ -20,6 +22,7 @@ from lib.Cb_constants.CBServer import CbServer
 from lib.SystemEventLogLib.Events import EventHelper
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
+from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -100,6 +103,76 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.kv_servers = []
         self.otpNodes = []
         self.collection_name = {}
+
+        #encryption at rest related params
+        self.encryption_level = self.input.param("encryption_level", "all")
+        self.private_key_passphrase = self.input.param("private_key_passphrase", None)
+        self.kmip_key_uuid = self.input.param("kmip_key_uuid", None)
+        config_path = os.path.join(os.path.dirname(__file__), "kmip_config.json")
+        with open(config_path, "r") as f:
+            kmip_config = json.load(f)
+        self.kmip_ip = kmip_config["kmip_ip"]
+        self.kmip_host_name = kmip_config["host_name"]
+        self.kmip_password = self.input.param("kmip_password", None)
+        self.kmip_cert_path = kmip_config["certs"]["path"]
+        self.KMIP_pkcs8_file_name = self.input.param(
+            "KMIP_pkcs8_file_name", "client-key-pkcs8.pem")
+        self.KMIP_cert_file_name = self.input.param(
+            "KMIP_cert_file_name", "client_cert_with_appid2.pem")
+        self.client_certs_path = "/etc/couchbase/certs/"
+        self.create_KMIP_secret = self.input.param(
+            "create_KMIP_secret", False)
+        self.KMIP_for_log_encryption = self.input.param(
+            "KMIP_for_log_encryption", False)
+        self.KMIP_for_config_encryption = self.input.param(
+            "KMIP_for_config_encryption", False)
+        self.KMIP_for_data_encryption = self.input.param(
+            "KMIP_for_data_encryption", False)
+        self.KMIP_for_audit_encryption = self.input.param(
+            "KMIP_for_audit_encryption", False)
+        self.enable_encryption_at_rest = self.input.param(
+            "enable_encryption_at_rest", False)
+        self.encryption_at_rest_id = self.input.param(
+            "encryption_at_rest_id", None)
+        self.KMIP_id = self.input.param("KMIP_id", None)
+        self.enable_config_encryption_at_rest = self.input.param(
+            "enable_config_encryption_at_rest", False)
+        self.config_encryption_at_rest_id = self.input.param(
+            "config_encryption_at_rest_id", None)
+        self.enable_log_encryption_at_rest = self.input.param(
+            "enable_log_encryption_at_rest", False)
+        self.enable_audit_encryption_at_rest = self.input.param(
+            "enable_audit_encryption_at_rest", False)
+        self.audit_encryption_at_rest_id = self.input.param(
+            "audit_encryption_at_rest_id", False)
+        self.log_encryption_at_rest_id = self.input.param(
+            "log_encryption_at_rest_id", False)
+        self.secret_rotation_interval = self.input.param(
+            "secret_rotation_interval", 60)
+        self.config_dekLifetime = self.input.param(
+            "config_dekLifetime", CbServer.secret_rotation_interval_in_seconds)
+        self.log_dekLifetime = self.input.param(
+            "log_dekLifetime", CbServer.encryption_at_rest_dek_lifetime_interval)
+        self.config_dekRotationInterval = self.input.param(
+            "config_dekRotationInterval", CbServer.encryption_at_rest_dek_rotation_interval)
+        self.audit_dekRotationInterval = self.input.param(
+            "audit_dekRotationInterval",
+            CbServer.encryption_at_rest_dek_rotation_interval)
+        self.audit_dekLifetime = self.input.param(
+            "audit_dekLifetime",
+            CbServer.encryption_at_rest_dek_rotation_interval)
+        self.log_dekRotationInterval = self.input.param(
+            "log_dekRotationInterval", CbServer.encryption_at_rest_dek_rotation_interval)
+        self.secret_id = self.input.param("secret_id", None)
+        self.encryptionAtRestDekRotationInterval = self.input.param(
+            "encryptionAtRestDekRotationInterval", 2592000)
+        self.rotationIntervalInSeconds = self.input.param(
+            "rotationIntervalInSeconds", 2592000)
+        self.encryption_at_rest_dek_lifetime = self.input.param(
+            "encryption_at_rest_dek_lifetime", CbServer.encryption_at_rest_dek_lifetime_interval)
+        self.task_manager = None
+        self.encryption_util = EncryptionUtil(self.task_manager)
+
 
         # upgrade related params
         self.product = self.input.param('product', 'couchbase-server')
@@ -422,6 +495,35 @@ class OnPremBaseTestCase(unittest.TestCase):
                 traceback.print_exc()
                 self.fail(e)
 
+            # Creating encryption keys
+            encryption_result = self.encryption_util.setup_encryption_at_rest(
+                cluster_master=self.master,
+                bypass_encryption_func=self.bypass_encryption_setting,
+                create_KMIP_secret=self.create_KMIP_secret,
+                enable_encryption_at_rest=self.enable_encryption_at_rest,
+                enable_config_encryption_at_rest=self.enable_config_encryption_at_rest,
+                enable_log_encryption_at_rest=self.enable_log_encryption_at_rest,
+                enable_audit_encryption_at_rest=self.enable_audit_encryption_at_rest,
+                secret_rotation_interval=self.secret_rotation_interval,
+                kmip_key_uuid=self.kmip_key_uuid,
+                client_certs_path=self.client_certs_path,
+                KMIP_pkcs8_file_name=self.KMIP_pkcs8_file_name,
+                KMIP_cert_file_name=self.KMIP_cert_file_name,
+                private_key_passphrase=self.private_key_passphrase,
+                kmip_host_name=self.kmip_host_name,
+                KMIP_for_config_encryption=self.KMIP_for_config_encryption,
+                config_dekLifetime=self.config_dekLifetime,
+                config_dekRotationInterval=self.config_dekRotationInterval,
+                KMIP_for_log_encryption=self.KMIP_for_log_encryption,
+                log_dekLifetime=self.log_dekLifetime,
+                log_dekRotationInterval=self.log_dekRotationInterval,
+                KMIP_for_audit_encryption=self.KMIP_for_audit_encryption,
+                audit_dekLifetime=self.audit_dekLifetime,
+                audit_dekRotationInterval=self.audit_dekRotationInterval
+            )
+            # Set the returned IDs back to self
+            self.encryption_util.set_encryption_ids(self, encryption_result)
+
             if self.dgm_run:
                 self.quota = 256
             if self.total_buckets > 10:
@@ -520,6 +622,10 @@ class OnPremBaseTestCase(unittest.TestCase):
         end_time = time.time()
         total_time = end_time - start_time
         self.log.info("Time to execute basesetup : %s" % total_time)
+
+    def bypass_encryption_setting(self):
+        self.log.info("Bypassing encryption restrictions")
+        self.encryption_util.bypass_encryption_restrictions(server=self.master)
 
     def suite_setUp(self):
         pass

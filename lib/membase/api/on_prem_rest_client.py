@@ -3112,7 +3112,121 @@ class RestConnection(object):
         json_parsed = json.loads(content)
         return status, json_parsed
 
+    def create_secret(self, params):
+        """
+         POST :: /settings/encryptionKeys
+        """
+        api = self.baseUrl + '/settings/encryptionKeys'
+        json_params = json.dumps(params)
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        return status, json_parsed
 
+    def get_all_secrets(self):
+        """
+        GET :: settings/encryptionKeys
+        """
+        api = self.baseUrl + 'settings/encryptionKeys'
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='GET', headers=headers)
+        return status, json_parsed
+
+    def get_specific_secret(self, secret_id):
+        """
+        GET :: /secrets/<secret_id>
+        """
+        api = self.baseUrl + '/secrets/' + str(secret_id)
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='GET', headers=headers)
+        return status, json_parsed
+
+    def download_keks(self, secret_id):
+        """
+        GET :: /secrets/<secret_id>/backup
+        """
+        api = self.baseUrl + '/secrets/' + str(secret_id) + '/backup'
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='GET', headers=headers)
+        return status, json_parsed
+
+    def modify_secret(self, secret_id, params):
+        """
+        PUT :: /settings/encryptionKeys/<secret_id>
+        """
+        api = self.baseUrl + '/settings/encryptionKeys/' + str(secret_id)
+        headers = self._create_headers()
+        json_params = json.dumps(params)
+        status, json_parsed, _ = self._http_request(api, method='PUT', params=json_params, headers=headers)
+        return status, json_parsed
+
+    def delete_secret(self, secret_id):
+        """
+         DELETE :: settings/encryptionKeys/<secret_id>
+        """
+        api = self.baseUrl + 'settings/encryptionKeys/' + str(secret_id)
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='DELETE', headers=headers)
+        return status, json_parsed
+
+    def get_encryption_at_rest_config(self):
+        """
+        GET :: /settings/security/encryptionAtRest
+        """
+        api = self.baseUrl + '/settings/security/encryptionAtRest'
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='GET', headers=headers)
+        return status, json_parsed
+
+    def configure_encryption_at_rest(self, params):
+        """
+        POST :: /settings/security/encryptionAtRest
+        """
+        api = self.baseUrl + '/settings/security/encryptionAtRest'
+        headers = self._create_headers()
+        json_params = json.dumps(params)
+        url_encoded_params = '&'.join(['{}={}'.format(key, value) for key, value in params.items()])
+        status, json_parsed, _ = self._http_request(api, method='POST', params=url_encoded_params, headers=headers)
+        return status, json_parsed
+
+    def trigger_data_reencryption(self, bucket):
+        """
+        POST :: /controller/dropEncryptionAtRestKeys/bucket/<bucket>
+        """
+        api = self.baseUrl + '/controller/dropEncryptionAtRestKeys/bucket/' + str(bucket)
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
+        return status, json_parsed
+
+    def trigger_kek_rotation(self, secret_id):
+        """
+        POST :: /controller/rotateSecret/<secret_id>
+        """
+        api = self.baseUrl + '/controller/rotateSecret/' + str(secret_id)
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
+        return status, json_parsed
+
+    def enable_bucket_encryption(self, bucket, secret_id):
+        """
+        POST :: /pools/default/buckets/<bucket>
+        """
+        api = self.baseUrl + '/pools/default/buckets/' + str(bucket)
+        headers = self._create_headers()
+        params = {'encryptionAtRestKeyId': secret_id}
+        json_params = json.dumps(params)
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        return status, json_parsed
+
+    def disable_bucket_encryption(self, bucket):
+        """
+        POST :: /pools/default/buckets/<bucket>
+        """
+        api = self.baseUrl + '/pools/default/buckets/' + str(bucket)
+        headers = self._create_headers()
+        params = {'encryptionAtRestKeyId': '-1'}
+        json_params = json.dumps(params)
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        return status, json_parsed
 
     def get_bucket_stats_json(self, bucket='default'):
         stats = {}
