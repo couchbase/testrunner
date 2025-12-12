@@ -625,7 +625,7 @@ class TestInputParser():
                 if server.ssh_username == '':
                     server.ssh_username = 'root'
                 if server.ssh_password == '':
-                    server.ssh_password = 'northscale!23'
+                    server.ssh_password = os.environ("SSH_PASSWORD")
                 if server.cli_path == '':
                     server.cli_path = '/opt/membase/bin/'
                 if not server.port:
