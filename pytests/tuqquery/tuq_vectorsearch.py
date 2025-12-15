@@ -535,12 +535,16 @@ class VectorSearchTests(QueryTests):
         similarity = self.distance.lower()
         if similarity in ['l2', 'euclidean']:
             similarity += '_squared'
-        expected_index1 = f"CREATE INDEX adv_brand_size_vecVECTOR_id ON `default`(`brand`,`size`,`vec` VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_index2 = f"CREATE INDEX adv_size_brand_vecVECTOR_id ON `default`(`size`,`brand`,`vec` VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_bhive_index1 = f"CREATE VECTOR INDEX adv_VECTOR_vecVECTOR_INCLUDE_brand_size_id ON `default`(`vec` VECTOR) INCLUDE (`brand`,`size`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vecVECTOR_INCLUDE_size_brand_id ON `default`(`vec` VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        vector_type = self.vector_type.upper()
+        expected_index1 = f"CREATE INDEX adv_brand_size_vec{vector_type}VECTOR_id ON `default`(`brand`,`size`,`vec` {vector_type} VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        expected_index2 = f"CREATE INDEX adv_size_brand_vec{vector_type}VECTOR_id ON `default`(`size`,`brand`,`vec` {vector_type} VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        expected_bhive_index1 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`brand`,`size`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
         expected_property = "ORDER pushdown, LIMIT pushdown"
-        advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        if self.vector_type == 'sparse':
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[1].tolist()}, {self.nprobes}) LIMIT 100'
+        else:
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}", {self.nprobes}) LIMIT 100'
         advise = self.run_cbq_query(advise_ann_query)
         self.log.info(advise['results'])
         adviseinfo = advise['results'][0]['advice']['adviseinfo']
@@ -557,20 +561,24 @@ class VectorSearchTests(QueryTests):
             self.run_cbq_query(index_statement)
             self.run_cbq_query(bhive_index_statement)
         finally:
-            self.run_cbq_query(f'DROP INDEX adv_brand_size_vecVECTOR_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_size_brand_vecVECTOR_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vecVECTOR_INCLUDE_brand_size_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vecVECTOR_INCLUDE_size_brand_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_brand_size_vec{vector_type}VECTOR_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_size_brand_vec{vector_type}VECTOR_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id IF EXISTS on default')
 
     def test_advise_ann_no_limit(self):
         similarity = self.distance.lower()
         if similarity in ['l2', 'euclidean']:
             similarity += '_squared'
-        expected_index1 = f"CREATE INDEX adv_brand_size_vecVECTOR_id ON `default`(`brand`,`size`,`vec` VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_index2 = f"CREATE INDEX adv_size_brand_vecVECTOR_id ON `default`(`size`,`brand`,`vec` VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_bhive_index1 = f"CREATE VECTOR INDEX adv_VECTOR_vecVECTOR_INCLUDE_brand_size_id ON `default`(`vec` VECTOR) INCLUDE (`brand`,`size`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vecVECTOR_INCLUDE_size_brand_id ON `default`(`vec` VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
-        advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}")'
+        vector_type = self.vector_type.upper()
+        expected_index1 = f"CREATE INDEX adv_brand_size_vec{vector_type}VECTOR_id ON `default`(`brand`,`size`,`vec` {vector_type} VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        expected_index2 = f"CREATE INDEX adv_size_brand_vec{vector_type}VECTOR_id ON `default`(`size`,`brand`,`vec` {vector_type} VECTOR,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        expected_bhive_index1 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`brand`,`size`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
+        if self.vector_type == 'sparse':
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[1].tolist()}, {self.nprobes})'
+        else:
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}", {self.nprobes})'
         advise = self.run_cbq_query(advise_ann_query)
         self.log.info(advise['results'])
         adviseinfo = advise['results'][0]['advice']['adviseinfo']
@@ -583,10 +591,10 @@ class VectorSearchTests(QueryTests):
             self.run_cbq_query(index_statement)
             self.run_cbq_query(bhive_index_statement)
         finally:
-            self.run_cbq_query(f'DROP INDEX adv_brand_size_vecVECTOR_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_size_brand_vecVECTOR_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vecVECTOR_INCLUDE_brand_size_id IF EXISTS on default')
-            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vecVECTOR_INCLUDE_size_brand_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_brand_size_vec{vector_type}VECTOR_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_size_brand_vec{vector_type}VECTOR_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id IF EXISTS on default')
+            self.run_cbq_query(f'DROP INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id IF EXISTS on default')
 
     def test_advise_knn(self):
         expected_index1 = f"CREATE INDEX adv_brand_size ON `default`(`brand`,`size`)"
