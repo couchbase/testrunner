@@ -609,6 +609,7 @@ class VectorSearchTests(QueryTests):
 
     def test_catalog(self):
         try:
+            vector_type = self.vector_type.upper()
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
             indexes = self.run_cbq_query('SELECT * FROM system:indexes')
@@ -617,7 +618,7 @@ class VectorSearchTests(QueryTests):
             index_name = index_info['name']
             index_key = index_info['index_key']
             self.assertEqual(index_name, f'vector_index_{self.distance}')
-            self.assertEqual(index_key, ['`size`', '`brand`', '`vec` VECTOR'])
+            self.assertEqual(index_key, ['`size`', '`brand`', f'`vec` {vector_type} VECTOR'])
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
