@@ -89,6 +89,7 @@ class EventingBaseTest(QueryHelperTests):
         metadata_bucket_name, metadata_scope, metadata_collection = self._get_metadata_keyspace()
         metadata_bucket = RestConnection(self.master).get_bucket(metadata_bucket_name)
         if metadata_bucket is not None and not self.skip_metabucket_check:
+            self.sleep(5)  # Wait a few seconds for metadata cleanup
             metadata_item_count = CollectionsStats(self.master).\
                 get_collection_item_count_cumulative(metadata_bucket, metadata_scope,
                                                      metadata_collection, self.get_kv_nodes())
