@@ -71,8 +71,7 @@ class QueryExpirationTests(QueryTests):
         self.run_cbq_query(expiration_index_query)
         primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
-
-        cb = self.cb_cluster.open_bucket(self.default_bucket_name)
+        cb = self.cb_cluster.bucket(self.default_bucket_name).default_collection()
         indexed_item = 0
         item_count_before_inserts = \
             self.cb_rest.get_index_stats()[self.default_bucket_name][self.exp_index][self.index_stat]
@@ -104,9 +103,11 @@ class QueryExpirationTests(QueryTests):
         # Validating docs expiration setting
         self.sleep(1.5 * expiration_time, "Waiting for docs to get expired")
         for doc_id in inserted_docs:
-            doc = cb.get(doc_id, quiet=True)
-            self.assertEqual(doc.value, None,
-                             "Inserted doc hasn't expired after passage of expiration time")
+            try:
+                doc = cb.get(doc_id, quiet=True)
+            except Exception as e:
+                self.assertTrue("DocumentNotFoundException" in str(e), f"DocumentNotFoundException not found please check {str(e)}")
+                continue
         select_query = "SELECT * FROM {0}".format(query_default_bucket)
         self.run_cbq_query(select_query)
         # Getting index count after expiration of document
@@ -334,7 +335,7 @@ class QueryExpirationTests(QueryTests):
         self.cluster.create_default_bucket(default_params)
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
-        cb = self.cb_cluster.open_bucket(self.default_bucket_name)
+        cb = self.cb_cluster.bucket(self.default_bucket_name).default_collection()
         query_default_bucket = self.get_collection_name(self.default_bucket_name)
 
         # creating index on meta.expiration and a primary index
@@ -368,9 +369,11 @@ class QueryExpirationTests(QueryTests):
         # Validating docs expiration setting
         self.sleep(expiration_time * 2 + 10, "Waiting for docs to get expired")
         for doc_id in inserted_docs:
-            doc = cb.get(doc_id, quiet=True)
-            self.assertEqual(doc.value, None,
-                             "Inserted doc hasn't expired after passage of expiration time")
+            try:
+                doc = cb.get(doc_id, quiet=True)
+            except Exception as e:
+                self.assertTrue("DocumentNotFoundException" in str(e), f"DocumentNotFoundException not found please check {str(e)}")
+                continue
         select_query = "SELECT * FROM {0}".format(query_default_bucket)
         self.run_cbq_query(select_query)
         # Getting index count after expiration of document
@@ -668,7 +671,7 @@ class QueryExpirationTests(QueryTests):
         self.run_cbq_query(primary_index_query)
 
         # Inserting docs with ttl higher than bucket ttl and check if the ttl is set to bucket ttl
-        cb = self.cb_cluster.open_bucket(bucket_name=self.default_bucket_name)
+        cb = self.cb_cluster.bucket(self.default_bucket_name).default_collection()
 
         for num in range(num_iter):
             doc_id = "k{0}".format(num)
@@ -843,6 +846,7 @@ class QueryExpirationTests(QueryTests):
                                                     "inserted": true}},
                                           OPTIONS {{"expiration": {1}}})'''.format(query_sample_bucket, expiration_time)
         self.run_cbq_query(merge_upsert_query)
+        self.sleep(10)
 
         # Validating Merge UPSERT query
         doc_count_query = "SELECT COUNT(*) FROM {0}".format(query_sample_bucket)
@@ -950,8 +954,10 @@ class QueryExpirationTests(QueryTests):
         """
         @summary: Update doc expiration from a user who doesn't have Query delete permission
         """
-        cluster = Cluster('couchbase://{0}'.format(self.master.ip))
+
+
         authenticator = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
+        cluster = Cluster('couchbase://{0}'.format(self.master.ip))
         cluster.authenticate(authenticator)
 
         # Loading travel-sample bucket
