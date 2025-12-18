@@ -954,12 +954,6 @@ class QueryExpirationTests(QueryTests):
         """
         @summary: Update doc expiration from a user who doesn't have Query delete permission
         """
-
-
-        authenticator = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
-        cluster = Cluster('couchbase://{0}'.format(self.master.ip))
-        cluster.authenticate(authenticator)
-
         # Loading travel-sample bucket
         result_count = 7303
         self.rest.load_sample(self.sample_bucket)
