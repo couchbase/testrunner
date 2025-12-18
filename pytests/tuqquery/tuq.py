@@ -1154,7 +1154,7 @@ class QueryTests(BaseTestCase):
                                 else:
                                     self.log.error(f"Fail to create index: {ex}")
                             if next_time - init_time > 600:
-                                self.log.fail("Fail to create primary index before timeout")
+                                self.fail("Fail to create primary index before timeout")
                             time.sleep(2)
                     else:
                         if where != '':

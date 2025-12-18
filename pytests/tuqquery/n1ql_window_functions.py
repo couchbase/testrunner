@@ -239,7 +239,7 @@ class WindowFunctionsTest(QueryTests):
         super(WindowFunctionsTest, self).suite_setUp()
         if self.test_buckets != 'test_bucket':
             self.test_buckets = 'test_bucket'
-        self.init_nodes()
+        self.initialize_nodes()
         self.query_buckets = self.get_query_buckets(deferred_bucket=self.test_buckets)
         self.query_bucket = self.query_buckets[-1]
         self.load_test_data(self.query_bucket)
@@ -2256,7 +2256,7 @@ class WindowFunctionsTest(QueryTests):
     def _construct_window_function_call(self, v):
         return v['name'] + v['params'] + " over(" + v['partition'] + " " + v['order'] + " " + v['range'] + ")"
 
-    def init_nodes(self):
+    def initialize_nodes(self):
         test_bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
