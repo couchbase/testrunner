@@ -4052,7 +4052,8 @@ class FTSBaseTest(unittest.TestCase):
                             logging,
                             self._input.param(
                                 "log_level",
-                                None)))
+                                None).upper()))
+                self.log.info(f"Log level set to {self.log.level}")
 
     def _set_bleve_max_result_window(self):
         bmrw_value = self._input.param("bmrw_value", 100000000)
