@@ -1753,7 +1753,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 class ESRunQueryCompare(Task):
     def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
-                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None,ignore_wiki=False):
+                 use_collections=False,dataset=None,reduce_query_logging=False,variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None,ignore_wiki=False,hierarchical=False):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1776,6 +1776,10 @@ class ESRunQueryCompare(Task):
         self.fts_target_node = fts_target_node
         self.validation_data = validation_data
         self.ignore_wiki = ignore_wiki
+        # Hierarchical search mode
+        self.hierarchical = hierarchical or TestInputSingleton.input.param("hierarchical", False)
+        if self.hierarchical:
+            self.log.info("Hierarchical validation mode enabled for this query")
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1808,6 +1812,146 @@ class ESRunQueryCompare(Task):
                 json.dump(differing_hits,fp)
 
         shutil.make_archive(query_log_path,'zip',query_log_path)
+
+    def run_hierarchical_validation(self, fts_hits, fts_doc_ids):
+        """
+        Validate FTS results using hierarchical validator instead of Elasticsearch
+
+        Args:
+            fts_hits: Number of hits returned by FTS
+            fts_doc_ids: List of document IDs returned by FTS
+
+        Returns:
+            bool: True if validation passed, False otherwise
+        """
+        try:
+            # Import hierarchical validator
+            import sys
+            sys.path.insert(0, 'pytests/fts/hierarchical_search_helper')
+            from hs_validator import validate_documents
+            from doc_fetcher import fetch_documents_for_validation
+            from query_converter import convert_to_validator_query, convert_to_fts_query
+
+            # Get hierarchical query from test parameters
+            param_query = TestInputSingleton.input.param("hierarchical_query", "")
+            if not param_query:
+                # Default fallback query (must match the one in fts_base.py::generate_hierarchical_queries)
+                param_query = '[{"name":"Alice", "role":"Manager"}]'
+                self.log.warning("No hierarchical_query param found, using default query")
+
+            self.log.info(f"Hierarchical query param: {param_query}")
+
+            # Generate both FTS and validator queries from the same param
+            fts_query_obj = convert_to_fts_query(param_query)
+            validator_query = convert_to_validator_query(param_query)
+
+            self.log.info(f"Generated FTS query object: {json.dumps(fts_query_obj, indent=2)}")
+            self.log.info(f"Generated validator query: {json.dumps(validator_query, indent=2)}")
+
+            # Use validator query for validation
+            hierarchical_query = validator_query
+
+            self.log.info(f"Hierarchical query for validation: {json.dumps(hierarchical_query, indent=2)}")
+
+            # Get cluster connection info
+            bucket = self.fts_index._source_name
+
+            # Get scope and collection from index first, then fall back to parameters
+            # (matching the logic in fts_base.py)
+            scope = getattr(self.fts_index, 'scope', None)
+            if not scope or scope == '_default':
+                # Try to get from parameters (same logic as _load_hierarchical_data and create_index)
+                scope = TestInputSingleton.input.param("scope", "_default")
+                container_type = TestInputSingleton.input.param("container_type", "bucket")
+                if container_type == "collection" and scope == "_default":
+                    scope = TestInputSingleton.input.param("index_scope", "scope1")
+
+            # Get collections from index
+            collection = None
+            if hasattr(self.fts_index, 'collections') and self.fts_index.collections:
+                collection = self.fts_index.collections[0] if isinstance(self.fts_index.collections, list) else self.fts_index.collections
+
+            if not collection or collection == '_default':
+                # Try to get from parameters (same logic as _load_hierarchical_data and create_index)
+                collection = TestInputSingleton.input.param("collection", "_default")
+                container_type = TestInputSingleton.input.param("container_type", "bucket")
+                if container_type == "collection" and collection == "_default":
+                    collection_param = TestInputSingleton.input.param("index_collections", "collection1")
+                    if isinstance(collection_param, list):
+                        collection = collection_param[0] if collection_param else "collection1"
+                    else:
+                        collection = collection_param
+
+            # Get node IP from cluster
+            from lib.membase.api.rest_client import RestConnection
+            rest = RestConnection(self.fts_index._FTSIndex__cluster.get_random_fts_node())
+            node_ip = rest.ip
+            username = rest.username
+            password = rest.password
+
+            # Get document ID prefix
+            doc_prefix = TestInputSingleton.input.param("hierarchical_doc_prefix", "hvec_")
+
+            self.log.info(f"Fetching documents from bucket={bucket}, scope={scope}, collection={collection}")
+            self.log.info(f"Document prefix filter: {doc_prefix}")
+
+            # Fetch documents from cluster
+            doc_source = fetch_documents_for_validation(
+                node_ip=node_ip,
+                bucket=bucket,
+                scope=scope,
+                collection=collection,
+                username=username,
+                password=password,
+                doc_id_prefix=doc_prefix,
+                batch_size=1000
+            )
+
+            # Run hierarchical validation
+            self.log.info("Running hierarchical validator...")
+            hs_matching_docs = validate_documents(
+                doc_source=doc_source,
+                query=hierarchical_query,
+                batch_size=100_000,
+                verbose=True
+            )
+
+            hs_hits = len(hs_matching_docs)
+            self.log.info(f"Hierarchical validator hits: {hs_hits}")
+            self.log.info(f"FTS hits: {fts_hits}")
+
+            # Compare results
+            if hs_hits != fts_hits:
+                self.log.error(f"FAIL: Hit count mismatch - FTS: {fts_hits}, HS Validator: {hs_hits}")
+                self.passed = False
+                return False
+
+            # Compare document IDs
+            fts_doc_ids_set = set(fts_doc_ids)
+            hs_doc_ids_set = hs_matching_docs
+
+            hs_but_not_fts = list(hs_doc_ids_set - fts_doc_ids_set)
+            fts_but_not_hs = list(fts_doc_ids_set - hs_doc_ids_set)
+
+            if not (hs_but_not_fts or fts_but_not_hs):
+                self.log.info("SUCCESS: Docs returned by FTS = docs validated by HS Validator")
+                self.log.info(f"  All {fts_hits} document IDs match!")
+                return True
+            else:
+                if fts_but_not_hs:
+                    self.log.error(f"FAIL: {len(fts_but_not_hs)} doc(s) returned by FTS but not validated by HS")
+                    self.log.error(f"  Sample (first 10): {fts_but_not_hs[:10]}")
+                if hs_but_not_fts:
+                    self.log.error(f"FAIL: {len(hs_but_not_fts)} doc(s) validated by HS but not returned by FTS")
+                    self.log.error(f"  Sample (first 10): {hs_but_not_fts[:10]}")
+                self.passed = False
+                return False
+
+        except Exception as e:
+            self.log.error(f"Exception during hierarchical validation: {e}")
+            import traceback
+            self.log.error(traceback.format_exc())
+            return False
 
     def execute(self, task_manager):
         self.es_compare = True
@@ -1918,8 +2062,25 @@ class ESRunQueryCompare(Task):
             except ServerUnavailableException:
                 self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
+
+            # Use hierarchical validator instead of ES if in hierarchical mode
+            if self.hierarchical:
+                self.log.info("=" * 70)
+                self.log.info("Using Hierarchical Validator for result verification")
+                self.log.info("=" * 70)
+                try:
+                    hs_validation_passed = self.run_hierarchical_validation(fts_hits, fts_doc_ids)
+                    if not hs_validation_passed:
+                        self.passed = False
+                except Exception as e:
+                    self.log.error(f"Hierarchical validation failed with error: {e}")
+                    self.passed = False
+                # Skip ES comparison and N1QL verification
+                should_verify_n1ql = False
+
+            # Only run ES comparison if NOT in hierarchical mode
             es_hits = 0
-            if self.es and self.es_query and "vector" not in self.fts_query:
+            if not self.hierarchical and self.es and self.es_query and "vector" not in self.fts_query:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query,dataset=self.dataset,ignore_wiki=self.ignore_wiki)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
                               (json.dumps(self.es_query, ensure_ascii=False),
@@ -5445,10 +5606,10 @@ class EnterpriseRestoreTask(Task):
                 f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
                 f" --repo {self.backupset.name}"
                 f" {self.cluster_flag} http://{self.backupset.restore_cluster_host.ip}:{self.backupset.restore_cluster_host.port}"
-                f" --username {self.backupset.restore_cluster_host.rest_username} " 
+                f" --username {self.backupset.restore_cluster_host.rest_username} "
                    f" --password {self.backupset.restore_cluster_host.rest_password}"
                 f" --start {backup_start}"
-                f" --end {backup_end}" 
+                f" --end {backup_end}"
                 f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
                        f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
                 f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
