@@ -2211,6 +2211,7 @@ class CouchbaseCluster:
         self.__bypass_n1ql_nodes = []
         self.capella_run = TestInputSingleton.input.param("capella_run", False)
         self.modify_memory_quotas = TestInputSingleton.input.param("modify_memory_quotas", False)
+        self.hierarchical = TestInputSingleton.input.param("hierarchical", False)
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
@@ -2931,6 +2932,274 @@ class CouchbaseCluster:
             index.create()
         return index
 
+    def create_hierarchical_fts_index(self, name, source_name, scope="_default",
+                                       collections=None, index_type='scorch'):
+        """
+        Create a hierarchical nested FTS index for hierarchical search validation
+
+        @param name: Index name
+        @param source_name: Bucket name
+        @param scope: Scope name (default: _default)
+        @param collections: Collection names (default: ["_default"])
+        @param index_type: Index type (default: scorch)
+        @return: FTSIndex object
+        """
+        if collections is None:
+            collections = ["_default"]
+
+        # Use empty string for UUID - FTS will fill it in when creating the index
+        bucket_uuid = ""
+
+        # Build the hierarchical nested index definition
+        index_definition = {
+            "name": name,
+            "type": "fulltext-index",
+            "params": {
+                "doc_config": {
+                    "docid_prefix_delim": "",
+                    "docid_regexp": "",
+                    "mode": "scope.collection.type_field",
+                    "type_field": "type"
+                },
+                "mapping": {
+                    "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "default_mapping": {
+                        "dynamic": False,
+                        "enabled": False
+                    },
+                    "default_type": "_default",
+                    "docvalues_dynamic": False,
+                    "index_dynamic": False,
+                    "scoring_model": "tf-idf",
+                    "store_dynamic": False,
+                    "type_field": "_type",
+                    "types": {
+                        f"{scope}.{collections[0]}": {
+                            "dynamic": False,
+                            "enabled": True,
+                            "properties": {
+                                "company": {
+                                    "dynamic": False,
+                                    "enabled": True,
+                                    "properties": {
+                                        "departments": {
+                                            "dynamic": False,
+                                            "enabled": True,
+                                            "nested": True,
+                                            "properties": {
+                                                "employees": {
+                                                    "dynamic": False,
+                                                    "enabled": True,
+                                                    "nested": True,
+                                                    "properties": {
+                                                        "home": {
+                                                            "enabled": True,
+                                                            "dynamic": False,
+                                                            "fields": [
+                                                                {
+                                                                    "analyzer": "en",
+                                                                    "index": True,
+                                                                    "name": "home",
+                                                                    "type": "text"
+                                                                }
+                                                            ]
+                                                        },
+                                                        "name": {
+                                                            "enabled": True,
+                                                            "dynamic": False,
+                                                            "fields": [
+                                                                {
+                                                                    "analyzer": "en",
+                                                                    "index": True,
+                                                                    "name": "name",
+                                                                    "type": "text"
+                                                                }
+                                                            ]
+                                                        },
+                                                        "role": {
+                                                            "enabled": True,
+                                                            "dynamic": False,
+                                                            "fields": [
+                                                                {
+                                                                    "analyzer": "en",
+                                                                    "index": True,
+                                                                    "name": "role",
+                                                                    "type": "text"
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "projects": {
+                                                    "dynamic": False,
+                                                    "enabled": True,
+                                                    "nested": True,
+                                                    "properties": {
+                                                        "status": {
+                                                            "enabled": True,
+                                                            "dynamic": False,
+                                                            "fields": [
+                                                                {
+                                                                    "analyzer": "en",
+                                                                    "index": True,
+                                                                    "name": "status",
+                                                                    "type": "text"
+                                                                }
+                                                            ]
+                                                        },
+                                                        "title": {
+                                                            "enabled": True,
+                                                            "dynamic": False,
+                                                            "fields": [
+                                                                {
+                                                                    "analyzer": "en",
+                                                                    "index": True,
+                                                                    "name": "title",
+                                                                    "type": "text"
+                                                                }
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "budget": {
+                                                    "enabled": True,
+                                                    "dynamic": False,
+                                                    "fields": [
+                                                        {
+                                                            "index": True,
+                                                            "name": "budget",
+                                                            "type": "number"
+                                                        }
+                                                    ]
+                                                },
+                                                "name": {
+                                                    "enabled": True,
+                                                    "dynamic": False,
+                                                    "fields": [
+                                                        {
+                                                            "analyzer": "en",
+                                                            "index": True,
+                                                            "name": "name",
+                                                            "type": "text"
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        },
+                                        "locations": {
+                                            "dynamic": False,
+                                            "enabled": True,
+                                            "nested": True,
+                                            "properties": {
+                                                "city": {
+                                                    "enabled": True,
+                                                    "dynamic": False,
+                                                    "fields": [
+                                                        {
+                                                            "analyzer": "en",
+                                                            "index": True,
+                                                            "name": "city",
+                                                            "type": "text"
+                                                        }
+                                                    ]
+                                                },
+                                                "country": {
+                                                    "enabled": True,
+                                                    "dynamic": False,
+                                                    "fields": [
+                                                        {
+                                                            "analyzer": "en",
+                                                            "index": True,
+                                                            "name": "country",
+                                                            "type": "text"
+                                                        }
+                                                    ]
+                                                }
+                                            }
+                                        },
+                                        "name": {
+                                            "enabled": True,
+                                            "dynamic": False,
+                                            "fields": [
+                                                {
+                                                    "analyzer": "en",
+                                                    "index": True,
+                                                    "name": "name",
+                                                    "type": "text"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                },
+                                "id": {
+                                    "enabled": True,
+                                    "dynamic": False,
+                                    "fields": [
+                                        {
+                                            "analyzer": "en",
+                                            "index": True,
+                                            "name": "id",
+                                            "type": "text"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "store": {
+                    "indexType": index_type,
+                    "scorchMergePlanOptions": {
+                        "floorSegmentFileSize": 20971520
+                    },
+                    "scorchPersisterOptions": {
+                        "maxSizeInMemoryMergePerWorker": 20971520,
+                        "numPersisterWorkers": 4
+                    },
+                    "segmentVersion": 16
+                }
+            },
+            "sourceType": "gocbcore",
+            "sourceName": source_name,
+            "sourceUUID": bucket_uuid,
+            "sourceParams": {
+                "scopeParams": {
+                    "collections": [
+                        {
+                            "name": collections[0],
+                            "uid": "0"
+                        }
+                    ],
+                    "name": scope
+                }
+            },
+            "planParams": {
+                "maxPartitionsPerPIndex": 128,
+                "indexPartitions": 1,
+                "numReplicas": 0
+            }
+        }
+
+        # self.log.info("="*70)
+        # self.log.info(f"Creating hierarchical nested FTS index: {name}")
+        # self.log.info(f"  Bucket: {source_name}")
+        # self.log.info(f"  Scope: {scope}, Collection: {collections[0]}")
+        # self.log.info(f"  Nested fields: company.departments.employees, company.locations")
+        # self.log.info("="*70)
+
+        index = self.create_fts_index(
+            name=name,
+            source_name=source_name,
+            payload=index_definition,
+            collection_index=True,
+            scope=scope,
+            collections=collections
+        )
+
+        return index
+
     def create_fts_index_wait_for_completion(self, sample_index_name_1, sample_bucket_name,
                                              collection_index=False, _type=None):
         fts_idx = self.create_fts_index(name=sample_index_name_1, source_name=sample_bucket_name,
@@ -3576,11 +3845,15 @@ class CouchbaseCluster:
         return tasks
 
     def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
-                                    use_collections=False, dataset=None, variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None,ignore_wiki=False):
+                                    use_collections=False, dataset=None, variable_node = None,fts_nodes=None,fts_target_node=None,validation_data=None,ignore_wiki=False,hierarchical=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
         """
+        # Use instance hierarchical setting if not explicitly provided
+        if hierarchical is None:
+            hierarchical = self.hierarchical
+
         task = self.__clusterop.async_run_fts_query_compare(fts_index=fts_index,
                                                             es_instance=es,
                                                             query_index=query_index,
@@ -3593,7 +3866,8 @@ class CouchbaseCluster:
                                                             fts_nodes=fts_nodes,
                                                             fts_target_node=fts_target_node,
                                                             validation_data=validation_data,
-                                                            ignore_wiki=ignore_wiki)
+                                                            ignore_wiki=ignore_wiki,
+                                                            hierarchical=hierarchical)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4198,8 +4472,9 @@ class FTSBaseTest(unittest.TestCase):
                     rest.delete_zone(zone)
 
         self.java_sdk_client = self._input.param("java_sdk_client", False)
-        if self.java_sdk_client:
-            self.log.info("Building docker image with java sdk client")
+        # Build java_sdk_client jar for both regular java_sdk_client tests AND hierarchical mode
+        if self.java_sdk_client or self.hierarchical:
+            self.log.info("Building java_sdk_client jar via JavaSdkSetup")
             JavaSdkSetup()
         if self.capella_run:
             self.__setup_for_test_capella()
@@ -4606,26 +4881,29 @@ class FTSBaseTest(unittest.TestCase):
                 self.teardown_es()
 
             self.log.info("Cleaning up docker containers")
-            docker_client = docker.from_env()
-            for docker_container in self.docker_containers:
-                try:
-                    container = docker_client.containers.get(docker_container)
-                    if container.status == "running":
-                        try:
-                            self.log.info(f"Docker container {docker_container} is running")
-                            container.stop()
-                            self.log.info(f"Docker container {docker_container} stopped")
-                        except Exception as e:
-                            self.log.error(f"Failed to stop docker container: {e}")
-                    else:
-                        self.log.info(f"Docker conainter {docker_container} is not running")
-                        self.log.info("Prune stopped containers")
-                        try:
-                            docker_client.containers.prune()
-                        except Exception as e:
-                            self.log.error(f"Failed to prune docker containers {e}")
-                except docker.errors.NotFound:
-                    self.log.info(f"Docker container {docker_container} does not exist")
+            try:
+                docker_client = docker.from_env()
+                for docker_container in self.docker_containers:
+                    try:
+                        container = docker_client.containers.get(docker_container)
+                        if container.status == "running":
+                            try:
+                                self.log.info(f"Docker container {docker_container} is running")
+                                container.stop()
+                                self.log.info(f"Docker container {docker_container} stopped")
+                            except Exception as e:
+                                self.log.error(f"Failed to stop docker container: {e}")
+                        else:
+                            self.log.info(f"Docker conainter {docker_container} is not running")
+                            self.log.info("Prune stopped containers")
+                            try:
+                                docker_client.containers.prune()
+                            except Exception as e:
+                                self.log.error(f"Failed to prune docker containers {e}")
+                    except docker.errors.NotFound:
+                        self.log.info(f"Docker container {docker_container} does not exist")
+            except Exception as e:
+                self.log.warning(f"Docker not available for cleanup (this is OK if not using Docker): {e}")
 
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
@@ -4845,8 +5123,21 @@ class FTSBaseTest(unittest.TestCase):
         self.index_per_bucket = self._input.param("index_per_bucket", 1)
         self.dataset = self._input.param("dataset", "emp")
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
+        # Hierarchical search mode - uses hs_validator instead of ES
+        self.hierarchical = self._input.param("hierarchical", False)
+
         self.compare_es = self._input.param("compare_es", False)
-        if self.compare_es:
+
+        # If hierarchical mode is enabled, disable ES comparison
+        if self.hierarchical:
+            self.log.info("=" * 70)
+            self.log.info("HIERARCHICAL SEARCH MODE ENABLED")
+            self.log.info("  - Will load hierarchical dataset via java_sdk_client")
+            self.log.info("  - Validation will use hs_validator (NOT Elasticsearch)")
+            self.log.info("=" * 70)
+            self.compare_es = False
+            self.es = None
+        elif self.compare_es:
             if not self.elastic_node:
                 self.fail("For ES result validation, pls add in the"
                           " [elastic] section in your ini file,"
@@ -5593,12 +5884,17 @@ class FTSBaseTest(unittest.TestCase):
     def generate_random_queries(self, index, num_queries=1, query_type=["match"],
                                 seed=0):
         """
-         Calls FTS-ES Query Generator for employee dataset
+         Calls FTS-ES Query Generator for employee dataset (or hierarchical query generator if hierarchical=True)
          @param num_queries: number of queries to return
          @query_type: a list of different types of queries to generate
                       like: query_type=["match", "match_phrase","bool",
                                         "conjunction", "disjunction"]
         """
+        # If hierarchical mode, generate hierarchical queries instead of using RQG
+        if self.hierarchical:
+            self.log.info("HIERARCHICAL MODE: Using hierarchical query generator instead of RQG")
+            return self.generate_hierarchical_queries(index, num_queries)
+
         from .random_query_generator.rand_query_gen import FTSESQueryGenerator
         self.doc_maps = int(TestInputSingleton.input.param("doc_maps", 1))
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
@@ -5619,6 +5915,39 @@ class FTSBaseTest(unittest.TestCase):
                 self.es.es_queries.append(
                     json.loads(json.dumps(es_query, ensure_ascii=False)))
             return index.fts_queries, self.es.es_queries
+
+        return index.fts_queries
+
+    def generate_hierarchical_queries(self, index, num_queries=1):
+        """
+        Generate hierarchical nested queries from conf file parameters
+        Uses query_converter to parse shorthand query syntax
+
+        @param index: FTS index object to add queries to
+        @param num_queries: number of times to repeat the query (default: 1)
+        """
+        import sys
+        sys.path.insert(0, 'pytests/fts/hierarchical_search_helper')
+        from query_converter import convert_to_fts_query
+
+        param_query = TestInputSingleton.input.param("hierarchical_query", "")
+        if not param_query:
+            param_query = '[{"name":"Alice", "role":"Manager"}]'
+            self.log.warning("No hierarchical_query param found, using default query")
+
+        self.log.info("="*70)
+        self.log.info("GENERATING HIERARCHICAL QUERIES")
+        self.log.info("="*70)
+        self.log.info(f"Query param: {param_query}")
+
+        fts_query = convert_to_fts_query(param_query)
+
+        self.log.info(f"Generated FTS query:\n{json.dumps(fts_query, indent=2)}")
+
+        for i in range(num_queries):
+            index.fts_queries.append(json.loads(json.dumps(fts_query, ensure_ascii=False)))
+
+        self.log.info(f"Added {num_queries} hierarchical query/queries to index")
 
         return index.fts_queries
 
@@ -5774,8 +6103,46 @@ class FTSBaseTest(unittest.TestCase):
                      collections=None, no_check=False,store_all_flag=False,filters = None,synonym_source=None):
         """
         Creates a default index given bucket, index_name and plan_params
+        If hierarchical mode is enabled, creates a hierarchical nested index instead.
         """
 
+        # Use hierarchical index creation if hierarchical mode is enabled
+        if self.hierarchical:
+            self.log.info("Hierarchical mode: Creating nested hierarchical FTS index")
+
+            # Get scope and collection from parameters (matching _load_hierarchical_data behavior)
+            if not scope:
+                scope = self._input.param("scope", "_default")
+            if not collections:
+                collections = [self._input.param("collection", "_default")]
+
+            # For collection tests, check if we need to use scope1/collection1
+            container_type = self._input.param("container_type", "bucket")
+            if container_type == "collection":
+                # If still default, use the same defaults as _load_hierarchical_data
+                if scope == "_default":
+                    scope = self._input.param("index_scope", "scope1")
+                if collections == ["_default"]:
+                    collection_param = self._input.param("index_collections", "collection1")
+                    # index_collections might be a list, handle that
+                    if isinstance(collection_param, list):
+                        collections = [collection_param[0]] if collection_param else ["collection1"]
+                    else:
+                        collections = [collection_param]
+
+            self.log.info(f"Creating hierarchical index in: {bucket.name}.{scope}.{collections[0]}")
+
+            index = self._cb_cluster.create_hierarchical_fts_index(
+                name=index_name,
+                source_name=bucket.name,
+                scope=scope,
+                collections=collections,
+                index_type=self._input.param("index_type", "scorch")
+            )
+            self.is_index_partitioned_balanced(index)
+            return index
+
+        # Normal index creation for non-hierarchical mode
         if not plan_params:
             plan_params = self.construct_plan_params()
         index = self._cb_cluster.create_fts_index(
@@ -6394,10 +6761,122 @@ class FTSBaseTest(unittest.TestCase):
                                                          end=self.create_gen[1].end,
                                                          op_type=OPS.DELETE))
 
+    def _load_hierarchical_data(self, num_items=None):
+        """
+        Load hierarchical dataset using java_sdk_client
+
+        Args:
+            num_items: Number of documents to load (if None, uses self._num_items)
+        """
+        self.log.info("=" * 70)
+        self.log.info("Loading hierarchical dataset via java_sdk_client")
+        self.log.info("=" * 70)
+        if num_items is None:
+            num_items = self._num_items
+
+        # Get hierarchical-specific parameters
+        doc_prefix = self._input.param("hierarchical_doc_prefix", "hvec_")
+        dataset_type = self._input.param("hierarchical_dataset", "hierarchical")
+        num_threads = self._input.param("hierarchical_threads", 16)
+        percent_create = self._input.param("hierarchical_pc", 100)
+
+        # Get bucket/scope/collection info from test parameters (matching create_index behavior)
+        buckets = self._cb_cluster.get_buckets()
+        bucket_name = buckets[0].name if buckets else "default"
+
+        # Get scope and collection from parameters (same as what create_index uses)
+        scope_name = self._input.param("scope", "_default")
+        collection_name = self._input.param("collection", "_default")
+
+        # For collection tests, check if we need to use scope1/collection1
+        container_type = self._input.param("container_type", "bucket")
+        if container_type == "collection":
+            # If not explicitly set, use the same defaults as create_index
+            if scope_name == "_default":
+                scope_name = self._input.param("index_scope", "scope1")
+            if collection_name == "_default":
+                collection_name = self._input.param("index_collections", "collection1")
+                # index_collections might be a list, handle that
+                if isinstance(collection_name, list):
+                    collection_name = collection_name[0] if collection_name else "collection1"
+
+        self.log.info(f"Loading hierarchical data to: {bucket_name}.{scope_name}.{collection_name}")
+        self.log.info(f"Number of documents: {num_items}")
+
+        # Debug: Check current working directory
+        import os
+        current_dir = os.getcwd()
+        self.log.info(f"DEBUG: Current working directory: {current_dir}")
+
+        # Compute absolute path to testrunner root (where java_sdk_client should be)
+        # This file is in: testrunner/pytests/fts/fts_base.py
+        # We need to go up 3 levels to get to testrunner root
+        this_file = os.path.abspath(__file__)
+        testrunner_root = os.path.dirname(os.path.dirname(os.path.dirname(this_file)))
+        self.log.info(f"DEBUG: Testrunner root: {testrunner_root}")
+
+        # Build absolute path to jar
+        jar_path = os.path.join(testrunner_root, "java_sdk_client/collections/target/javaclient/javaclient.jar")
+        self.log.info(f"DEBUG: Jar path: {jar_path}")
+        self.log.info(f"DEBUG: Jar exists? {os.path.exists(jar_path)}")
+
+        cmd = (
+            f"java -jar {jar_path} "
+            f"-i {self.master.ip} "
+            f"-u '{self.master.rest_username}' "
+            f"-p '{self.master.rest_password}' "
+            f"-b {bucket_name} "
+            f"-s {scope_name} "
+            f"-c {collection_name} "
+            f"-n {num_items} "
+            f"-pc {percent_create} "
+            f"-nt {num_threads} "
+            f"-dt {dataset_type} "
+            f"-dpx {doc_prefix}"
+        )
+
+        self.log.info("Executing java_sdk_client command:")
+        self.log.info(cmd)
+
+        # Execute command (following the EXACT pattern from SDKLoadDocumentsTask in lib/tasks/task.py)
+        import subprocess
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+            out = proc.communicate(timeout=600)  # 10 minute timeout
+
+            self.log.info("java_sdk_client output:")
+            self.log.info(out[0].decode("utf-8"))
+
+            if proc.returncode != 0:
+                raise Exception(f"java_sdk_client failed with return code {proc.returncode}")
+
+            self.log.info(f"Successfully loaded {num_items} hierarchical documents")
+
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            self.log.error("java_sdk_client timed out after 10 minutes")
+            raise
+        except Exception as e:
+            if 'proc' in locals():
+                proc.terminate()
+            self.log.error(f"Error loading hierarchical data: {e}")
+            raise
+
     def load_data(self, generator=None, data_loader_output=False, num_items=20000, exempt_bucket_prefix=None):
         """
          Blocking call to load data to Couchbase and ES
         """
+        # Handle hierarchical data loading via java_sdk_client
+        if self.hierarchical:
+            self.log.info("=" * 70)
+            self.log.info("Loading hierarchical dataset via java_sdk_client")
+            self.log.info("=" * 70)
+            # If num_items is default 20000 but self._num_items is set (from 'items' param), use that
+            if num_items == 20000 and hasattr(self, '_num_items') and self._num_items != 20000:
+                num_items = self._num_items
+            self._load_hierarchical_data(num_items=num_items)
+            return
+
         if self._dgm_run:
             self.create_gen = self._cb_cluster.load_all_buckets_till_dgm(
                 self._active_resident_ratio,
@@ -6429,6 +6908,88 @@ class FTSBaseTest(unittest.TestCase):
         for task in load_tasks:
             task.result()
         self.log.info("Loading phase complete!")
+
+    def _run_hierarchical_validation(self):
+        """
+        Run hierarchical validation using hs_validator for the configured query
+        """
+        try:
+            # Import hierarchical validator
+            import sys
+            import json
+            sys.path.insert(0, 'pytests/fts/hierarchical_search_helper')
+            from hs_validator import validate_documents
+            from doc_fetcher import fetch_documents_for_validation
+
+            # Get hierarchical query from test parameters
+            hierarchical_query_str = self._input.param(
+                "hierarchical_query",
+                '{"company": {"departments": {"employees": {"name": "Alice"}}}}'
+            )
+            hierarchical_query = json.loads(hierarchical_query_str)
+
+            self.log.info(f"Hierarchical query for validation: {json.dumps(hierarchical_query, indent=2)}")
+
+            # Get first index
+            if not self._cb_cluster.get_indexes():
+                self.log.error("No FTS indexes found for hierarchical validation")
+                return
+
+            index = self._cb_cluster.get_indexes()[0]
+
+            # Get cluster connection info
+            bucket = index._source_name
+            scope = "_default"
+            collection = "_default"
+
+            # Get node IP from cluster
+            from lib.membase.api.rest_client import RestConnection
+            rest = RestConnection(self._cb_cluster.get_random_fts_node())
+            node_ip = rest.ip
+            username = rest.username
+            password = rest.password
+
+            # Get document ID prefix
+            doc_prefix = self._input.param("hierarchical_doc_prefix", "hier_")
+
+            self.log.info(f"Fetching documents from bucket={bucket}, scope={scope}, collection={collection}")
+            self.log.info(f"Document prefix filter: {doc_prefix}")
+
+            # Fetch documents from cluster
+            doc_source = fetch_documents_for_validation(
+                node_ip=node_ip,
+                bucket=bucket,
+                scope=scope,
+                collection=collection,
+                username=username,
+                password=password,
+                doc_id_prefix=doc_prefix,
+                batch_size=1000
+            )
+
+            # Run hierarchical validation
+            self.log.info("Running hierarchical validator...")
+            hs_matching_docs = validate_documents(
+                doc_source=doc_source,
+                query=hierarchical_query,
+                batch_size=100_000,
+                verbose=True
+            )
+
+            hs_hits = len(hs_matching_docs)
+            self.log.info("=" * 70)
+            self.log.info(f"HIERARCHICAL VALIDATION RESULT: {hs_hits} documents match the query")
+            self.log.info("=" * 70)
+
+            # Optionally run FTS query and compare
+            # For now, just report the hs_validator result
+            self.log.info(f"Matching document IDs (first 10): {list(hs_matching_docs)[:10]}")
+
+        except Exception as e:
+            self.log.error(f"Exception during hierarchical validation: {e}")
+            import traceback
+            self.log.error(traceback.format_exc())
+            raise
 
     def async_load_data(self, generator=None, data_loader_output=False, filename=None, dataset=None):
         """
@@ -6960,7 +7521,8 @@ class FTSBaseTest(unittest.TestCase):
                 fts_nodes=fts_nodes,
                 fts_target_node=fts_target_node,
                 validation_data=validation_data,
-                ignore_wiki=ignore_wiki))
+                ignore_wiki=ignore_wiki,
+                hierarchical=self.hierarchical))
 
         num_queries = len(tasks)
 
