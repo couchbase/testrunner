@@ -579,7 +579,9 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.fail("autocompaction settings weren't saved")
 
     def verify_all_queries(self, queue=None):
-        query = {"connectionTimeout": 60000}
+        self.log.info("Waiting for view indexes to be built...")
+        self.sleep(60)
+        query = {"connectionTimeout" : 60000, "stale": "false", "full_set": "true"}
         expected_rows = self.num_items
         if self.max_verify:
             expected_rows = self.max_verify
