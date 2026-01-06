@@ -940,6 +940,7 @@ def main():
                 branch_to_trigger = options.branch
                 slave_to_use = testsToLaunch[i]['slave']
                 if testsToLaunch[i]['framework'] == "TAF":
+                    slave_to_use = "deb12_jython_slave" if slave_to_use == "P0" else slave_to_use
                     if float(options.version[:3]) >= 8.1:
                         if testsToLaunch[i]["component"] == "analytics" \
                                 and str(options.columnar_version) == "0":
