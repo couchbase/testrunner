@@ -938,11 +938,40 @@ def main():
                         parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
                 branch_to_trigger = options.branch
-                if (testsToLaunch[i]['framework'] == "TAF"
-                        and float(options.version[:3]) >= 8
-                        and options.branch == "master"
-                        and testsToLaunch[i]["support_py3"] == "true"):
-                    branch_to_trigger = "master_py3_dev"
+                if testsToLaunch[i]['framework'] == "TAF":
+                    if float(options.version[:3]) >= 8.1:
+                        if testsToLaunch[i]["component"] == "analytics" \
+                                and str(options.columnar_version) == "0":
+                            # TAF::analytics and 8.1 or greater and EA is None
+                            # Force to use this branch
+                            branch_to_trigger = "master_jython"
+                        else:
+                            # TAF and 8.1 or greater
+                            slave_to_use = "deb12_jython_slave"
+                            testsToLaunch[i][
+                                'target_jenkins'] = 'http://172.23.121.80'
+                    elif (str(options.version[:3]) == "8.0"
+                          and options.branch == "morpheus"
+                          and testsToLaunch[i]["support_py3"] == "false"):
+                        # TAF and 8.0 morpheus branch with support_py3=false
+                        branch_to_trigger = "master_jython"
+                elif testsToLaunch[i]['framework'] == "testrunner":
+                    if float(options.version[:3]) >= 8.1:
+                        # Force to use qe jenkins and deb12 slave for all
+                        # testrunner jobs on 8.1 and above
+                        testsToLaunch[i][
+                            'target_jenkins'] = 'http://172.23.121.80'
+                        if slave_to_use in ["rqg_testing"]:
+                            # Force to use qe jenkins and deb12_rqg slave
+                            slave_to_use = "deb12_rqg_slave"
+                        elif slave_to_use in ["bhive_slave"]:
+                            # No need to update the slave, since this is
+                            # already present on QE jenkins
+                            pass
+                        else:
+                            # If nothing matches, fallback to default slave
+                            slave_to_use = "deb12_P0_slave"
+
                 url = launchString.format(options.version,
                                             testsToLaunch[i]['confFile'],
                                             descriptor,
