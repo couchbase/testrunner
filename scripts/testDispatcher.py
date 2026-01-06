@@ -983,7 +983,7 @@ def main():
                                             testsToLaunch[i]['initNodes'],
                                             testsToLaunch[i]['installParameters'],
                                             branch_to_trigger,
-                                            testsToLaunch[i]['slave'],
+                                            slave_to_use,
                                             urllib.parse.quote(testsToLaunch[i]['owner']),
                                             urllib.parse.quote(
                                                 testsToLaunch[i]['mailing_list']),
