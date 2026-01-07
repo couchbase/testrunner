@@ -3192,6 +3192,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.log.info("Executing '{0}'...".format(cmd))
             output = subprocess.check_output(cmd, shell=True)
             self.log.info("cbc hash output : {0}".format(output))
+            cmd = "cbc cat -U couchbase://{0}/{1} {2}".format(server.ip, bucket.name, key)
+            self.log.info("Executing '{0}'...".format(cmd))
+            output = subprocess.check_output(cmd, shell=True)
+            self.log.info("cbc cat output : {0}".format(output))
 
     def run_view_queries(self):
         view_query_thread = Thread(target=self.view_queries, name="run_queries",
