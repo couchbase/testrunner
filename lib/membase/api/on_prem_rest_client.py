@@ -6866,6 +6866,18 @@ class RestConnection(object):
                                                      params=params)
         return status, content
 
+    def get_node_certificate_by_name(self, node_ip, port=8091):
+        """
+        GET:: /pools/default/certificate/node/<node-ip>:<port>
+        https://docs.couchbase.com/server/current/rest-api/upload-retrieve-node-cert.html
+        Retrieves certificate information for a specific node
+        :param node_name: Node name in format "ip:port"
+        :return: (status, content) tuple
+        """
+        url = self.baseUrl + f"/pools/default/certificate/node/{node_ip}:{port}"
+        status, content, _ = self._http_request(url, 'GET')
+        return status, content
+
     def refresh_certificate(self, params=''):
         """
         Refresh certificate

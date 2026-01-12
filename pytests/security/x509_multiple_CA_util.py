@@ -6,6 +6,7 @@ import os
 import copy
 import string
 import time
+from datetime import datetime
 from couchbase.auth import CertificateAuthenticator
 from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions
@@ -864,6 +865,97 @@ class x509main:
         content = self.load_trusted_CAs(server=server)
         return content
 
+    def verify_node_certificate(self, server, expected_subject=None):
+        """
+        Verify node certificate using pools/default/certificate/node/<node-name> endpoint
+        :param server: Server object to verify certificate for
+        :param expected_subject: Expected certificate subject (optional)
+        :return: True if verification succeeds, False otherwise
+        """
+        try:
+            cert_api = RestConnection(server)
+            status, content = cert_api.get_node_certificate_by_name(server.ip, server.port)
+
+            if not status:
+                self.log.error("Failed to retrieve certificate for node {0}: {1}".format(server.ip, content))
+                return False
+
+            cert_data = json.loads(content)
+            self.log.info("Certificate retrieved for node {0}".format(server.ip))
+
+            # Basic validation - check if PEM certificate data exists
+            if 'pem' not in cert_data or not cert_data['pem']:
+                self.log.error("No PEM certificate data found for node {0}".format(server.ip))
+                return False
+
+            # Check for warnings
+            if 'warnings' in cert_data and cert_data['warnings']:
+                self.log.warning("Certificate has warnings for node {0}: {1}".format(server.ip, cert_data['warnings']))
+
+            # Check certificate expiry
+            if 'expires' in cert_data and cert_data['expires']:
+                try:
+                    expiry_date = datetime.fromisoformat(cert_data['expires'].replace('Z', '+00:00'))
+                    current_date = datetime.now(expiry_date.tzinfo)
+                    if current_date > expiry_date:
+                        self.log.error("Certificate has expired for node {0}. Expiry: {1}".format(server.ip, cert_data['expires']))
+                        return False
+                    else:
+                        self.log.info("Certificate is valid until {0} for node {1}".format(cert_data['expires'], server.ip))
+                except ValueError as e:
+                    self.log.warning("Could not parse expiry date for node {0}: {1}".format(server.ip, str(e)))
+
+            # Validate certificate type
+            if 'type' in cert_data:
+                cert_type = cert_data['type']
+                if cert_type not in ['uploaded', 'generated']:
+                    self.log.error("Unknown certificate type '{0}' for node {1}".format(cert_type, server.ip))
+                    return False
+                self.log.info("Certificate type: {0} for node {1}".format(cert_type, server.ip))
+
+            # Optional subject validation
+            if expected_subject and 'subject' in cert_data:
+                if expected_subject not in cert_data['subject']:
+                    self.log.error("Certificate subject mismatch for node {0}. Expected: {1}, Found: {2}"
+                                   .format(server.ip, expected_subject, cert_data.get('subject', 'N/A')))
+                    return False
+                self.log.info("Certificate subject validation passed for node {0}".format(server.ip))
+
+            # Log certificate subject for debugging
+            if 'subject' in cert_data:
+                self.log.info("Certificate subject for node {0}: {1}".format(server.ip, cert_data['subject']))
+
+            self.log.info("Certificate verification successful for node {0}".format(server.ip))
+            return True
+
+        except Exception as e:
+            self.log.error("Exception during certificate verification for node {0}: {1}".format(server.ip, str(e)))
+            return False
+
+    def verify_all_node_certificates(self, servers=None):
+        """
+        Verify certificates for all nodes in the cluster
+        :param servers: List of servers to verify (defaults to all cluster servers)
+        :return: True if all nodes pass verification
+        """
+        if servers is None:
+            servers = self.cluster.servers
+
+        verification_results = []
+        for server in servers:
+            result = self.verify_node_certificate(server)
+            verification_results.append(result)
+            if not result:
+                self.log.error("Certificate verification failed for node {0}:{1}".format(server.ip, server.port))
+
+        all_passed = all(verification_results)
+        if all_passed:
+            self.log.info("All node certificates verified successfully")
+        else:
+            self.log.error("Some node certificates failed verification")
+
+        return all_passed
+
     def upload_node_certs(self, servers):
         """
         Uploads node certs
@@ -876,6 +968,12 @@ class x509main:
         for server in servers:
             self.copy_node_cert(server=server)
         self.reload_node_certificates(servers)
+
+        # Verify node certificates after upload
+        self.log.info("Verifying node certificates after upload...")
+        cert_verification_passed = self.verify_all_node_certificates(servers=servers)
+        if not cert_verification_passed:
+            self.fail("Node certificate verification failed after upload")
 
     def write_client_cert_json_new(self):
         template_path = './pytests/security/' + x509main.CLIENT_CERT_AUTH_TEMPLATE
