@@ -20,7 +20,8 @@ from couchbase_helper.documentgenerator import BlobGenerator
 
 
 help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
- 'COMMAND': {'bucket-compact': 'compact database and index data',
+ 'COMMAND': {'analytics-link-setup': 'manage analytics links',
+             'bucket-compact': 'compact database and index data',
              'bucket-create': 'add a new bucket to the cluster',
              'bucket-delete': 'delete an existing bucket',
              'bucket-edit': 'modify an existing bucket',
@@ -72,6 +73,38 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
  'OPTIONS': {'-o KIND, --output=KIND': 'KIND is json or standard\n-d, --debug',
              '-p PASSWORD, --password=PASSWORD': 'admin password of the cluster',
              '-u USERNAME, --user=USERNAME': 'admin username of the cluster'},
+ 'analytics-link-setup OPTIONS': {'--access-key-id=KEY_ID': 'AWS access key ID for S3 link',
+                                 '--account-key=ACCOUNT_KEY': 'Azure account key for Azure Blob link',
+                                 '--account-name=ACCOUNT_NAME': 'Azure account name for Azure Blob link',
+                                 '--application-default-credentials': 'use application default credentials for GCS link',
+                                 '--certificate=CERTIFICATE': 'certificate file path for Couchbase link',
+                                 '--client-certificate=CERTIFICATE': 'client certificate for Azure Blob link',
+                                 '--client-certificate-password=PASSWORD': 'client certificate password for Azure Blob link',
+                                 '--client-id=CLIENT_ID': 'client ID for Azure Blob link',
+                                 '--client-secret=SECRET': 'client secret for Azure Blob link',
+                                 '--create': 'create a new analytics link',
+                                 '--delete': 'delete an analytics link',
+                                 '--edit': 'edit an existing analytics link',
+                                 '--encryption=ENCRYPTION': 'encryption type for Couchbase link',
+                                 '--endpoint=ENDPOINT': 'endpoint URL for Azure Blob link',
+                                 '--hostname=HOSTNAME': 'remote hostname for Couchbase link',
+                                 '--json-credentials=CREDENTIALS': 'JSON credentials for GCS link',
+                                 '--link-password=PASSWORD': 'password for Couchbase link',
+                                 '--link-username=USERNAME': 'username for Couchbase link',
+                                 '--list': 'list all analytics links',
+                                 '--managed-identity-id=ID': 'managed identity ID for Azure Blob link',
+                                 '--name=LINKNAME': 'name of the analytics link',
+                                 '--region=REGION': 'AWS region for S3 link',
+                                 '--scope=SCOPE': 'scope name for the link',
+                                 '--secret-access-key=SECRET_KEY': 'AWS secret access key for S3 link',
+                                 '--service-endpoint=ENDPOINT': 'service endpoint for S3 link',
+                                 '--session-token=TOKEN': 'session token for S3 link',
+                                 '--shared-access-signature=SAS': 'shared access signature for Azure Blob link',
+                                 '--tenant-id=TENANT_ID': 'tenant ID for Azure Blob link',
+                                 '--type=TYPE': 'type of analytics link (e.g., s3, couchbase, gcs, azureblob)',
+                                 '--user-certificate=CERTIFICATE': 'user certificate file path for Couchbase link',
+                                 '--user-key=KEY': 'user key file path for Couchbase link',
+                                 '--user-key-passphrase=PASSPHRASE': 'passphrase for user key for Couchbase link'},
  'bucket-* OPTIONS': {'--bucket-eviction-policy=[valueOnly|fullEviction]': ' policy how to retain meta in memory',
                       '--bucket-password=PASSWORD': 'standard port, exclusive with bucket-port',
                       '--bucket-port=PORT': 'supports ASCII protocol and is auth-less',
@@ -188,7 +221,8 @@ help = {'CLUSTER': '--cluster=HOST[:PORT] or -c HOST[:PORT]',
                         '--xdcr-username=USERNAME': ' remote cluster admin username'}}
 
 """ in 3.0, we add 'recovery  recover one or more servers' into couchbase-cli """
-help_short = {'COMMANDs include': {'bucket-compact': 'compact database and index data',
+help_short = {'COMMANDs include': {'analytics-link-setup': 'manage analytics links',
+                      'bucket-compact': 'compact database and index data',
                       'bucket-create': 'add a new bucket to the cluster',
                       'bucket-delete': 'delete an existing bucket',
                       'bucket-edit': 'modify an existing bucket',
@@ -395,6 +429,134 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if command_with_error:
             raise Exception("some commands throw out error %s " % command_with_error)
         shell.disconnect()
+
+    def testAnalyticsLinkSetup(self):
+        username = self.input.param("username", None)
+        password = self.input.param("password", None)
+        operation = self.input.param("operation", "create")  # list, create, edit, delete
+
+        link_name = self.input.param("link-name", None)
+        if link_name is None and operation != "list":
+            link_name = ''.join(random.choices(string.ascii_letters, k=random.randint(5, 8)))
+
+        link_type = self.input.param("link-type", None)
+        scope = self.input.param("scope", None)
+        expect_error = self.input.param("expect-error", False)
+        error_msg = self.input.param("error-msg", "")
+
+        # Initialize link parameters based on link type
+        # S3 link parameters
+        access_key_id = secret_access_key = region = service_endpoint = session_token = None
+        if link_type == "s3":
+            access_key_id = self.input.param("access-key-id", None)
+            secret_access_key = self.input.param("secret-access-key", None)
+            region = self.input.param("region", None)
+            service_endpoint = self.input.param("service-endpoint", None)
+            session_token = self.input.param("session-token", None)
+
+        # Couchbase link parameters
+        remote_hostname = link_username = link_password = encryption = None
+        user_certificate = user_key = user_key_passphrase = certificate = None
+        if link_type == "couchbase":
+            remote_hostname = self.input.param("remote_hostname", None)
+            # If hostname is not provided and link type is couchbase, use server[1]
+            if remote_hostname is None and len(self.servers) > 1:
+                remote_hostname = self.servers[0].ip
+            link_username = self.input.param("link-username", None)
+            link_password = self.input.param("link-password", None)
+            encryption = self.input.param("encryption", None)
+            user_certificate = self.input.param("user-certificate", None)
+            user_key = self.input.param("user-key", None)
+            user_key_passphrase = self.input.param("user-key-passphrase", None)
+            certificate = self.input.param("certificate", None)
+
+        # GCS link parameters
+        application_default_credentials = False
+        json_credentials = None
+        if link_type == "gcs":
+            application_default_credentials = self.input.param("application-default-credentials", False)
+            use_json_credentials = self.input.param("json-credentials", False)
+            if use_json_credentials:
+                self.log.info(f"Fetching certificate file path from the env: {use_json_credentials}")
+                gcs_certificate = os.getenv(use_json_credentials)
+                if gcs_certificate:
+                    json_credentials = gcs_certificate
+                else:
+                    self.fail(f"Certificate file not found in the env: {use_json_credentials}")
+
+        # Azure link parameters
+        authentication = account_name = account_key = shared_access_signature = None
+        managed_identity_id = client_id = client_secret = client_certificate = None
+        client_certificate_password = tenant_id = endpoint = None
+        if link_type == "azureblob":
+            authentication = self.input.param("authentication", None)
+            account_name = None if authentication == "anonymous" else self.input.param("account-name", None)
+            account_key = None if authentication == "anonymous" else self.input.param("account-key", None)
+            shared_access_signature = self.input.param("shared-access-signature", None)
+            managed_identity_id = self.input.param("managed-identity-id", None)
+            client_id = self.input.param("client-id", None)
+            client_secret = self.input.param("client-secret", None)
+            client_certificate = self.input.param("client-certificate", None)
+            client_certificate_password = self.input.param("client-certificate-password", None)
+            tenant_id = self.input.param("tenant-id", None)
+            endpoint = self.input.param("endpoint", None)
+
+        server = copy.deepcopy(self.servers[1])
+        cli = CouchbaseCLI(server, username, password)
+
+        stdout, stderr, success = cli.analytics_link_setup(
+            list_links=(operation == "list"),
+            create=(operation == "create"),
+            edit=(operation == "edit"),
+            delete=(operation == "delete"),
+            name=link_name,
+            link_type=link_type,
+            scope=scope,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+            region=region,
+            service_endpoint=service_endpoint,
+            session_token=session_token,
+            remote_hostname=remote_hostname,
+            link_username=link_username,
+            link_password=link_password,
+            encryption=encryption,
+            user_certificate=user_certificate,
+            user_key=user_key,
+            user_key_passphrase=user_key_passphrase,
+            certificate=certificate,
+            application_default_credentials=application_default_credentials,
+            json_credentials=json_credentials,
+            account_name=account_name,
+            account_key=account_key,
+            shared_access_signature=shared_access_signature,
+            managed_identity_id=managed_identity_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            client_certificate=client_certificate,
+            client_certificate_password=client_certificate_password,
+            tenant_id=tenant_id,
+            endpoint=endpoint,
+            admin_tools_package=self.admin_tools_package
+        )
+
+        self.log.info(f"stdout: {stdout}")
+
+        if not expect_error:
+            # Check stdout for error indicators
+            for line in stdout:
+                if "Traceback" in line or "Exception" in line or "ERROR:" in line:
+                    self.fail(f"Error found in stdout: {line}")
+
+            if operation == "list":
+                # For list operation, success is determined by non-empty output
+                self.assertTrue(len(stdout) > 0, "Expected analytics link list to return output. Output: %s" % stdout)
+            else:
+                self.assertTrue(success, "Expected analytics link setup to succeed. Output: %s" % stdout)
+        else:
+            self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
+                          "Expected error message not found")
+
 
     def testInfoCommands(self):
         remote_client = RemoteMachineShellConnection(self.master)

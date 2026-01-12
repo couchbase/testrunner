@@ -713,6 +713,104 @@ class CouchbaseCLI:
         return stdout, stderr, self._was_success(stdout,
                                                  "Cluster settings modified")
 
+    def analytics_link_setup(self, list_links=False, create=False, edit=False, delete=False,
+                             name=None, link_type=None, scope=None,
+                             # S3 link parameters
+                             access_key_id=None, secret_access_key=None, region=None,
+                             service_endpoint=None, session_token=None,
+                             # Couchbase link parameters
+                             remote_hostname=None, link_username=None, link_password=None,
+                             encryption=None, user_certificate=None, user_key=None,
+                             user_key_passphrase=None, certificate=None,
+                             # GCS link parameters
+                             application_default_credentials=False, json_credentials=None,
+                             # Azure link parameters
+                             account_name=None, account_key=None, shared_access_signature=None,
+                             managed_identity_id=None, client_id=None, client_secret=None,
+                             client_certificate=None, client_certificate_password=None,
+                             tenant_id=None, endpoint=None,
+                             admin_tools_package=False):
+        options = self._get_default_options()
+        if list_links:
+            options += " --list"
+        if create:
+            options += " --create"
+        if edit:
+            options += " --edit"
+        if delete:
+            options += " --delete"
+        if name is not None:
+            options += " --name " + str(name)
+        if link_type is not None:
+            options += " --type " + str(link_type)
+        if scope is not None:
+            options += " --scope " + str(scope)
+
+        # S3 link parameters
+        if access_key_id is not None:
+            options += " --access-key-id " + str(access_key_id)
+        if secret_access_key is not None:
+            options += " --secret-access-key " + str(secret_access_key)
+        if region is not None:
+            options += " --region " + str(region)
+        if service_endpoint is not None:
+            options += " --service-endpoint " + str(service_endpoint)
+        if session_token is not None:
+            options += " --session-token " + str(session_token)
+
+        # Couchbase link parameters
+        if remote_hostname is not None:
+            options += " --hostname " + str(remote_hostname)
+        if link_username is not None:
+            options += " --link-username " + str(link_username)
+        if link_password is not None:
+            options += " --link-password " + str(link_password)
+        if encryption is not None:
+            options += " --encryption " + str(encryption)
+        if user_certificate is not None:
+            options += " --user-certificate " + str(user_certificate)
+        if user_key is not None:
+            options += " --user-key " + str(user_key)
+        if user_key_passphrase is not None:
+            options += " --user-key-passphrase " + str(user_key_passphrase)
+        if certificate is not None:
+            options += " --certificate " + str(certificate)
+
+        # GCS link parameters
+        if application_default_credentials:
+            options += " --application-default-credentials"
+        if json_credentials is not None:
+            options += " --json-credentials " + str(json_credentials)
+
+        # Azure link parameters
+        if account_name is not None:
+            options += " --account-name " + str(account_name)
+        if account_key is not None:
+            options += " --account-key " + str(account_key)
+        if shared_access_signature is not None:
+            options += " --shared-access-signature " + str(shared_access_signature)
+        if managed_identity_id is not None:
+            options += " --managed-identity-id " + str(managed_identity_id)
+        if client_id is not None:
+            options += " --client-id " + str(client_id)
+        if client_secret is not None:
+            options += " --client-secret " + str(client_secret)
+        if client_certificate is not None:
+            options += " --client-certificate " + str(client_certificate)
+        if client_certificate_password is not None:
+            options += " --client-certificate-password " + str(client_certificate_password)
+        if tenant_id is not None:
+            options += " --tenant-id " + str(tenant_id)
+        if endpoint is not None:
+            options += " --endpoint " + str(endpoint)
+
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.couchbase_cli("analytics-link-setup",
+                                                     self.hostname.split(":")[0], options,
+                                                     admin_tools_package=admin_tools_package)
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout)
+
     def _get_default_options(self):
         options = ""
         if self.username is not None:
