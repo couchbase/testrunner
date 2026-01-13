@@ -3,7 +3,9 @@ import logging
 import random
 
 from string import ascii_lowercase
-from couchbase.bucket import Bucket
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions
+from couchbase.auth import PasswordAuthenticator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
 from couchbase_helper.query_definitions import QueryDefinition
@@ -341,8 +343,14 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             url = 'couchbases://{ip}/{name}?ssl=no_verify'.format(ip=self.master.ip, name=bucket_name)
         else:
             url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=bucket_name)
-        bucket = Bucket(url, username=bucket_name, password="password")
-        bucket.upsert(key, document)
+        auth = PasswordAuthenticator(bucket_name, self.rest.password)
+        cluster = Cluster(
+            f"couchbase://{self.master.ip}",
+            ClusterOptions(auth)
+        )
+        bucket_obj = cluster.bucket(bucket_name)
+        collection = bucket_obj.default_collection()
+        collection.upsert(key, document)
 
     def _find_datatype(self, query_definition):
         for field in query_definition.index_fields:
