@@ -146,6 +146,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.index_loglevel = self.input.param("index_loglevel", None)
         self.bhive_index = self.input.param("bhive_index", False)
+        self.cleanup_info = {}
         self.data_model = self.input.param("data_model", "sentence-transformers/all-MiniLM-L6-v2")
         self.vector_dim = self.input.param("vector_dim", "384")
         self.dimension = self.input.param("dimension", 384)
@@ -3347,7 +3348,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             if index.get('condition'):
                 where_clause = f" WHERE {index['condition']}"
 
-            if (index['name'] not in primary_indexes and (index['index_key'][0] == "`colorRGBVector` VECTOR" or index['index_key'][0] == '((meta().`xattrs`).`colorVector`) VECTOR') and "similarity" in index['with']
+
+            if (index['name'] not in primary_indexes and (index['index_key'][0] == "`colorRGBVector` DENSE VECTOR" or index['index_key'][0] == '((meta().`xattrs`).`colorVector`) DENSE VECTOR') and "similarity" in index['with']
                 and index['with']['similarity'] == "cosine"):
                 condition = "colorRGBVector != [0, 0, 0]"
                 if where_clause:
