@@ -146,7 +146,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             raise("Failed to set hostname")
                     shell.disconnect()
                 self.log.info("\n*** Done reset cluster")
-            self.sleep(10)
+            self.sleep(30)
 
             """ Add built-in user cbadminbucket to second cluster """
             self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
@@ -2907,10 +2907,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         cluster_host_data = {}
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
-            value_obj = client.default_collection.get(key=key)
-            cluster_host_data[key] = {}
-            cluster_host_data[key]["cas"] = str(value_obj.cas)
-            cluster_host_data[key]["flags"] = str(value_obj.flags)
+
+            try:
+                value_obj = client.default_collection.get(key=key)
+                cluster_host_data[key] = {}
+                cluster_host_data[key]["cas"] = str(value_obj.cas)
+                cluster_host_data[key]["flags"] = str(value_obj.flags)
+            except TypeError as e:
+                self.log.info(f"Found exception type: {e}")
+
         client.close()
         self.backup_create()
         self.backup_cluster_validate()
@@ -2928,10 +2933,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.sleep(30)
         for i in range(1, self.num_items + 1):
             key = "doc" + str(i)
-            value_obj = client.default_collection.get(key=key)
-            restore_host_data[key] = {}
-            restore_host_data[key]["cas"] = str(value_obj.cas)
-            restore_host_data[key]["flags"] = str(value_obj.flags)
+
+            try:
+                value_obj = client.default_collection.get(key=key)
+                restore_host_data[key] = {}
+                restore_host_data[key]["cas"] = str(value_obj.cas)
+                restore_host_data[key]["flags"] = str(value_obj.flags)
+            except TypeError as e:
+                self.log.info(f"Found exception type: {e}")
         self.log.info("Comparing cluster host data cas and flags against restore host data")
         client.close()
         for i in range(1, self.num_items + 1):

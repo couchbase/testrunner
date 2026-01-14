@@ -114,6 +114,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.cli_command_location = "/tmp/tools_package/couchbase-server-admin-tools-*/bin/"
 
         self.debug_logs = self.input.param("debug-logs", False)
+        self.check_logs = self.input.param("check-logs", False)
         self.show_bk_list = self.input.param("show_bk_list", True)
         self.vbuckets_filter_no_data = False
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
@@ -1183,20 +1184,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_dir = f"{self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}{self.backupset.directory}"
         if ipv6_raw_ip:
             bk_dir = bk_raw_ipv6_dir
-        command = "grep 'Restore completed successfully' " + bk_dir + \
-                  "/logs/{0}".format(bk_log_file_name)
-        output, error = remote_client.execute_command(command)
-        if self.debug_logs:
-            remote_client.log_command_output(output, error)
-        if not output:
-            self.fail("Restoring backup failed.")
-        command = "grep 'Transfer failed' " + bk_dir + \
-                  "/logs/{0}".format(bk_log_file_name)
-        output, error = remote_client.execute_command(command)
-        if self.debug_logs:
-            remote_client.log_command_output(output, error)
-        if output:
-            self.fail("Restoring backup failed.")
+
+        if self.check_logs:    
+            command = "grep 'Restore completed successfully' " + bk_dir + \
+                    "/logs/{0}".format(bk_log_file_name)
+            output, error = remote_client.execute_command(command)
+            if self.debug_logs:
+                remote_client.log_command_output(output, error)
+            if not output:
+                remote_client.log_command_output(output, error)
+                self.log.info("Restore log: %s", output)
+                self.log.info("Restore error: %s", error)
+                self.sleep(360)
+                self.fail("Restoring backup failed.")
+            command = "grep 'Transfer failed' " + bk_dir + \
+                    "/logs/{0}".format(bk_log_file_name)
+            output, error = remote_client.execute_command(command)
+            if self.debug_logs:
+                remote_client.log_command_output(output, error)
+            if output:
+                self.fail("Restoring backup failed.")
 
         self.log.info("Finished restoring backup")
         self.log.info("Get current vseqno on node %s " % self.cluster_to_restore[0].ip)

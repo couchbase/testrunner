@@ -131,8 +131,11 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                                      getReplica=get_replica,
                                      mode=mode)
             data = restored_data[bucket.name]
+            # Store raw values before processing for debug logging of mismatched keys
+            raw_restored_values = {}
             for key in data:
                 value = data[key]
+                raw_restored_values[key] = value  # Store raw value for potential debug logging
                 if '"b\'' in value:
                     value = ",".join(value.split(',')[4:8])
                 else:
@@ -146,12 +149,28 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             self.log.info("Compare backup data in bucket %s " % bucket.name)
             is_equal, not_equal, extra, not_present = \
                                         self.compare_dictionary(backedup_kv, data)
+            # Debug: Log detailed info for mismatched keys
+            if not_equal:
+                for mismatched_key in not_equal.keys():
+                    if mismatched_key in raw_restored_values:
+                        raw_value = raw_restored_values[mismatched_key]
+                        processed_value = data.get(mismatched_key, "N/A")
+                        backedup_value = backedup_kv.get(mismatched_key, "N/A")
+                        self.log.info(f"DEBUG: Mismatched key '{mismatched_key}':")
+                        self.log.info(f"DEBUG:   Raw restored value (length: {len(raw_value)}): {raw_value[:200]}...")
+                        self.log.info(f"DEBUG:   Value parts count after split: {len(raw_value.split(','))}")
+                        self.log.info(f"DEBUG:   Processed restored value (length: {len(processed_value) if isinstance(processed_value, str) else len(str(processed_value))}): {processed_value[:200] if isinstance(processed_value, str) else str(processed_value)[:200]}...")
+                        self.log.info(f"DEBUG:   Backed up value (length: {len(backedup_value) if isinstance(backedup_value, str) else len(str(backedup_value))}): {backedup_value[:200] if isinstance(backedup_value, str) else str(backedup_value)[:200]}...")
             status, msg = self.compare_dictionary_result_analyser(is_equal,
                                                                   not_equal,
                                                                   extra,
                                                                   not_present,
                                                 "{0} Data".format(bucket.name))
             if not status:
+                self.log.info("Data validation failed for bucket at compare dictionary %s " % bucket.name)
+                self.log.info("Not equal: {0}".format(not_equal))
+                self.log.info("Extra: {0}".format(extra))
+                self.log.info("Not present: {0}".format(not_present))
                 return status, msg
             success_msg += "{0}\n".format(msg)
         success_msg += "Data validation success"

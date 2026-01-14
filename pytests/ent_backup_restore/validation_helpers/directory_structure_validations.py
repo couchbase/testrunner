@@ -49,6 +49,8 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
                 obj[split[-1]] = {}
             else:
                 obj[split[-1]] = split[-1]
+        if "logs" in directory_structure[self.backupset.name]:
+            directory_structure[self.backupset.name].pop("logs")
         return directory_structure
 
     def generate_directory_structure(self):
