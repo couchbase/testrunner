@@ -3131,7 +3131,7 @@ class QueryTests(BaseTestCase):
             json_curl = json.loads(new_curl)
             return json_curl
         except Exception as ex:
-            self.info.log(output_curl)
+            self.log.info(output_curl)
 
     '''Convert output of remote_util.execute_command to json
        (stripping all white space to match execute_command_inside output)'''
@@ -3143,7 +3143,7 @@ class QueryTests(BaseTestCase):
             json_output = json.loads(concat_string)
             return json_output
         except Exception as ex:
-            self.info.log(output_of_curl)
+            self.log.info(output_of_curl)
 
     '''Convert output of remote_util.execute_command to json to match the output of run_cbq_query'''
 
@@ -3154,7 +3154,7 @@ class QueryTests(BaseTestCase):
             json_output = json.loads(concat_string)
             return json_output
         except Exception as ex:
-            self.info.log(output_of_curl)
+            self.log.info(output_of_curl)
 
     ##############################################################################################
     #
@@ -3560,7 +3560,7 @@ class QueryTests(BaseTestCase):
                 fn = getattr(self, query_method)
                 query = fn()
         except Exception as ex:
-            self.info.log(ex)
+            self.log.info(ex)
         finally:
             return indexes, query
 
