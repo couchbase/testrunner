@@ -956,6 +956,12 @@ def main():
                         else:
                             # If nothing matches, fallback to default slave
                             slave_to_use = "deb12_P0_slave"
+                    elif testsToLaunch[i]['component'] == "xdcr":
+                        # For all version <= 8.0 use legacy slaves on
+                        # qa jenkins with particular slave
+                        testsToLaunch[i][
+                            'target_jenkins'] = 'http://172.23.120.81'
+                        slave_to_use = "P3XDCR"
 
                 # grab the server resources
                 # this bit is Docker/VM dependent
