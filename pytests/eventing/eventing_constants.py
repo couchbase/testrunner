@@ -68,6 +68,13 @@ class HANDLER_CODE:
     ADVANCED_BUCKET_OP_MULTI_COLLECTION='handler_code/multi_collection/advanced_bucket_op_multi_collection.js'
     SBM_MULTI_COLLECTION = 'handler_code/multi_collection/sbm_multi_collection.js'
     TIMERS_MULTI_COLLECTION = 'handler_code/multi_collection/timers_multi_collection.js'
+    BASIC_BUCKET_ACCESSORS_GET = 'handler_code/ABO/basic_bucket_accessors_get.js'
+    BASIC_BUCKET_ACCESSORS_SBM = 'handler_code/ABO/basic_bucket_accessors_sbm.js'
+    BASIC_BUCKET_ACCESSORS_TIMERS = 'handler_code/ABO/basic_bucket_accessors_timer.js'
+    BASIC_BUCKET_ACCESSORS_CURL = 'handler_code/ABO/basic_bucket_accessors_curl.js'
+    BASIC_BUCKET_ACCESSORS_BASE64 = 'handler_code/ABO/basic_bucket_accessors_base64.js'
+    BASIC_BUCKET_ACCESSORS_N1QL = 'handler_code/ABO/basic_bucket_accessors_n1ql.js'
+    BASIC_BUCKET_ACCESSORS_CRC = 'handler_code/ABO/basic_bucket_accessors_crc.js'
 
 class HANDLER_CODE_CURL:
     BUCKET_OP_WITH_CURL = 'handler_code/curl/bucket_op_curl.js'
