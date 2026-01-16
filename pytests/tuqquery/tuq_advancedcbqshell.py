@@ -385,6 +385,13 @@ class AdvancedQueryTests(QueryTests):
                 queries = ['\SET -args [7, 0,1,2011];', 'prepare temp from SELECT tasks_points.task1 AS task from bucketname WHERE join_mo>$1 GROUP BY tasks_points.task1 HAVING COUNT(tasks_points.task1) > $2 AND  (MIN(join_day)=$3 OR MAX(join_yr=$4)) ORDER BY tasks_points.task1 ;', 'execute temp;']
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '')
                 # Test neeeds to be finished
+    
+    def test_prepared_auto_execute(self):
+        for bucket in self.buckets:
+            queries = ['\set -auto_execute true;','\set -$a 1;','prepare p1 from select $a;','execute p1;','\set -auto_execute false;','execute p1;','\set -auto_execute true;','execute p1;']
+            o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '')
+            self.assertTrue('"errors"' not in str(o), f"Errors should not be present, please check {o}")
+            self.assertTrue('[{"$1": 1}]' in str(o), f"we expect these results from the queries, please check {o}")
 
     def test_query_context(self):
         queries = ['\SET -query_context default.test;',
