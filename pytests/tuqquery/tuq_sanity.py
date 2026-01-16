@@ -4809,6 +4809,16 @@ class QuerySanityTests(QueryTests):
         ]
         self.assertEqual(result_node1['results'], expected_result)
         self.assertEqual(result_node2['results'], expected_result)
+    
+    # MB-70112
+    def test_prepared_auto_execute(self):
+        self.run_cbq_query(query="prepare p1 from select $a")
+        try:
+            results = self.run_cbq_query(query="execute p1", query_params={'$a': 1,"auto_execute":True})
+        except Exception as e:
+            self.fail("Prepared statement failed {0}".format(str(e)))
+        expected_results = [{"$1":1}]
+        self.assertEqual(results['results'], expected_results)
 
     # MB-66691
     def test_join_memory_quota(self):
