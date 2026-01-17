@@ -7200,7 +7200,10 @@ class FTSBaseTest(unittest.TestCase):
                          percentages_to_resize=[], dims_to_resize=[],
                          iterations=1, update=False, faiss_indexes=[], faiss_index_node='127.0.0.1',
                          python_loader_toggle=True, provideDefaultDocs=True,
-                         start_key=0,doc_filter_test=False):
+                         start_key=0,doc_filter_test=False,
+                         doc_id_prefix=None, end_index=None,
+                         doc_schema=None, departments_count=None, projects_per_dept=None, locations_count=None,
+                         employees_per_dept=None, embedding_field_name=None, seed=None, batch_size=None):
 
         bucketvsdataset = {}
         self.log.info(f"containers - {containers}")
@@ -7217,9 +7220,19 @@ class FTSBaseTest(unittest.TestCase):
                         ei = 1000    
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, False,
+                                              collection_name, dataset[0], False, doc_id_prefix or "vect",
+                                              start_key, (end_index if end_index is not None else (ei + start_key)),
+                                              False,
                                               percentages_to_resize, dims_to_resize,
-                                              provideDefaultDocs=provideDefaultDocs)
+                                              provideDefaultDocs=provideDefaultDocs,
+                                              batchSize=(batch_size if batch_size is not None else 300),
+                                              docSchema=doc_schema,
+                                              departmentsCount=departments_count,
+                                              projectsPerDept=projects_per_dept,
+                                              locationsCount=locations_count,
+                                              employeesPerDept=employees_per_dept,
+                                              embeddingFieldName=embedding_field_name,
+                                              seed=seed)
                         govl.load_data(container_name)
                         return bucketvsdataset
 
@@ -7257,9 +7270,18 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", start_key, ei+start_key,
+                                              collection_name, dataset[0], True, doc_id_prefix or "vect",
+                                              start_key, (end_index if end_index is not None else (ei + start_key)),
                                               self.encode_base64_vector, percentages_to_resize, dims_to_resize,
-                                              provideDefaultDocs=provideDefaultDocs)
+                                              provideDefaultDocs=provideDefaultDocs,
+                                              batchSize=(batch_size if batch_size is not None else 300),
+                                              docSchema=doc_schema,
+                                              departmentsCount=departments_count,
+                                              projectsPerDept=projects_per_dept,
+                                              locationsCount=locations_count,
+                                              employeesPerDept=employees_per_dept,
+                                              embeddingFieldName=embedding_field_name,
+                                              seed=seed)
                         govl.load_data(container_name)
 
 
@@ -7272,9 +7294,18 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], True, "vect", start_key, ei+start_key,
+                                              collection_name, dataset[0], True, doc_id_prefix or "vect",
+                                              start_key, (end_index if end_index is not None else (ei + start_key)),
                                               self.encode_base64_vector, percentages_to_resize, dims_to_resize,
-                                              provideDefaultDocs=provideDefaultDocs)
+                                              provideDefaultDocs=provideDefaultDocs,
+                                              batchSize=(batch_size if batch_size is not None else 300),
+                                              docSchema=doc_schema,
+                                              departmentsCount=departments_count,
+                                              projectsPerDept=projects_per_dept,
+                                              locationsCount=locations_count,
+                                              employeesPerDept=employees_per_dept,
+                                              embeddingFieldName=embedding_field_name,
+                                              seed=seed)
                         govl.load_data(container_name)
 
                     elif self.encode_base64_vector:
@@ -7287,9 +7318,19 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, True,
+                                              collection_name, dataset[0], False, doc_id_prefix or "vect",
+                                              start_key, (end_index if end_index is not None else (ei + start_key)),
+                                              True,
                                               percentages_to_resize, dims_to_resize,
-                                              provideDefaultDocs=provideDefaultDocs)
+                                              provideDefaultDocs=provideDefaultDocs,
+                                              batchSize=(batch_size if batch_size is not None else 300),
+                                              docSchema=doc_schema,
+                                              departmentsCount=departments_count,
+                                              projectsPerDept=projects_per_dept,
+                                              locationsCount=locations_count,
+                                              employeesPerDept=employees_per_dept,
+                                              embeddingFieldName=embedding_field_name,
+                                              seed=seed)
                         govl.load_data(container_name)
                     else:
                         container_name = self.generate_random_container_name()
@@ -7300,9 +7341,19 @@ class FTSBaseTest(unittest.TestCase):
                             ei = 10000
                         govl = GoVectorLoader(self.master, self._input.membase_settings.rest_username,
                                               self._input.membase_settings.rest_password, bucket_name, scope_name,
-                                              collection_name, dataset[0], False, "vect", start_key, ei+start_key, False,
+                                              collection_name, dataset[0], False, doc_id_prefix or "vect",
+                                              start_key, (end_index if end_index is not None else (ei + start_key)),
+                                              False,
                                               percentages_to_resize, dims_to_resize,
-                                              provideDefaultDocs=provideDefaultDocs)
+                                              provideDefaultDocs=provideDefaultDocs,
+                                              batchSize=(batch_size if batch_size is not None else 300),
+                                              docSchema=doc_schema,
+                                              departmentsCount=departments_count,
+                                              projectsPerDept=projects_per_dept,
+                                              locationsCount=locations_count,
+                                              employeesPerDept=employees_per_dept,
+                                              embeddingFieldName=embedding_field_name,
+                                              seed=seed)
                         govl.load_data(container_name)
 
         return bucketvsdataset
