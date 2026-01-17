@@ -26,7 +26,11 @@ class VectorLoader:
         self.use_cbimport = use_cbimport
         self.iterations = iterations
         self.create_bucket_struct = create_bucket_struct
-        self.docker_client = docker.from_env()
+        try:
+            self.docker_client = docker.from_env()
+        except Exception as e:
+            self.docker_client = None
+            print(f"WARN: docker unavailable for VectorLoader: {e}")
         self.percentages_to_resize = percentages_to_resize
         self.dims_for_resize = dims_for_resize
         self.update = update
@@ -38,6 +42,8 @@ class VectorLoader:
 
     def load_data(self, container_name=None):
         try:
+            if self.docker_client is None:
+                raise RuntimeError("Docker is unavailable; cannot run VectorLoader container.")
             docker_image = "sequoiatools/vectorloader:v1.1"
             dataset_name = self.dataset[0]
             docker_run_params = f"-n {self.node.ip} -u {self.username} -p {self.password} " \
@@ -102,7 +108,10 @@ class VectorLoader:
 
 class GoVectorLoader:
     def __init__(self, node, username, password, bucket, scope, collection, dataset, xattr, prefix, si, ei, base64,
-                 percentage_to_resize=[], dimension_to_resize=[],load_invalid_vecs=False,invalid_vecs_dims = 128,provideDefaultDocs=False,batchSize=300):
+                 percentage_to_resize=[], dimension_to_resize=[],load_invalid_vecs=False,invalid_vecs_dims = 128,
+                 provideDefaultDocs=False,batchSize=300,
+                 docSchema=None, departmentsCount=None, projectsPerDept=None, locationsCount=None,
+                 employeesPerDept=None, embeddingFieldName=None, seed=None):
         self.node = node
         self.username = username
         self.password = password
@@ -121,9 +130,24 @@ class GoVectorLoader:
         self.invalid_vecs_dims = invalid_vecs_dims
         self.provideDefaultDocs = provideDefaultDocs
         self.batchSize = batchSize
-        self.docker_client = docker.from_env()
+        # hierarchical/nested doc generation options (optional)
+        self.docSchema = docSchema
+        self.departmentsCount = departmentsCount
+        self.projectsPerDept = projectsPerDept
+        self.locationsCount = locationsCount
+        self.employeesPerDept = employeesPerDept
+        self.embeddingFieldName = embeddingFieldName
+        self.seed = seed
+        try:
+            self.docker_client = docker.from_env()
+        except Exception as e:
+            self.docker_client = None
+            print(f"WARN: docker unavailable for GoVectorLoader: {e}")
 
     def load_data(self, container_name=None):
+        if self.docker_client is None:
+            raise RuntimeError("Docker is unavailable; cannot run GoVectorLoader container. "
+                               "Either run on a machine with Docker or pre-load docs and set hierarchical_skip_doc_load=True.")
         try:
             cont = self.docker_client.containers.get("upgrade")
             cont.stop()
@@ -139,6 +163,22 @@ class GoVectorLoader:
                 pr = ','.join(map(str, self.percentage_to_resize))
                 dr = ','.join(map(str, self.dimension_to_resize))
                 docker_run_params = f"-nodeAddress={self.node.ip} -bucketName={self.bucket} -scopeName={self.scope} -collectionName={self.collection} -documentIdPrefix={self.prefix} -username={self.username} -password={self.password} -datasetName={self.dataset} -startIndex={self.si} -endIndex={self.ei} -base64Flag={self.base64} -xattrFlag={self.xattr} -percentagesToResize={pr} -dimensionsForResize={dr} -invalidVecsLoader={self.load_invalid_vecs} -invalidDimensions={self.invalid_vecs_dims} -provideDefaultDocs={self.provideDefaultDocs} -batchSize={self.batchSize}"
+
+            # Optional hierarchical doc schema parameters
+            if self.docSchema:
+                docker_run_params += f" -docSchema {self.docSchema}"
+            if self.departmentsCount is not None:
+                docker_run_params += f" -departmentsCount {self.departmentsCount}"
+            if self.projectsPerDept is not None:
+                docker_run_params += f" -projectsPerDept {self.projectsPerDept}"
+            if self.locationsCount is not None:
+                docker_run_params += f" -locationsCount {self.locationsCount}"
+            if self.employeesPerDept is not None:
+                docker_run_params += f" -employeesPerDept {self.employeesPerDept}"
+            if self.embeddingFieldName:
+                docker_run_params += f" -embeddingFieldName {self.embeddingFieldName}"
+            if self.seed is not None:
+                docker_run_params += f" -seed {self.seed}"
             print("docker run params: {}".format(docker_run_params))
 
             # Run the Docker pull command

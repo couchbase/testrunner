@@ -17,6 +17,365 @@ from .fts_backup_restore import FTSIndexBackupClient
 from .fts_base import FTSBaseTest
 
 
+HIERARCHICAL_INDEX_DEF_JSON = r"""
+{
+ "name": "test_flat",
+ "type": "fulltext-index",
+ "params": {
+  "doc_config": {
+   "docid_prefix_delim": "",
+   "docid_regexp": "",
+   "mode": "scope.collection.type_field",
+   "type_field": "type"
+  },
+  "mapping": {
+   "default_analyzer": "standard",
+   "default_datetime_parser": "dateTimeOptional",
+   "default_field": "_all",
+   "default_mapping": {
+    "dynamic": false,
+    "enabled": false
+   },
+   "default_type": "_default",
+   "docvalues_dynamic": false,
+   "index_dynamic": false,
+   "scoring_model": "tf-idf",
+   "store_dynamic": false,
+   "type_field": "_type",
+   "types": {
+    "test_scope.coll2": {
+     "dynamic": false,
+     "enabled": true,
+     "properties": {
+      "company": {
+       "dynamic": false,
+       "enabled": true,
+       "fields": [
+        {
+         "analyzer": "en",
+         "docvalues": true,
+         "include_in_all": true,
+         "include_term_vectors": true,
+         "index": true,
+         "name": "company",
+         "store": true,
+         "type": "text"
+        }
+       ],
+       "properties": {
+        "departments": {
+         "dynamic": false,
+         "enabled": true,
+         "fields": [
+          {
+           "analyzer": "en",
+           "docvalues": true,
+           "include_in_all": true,
+           "include_term_vectors": true,
+           "index": true,
+           "name": "departments",
+           "store": true,
+           "type": "text"
+          }
+         ],
+         "properties": {
+          "employees": {
+           "dynamic": false,
+           "enabled": true,
+           "fields": [
+            {
+             "analyzer": "en",
+             "docvalues": true,
+             "include_in_all": true,
+             "include_term_vectors": true,
+             "index": true,
+             "name": "employees",
+             "store": true,
+             "type": "text"
+            }
+           ],
+           "properties": {
+            "embedding": {
+             "enabled": true,
+             "dynamic": false,
+             "fields": [
+              {
+               "dims": 128,
+               "index": true,
+               "name": "embedding",
+               "similarity": "cosine",
+               "type": "vector",
+               "vector_index_optimized_for": "recall"
+              }
+             ]
+            },
+            "name": {
+             "enabled": true,
+             "dynamic": false,
+             "fields": [
+              {
+               "analyzer": "en",
+               "docvalues": true,
+               "include_in_all": true,
+               "include_term_vectors": true,
+               "index": true,
+               "name": "name",
+               "store": true,
+               "type": "text"
+              }
+             ]
+            },
+            "role": {
+             "enabled": true,
+             "dynamic": false,
+             "fields": [
+              {
+               "analyzer": "en",
+               "docvalues": true,
+               "include_in_all": true,
+               "include_term_vectors": true,
+               "index": true,
+               "name": "role",
+               "store": true,
+               "type": "text"
+              }
+             ]
+            }
+           }
+          },
+          "projects": {
+           "dynamic": false,
+           "enabled": true,
+           "fields": [
+            {
+             "analyzer": "en",
+             "docvalues": true,
+             "include_in_all": true,
+             "include_term_vectors": true,
+             "index": true,
+             "name": "projects",
+             "store": true,
+             "type": "text"
+            }
+           ],
+           "properties": {
+            "embedding": {
+             "enabled": true,
+             "dynamic": false,
+             "fields": [
+              {
+               "dims": 128,
+               "index": true,
+               "name": "embedding",
+               "similarity": "cosine",
+               "type": "vector",
+               "vector_index_optimized_for": "recall"
+              }
+             ]
+            },
+            "status": {
+             "enabled": true,
+             "dynamic": false,
+             "fields": [
+              {
+               "analyzer": "en",
+               "docvalues": true,
+               "include_in_all": true,
+               "include_term_vectors": true,
+               "index": true,
+               "name": "status",
+               "store": true,
+               "type": "text"
+              }
+             ]
+            },
+            "title": {
+             "enabled": true,
+             "dynamic": false,
+             "fields": [
+              {
+               "analyzer": "en",
+               "docvalues": true,
+               "include_in_all": true,
+               "include_term_vectors": true,
+               "index": true,
+               "name": "title",
+               "store": true,
+               "type": "text"
+              }
+             ]
+            }
+           }
+          },
+          "budget": {
+           "enabled": true,
+           "dynamic": false,
+           "fields": [
+            {
+             "docvalues": true,
+             "include_in_all": true,
+             "index": true,
+             "name": "budget",
+             "store": true,
+             "type": "number"
+            }
+           ]
+          },
+          "name": {
+           "enabled": true,
+           "dynamic": false,
+           "fields": [
+            {
+             "analyzer": "en",
+             "docvalues": true,
+             "include_in_all": true,
+             "include_term_vectors": true,
+             "index": true,
+             "name": "name",
+             "store": true,
+             "type": "text"
+            }
+           ]
+          }
+         }
+        },
+        "locations": {
+         "dynamic": false,
+         "enabled": true,
+         "fields": [
+          {
+           "analyzer": "en",
+           "docvalues": true,
+           "include_in_all": true,
+           "include_term_vectors": true,
+           "index": true,
+           "name": "locations",
+           "store": true,
+           "type": "text"
+          }
+         ],
+         "properties": {
+          "city": {
+           "enabled": true,
+           "dynamic": false,
+           "fields": [
+            {
+             "analyzer": "en",
+             "docvalues": true,
+             "include_in_all": true,
+             "include_term_vectors": true,
+             "index": true,
+             "name": "city",
+             "store": true,
+             "type": "text"
+            }
+           ]
+          },
+          "country": {
+           "enabled": true,
+           "dynamic": false,
+           "fields": [
+            {
+             "analyzer": "en",
+             "docvalues": true,
+             "include_in_all": true,
+             "include_term_vectors": true,
+             "index": true,
+             "name": "country",
+             "store": true,
+             "type": "text"
+            }
+           ]
+          },
+          "embedding": {
+           "enabled": true,
+           "dynamic": false,
+           "fields": [
+            {
+             "dims": 128,
+             "index": true,
+             "name": "embedding",
+             "similarity": "cosine",
+             "type": "vector",
+             "vector_index_optimized_for": "recall"
+            }
+           ]
+          }
+         }
+        },
+        "id": {
+         "enabled": true,
+         "dynamic": false,
+         "fields": [
+          {
+           "analyzer": "en",
+           "docvalues": true,
+           "include_in_all": true,
+           "include_term_vectors": true,
+           "index": true,
+           "name": "id",
+           "store": true,
+           "type": "text"
+          }
+         ]
+        },
+        "name": {
+         "enabled": true,
+         "dynamic": false,
+         "fields": [
+          {
+           "analyzer": "en",
+           "docvalues": true,
+           "include_in_all": true,
+           "include_term_vectors": true,
+           "index": true,
+           "name": "name",
+           "store": true,
+           "type": "text"
+          }
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "store": {
+   "indexType": "scorch",
+   "scorchMergePlanOptions": {
+    "floorSegmentFileSize": 139810133
+   },
+   "scorchPersisterOptions": {
+    "maxSizeInMemoryMergePerWorker": 419430400,
+    "numPersisterWorkers": 4
+   },
+   "segmentVersion": 16
+  }
+ },
+ "sourceType": "gocbcore",
+ "sourceName": "test2",
+ "sourceUUID": "4c789d73e9c99ceba8ed751e283dfd5f",
+ "sourceParams": {
+  "scopeParams": {
+   "collections": [
+    {
+     "name": "coll2",
+     "uid": "c"
+    }
+   ],
+   "name": "test_scope"
+  }
+ },
+ "planParams": {
+  "maxPartitionsPerPIndex": 128,
+  "indexPartitions": 1,
+  "numReplicas": 0
+ }
+}
+"""
+
+
 class VectorSearch(FTSBaseTest):
 
     def setUp(self):
@@ -71,7 +430,7 @@ class VectorSearch(FTSBaseTest):
             else:
                 fts_vector_query["knn"][0]["field"] = "vector_data"
                 fts_vector_query["knn"][0]["vector"] = []
-        
+
         self.raw_query = copy.deepcopy(fts_vector_query)
 
         if self.change_nprobe_settings:
@@ -121,26 +480,254 @@ class VectorSearch(FTSBaseTest):
             RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(512, 400, 2000, 1024, 256)
         except Exception as e:
             print(e)
-        
+
         self.read_from_replica = TestInputSingleton.input.param("read_from_replica", False)
         self.parition_selection = TestInputSingleton.input.param("parition_selection", "")
         self.fts_nodes = None
         self.fts_target_node = None
         self.index_src=None
         self.validation_data = None
-        
+
         if self.read_from_replica:
             try:
                 RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(3000, 400, 3000, 1024, 256)
             except Exception as e:
                 print(e)
 
+        self.hierarchical_vector = self.input.param("hierarchical_vector", False)
+        self.hierarchical_embedding_dataset = self.input.param("hierarchical_embedding_dataset", "siftsmall")
+        self.hierarchical_num_queries = self.input.param("hierarchical_num_queries", 5)
+        self.hierarchical_doc_schema = self.input.param("hierarchical_doc_schema", "company")
+        self.hierarchical_doc_id_prefix = self.input.param("hierarchical_doc_id_prefix", "companyDoc_")
+        self.hierarchical_end_index = self.input.param("hierarchical_end_index", 100)
+        self.hierarchical_batch_size = self.input.param("hierarchical_batch_size", 100)
+        self.hierarchical_embedding_field_name = self.input.param("hierarchical_embedding_field_name", "embedding")
+        self.hierarchical_departments_count = self.input.param("hierarchical_departments_count", 4)
+        self.hierarchical_projects_per_dept = self.input.param("hierarchical_projects_per_dept", 1)
+        self.hierarchical_locations_count = self.input.param("hierarchical_locations_count", 2)
+        self.hierarchical_employees_per_dept = self.input.param("hierarchical_employees_per_dept", 2)
+        self.hierarchical_seed = self.input.param("hierarchical_seed", 123)
+        self.hierarchical_knn_field = self.input.param("hierarchical_knn_field",
+                                                       "company.departments.employees.embedding")
+        self.hierarchical_knn_fields = self.input.param("hierarchical_knn_fields", None)
+        if self.hierarchical_knn_fields and not isinstance(self.hierarchical_knn_fields, list):
+            self.hierarchical_knn_fields = [self.hierarchical_knn_fields]
+        # Hardcoded index definitions (conf should not carry the full JSON). You can update
+        # the nested definition later when it diverges.
+        self.hierarchical_flat_index_def = self.input.param("hierarchical_flat_index_def", HIERARCHICAL_INDEX_DEF_JSON)
+        self.hierarchical_nested_index_def = self.input.param("hierarchical_nested_index_def", HIERARCHICAL_INDEX_DEF_JSON)
+        # Only mutate the nested definition when hierarchical tests are enabled.
+        if self.hierarchical_vector:
+            self.hierarchical_nested_index_def = self._add_nested_fields_to_index_def(self.hierarchical_nested_index_def)
+
+    def _add_nested_fields_to_index_def(self, index_def):
+        """
+        Marks array/object fields as nested for the nested-index definition.
+        Accepts either a JSON string or a dict and returns a dict.
+        """
+        index_def = self._parse_index_def(index_def)
+        index_def = copy.deepcopy(index_def)
+
+        types = index_def.get("params", {}).get("mapping", {}).get("types", {})
+        if not isinstance(types, dict) or len(types) == 0:
+            self.fail("Invalid hierarchical index definition: params.mapping.types is missing/empty")
+
+        # The hardcoded payload has a single key (e.g. test_scope.coll2). We'll rewrite it later
+        # to the actual scope.collection in _prepare_hierarchical_index_payload.
+        if len(types.keys()) == 1:
+            type_key = next(iter(types.keys()))
+        else:
+            self.fail(f"Invalid hierarchical index definition: expected 1 mapping type, got {list(types.keys())}")
+
+        try:
+            company_props = types[type_key]["properties"][self.hierarchical_doc_schema]["properties"]
+
+            # company.departments[] is an array of objects
+            company_props["departments"]["nested"] = True
+            # departments.employees[] and departments.projects[] are arrays of objects
+            company_props["departments"]["properties"]["employees"]["nested"] = True
+            company_props["departments"]["properties"]["projects"]["nested"] = True
+            # company.locations[] is an array of objects
+            company_props["locations"]["nested"] = True
+        except Exception as e:
+            self.fail(f"Failed to apply nested flags to hierarchical index def: {e}")
+
+        return index_def
+
+    def _parse_index_def(self, index_def):
+        if index_def is None:
+            return None
+        if isinstance(index_def, dict):
+            return index_def
+        if isinstance(index_def, str):
+            return json.loads(index_def)
+        raise TypeError(f"Unsupported index_def type: {type(index_def)}")
+
+    def _prepare_hierarchical_index_payload(self, payload, index_name, bucket, scope, collection):
+        payload = copy.deepcopy(payload)
+        # remove environment-specific identifiers
+        payload.pop("uuid", None)
+        payload.pop("sourceUUID", None)
+
+        payload["name"] = index_name
+        payload["sourceName"] = bucket
+
+        # update sourceParams scope/collection to match test container
+        if "sourceParams" in payload and "scopeParams" in payload["sourceParams"]:
+            payload["sourceParams"]["scopeParams"]["name"] = scope
+            existing_collections = payload["sourceParams"]["scopeParams"].get("collections", None)
+            if isinstance(existing_collections, list) and len(existing_collections) > 0 and isinstance(existing_collections[0], dict):
+                existing_collections[0]["name"] = collection
+            else:
+                payload["sourceParams"]["scopeParams"]["collections"] = [{"name": collection}]
+
+        # update mapping type key to match doc_config mode scope.collection.type_field
+        mapping_types = payload.get("params", {}).get("mapping", {}).get("types", {})
+        if len(mapping_types.keys()) == 1:
+            old_key = next(iter(mapping_types.keys()))
+            new_key = f"{scope}.{collection}"
+            mapping_types[new_key] = mapping_types.pop(old_key)
+        else:
+            # allow explicitly keying via conf later if needed
+            self.log.info(f"Unexpected mapping types keys: {list(mapping_types.keys())}")
+        return payload
+
+    def _run_hierarchical_knn_query(self, index_obj, field_path, vector, k):
+        query = {"match_none": {}}
+        knn = [{"field": field_path, "k": int(k), "vector": vector}]
+        hits, matches, _, status = index_obj.execute_query(query=query, knn=knn,
+                                                          explain=False, return_raw_hits=True)
+        return hits, matches, status
+
+    def test_hierarchical_vector_search_no_filters(self):
+        """
+        Phase 1:
+        - Load hierarchical company docs using govectorloader with docSchema=company.
+        - Create two indexes (flat + nested) from provided payloads.
+        - Run KNN query against both and validate strict top-k docIDs equality (order matters).
+        """
+        if not self.hierarchical_vector:
+            self.log.info("hierarchical_vector=False, skipping hierarchical vector search test.")
+            return
+
+        containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
+
+        hierarchical_skip_doc_load = self.input.param("hierarchical_skip_doc_load", False)
+
+        # Load hierarchical docs (govectorloader path) into the test containers, unless user pre-loaded externally.
+        if not hierarchical_skip_doc_load:
+            self.store_in_xattr = False
+            self.encode_base64_vector = False
+            self.load_vector_data(
+                containers,
+                dataset=[self.hierarchical_embedding_dataset],
+                python_loader_toggle=False,
+                provideDefaultDocs=False,
+                start_key=int(self.start_key),
+                doc_id_prefix=self.hierarchical_doc_id_prefix,
+                end_index=int(self.hierarchical_end_index),
+                batch_size=int(self.hierarchical_batch_size),
+                doc_schema=self.hierarchical_doc_schema,
+                departments_count=int(self.hierarchical_departments_count),
+                projects_per_dept=int(self.hierarchical_projects_per_dept),
+                locations_count=int(self.hierarchical_locations_count),
+                employees_per_dept=int(self.hierarchical_employees_per_dept),
+                embedding_field_name=self.hierarchical_embedding_field_name,
+                seed=int(self.hierarchical_seed),
+            )
+        else:
+            self.log.info("hierarchical_skip_doc_load=True; assuming hierarchical docs are already loaded.")
+
+        # Resolve bucket/scope/collection from the created containers (align index creation with where docs are loaded)
+        bucket_name = containers["buckets"][0]["name"]
+        scope_name = containers["buckets"][0]["scopes"][0]["name"]
+        collection_name = containers["buckets"][0]["scopes"][0]["collections"][0]["name"]
+
+        flat_def = self._parse_index_def(self.hierarchical_flat_index_def)
+        if flat_def is None:
+            self.fail("hierarchical_flat_index_def must be provided (json string or dict).")
+        nested_def = self._parse_index_def(self.hierarchical_nested_index_def) or flat_def
+
+        flat_payload = self._prepare_hierarchical_index_payload(flat_def, "hier_flat", bucket_name, scope_name,
+                                                                collection_name)
+        nested_payload = self._prepare_hierarchical_index_payload(nested_def, "hier_nested", bucket_name, scope_name,
+                                                                  collection_name)
+
+        flat_index = self._cb_cluster.create_fts_index(name="hier_flat", source_name=bucket_name, scope=scope_name,
+                                                       payload=flat_payload)
+        flat_index.index_definition['uuid'] = flat_index.get_uuid()
+
+        nested_index = self._cb_cluster.create_fts_index(name="hier_nested", source_name=bucket_name, scope=scope_name,
+                                                         payload=nested_payload)
+        nested_index.index_definition['uuid'] = nested_index.get_uuid()
+
+        self.wait_for_indexing_complete()
+        self.sleep(30, "Wait before executing hierarchical KNN queries")
+
+        hierarchical_log_results = self.input.param("hierarchical_log_results", True)
+
+        # Build list of fields to test
+        fields_to_test = self.hierarchical_knn_fields or [self.hierarchical_knn_field]
+        if not fields_to_test:
+            self.fail("No hierarchical knn field(s) provided.")
+
+        # Use random query vectors from the dataset
+        queries = self.get_query_vectors(self.hierarchical_embedding_dataset)
+        if queries is None or len(queries) == 0:
+            self.fail(f"No query vectors found for dataset {self.hierarchical_embedding_dataset}")
+        random.seed(int(self.hierarchical_seed))
+        chosen_queries = random.sample(list(queries), min(int(self.hierarchical_num_queries), len(queries)))
+
+        for field_path in fields_to_test:
+            for qi, qv in enumerate(chosen_queries):
+                vector = qv.tolist() if hasattr(qv, "tolist") else list(qv)
+
+                hits_flat, matches_flat, status_flat = self._run_hierarchical_knn_query(
+                    flat_index, field_path, vector, self.k
+                )
+                hits_nested, matches_nested, status_nested = self._run_hierarchical_knn_query(
+                    nested_index, field_path, vector, self.k
+                )
+
+                if type(status_flat) == str or (isinstance(status_flat, dict) and status_flat.get("failed", 0) != 0):
+                    self.fail(f"Flat index query failed: status={status_flat}")
+                if type(status_nested) == str or (isinstance(status_nested, dict) and status_nested.get("failed", 0) != 0):
+                    self.fail(f"Nested index query failed: status={status_nested}")
+
+                if int(hits_flat) != int(self.k) or len(matches_flat) != int(self.k):
+                    self.fail(f"Flat index did not return exactly k results. hits={hits_flat}, matches={len(matches_flat)}, k={self.k}")
+                if int(hits_nested) != int(self.k) or len(matches_nested) != int(self.k):
+                    self.fail(f"Nested index did not return exactly k results. hits={hits_nested}, matches={len(matches_nested)}, k={self.k}")
+
+                flat_ids = [m["id"] for m in matches_flat]
+                nested_ids = [m["id"] for m in matches_nested]
+
+                if len(set(flat_ids)) != int(self.k):
+                    self.fail(f"Flat index returned duplicate docIDs in top-k: {flat_ids}")
+                if len(set(nested_ids)) != int(self.k):
+                    self.fail(f"Nested index returned duplicate docIDs in top-k: {nested_ids}")
+
+                if flat_ids != nested_ids:
+                    # helpful diff
+                    mismatch_at = next((i for i in range(int(self.k)) if flat_ids[i] != nested_ids[i]), None)
+                    self.log.info(f"Mismatch at position {mismatch_at}, field={field_path}")
+                    self.log.info(f"Flat IDs  : {flat_ids}")
+                    self.log.info(f"Nested IDs: {nested_ids}")
+                    self.fail("Flat and nested hierarchical KNN results differ (strict order).")
+                else:
+                    if hierarchical_log_results:
+                        self.log.info(
+                            f"HIER_KNN_PASS field={field_path} query_idx={qi} k={self.k} hits_flat={hits_flat} hits_nested={hits_nested}"
+                        )
+                        self.log.info(f"HIER_KNN_PASS flat_ids  : {flat_ids}")
+                        self.log.info(f"HIER_KNN_PASS nested_ids: {nested_ids}")
+
     def read_from_replica_setup(self,index=None):
-        
+
         #skips the validation check for random / random balanced queries
         if TestInputSingleton.input.param("skip_replica_validation", False):
             return
-        
+
         #selecting the fts target node (random)
         self.fts_target_node = random.choice(self._cb_cluster.get_fts_nodes())
         self.fts_nodes = self._cb_cluster.get_fts_nodes()
@@ -172,7 +759,7 @@ class VectorSearch(FTSBaseTest):
                         key = a.split('.')[2]
                     except:
                         key = a
-                    
+
                     if index_name in key:
                         for m,n in b.items():
                             if m == 'nodes':
@@ -354,20 +941,20 @@ class VectorSearch(FTSBaseTest):
         if isinstance(self.query, str):
             self.query = json.loads(self.query)
             self.raw_query = json.loads(self.raw_query)
-        
+
         if doc_filter_index:
 
             self.query['knn'][0]['vector'] = vector
             self.raw_query['knn'][0]['vector'] = vector
             self.query["knn"][0]["filter"] = self.prefilter_query
-            
+
             hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
                                                                     fields=self.query['fields'])
 
             hits_d,matches_d,time_taken_d,status_d = doc_filter_index.execute_query(query=self.raw_query['query'], knn=self.raw_query['knn'],
                                                                     explain=self.query['explain'], return_raw_hits=True,
                                                                     fields=self.query['fields'])
-            
+
             return hits, hits_d, matches, matches_d, status, status_d
 
 
@@ -437,7 +1024,6 @@ class VectorSearch(FTSBaseTest):
 
 
 
-        # compare fts and n1ql results if required
         if self.run_n1ql_search_function:
             if n1ql_hits == hits:  #
                 self.log.info(
@@ -463,7 +1049,7 @@ class VectorSearch(FTSBaseTest):
             self.log.info("*" * 5 + f"Query RESULT # {self.count - 1}" + "*" * 5)
             fts_faiss_accuracy, fts_faiss_recall = self.compare_results(faiss_results, fts_matches, "faiss",
                                                                         "fts")
-            
+
             if fts_faiss_recall < 85:
                 self.log.info(f"FTS MATCHES: {fts_matches}")
                 self.log.info(f"FAISS MATCHES: {faiss_results}")
@@ -557,7 +1143,7 @@ class VectorSearch(FTSBaseTest):
         # create index i1 with self.similarity similarity
         idx = [("i1", "b1.s1.c1")]
         vector_fields = {"dims": self.dimension, "similarity": self.similarity}
-    
+
         index = self._create_fts_index_parameterized(field_name=self.vector_field_name,
                                                      field_type=self.vector_field_type,
                                                      test_indexes=idx,
@@ -648,7 +1234,7 @@ class VectorSearch(FTSBaseTest):
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
-        
+
 
         # docs not in xattr as vectors
         self.store_in_xattr = False
@@ -914,7 +1500,7 @@ class VectorSearch(FTSBaseTest):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
         indexes = []
-        
+
 
         # create index i1 with dot product similarity
         idx = [("i1", "b1.s1.c1")]
@@ -1107,7 +1693,7 @@ class VectorSearch(FTSBaseTest):
 
     def test_vector_index_update_dimensions(self):
 
-        
+
         new_dimension = self.input.param("new_dim", 130)
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1188,7 +1774,7 @@ class VectorSearch(FTSBaseTest):
 
     def test_vector_search_update_similarity(self):
 
-        
+
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
@@ -1311,7 +1897,7 @@ class VectorSearch(FTSBaseTest):
 
     def test_vector_search_update_partitions(self):
 
-        
+
 
         new_partition_number = self.input.param("update_partitions", 2)
 
@@ -1469,7 +2055,7 @@ class VectorSearch(FTSBaseTest):
         results_after_update = [matches[i]['fields']['sno'] for i in range(self.k)]
 
     def test_vector_search_update_replicas(self):
-        
+
         new_replica_number = self.input.param("update_replicas", 2)
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
@@ -1896,7 +2482,7 @@ class VectorSearch(FTSBaseTest):
 
     def test_vector_search_different_dimensions(self):
 
-        
+
 
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
@@ -2059,7 +2645,7 @@ class VectorSearch(FTSBaseTest):
         return True
 
     def test_vector_search_backup_restore(self):
-        
+
         index_definitions = {}
 
         bucket_name = TestInputSingleton.input.param("bucket", None)
@@ -2312,7 +2898,7 @@ class VectorSearch(FTSBaseTest):
                 hits, n1ql, _, _ = self.run_vector_query(vector=q.tolist(), index=index['index_obj'], continue_on_failure=True,validate_result_count=False)
                 self.assertEqual(hits, -1)
                 self.assertEqual(n1ql, -1)
-    
+
     def test_docfilter(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
 
@@ -2369,7 +2955,7 @@ class VectorSearch(FTSBaseTest):
                                                      vector_fields=vector_fields,
                                                      create_vector_index=True,
                                                      extra_fields=[{"term_string": "text"}])
-        
+
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
 
@@ -2385,13 +2971,13 @@ class VectorSearch(FTSBaseTest):
             fts_matches = []
             for i in range(int(hits_fts)):
                 fts_matches.append(int(matches_fts[i]['id'][4:]))
-            
+
             fts_matches.sort()
-            
+
             doc_filter_matches = []
             for i in range(int(hits_doc)):
                 doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
-            
+
             doc_filter_matches.sort()
 
             self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
@@ -2426,7 +3012,7 @@ class VectorSearch(FTSBaseTest):
                                                      vector_fields=vector_fields,
                                                      create_vector_index=True,
                                                      extra_fields=[{"bool_string": "boolean"}])
-        
+
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
 
@@ -2435,20 +3021,20 @@ class VectorSearch(FTSBaseTest):
             hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
                                                                     perform_faiss_validation=False,
                                                                     validate_fts_with_faiss=False,doc_filter_index=doc_index)
-            
+
             self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
             self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
 
             fts_matches = []
             for i in range(int(hits_fts)):
                 fts_matches.append(int(matches_fts[i]['id'][4:]))
-            
+
             fts_matches.sort()
-            
+
             doc_filter_matches = []
             for i in range(int(hits_doc)):
                 doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
-            
+
             doc_filter_matches.sort()
 
             self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
@@ -2456,7 +3042,7 @@ class VectorSearch(FTSBaseTest):
 
             if fts_matches != doc_filter_matches:
                 self.fail("Doc hits with prefiltering and doc filter are not equal")
-        
+
         #numeric filter
         numeric_query = numeric_filter.copy()
         numeric_query.pop('order',None)
@@ -2481,7 +3067,7 @@ class VectorSearch(FTSBaseTest):
                                                      vector_fields=vector_fields,
                                                      create_vector_index=True,
                                                      extra_fields=[{"num_val": "number"}])
-        
+
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
 
@@ -2490,7 +3076,7 @@ class VectorSearch(FTSBaseTest):
             hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
                                                                     perform_faiss_validation=False,
                                                                     validate_fts_with_faiss=False,doc_filter_index=doc_index)
-            
+
             self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
             self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
 
@@ -2500,13 +3086,13 @@ class VectorSearch(FTSBaseTest):
             fts_matches = []
             for i in range(int(hits_fts)):
                 fts_matches.append(int(matches_fts[i]['id'][4:]))
-            
+
             fts_matches.sort()
-            
+
             doc_filter_matches = []
             for i in range(int(hits_doc)):
                 doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
-            
+
             doc_filter_matches.sort()
 
             self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
@@ -2514,7 +3100,7 @@ class VectorSearch(FTSBaseTest):
 
             if fts_matches != doc_filter_matches:
                 self.fail("Doc hits with prefiltering and doc filter are not equal")
-        
+
 
         #datetime filter
         date_query = date_filter.copy()
@@ -2540,7 +3126,7 @@ class VectorSearch(FTSBaseTest):
                                                      vector_fields=vector_fields,
                                                      create_vector_index=True,
                                                      extra_fields=[{"date_string": "datetime"}])
-        
+
         index[0]['dataset'] = bucketvsdataset['bucket_name']
         index_obj = next((item for item in index if item['name'] == "i1"), None)['index_obj']
 
@@ -2549,20 +3135,20 @@ class VectorSearch(FTSBaseTest):
             hits_fts, hits_doc, matches_fts,matches_doc,status_fts,status_doc = self.run_vector_query(vector=q.tolist(), index=index[0]['index_obj'],
                                                                     perform_faiss_validation=False,
                                                                     validate_fts_with_faiss=False,doc_filter_index=doc_index)
-            
+
             self.log.info(f"Doc hits with prefiltering : {hits_fts}\n")
             self.log.info(f"Doc hits with doc filter : {hits_doc}\n")
 
             fts_matches = []
             for i in range(int(hits_fts)):
                 fts_matches.append(int(matches_fts[i]['id'][4:]))
-            
+
             fts_matches.sort()
-            
+
             doc_filter_matches = []
             for i in range(int(hits_doc)):
                 doc_filter_matches.append(int(matches_doc[i]['id'][4:]))
-            
+
             doc_filter_matches.sort()
 
             self.log.info(f"Doc Hits (pre filtering): {fts_matches}\n")
@@ -2570,12 +3156,12 @@ class VectorSearch(FTSBaseTest):
 
             if fts_matches != doc_filter_matches:
                 self.fail("Doc hits with prefiltering and doc filter are not equal")
-        
+
         self.log.info("SUCCESS : DocFilter vector sanity tests passed")
-        
+
 
     def test_prefiltering(self):
-        
+
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=["sift"])
         _ = self.load_vector_data(containers, dataset=["siftsmall"], start_key=self.start_key)
