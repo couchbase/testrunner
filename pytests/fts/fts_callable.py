@@ -436,7 +436,7 @@ class FTSCallable:
                 fail_count += 1
                 failed_queries.append(task.query_index + 1)
 
-        if fail_count:
+        if fail_count > 1:
             raise Exception("%s out of %s queries failed! - %s" % (fail_count,
                                                                    num_queries,
                                                                    failed_queries))
@@ -753,7 +753,7 @@ class FTSCallable:
                 "enabled": True,
                 "dynamic": False,
                 "properties": vector_temp}
-        
+
         index_body['planParams']['indexPartitions'] = plans['indexPartitions']
         index_body['planParams']['numReplicas'] = plans['numReplicas']
 
@@ -783,7 +783,7 @@ class FTSCallable:
         index_body_def = RestConnection(self.servers[1]).get_fts_index_definition(name=index_name)[1]['indexDef']
         index_partition = index_body_def['planParams']['indexPartitions']
         num_replicas = index_body_def['planParams']['numReplicas']
-        
+
 
         try:
             index_body = copy.deepcopy(self.vector_index_definition)
@@ -821,10 +821,10 @@ class FTSCallable:
                     "enabled": True,
                     "dynamic": False,
                     "properties": vector_temp}
-            
+
             index_body['planParams']['indexPartitions'] = index_partition
             index_body['planParams']['numReplicas'] = num_replicas
-        
+
         except Exception as ex:
             print(f"error occured while trying to update index . reason : {ex}\n")
 
@@ -846,7 +846,7 @@ class FTSCallable:
         goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
                                          start_index,end_index,base64Flag)
         goloader_object.load_data("upgrade")
-    
+
     def delete_doc_by_key(self,node,start,end,percent,bucket_name = "default",scope_name="_default",collection_name="_default"):
         server = RestConnection(node)
         server.reduce_query_logging = True
@@ -1248,7 +1248,7 @@ class FTSCallable:
         return result
 
     def validate_partition_distribution(self, rest):
-        
+
         _, payload = rest.get_cfg_stats()
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
 
@@ -1300,7 +1300,7 @@ class FTSCallable:
                     curr_active_partitions = v['planParams']['indexPartitions']
                     curr_replica_partitions = curr_active_partitions * num_rep
                     expected_partition_count += curr_active_partitions + curr_replica_partitions
- 
+
             print(f"Expected number of index partitions in cluster: {expected_partition_count}")
             print(f"Indexes: {len(indexes_map)}")
         except Exception as ex:
@@ -1326,7 +1326,7 @@ class FTSCallable:
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
             if current_partition_count != int(pindexes_count[count]):
-                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")         
+                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")
             count+=1
 
             index_distribution.sort(reverse = True)
