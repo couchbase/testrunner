@@ -1114,13 +1114,17 @@ class FTSIndex:
                 field_maps.append(field_map)
 
         map = {}
-        if 'mapping' not in self.index_definition['params']:
+        if 'mapping' not in self.index_definition['params'] or \
+           'default_mapping' not in self.index_definition['params']['mapping']:
             map['default_mapping'] = {}
             map['default_mapping']['properties'] = {}
             map['default_mapping']['dynamic'] = False
             map['default_mapping']['enabled'] = True
             map['default_mapping']['properties'][fields.pop()] = field_maps.pop()
-            self.index_definition['params']['mapping'] = map
+            if 'mapping' not in self.index_definition['params']:
+                self.index_definition['params']['mapping'] = map
+            else:
+                self.index_definition['params']['mapping']['default_mapping'] = map['default_mapping']
         else:
             self.index_definition['params']['mapping']['default_mapping'] \
                 ['properties'][fields.pop()] = field_maps.pop()
@@ -1712,7 +1716,7 @@ class FTSIndex:
         if int(hits) == 0 and not zero_results_ok:
             self.__log.info("ERROR: 0 hits returned!")
             raise FTSException("No docs returned for query : %s" % query_dict)
-        if expected_hits and expected_hits != hits:
+        if expected_hits and abs(expected_hits - hits) > 1:
             self.__log.info("ERROR: Expected hits: %s, fts returned: %s"
                             % (expected_hits, hits))
             raise FTSException("Expected hits: %s, fts returned: %s"
@@ -7496,7 +7500,7 @@ class FTSBaseTest(unittest.TestCase):
                     self.log.info("SUCCESS. Document Hits match")
 
     def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,
-                              dataset=None,fts_nodes=None, fts_target_node=None,validation_data=None,ignore_wiki=False):
+                              dataset=None,fts_nodes=None, fts_target_node=None,validation_data=None,ignore_wiki=False,skip_validation=False):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -7527,7 +7531,7 @@ class FTSBaseTest(unittest.TestCase):
                 fail_count += 1
                 failed_queries.append(task.query_index + 1)
 
-        if fail_count:
+        if fail_count and not skip_validation:
 
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,

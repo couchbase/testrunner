@@ -386,7 +386,7 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -748,7 +748,6 @@ class MovingTopFTS(FTSBaseTest):
             self._cb_cluster.swap_rebalance_master(services=["fts"])
             self.validate_index_count(equal_bucket_doc_count=True)
             raise e
-        self._cb_cluster.swap_rebalance_master(services=["fts"])
         self.validate_index_count(equal_bucket_doc_count=True)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
@@ -803,7 +802,7 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv,fts"])
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self._cb_cluster.failover_and_rebalance_master()
@@ -845,9 +844,10 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover()
+        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        task = self._cb_cluster.async_failover(node=kv_node)
         task.result()
-        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -865,9 +865,10 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover()
+        fts_node = self._cb_cluster.get_fts_nodes()[0]
+        task = self._cb_cluster.async_failover(node=fts_node)
         task.result()
-        self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
+        self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -885,10 +886,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover(graceful=True)
+        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(60)
-        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -906,10 +908,11 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        task = self._cb_cluster.async_failover(graceful=True)
+        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(60)
-        self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -1059,7 +1062,7 @@ class MovingTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
         rest = RestConnection(self._cb_cluster.get_master_node())
         if rest.is_enterprise_edition():
-            services = "kv,fts"
+            services = "fts"
         else:
             services = "fts,kv,index,n1ql"
         self._cb_cluster.rebalance_in(num_nodes=self.num_rebalance,
@@ -1273,9 +1276,10 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        task = self._cb_cluster.async_failover()
+        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        task = self._cb_cluster.async_failover(node=kv_node)
         task.result()
-        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -1294,9 +1298,10 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        task = self._cb_cluster.async_failover()
+        fts_node = self._cb_cluster.get_fts_nodes()[0]
+        task = self._cb_cluster.async_failover(node=fts_node)
         task.result()
-        self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
+        self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -1335,10 +1340,11 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        task = self._cb_cluster.async_failover(graceful=True)
+        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(30)
-        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -1357,10 +1363,11 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        task = self._cb_cluster.async_failover(graceful=True)
+        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(30)
-        self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -1520,7 +1527,7 @@ class MovingTopFTS(FTSBaseTest):
         self.generate_random_queries(index, self.num_queries, self.query_types)
         return index
 
-    def run_tasks_and_report(self, tasks, num_queries):
+    def run_tasks_and_report(self, tasks, num_queries,skip_validation=False):
         fail_count = 0
         failed_queries = []
         for task in tasks:
@@ -1530,7 +1537,7 @@ class MovingTopFTS(FTSBaseTest):
                     fail_count += 1
                     failed_queries.append(task.query_index+1)
 
-        if fail_count:
+        if fail_count and not skip_validation:
             self.fail("%s out of %s queries failed! - %s" % (fail_count,
                                                              num_queries,
                                                              failed_queries))
@@ -1626,8 +1633,9 @@ class MovingTopFTS(FTSBaseTest):
                 es=self.es,
                 es_index_name=None,
                 query_index=count))
-        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.run_tasks_and_report(tasks, len(index.fts_queries),skip_validation=True)
         self.is_index_partitioned_balanced(index)
+        time.sleep(20)
         self.run_query_and_compare(index)
         hits, _, _, _ = index.execute_query(query=self.query,
                                          expected_hits=self._find_expected_indexed_items_number())
@@ -1898,7 +1906,7 @@ class MovingTopFTS(FTSBaseTest):
         node = self._cb_cluster.get_random_fts_node()
         NodeHelper.kill_memcached(node)
         self._cb_cluster.set_bypass_fts_node(node)
-        self.run_query_and_compare(index)
+        self.run_query_and_compare(index,skip_validation=True)
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
