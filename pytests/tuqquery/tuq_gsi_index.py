@@ -2466,6 +2466,63 @@ class QueriesIndexTests(QueryTests):
                     self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
+    
+    #MB-69083
+    def test_nested_index_agg(self):
+        # The following code implements the queries and checks described in the instruction.
+        self.fail_if_no_buckets()
+        for bucket in self.buckets:
+            created_indexes = []
+            query_bucket = self.get_collection_name(bucket.name)
+            try:
+                # 1. Insert 500000 "group" documents via UPSERT ... SELECT ... FROM ARRAY_RANGE:
+                insert_query = '''
+                UPSERT INTO {0} (KEY doc.k, VALUE doc)
+                SELECT {{"k":"group_"||TO_STR(d), "type" : "group", "gid": "doc_"||TO_STR(IMOD(d,250000)), "id":IMOD(d,10000), "c0":d, "c1":d, "c3":d}} AS doc 
+                    FROM ARRAY_RANGE(0,500000) AS d;
+                '''.format(query_bucket)
+                self.run_cbq_query(insert_query)
+
+                # 2. Insert "doc_100" and "doc_200"
+                self.run_cbq_query('UPSERT INTO {0} VALUES ("doc_100", {{"type":"doc", "name":"docs"}});'.format(query_bucket))
+                self.run_cbq_query('UPSERT INTO {0} VALUES ("doc_200", {{"type":"doc", "name":"docs"}});'.format(query_bucket))
+
+                # 3. Create covering index
+                idx = "ix1"
+                create_index_query = 'CREATE INDEX {0} ON {1}(type, c1, c3, id, gid);'.format(idx, query_bucket)
+                self.run_cbq_query(create_index_query)
+                self._wait_for_index_online(bucket, idx)
+                created_indexes.append(idx)
+                self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
+
+                # 4. Run the aggregation LEFT JOIN query
+                join_query = '''
+                SELECT META(t).id , t.name, t.type, d.cnt
+                FROM {0} AS t
+                LEFT JOIN (
+                    SELECT gid, COUNT(id) AS cnt
+                    FROM {0} AS g
+                    WHERE type = "group"
+                    GROUP BY gid
+                ) AS d USE HASH(build) ON META(t).id = d.gid
+                WHERE t.type = "doc" AND t.name LIKE "%docs%";
+                '''.format(query_bucket)
+                explain_query = "EXPLAIN " + join_query
+                actual_result = self.run_cbq_query(explain_query)
+                plan = self.ExplainPlanHelper(actual_result)
+                self.assertTrue("'sum(cover (count(cover ((`g`.`id`)))))'" in str(plan))
+                result = self.run_cbq_query(join_query)
+                # Assertions can be added as needed, for example:
+                self.assertEqual(result['results'], [{'id': 'doc_100', 'name': 'docs', 'type': 'doc', 'cnt': 2}, {'id': 'doc_200', 'name': 'docs', 'type': 'doc', 'cnt': 2}])
+
+            finally:
+                for idx in created_indexes:
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
+                    try:
+                        self.run_cbq_query()
+                    except Exception:
+                        pass  # Index may not exist
+                    self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_nested_attr_index(self):
         self.fail_if_no_buckets()
