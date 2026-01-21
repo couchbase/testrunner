@@ -6,6 +6,7 @@ import random
 from threading import Thread
 
 import Geohash
+import time
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
