@@ -1025,3 +1025,41 @@ class QueryExpirationTests(QueryTests):
             count += 1
         self.log.info("Expected: {0}, Actual: {1}".format(expected_stat_value, curr_stat_value))
         return False
+
+    def test_retrieve_expiration(self):
+        """
+        @summary: Test to retrieve expiration of a document
+        """
+        # Test that expiration value is returned when querying via META, both with and without specifying expiration
+
+        bucket_name = self.input.param('bucket_name', 'default')
+        collection_name = self.get_collection_name(bucket_name)
+        doc_key = "k01"
+        doc_value = {"a": 1}
+        expiration_secs = 24 * 3600
+
+        # Upsert document with expiration.
+        upsert_query = f'UPSERT INTO {collection_name} VALUES("{doc_key}", {doc_value}, {{"expiration":{expiration_secs}}})'
+        self.run_cbq_query(upsert_query)
+
+        # Select META(d).expiration explicitly
+        query1 = f'SELECT d.*, META(d).expiration FROM {collection_name} AS d USE KEYS "{doc_key}"'
+        result1 = self.run_cbq_query(query1)
+        self.assertEqual(len(result1['results']), 1, "Expected exactly one result")
+        doc1 = result1['results'][0]
+        self.assertIn('a', doc1)
+        self.assertIn('expiration', doc1)
+        # expiration should be close to now + 24*3600, we'll just check it's a positive int
+        self.assertIsInstance(doc1['expiration'], int)
+        self.assertGreater(doc1['expiration'], 0)
+
+        # Select entire META(d) object and check expiration is present
+        query2 = f'SELECT d.*, META(d) AS metadata FROM {collection_name} AS d USE KEYS "{doc_key}"'
+        result2 = self.run_cbq_query(query2)
+        self.assertEqual(len(result2['results']), 1, "Expected exactly one result")
+        doc2 = result2['results'][0]
+        self.assertIn('a', doc2)
+        self.assertIn('metadata', doc2)
+        self.assertIn('expiration', doc2['metadata'])
+        self.assertIsInstance(doc2['metadata']['expiration'], int)
+        self.assertGreater(doc2['metadata']['expiration'], 0)
