@@ -5201,3 +5201,38 @@ class QuerySanityTests(QueryTests):
             # Clean up
             self.run_cbq_query(f"DROP COLLECTION `{collection_name}` IF EXISTS", query_context=query_context)
             self.run_cbq_query("DELETE FROM system:prepareds WHERE name = 'p111'", query_context=query_context)
+
+    def test_slice_filter(self):
+        """
+        Test to ensure the filter condition for a slice filter is correct in the explain plan.
+        Query: SELECT t.* FROM {"version": "3.1.0"} AS  t WHERE SPLIT(t.version,".")[:2]=["3","1"];
+        The 'Filter' condition in the plan should contain: 
+            ((split((`t`.`version`), ".")[ : 2]) = ["3", "1"])
+        """
+        query = 'EXPLAIN SELECT t.* FROM {"version": "3.1.0"} AS t WHERE SPLIT(t.version, ".")[:2]=["3","1"];'
+        explain_result = self.run_cbq_query(query)
+        plan = explain_result['results'][0]['plan']
+
+        # Traverse the plan to find a Filter operator and check its 'condition'
+        def find_filter_condition(plan):
+            if isinstance(plan, dict):
+                if plan.get("#operator") == "Filter":
+                    return plan.get("condition", "")
+                # Recursively check for ~children or ~child
+                for key in ["~children", "~child"]:
+                    if key in plan:
+                        res = find_filter_condition(plan[key])
+                        if res:
+                            return res
+            elif isinstance(plan, list):
+                for elem in plan:
+                    res = find_filter_condition(elem)
+                    if res:
+                        return res
+            return ""
+
+        filter_condition = find_filter_condition(plan)
+        # The expected condition string
+        expected_fragment = 'split((`t`.`version`), ".")[ : 2]) = ["3", "1"]'
+        self.assertIn(expected_fragment, filter_condition, 
+            f"Expected slice filter condition not found in filter node: {filter_condition}")
