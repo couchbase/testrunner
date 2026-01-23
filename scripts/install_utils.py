@@ -963,9 +963,11 @@ def __get_build_url(node, build_binary):
     if params["bkrs_client"]:
         if node.ip != params["bkrs_client"].ip:
             cb_version = params["cluster_version"]
+    version_parts = cb_version.split('-')[0].split('.')
+    major_minor = '.'.join(version_parts[:2])  # e.g., '7.6.9' → '7.6'
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
         testconstants.CB_REPO,
-        testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+        testconstants.CB_VERSION_NAME[major_minor],
         cb_version.split('-')[1],
         build_binary)
     release_url = "{0}{1}/{2}".format(
@@ -1005,9 +1007,11 @@ def __get_columnar_build_url(node, build_binary):
 
 def __get_tools_url(node, tools_package):
     cb_version = node.cb_version or params["version"]
+    version_parts = cb_version.split('-')[0].split('.')
+    major_minor = '.'.join(version_parts[:2])  # e.g., '7.6.9' → '7.6'
     latestbuilds_url = "{0}{1}/{2}/{3}".format(
         testconstants.CB_REPO,
-        testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+        testconstants.CB_VERSION_NAME[major_minor],
         cb_version.split('-')[1],
         tools_package)
     if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
