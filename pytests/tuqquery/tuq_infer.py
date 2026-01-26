@@ -156,3 +156,30 @@ class QueryInferTests(QueryTests):
         for i, sample in enumerate(samples):
             self.assertIsInstance(sample['x'], list, f"sample[{i}] should be an array")
             self.assertEqual(len(sample['x']), 2, f"sample[{i}] should contain 2 elements")
+
+    def test_infer_parameters(self):
+        """
+        Test INFER with undefined named or positional parameter
+        Ensure INFER does not panic, but returns error.
+        """
+        # Test with undefined positional parameter
+        query_positional = "INFER $1"
+        try:
+            result = self.run_cbq_query(query_positional)
+            # We expect an error, so if no exception, the test should fail
+            self.fail("INFER with undefined positional parameter should return error, but returned: %s" % result)
+        except Exception as ex:
+            # Should return error message about missing/incomplete parameter(s)
+            error_msg = str(ex)
+            self.assertTrue("No value for positional parameter" in error_msg or
+                            f"Expected error about missing parameter, got: {error_msg}")
+
+        # Test with undefined named parameter
+        query_named = "INFER $bucket"
+        try:
+            result = self.run_cbq_query(query_named)
+            self.fail("INFER with undefined named parameter should return error, but returned: %s" % result)
+        except Exception as ex:
+            error_msg = str(ex)
+            self.assertTrue("No value for named parameter" in error_msg or
+                            f"Expected error about missing parameter, got: {error_msg}")
