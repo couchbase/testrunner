@@ -135,13 +135,13 @@ class BuildQuery(object):
         build.build_number = 0
         if deliverable_type == "exe":
             """ /3.0.1/couchbase-server-enterprise_3.0.1-windows_amd64.exe """
-            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+            if not re.match(r'[1-9].[0-9].[0-9]{1,2}$', build_version):
                 arch_type = "amd64"
                 if "x86_64" not in os_architecture:
                     arch_type = "x86"
                 build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
                     .format(build_version[:build_version.find('-')],
-                    product, arch_type, deliverable_type, build_details[:5],
+                    product, arch_type, deliverable_type, build_details[:build_details.find('-')],
                     CB_RELEASE_REPO)
             else:
                 arch_type = "amd64"
@@ -149,13 +149,13 @@ class BuildQuery(object):
                     arch_type = "x86"
                 build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
                     .format(build_version, product, arch_type,
-                    deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                    deliverable_type, build_details[:build_details.find('-')], CB_RELEASE_REPO)
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture, deliverable_type,
                                             build_details, CB_LATESTBUILDS_REPO)
         else:
             """ check match full version x.x.x-xxxx """
-            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+            if not re.match(r'[1-9].[0-9].[0-9]{1,2}$', build_version):
                 """  in release folder
                         /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
                         /3.0.1/couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb
@@ -170,7 +170,7 @@ class BuildQuery(object):
                     build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                             product, os_architecture, deliverable_type,
-                                    build_details[:5], CB_RELEASE_REPO)
+                                    build_details[:build_details.find('-')], CB_RELEASE_REPO)
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
@@ -181,12 +181,12 @@ class BuildQuery(object):
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                              product, os_architecture, deliverable_type,
-                             build_details[:5], os_name, CB_RELEASE_REPO)
+                             build_details[:build_details.find('-')], os_name, CB_RELEASE_REPO)
             else:
                 if "rpm" in deliverable_type:
                     build.url = "{5}{0}/{1}-{4}-centos6.{2}.{3}"\
                         .format(build_version, product, os_architecture,
-                        deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                        deliverable_type, build_details[:build_details.find('-')], CB_RELEASE_REPO)
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
@@ -196,7 +196,7 @@ class BuildQuery(object):
                         os_name = "ubuntu16.04"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                         .format(build_version, product, os_architecture,
-                        deliverable_type, build_details[:5], os_name,
+                        deliverable_type, build_details[:build_details.find('-')], os_name,
                                                      CB_RELEASE_REPO)
                     """ http://builds.hq.northscale.net/releases/3.0.1/
                     couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb """
@@ -234,7 +234,7 @@ class BuildQuery(object):
                     arch_type = "x86"
                 build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
                         .format(build_version[:build_version.find('-')],
-                        product, arch_type, deliverable_type, build_details[:5],
+                        product, arch_type, deliverable_type, build_details[:build_details.find('-')],
                         CB_RELEASE_REPO)
             else:
                 arch_type = "amd64"
@@ -242,7 +242,7 @@ class BuildQuery(object):
                     arch_type = "x86"
                 build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
                     .format(build_version, product, arch_type,
-                     deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                     deliverable_type, build_details[:build_details.find('-')], CB_RELEASE_REPO)
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture,
                              deliverable_type, build_details, CB_LATESTBUILDS_REPO)
@@ -253,7 +253,7 @@ class BuildQuery(object):
                     arch_type = "x86"
                 build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
                         .format(build_version[:build_version.find('-')],
-                        product, arch_type, deliverable_type, build_details[:5],
+                        product, arch_type, deliverable_type, build_details[:build_details.find('-')],
                         CB_RELEASE_REPO)
             else:
                 arch_type = "amd64"
@@ -261,24 +261,24 @@ class BuildQuery(object):
                     arch_type = "x86"
                 build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
                     .format(build_version, product, arch_type,
-                     deliverable_type, build_details[:5], CB_RELEASE_REPO)
+                     deliverable_type, build_details[:build_details.find('-')], CB_RELEASE_REPO)
         elif deliverable_type == "dmg":
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
                 os_name = "macos"
                 build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                             product, os_architecture, deliverable_type,
-                            build_details[:5],os_name, CB_RELEASE_REPO)
+                            build_details[:build_details.find('-')],os_name, CB_RELEASE_REPO)
         else:
             """ check match full version x.x.x-xxxx """
             os_name = "".join(os_version.lower().split(" "))
-            if not re.match(r'[1-9].[0-9].[0-9]$', build_version) and float(build_version[:3]) >= 7.1\
+            if not re.match(r'[1-9].[0-9].[0-9]{1,2}$', build_version) and float(build_version[:3]) >= 7.1\
                 and os_name in install_constants.LINUX_DISTROS:
                 if os_name in install_constants.LINUX_AMD64:
                     os_architecture = "amd64"
                     build.name = "{0}_{1}-{2}_{3}.{4}"\
                                  .format(product,
-                                         build_details[:5],
+                                         build_details[:build_details.find('-')],
                                          "linux",
                                          os_architecture,
                                          deliverable_type)
@@ -286,7 +286,7 @@ class BuildQuery(object):
                     os_architecture = "x86_64"
                     build.name = "{0}-{1}-{2}.{3}.{4}"\
                                  .format(product,
-                                         build_details[:5],
+                                         build_details[:build_details.find('-')],
                                          "linux",
                                          os_architecture,
                                          deliverable_type)
@@ -294,7 +294,7 @@ class BuildQuery(object):
                             .format(CB_RELEASE_REPO,
                                     build_version[:build_version.find('-')],
                                     build.name)
-            elif not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+            elif not re.match(r'[1-9].[0-9].[0-9]{1,2}$', build_version):
                 """  in release folder
                         /3.0.1/couchbase-server-enterprise-3.0.1-centos6.x86_64.rpm
                         /3.0.1/couchbase-server-enterprise_3.0.1-ubuntu12.04_amd64.deb
@@ -332,7 +332,7 @@ class BuildQuery(object):
                     build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                             product, os_architecture, deliverable_type,
-                            build_details[:5], os_name, CB_RELEASE_REPO)
+                            build_details[:build_details.find('-')], os_name, CB_RELEASE_REPO)
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
@@ -349,7 +349,7 @@ class BuildQuery(object):
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                              product, os_architecture, deliverable_type,
-                             build_details[:5], os_name, CB_RELEASE_REPO)
+                             build_details[:build_details.find('-')], os_name, CB_RELEASE_REPO)
             else:
                 if "rpm" in deliverable_type:
                     if "centos" in os_version.lower():
@@ -373,7 +373,7 @@ class BuildQuery(object):
                     build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                             .format(build_version[:build_version.find('-')],
                             product, os_architecture, deliverable_type,
-                            build_details[:5], os_name, CB_RELEASE_REPO)
+                            build_details[:build_details.find('-')], os_name, CB_RELEASE_REPO)
                 elif "deb" in deliverable_type:
                     os_architecture = "amd64"
                     os_name = "ubuntu12.04"
@@ -389,7 +389,7 @@ class BuildQuery(object):
                         os_name = "debian11"
                     build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                         .format(build_version, product, os_architecture,
-                        deliverable_type, build_details[:5], os_name,
+                        deliverable_type, build_details[:build_details.find('-')], os_name,
                         CB_RELEASE_REPO)
             build.url_latest_build = "{4}{0}_{1}_{3}.{2}".format(product,
                         os_architecture, deliverable_type, build_details,
@@ -730,7 +730,7 @@ class BuildQuery(object):
                     build.name = edition_type + "-" + build.product_version + \
                                  "-" + "linux" + "." + build.architecture_type + \
                                  "." + build.deliverable_type
-                build_number = build.product_version.replace(version[:6],"")
+                build_number = build.product_version.replace(version[:version.find("-")+1],"")
                 build.url = repo + build_number + "/" + build.name
         elif toy == "":
             """ format for sherlock build name
