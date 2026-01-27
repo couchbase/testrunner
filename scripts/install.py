@@ -313,14 +313,14 @@ class Installer(object):
                                                 CB_DOWNLOAD_SERVER_FQDN)
 
             for name in names:
-                if version[:5] in releases_version:
+                if version[:version.find("-")] in releases_version:
                     build = BuildQuery().find_membase_release_build(
                                              deliverable_type=info.deliverable_type,
                                              os_architecture=info.architecture_type,
                                              build_version=version,
                                              product='membase-server-enterprise')
-                elif len(version) > 6 and version[6:].replace("-rel", "") == \
-                                                    CB_RELEASE_BUILDS[version[:5]]:
+                elif len(version) > 6 and version[version.find("-")+1:].replace("-rel", "") == \
+                                                    CB_RELEASE_BUILDS[version[:version.find("-")]]:
                     build = BuildQuery().find_couchbase_release_build(
                                             deliverable_type=info.deliverable_type,
                                             os_architecture=info.architecture_type,
@@ -1209,8 +1209,10 @@ def main():
         correct_build_format = False
         if "version" in input.test_params:
             build_version = input.test_params["version"]
-            build_pattern = re.compile("\d\d?\.\d\.\d-\d{3,4}$")
-            if input.test_params["version"][:5] in COUCHBASE_VERSIONS and \
+            # Accept both single- and multi-digit patch versions, e.g. 7.6.10-1234.
+            build_pattern = re.compile(r"\d{1,2}\.\d{1,2}\.\d{1,2}-\d{3,4}$")
+            base_version = build_version.split("-")[0]
+            if base_version in CB_RELEASE_BUILDS and \
                 bool(build_pattern.match(build_version)):
                 correct_build_format = True
         use_direct_url = False
