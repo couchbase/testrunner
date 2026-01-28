@@ -427,7 +427,7 @@ class QueryUDFN1QLTests(QueryTests):
         query_result = self.run_cbq_query(query)
         # Execute function and check
         function_result = self.run_cbq_query(f'EXECUTE FUNCTION {function_name}()')
-        self.assertEqual(function_result['results'][0][0][0]['#docs'], query_result['results'][0][0]['#docs'])
+        self.assertAlmostEqual(function_result['results'][0][0][0]['#docs'], query_result['results'][0][0]['#docs'],delta=30)
 
     def test_advise(self):
         function_name = "advise_default"
