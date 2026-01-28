@@ -625,6 +625,7 @@ class QueryLMKTests(QueryTests):
 
         # Create the collection
         self.run_cbq_query(f"CREATE COLLECTION `default`.`_default`.`{collection_name}`")
+        self.sleep(5, "sleep for collection to be created")
 
         # Insert some test data
         test_data = [
@@ -646,6 +647,7 @@ class QueryLMKTests(QueryTests):
             # Create index with INCLUDE MISSING and WHERE clause
             index_query = f"CREATE INDEX adv_c11 ON `default`.`_default`.`{collection_name}`(`c11` INCLUDE MISSING) WHERE `test_id` = 'advise'"
             self.run_cbq_query(index_query)
+            self.sleep(5, "sleep for index to be created")
 
             # Test query with LIMIT
             query = f"SELECT c11 FROM `default`.`_default`.`{collection_name}` WHERE test_id = 'advise' LIMIT 2"
