@@ -957,7 +957,7 @@ def main():
                             # If nothing matches, fallback to default slave
                             slave_to_use = "deb12_P0_slave"
                     elif testsToLaunch[i]['component'] in ["xdcr",
-                                                           "backup_recpvery"]:
+                                                           "backup_recovery"]:
                         # For all version <= 8.0 use legacy slaves on
                         # qa jenkins with particular slave
                         testsToLaunch[i][
