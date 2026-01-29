@@ -32,6 +32,9 @@ class GSIUtils(object):
         self.query_event = Event()
         self.encoder = encoder
         self.query_errors = []
+        #Query vectors used for bigSiftANN data set
+        self.bhive_sample_vector = [3.0, 9.0, 17.0, 78.0, 83.0, 15.0, 10.0, 8.0, 101.0, 109.0, 21.0, 8.0, 3.0, 2.0, 9.0, 64.0, 39.0, 31.0, 18.0, 80.0, 55.0, 10.0, 2.0, 12.0, 7.0, 7.0, 26.0, 58.0, 32.0, 6.0, 4.0, 3.0, 14.0, 2.0, 13.0, 28.0, 37.0, 19.0, 47.0, 59.0, 109.0, 22.0, 2.0, 6.0, 18.0, 15.0, 20.0, 109.0, 30.0, 8.0, 11.0, 44.0, 109.0, 54.0, 19.0, 32.0, 17.0, 21.0, 15.0, 22.0, 12.0, 28.0, 101.0, 35.0, 66.0, 11.0, 9.0, 30.0, 68.0, 35.0, 30.0, 75.0, 106.0, 103.0, 26.0, 50.0, 76.0, 20.0, 8.0, 13.0, 51.0, 41.0, 63.0, 109.0, 40.0, 2.0, 3.0, 15.0, 36.0, 49.0, 21.0, 13.0, 12.0, 9.0, 36.0, 37.0, 52.0, 37.0, 24.0, 34.0, 19.0, 3.0, 13.0, 23.0, 21.0, 8.0, 3.0, 20.0, 68.0, 56.0, 79.0, 60.0, 99.0, 36.0, 7.0, 28.0, 78.0, 41.0, 7.0, 21.0, 74.0, 26.0, 3.0, 15.0, 34.0, 15.0, 12.0, 27.0]
+
 
     def set_encoder(self, encoder):
         self.encoder = encoder
@@ -372,7 +375,7 @@ class GSIUtils(object):
                                                    persist_full_vector=True, skip_extra_indexes=True):
         definitions_list = []
 
-        query_vec = f"ANN_DISTANCE(embedding, embVector,  '{similarity}', {scan_nprobes})"
+        query_vec = f"ANN_DISTANCE(embedding, {self.bhive_sample_vector},  '{similarity}', {scan_nprobes})"
         if not index_name_prefix:
             index_name_prefix = "shoe_idx_" + str(uuid.uuid4()).replace("-", "")[5]
         # Primary Query
@@ -422,8 +425,7 @@ class GSIUtils(object):
                                                                train_list=None, scan_nprobes=1, skip_primary=False,
                                                                limit=10, quantization_algo_description_vector=None):
         definitions_list = []
-
-        query_vec = f"ANN_DISTANCE(embedding, embVector,  '{similarity}', {scan_nprobes})"
+        query_vec = f"ANN_DISTANCE(embedding, {self.bhive_sample_vector},  '{similarity}', {scan_nprobes})"
         if not index_name_prefix:
             index_name_prefix = "shoe_comp_idx_" + str(uuid.uuid4()).replace("-", "")[5]
 
@@ -1591,6 +1593,7 @@ class GSIUtils(object):
         if not index_name_prefix:
             index_name_prefix = "hotel" + str(uuid.uuid4()).replace("-", "")
 
+        # query vector for the bigSiftANN dataset
         vector = [2.5273438, -0.34814453, 1.1171875, 1.0703125, 0.7084961, -0.15429688, -1.2890625, 0.55078125,
                   -2.3359375, -0.70703125, 0.068603516, 1.7333984, -0.11010742, -1.1875, 1.2519531, 0.99658203,
                   -0.94970703, -0.9819336, 0.14758301, -1.1748047, -1.1767578, 3.84375, -0.64208984, 0.32714844,
@@ -2406,7 +2409,7 @@ class GSIUtils(object):
 
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
-                                  quantization_algo_description_vector=None, is_base64=False, bhive_index=False,
+                                  quantization_algo_description_vector="SQ8", is_base64=False, bhive_index=False,
                                   xattr_indexes=False, description_dimension=384, persist_full_vector=True, scalar=False, skip_extra_indexes=True):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,

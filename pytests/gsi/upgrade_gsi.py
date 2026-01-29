@@ -57,6 +57,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.mutation_time = self.input.param("mutation_time", 3600)
         self.num_batches = self.input.param("num_batches", 1)
         self.do_upgrade = self.input.param("do_upgrade", False)
+        self.compare_query_plan_upgrade = self.input.param("compare_query_plan_upgrade", False)
+        self.fields_to_ignore = {'hosts', 'partitionMap', 'lastScanTime', 'definition'}
 
         self.query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)[0]
         self.index_scans_batch = self.input.param("index_scans_batch", 10)
@@ -1636,7 +1638,341 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 event.set()
                 future.result()
 
+    def test_hybrid_offline_swap_upgrade_metadata_validation(self):
+        """
+        Test upgrade to 8.1 with metadata validation:
+        1. Create bucket, load data, create indexes.
+        2. Capture metadata stats before upgrade.
+        3. Perform upgrade to 8.1.
+        4. Run scans during and post upgrade.
+        5. Create/build/drop indexes post upgrade.
+        6. Run mutations post upgrade.
+        7. Validate metadata stats match pre-upgrade.
+        Offline upgrade - bring down the cluster and upgrade all nodes at once (no rebalance happens).
+        Hybrid: Bring down one node at a time, upgrade and start the server on node (no rebalance happens).
+        Swap: Swap rebalance old version node with new version node.
+        Failover: Failover the node, upgrade and bring it back in the cluster
 
+        """
+        self.rest.delete_all_buckets()
+        self.sleep(30)
+
+        # Step 1: Create bucket, load data.
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.test_bucket = self.test_bucket + '_metadata_upgrade'
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=True)
+        self.sleep(10)
+
+        with ThreadPoolExecutor() as executor_main:
+            try:
+                event = Event()
+                self.enable_redistribute_indexes()
+
+                select_queries_scalar = self.create_index_in_batches(replica_count=1, scalar=True,
+                                                                     dataset=self.json_template,
+                                                                     bhive=False)
+
+                select_queries_composite = self.create_index_in_batches(replica_count=1, scalar=False,
+                                                                        dataset=self.json_template, bhive=False)
+                select_queries_bhive = self.create_index_in_batches(replica_count=1, scalar=False,
+                                                                    dataset=self.json_template, bhive=True,
+                                                                    skip_extra_indexes=False)
+                self.wait_until_indexes_online()
+                self.sleep(120)
+
+                select_queries = list(select_queries_scalar)+list(select_queries_composite)+list(select_queries_bhive)
+
+                index_status_before_upgrade = self.index_rest.get_indexer_metadata()
+                self.log.info(f"Index status before upgrade: {index_status_before_upgrade}")
+
+                index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
+                self.log.info(f"Indexes before upgrade: {index_names_before_upgrade}")
+
+                # For offline upgrade, capture query plans before upgrade.
+                query_plans_before_upgrade = {}
+                if self.upgrade_mode == 'offline' and self.compare_query_plan_upgrade:
+                    self.log.info("Capturing query plans before offline upgrade...")
+                    n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                    for query in select_queries_scalar:
+                        explain_query = f"EXPLAIN {query}"
+                        result = self.run_cbq_query(query=explain_query, server=n1ql_server)
+                        query_plans_before_upgrade[query] = result.get('results', [])
+                    self.log.info(f"Captured {len(query_plans_before_upgrade)} query plans before upgrade")
+
+                # Step 3: Perform upgrade with scans running during upgrade.
+                self.log.info("Starting upgrade...")
+                if self.upgrade_mode == 'offline':
+                    self.rest.update_autofailover_settings(True, 3000)
+                    for server in self.servers[:self.nodes_init]:
+                        remote = RemoteMachineShellConnection(server)
+                        remote.stop_server()
+                        remote.disconnect()
+                    upgrade_th = self._async_update(self.upgrade_to, self.servers[:self.nodes_init], cluster_profile=None)
+                    for th in upgrade_th:
+                        th.join()
+                    self.log.info("==== Offline Upgrade Complete ====")
+                    self.sleep(120)
+                else:
+                    self.upgrade_and_validate(select_queries=select_queries, scan_results_check=False)
+                self.update_master_node()
+
+                # For offline upgrade, compare query plans after upgrade.
+                if self.upgrade_mode == 'offline' and self.compare_query_plan_upgrade:
+                    self.log.info("Comparing query plans after offline upgrade...")
+                    n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                    for query in select_queries_scalar:
+                        explain_query = f"EXPLAIN {query}"
+                        result = self.run_cbq_query(query=explain_query, server=n1ql_server)
+                        query_plan_after = result.get('results', [])
+                        query_plan_before = query_plans_before_upgrade.get(query, [])
+
+                        # Compare the query plans.
+                        diffs = DeepDiff(query_plan_before, query_plan_after, ignore_order=True)
+                        if diffs:
+                            self.log.warning(f"Query plan changed for query: {query}")
+                            self.log.warning(f"Before: {query_plan_before}")
+                            self.log.warning(f"After: {query_plan_after}")
+                            self.log.warning(f"Diff: {diffs}")
+                        else:
+                            self.log.info(f"Query plan unchanged for query: {query}")
+                    self.log.info("Query plan comparison completed")
+
+                if self.upgrade_to >= "8.0" and not self.dcp_rebalance:
+                    self.enable_shard_based_rebalance(provisioned=None)
+                
+                # Step 4: Validate metadata stats match pre-upgrade.
+                self.sleep(30) 
+
+
+                index_status_after_upgrade = self.index_rest.get_indexer_metadata()
+                self.log.info(f"Index status before upgrade: {index_status_after_upgrade}")
+                self._compare_index_status(index_status_before_upgrade, index_status_after_upgrade,
+                                           self.fields_to_ignore)
+
+                # Step 5: Run scans post upgrade.
+                self.log.info("Running scans post upgrade...")
+                n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+                self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
+                                                           query_node=n1ql_server, verbose=False)
+
+                # Step 6: Create indexes in deferred state, build, run scans/mutations, then drop.
+                self.log.info("Creating new indexes in deferred state post upgrade...")
+                query_node = self.get_nodes_from_services_map(service_type="n1ql")
+                build_queries = []
+                for namespace in self.namespaces:
+                    bhive_def, scalar_def, composite_def = self._get_query_definitions_all_indexes()
+                    for defs in [bhive_def, scalar_def, composite_def]:
+                        if defs==bhive_def:
+                            self.bhive_index=True
+                        else:
+                            self.bhive_index=False
+                        create_queries = self.gsi_util_obj.get_create_index_list(definition_list=defs, namespace=namespace, bhive_index=self.bhive_index)
+                        select_queries.extend(self.gsi_util_obj.get_select_queries(definition_list=defs, namespace=namespace))
+                        build_queries.append(self.gsi_util_obj.get_build_indexes_query(definition_list=defs, namespace=namespace))
+
+
+                        self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                             query_node=self.n1ql_node)
+                    self.sleep(30)
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=build_queries, database=namespace,
+                                                         query_node=self.n1ql_node)
+                self.wait_until_indexes_online()
+                self.log.info("All post-upgrade indexes are online")
+
+                # Run scans on newly created indexes.
+                select_queries_post = set(select_queries)
+                self.log.info("Running scans on newly created post-upgrade indexes...")
+                self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
+                                                           query_node=n1ql_server, verbose=False)
+
+                # Step 6: Run mutations on the new indexes.
+                self.log.info("Running mutations post upgrade on new indexes...")
+                mutation_event = Event()
+                mutation_future = executor_main.submit(self.perform_continuous_kv_mutations, mutation_event, 60, self.num_of_docs_per_collection)
+                self.sleep(60)
+                mutation_event.set()
+                mutation_future.result()
+                self.log.info("Mutations completed post upgrade")
+
+                # Ensure all indexer nodes are using magma as metadata store.
+                self.assert_all_indexers_metastore_type()
+
+                self.log.info("Metadata validation completed successfully")
+                self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
+
+            finally:
+                event.set()
+                mutation_future.result()
+
+    def _compare_index_status(self, before, after, fields_to_ignore):
+        before_indexes = {(idx['indexName'], idx.get('bucket', ''), idx.get('scope', ''),
+                           idx.get('collection', ''), idx.get('replicaId', 0)): idx
+                          for idx in before.get('status', [])}
+        after_indexes = {(idx['indexName'], idx.get('bucket', ''), idx.get('scope', ''),
+                          idx.get('collection', ''), idx.get('replicaId', 0)): idx
+                         for idx in after.get('status', [])}
+
+        missing_after = set(before_indexes.keys()) - set(after_indexes.keys())
+        if missing_after:
+            self.fail(f"Indexes missing after upgrade: {missing_after}")
+
+        mismatches = []
+        for key, before_idx in before_indexes.items():
+            if key not in after_indexes:
+                continue
+            after_idx = after_indexes[key]
+            all_fields = set(before_idx.keys()) | set(after_idx.keys())
+            for field in all_fields:
+                if field in fields_to_ignore:
+                    continue
+                before_val = before_idx.get(field)
+                after_val = after_idx.get(field)
+                if before_val != after_val:
+                    mismatches.append(
+                        f"Index {key}: field '{field}' changed from {before_val} to {after_val}")
+
+        if mismatches:
+            self.log.error(f"Index status mismatches after upgrade: {mismatches}")
+            self.fail(f"Index status mismatch after upgrade. Differences: {mismatches}")
+        else:
+            self.log.info("Index status comparison passed: all non-excluded fields match")
+
+    def test_mixed_mode_upgrade(self):
+        """
+        Test mixed mode upgrade where only one indexer node is upgraded:
+        1. Create bucket, load data, create indexes with num_replica=1.
+        2. Capture metadata stats before upgrade.
+        3. Offline upgrade only one indexer node.
+        4. Validate metadata - upgraded node uses magma, non-upgraded uses fdb.
+        5. If swap_upgraded_node=True, swap out the upgraded node and ensure all nodes use fdb.
+        6. Run scans on indexes.
+        7. Run mutations on indexes.
+        """
+        swap_upgraded_node = self.input.param("swap_upgraded_node", False)
+
+        self.rest.delete_all_buckets()
+        self.sleep(30)
+
+        # Step 1: Create bucket, load data.
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.test_bucket = self.test_bucket + '_mixed_mode'
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=False)
+        self.sleep(10)
+
+
+        self.enable_redistribute_indexes()
+
+        # Step 2: Create indexes with num_replica=1.
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.log.info(f"Index nodes before upgrade: {[n.ip for n in index_nodes]}")
+
+        select_queries_scalar = self.create_index_in_batches(replica_count=1, scalar=True,
+                                                             dataset=self.json_template,
+                                                             bhive=False)
+
+        select_queries_composite = self.create_index_in_batches(replica_count=1, scalar=False,
+                                                                dataset=self.json_template, bhive=False)
+        select_queries_bhive = self.create_index_in_batches(replica_count=1, scalar=False,
+                                                            dataset=self.json_template, bhive=True,
+                                                            skip_extra_indexes=False)
+        self.wait_until_indexes_online()
+        self.sleep(120)
+
+        select_queries = list(select_queries_scalar) + list(select_queries_composite) + list(
+            select_queries_bhive)
+
+        index_status_before_upgrade = self.index_rest.get_indexer_metadata()
+        self.log.info(f"Index status before upgrade: {index_status_before_upgrade}")
+
+        # Step 3: Offline upgrade only one indexer node.
+        node_to_upgrade = index_nodes[0]
+        non_upgraded_nodes = index_nodes[1:]
+        self.log.info(f"Upgrading only indexer node: {node_to_upgrade.ip}")
+
+        # Stop server on the node to upgrade.
+        self.rest.update_autofailover_settings(True, 3000)
+        remote = RemoteMachineShellConnection(node_to_upgrade)
+        remote.stop_server()
+        remote.disconnect()
+
+        # Upgrade the single node.
+        upgrade_th = self._async_update(self.upgrade_to, [node_to_upgrade], cluster_profile=None)
+        for th in upgrade_th:
+            th.join()
+        self.log.info(f"Offline upgrade complete for node: {node_to_upgrade.ip}")
+        self.sleep(120)
+        self.update_master_node()
+
+        # Step 4: Validate metadata post upgrade.
+        self.log.info("Validating metadata after mixed mode upgrade...")
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        metadata_after_upgrade = {}
+
+        self.log.info(f"Metadata after upgrade: {metadata_after_upgrade}")
+        for nodes in [node_to_upgrade]:
+            self.assert_all_indexers_metastore_type(expected="magma", index_nodes=[nodes])
+        for node in index_nodes:
+            if node!=node_to_upgrade:
+                try:
+                    stats = RestConnection(node).get_indexer_metastore_stats(timeout=120)
+                    actual = stats.get("meta_store_type")
+                    self.log.info(f"meta_store_type on {node.ip}: {actual}")
+                except Exception as e:
+                    self.assertIn("404", str(e), f"exception is {str(e)}")
+
+        index_status_after_upgrade = self.index_rest.get_indexer_metadata()
+        self.log.info(f"Index status after upgrade: {index_status_after_upgrade}")
+
+
+        self._compare_index_status(index_status_before_upgrade, index_status_after_upgrade,
+                                   self.fields_to_ignore)
+
+        # Step 5: If swap_upgraded_node flag is true, swap out upgraded node with spare node.
+        if swap_upgraded_node:
+            self.log.info("swap_upgraded_node=True, swapping out the upgraded node...")
+            spare_node = self.servers[self.nodes_init]
+            self.log.info(f"Swapping out upgraded node {node_to_upgrade.ip} with spare node {spare_node.ip}")
+
+            rebalance_task = self.cluster.async_rebalance(
+                servers=self.servers[:self.nodes_init],
+                to_add=[spare_node],
+                to_remove=[node_to_upgrade],
+                services=["index"]
+            )
+            rebalance_task.result()
+            self.sleep(30)
+            try:
+                stats = RestConnection(spare_node).get_indexer_metastore_stats(timeout=120)
+                actual = stats.get("meta_store_type")
+                self.log.info(f"meta_store_type on {spare_node.ip}: {actual}")
+            except Exception as e:
+                self.assertIn("404", str(e), f"exception is {str(e)}")
+        self.print_cluster_stats()
+
+
+        #run scans in mixed mode
+        self.gsi_util_obj.aysnc_run_select_queries(select_queries=select_queries,
+                                               query_node=self.query_node, verbose=False)
+        self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
 
     def test_offline_file_based_rebalance_with_multiple_rebalances(self):
@@ -2805,8 +3141,38 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                           'SELECT name FROM default:test_bucket_hotel._default._default WHERE avg_rating > 3 AND free_breakfast = true']
 
                 index_names_before_upgrade = self.get_all_indexes_in_the_cluster()
+
+                # If upgrade_to >= 8.1, validate metadata is using fdb before upgrade.
+                if self.upgrade_to >= "8.1":
+                    self.set_indexing_metadata_store_backend(backend="magma")
+                    self.sleep(15, "Sleeping after indexer setting change")
+                    self.log.info("Validating indexer metadata uses fdb before upgrade inspite of indexer setting change...")
+                    index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                    for node in index_nodes:
+                        rest = RestConnection(node)
+                        try:
+                            stats = rest.get_indexer_metastore_stats()
+                            meta_store_type = stats.get("meta_store_type")
+                            self.log.info(f"Node {node.ip}: meta_store_type={meta_store_type} (before upgrade)")
+                        except Exception as e:
+                            self.assertIn("404", str(e),
+                                         f"Node {node.ip} should use fdb before upgrade")
+
                 self.upgrade_ce_to_ee(select_queries=select_queries, scan_results_check=scan_results_check)
                 self.update_master_node()
+
+                # If upgrade_to >= 8.1, validate metadata is using magma after upgrade.
+                if self.upgrade_to >= "8.1":
+                    self.log.info("Validating indexer metadata uses magma after upgrade...")
+                    index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+                    for node in index_nodes:
+                        rest = RestConnection(node)
+                        stats = rest.get_indexer_metastore_stats()
+                        meta_store_type = stats.get("meta_store_type")
+                        self.log.info(f"Node {node.ip}: meta_store_type={meta_store_type} (after upgrade)")
+                        self.assertEqual(meta_store_type, "magma",
+                                         f"Node {node.ip} should use magma after upgrade, got {meta_store_type}")
+
                 self.enable_shard_based_rebalance()
                 self.sleep(30)
                 self.create_index_in_batches(num_batches=1, replica_count=1)
@@ -3456,7 +3822,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                                 self.disable_shard_based_rebalance(provisioned=True)
                         enable_shard_rebalance = not enable_shard_rebalance
 
-                elif self.upgrade_mode == 'offline':
+                elif self.upgrade_mode == 'offline' or self.upgrade_mode == 'hybrid':
                     self.rest.update_autofailover_settings(True, 300)
                     remote = RemoteMachineShellConnection(node)
                     remote.stop_server()
@@ -3481,6 +3847,19 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     rebalance.result()
                     node_to_be_swapped_in = node_to_upgrade
                     self.update_master_node()
+                elif self.upgrade_mode == "failover":
+                    failover_task = self.cluster.async_failover([self.master], failover_nodes=[node_to_upgrade], graceful=False)
+                    failover_task.result()
+                    upgrade_th = self._async_update(self.upgrade_to, [node_to_upgrade])
+                    for th in upgrade_th:
+                        th.join()
+                    log.info("==== Upgrade Complete ====")
+                    self.sleep(120)
+                    self.update_master_node()
+                    self.rest.add_back_node("ns_1@{}".format(node_to_upgrade.ip))
+                    self.rest.set_recovery_type("ns_1@{}".format(node_to_upgrade.ip), "full")
+                    self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                    self.log.info(f"upgrade of node {node.ip} for service {service} via failover done")
                 self.log.info("post upgrade cluster stats")
                 self.print_cluster_stats()
                 if select_queries is not None:

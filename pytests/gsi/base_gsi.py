@@ -16,6 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from string import ascii_letters, digits
 
 import faiss
+import uuid
 import numpy as np
 import requests
 from deepdiff import DeepDiff
@@ -170,6 +171,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.defer_build = self.defer_build and self.use_gsi_for_secondary
         self.num_index_replica = self.input.param("num_index_replica", 0)
         self.redistribute_nodes = self.input.param("redistribute_nodes", False)
+        self.indexer_meta_data_directory = self.input.param("indexer_meta_data_directory", "@2i/metadata_repo_v2")
         if self.capella_run:
             if self.num_index_replica == 0:
                 self.num_index_replica = 1
@@ -224,6 +226,29 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
+
+    def assert_all_indexers_metastore_type(self, expected="magma", timeout=120, index_nodes=None):
+        """
+        Validates meta_store_type reported by each index node.
+        """
+        if not index_nodes:
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for node in index_nodes:
+            # Use RestConnection helper (already implemented in on_prem_rest_client.py)
+            stats = RestConnection(node).get_indexer_metastore_stats(timeout=timeout)
+            actual = stats.get("meta_store_type")
+            self.log.info(f"meta_store_type on {node.ip}: {actual}")
+            self.assertEqual(actual, expected,
+                             f"Unexpected meta_store_type on {node.ip}. Expected={expected}, Actual={actual}")
+
+    def set_indexing_metadata_store_backend(self, backend="fdb", timeout=120):
+        """
+        Updates indexer settings to set:
+          indexer.metadata.store_backend = <backend>
+
+        Uses indexer endpoint via set_index_settings.
+        """
+        self.index_rest.set_index_settings({"indexer.metadata.store_backend": backend})
 
     def _create_server_groups(self):
         if self.server_grouping:
@@ -422,6 +447,47 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_info not in self.memory_create_list:
                     self.memory_create_list.append(index_info)
                     self.create_index(bucket.name, query_definition, deploy_node_info)
+
+    def _get_query_definitions_all_indexes(self, prefixes=["test_scalar", "test_bhive", "test_composite"], similarity="COSINE"):
+        bhive_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=prefixes[1] + str(uuid.uuid4()).replace("-", "")[5],
+                similarity=similarity,
+                train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                xattr_indexes=self.xattr_indexes,
+                limit=self.scan_limit,
+                is_base64=self.base64,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=True,
+                description_dimension=self.dimension
+            )
+
+        scalar_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=prefixes[0] + str(uuid.uuid4()).replace("-", "")[5],
+                scalar=True
+            )
+
+        composite_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=prefixes[2],
+                similarity=similarity,
+                train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                xattr_indexes=self.xattr_indexes,
+                limit=self.scan_limit,
+                is_base64=self.base64,
+                quantization_algo_color_vector=self.quantization_algo_color_vector,
+                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                bhive_index=False,
+                description_dimension=self.dimension
+            )
+
+        return bhive_def,scalar_def,composite_def
 
     def restore_couchbase_bucket(self, backup_filename, skip_default_scope=True):
         filename = backup_filename.split('/')[-1]
@@ -2435,8 +2501,8 @@ class BaseSecondaryIndexingTests(QueryTests):
 
 
     def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
-        self.drop_all_indexes()
         self.update_master_node()
+        self.drop_all_indexes()
         remote_client = RemoteMachineShellConnection(self.master)
         type = remote_client.extract_remote_info().distribution_type.lower()
         if type != "windows":

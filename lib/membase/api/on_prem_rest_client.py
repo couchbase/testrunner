@@ -566,6 +566,14 @@ class RestConnection(object):
         api = "%snode/controller/rename" % self.baseUrl
         status, content, header = self._http_request(api, 'POST', params)
         return status, content
+    
+    def get_indexer_metastore_stats(self, timeout=120):
+        api = self.index_baseUrl + "stats/metadata?debug=1"
+        status, content, _ = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
+        if not status:
+            raise Exception(content)
+
+        return json.loads(content)
 
     def active_tasks(self):
         api = self.baseUrl + "pools/default/tasks"
