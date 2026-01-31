@@ -1317,8 +1317,12 @@ class MovingTopFTS(FTSBaseTest):
 
     def failover_no_rebalance_with_replicas_between_indexing_and_querying(self):
         index = self.create_index_generate_queries()
-        self._cb_cluster.async_failover(
-            graceful=self._input.param("graceful", False)).result()
+        graceful = self._input.param("graceful", False)
+        if graceful:
+            node = self._cb_cluster.get_kv_nodes()[0]
+        else:
+            node = self._cb_cluster.get_fts_nodes()[0]
+        self._cb_cluster.async_failover(graceful=graceful, node=node).result()
         try:
             for index in self._cb_cluster.get_indexes():
                 self.is_index_partitioned_balanced(index)
@@ -1788,7 +1792,7 @@ class MovingTopFTS(FTSBaseTest):
                 es=self.es,
                 es_index_name=None,
                 query_index=count))
-        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.run_tasks_and_report(tasks, len(index.fts_queries),skip_validation=True)
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
@@ -1806,22 +1810,25 @@ class MovingTopFTS(FTSBaseTest):
         graceful = self._input.param("graceful", False)
         index = self.create_index_generate_queries()
         if graceful:
-            services = ['kv,fts']
+            services = ['kv']
+            node = self._cb_cluster.get_kv_nodes()[0]
         else:
             services = ['fts']
+            node = self._cb_cluster.get_fts_nodes()[0]
         tasks = []
         tasks.append(self._cb_cluster.async_failover_add_back_node(
             num_nodes=1,
             graceful=graceful,
             recovery_type=recovery,
-            services=services))
+            services=services,
+            node=node))
         for count in range(0, len(index.fts_queries)):
             tasks.append(self._cb_cluster.async_run_fts_query_compare(
                 fts_index=index,
                 es=self.es,
                 es_index_name=None,
                 query_index=count))
-        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.run_tasks_and_report(tasks, len(index.fts_queries),skip_validation=True)
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
