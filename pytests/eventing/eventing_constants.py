@@ -113,6 +113,22 @@ class HANDLER_CODE_ONDEPLOY:
     ONDEPLOY_REBALANCE = 'handler_code/ondeploy_rebalance.js'
     ONDEPLOY_PAUSE_RESUME = 'handler_code/ondeploy_pause_resume.js'
 
+class HANDLER_CODE_FTS_QUERY_SUPPORT:
+    FTS_QUERY_SUPPORT_MATCH_PHRASE_QUERY = 'handler_code/fts_query_support/match_phrase_query.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY = 'handler_code/fts_query_support/match_query.js'
+    FTS_QUERY_SUPPORT_CONJUNCTS_QUERY = 'handler_code/fts_query_support/conjuncts_query.js'
+    FTS_QUERY_SUPPORT_DISJUNCTS_QUERY = 'handler_code/fts_query_support/disjuncts_query.js'
+    FTS_QUERY_SUPPORT_BOOLEAN_QUERY = 'handler_code/fts_query_support/boolean_query.js'
+    FTS_QUERY_SUPPORT_WILDCARD_QUERY = 'handler_code/fts_query_support/wildcard_query.js'
+    FTS_QUERY_SUPPORT_TERM_QUERY = 'handler_code/fts_query_support/term_query.js'
+    FTS_QUERY_SUPPORT_PHRASE_QUERY = 'handler_code/fts_query_support/phrase_query.js'
+    FTS_QUERY_SUPPORT_PREFIX_QUERY = 'handler_code/fts_query_support/prefix_query.js'
+    FTS_QUERY_SUPPORT_QUERY_STRING_QUERY = 'handler_code/fts_query_support/query_string.js'
+    FTS_QUERY_SUPPORT_REGEX_QUERY = 'handler_code/fts_query_support/regex_query.js'
+    FTS_QUERY_SUPPORT_NUMERIC_RANGE_QUERY = 'handler_code/fts_query_support/numeric_range_query.js'
+    FTS_QUERY_SUPPORT_DOC_IDS_QUERY = 'handler_code/fts_query_support/docids_query.js'
+    FTS_QUERY_SUPPORT_MATCH_NONE_QUERY = 'handler_code/fts_query_support/match_none_query.js'
+    FTS_QUERY_SUPPORT_MATCH_ALL_QUERY = 'handler_code/fts_query_support/match_all_query.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
