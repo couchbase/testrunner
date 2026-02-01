@@ -2628,7 +2628,24 @@ class CouchbaseCluster:
 
     def _setup_bucket_structure(self, cli_client, containers=None):
         if not containers:
-            containers = eval(TestInputSingleton.input.param("kv", "{}"))
+            kv_param = TestInputSingleton.input.param("kv", None)
+            if kv_param is None:
+                containers = []
+            elif isinstance(kv_param, list):
+                # Testrunner already parsed it as a list (comma-separated values)
+                containers = kv_param
+            elif isinstance(kv_param, str):
+                kv_param = kv_param.strip()
+                if not kv_param or kv_param == "{}":
+                    containers = []
+                elif kv_param.startswith("[") or kv_param.startswith("{"):
+                    # It's a Python literal, eval it
+                    containers = eval(kv_param)
+                else:
+                    # It's a simple dotted string like "bucket.scope.collection"
+                    containers = [kv_param]
+            else:
+                containers = []
         decoded_containers = self._decode_containers(containers)
         self.create_bucket_scope_collection_multi_structure(existing_buckets=None,
                                                             data_structure=decoded_containers,
@@ -6919,13 +6936,15 @@ class FTSBaseTest(unittest.TestCase):
             sys.path.insert(0, 'pytests/fts/hierarchical_search_helper')
             from hs_validator import validate_documents
             from doc_fetcher import fetch_documents_for_validation
+            from query_converter import convert_to_validator_query
 
             # Get hierarchical query from test parameters
-            hierarchical_query_str = self._input.param(
+            hierarchical_query_param = self._input.param(
                 "hierarchical_query",
-                '{"company": {"departments": {"employees": {"name": "Alice"}}}}'
+                'name:Alice+role:Manager'
             )
-            hierarchical_query = json.loads(hierarchical_query_str)
+            # Accept either full nested validator query or shorthand list-of-dicts.
+            hierarchical_query = convert_to_validator_query(hierarchical_query_param)
 
             self.log.info(f"Hierarchical query for validation: {json.dumps(hierarchical_query, indent=2)}")
 
