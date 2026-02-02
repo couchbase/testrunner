@@ -99,8 +99,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.rebalance_timeout = self.input.param("rebalance_timeout", 600)
         self.missing_field_desc = self.input.param("missing_field_desc", False)
         self.num_of_tenants = self.input.param("num_of_tenants", 10)
-        self.aws_access_key_id = self.input.param("aws_access_key_id", None)
-        self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         self.region = self.input.param("region", "us-west-1")
         self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
         self.download_vector_dataset = self.input.param("download_vector_dataset", False)

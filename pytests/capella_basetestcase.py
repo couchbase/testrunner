@@ -1,7 +1,9 @@
+import copy
+import os
+
 from lib.couchbase_helper.data_analysis_helper import DataAnalysisResultAnalyzer, DataAnalyzer, DataCollector
 from lib.Cb_constants.CBServer import CbServer
 from basetestcase import OnPremBaseTestCase
-import copy
 from lib.cluster_config import ClusterConfig
 from lib.membase.helper.bucket_helper import BucketOperationHelper
 from lib.capella.utils import CapellaAPI, CapellaCredentials
@@ -10,6 +12,8 @@ from TestInput import TestInputServer, TestInputSingleton
 from lib.couchbase_helper.cluster import Cluster
 from lib import logger
 from scripts.java_sdk_setup import JavaSdkSetup
+
+
 class BaseTestCase(OnPremBaseTestCase):
     def setUp(self):
         try:
@@ -22,6 +26,10 @@ class BaseTestCase(OnPremBaseTestCase):
             self.log = logger.Logger.get_logger()
             if self.log_level:
                 self.log.setLevel(level=self.log_level)
+
+            self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
+            self.aws_secret_access_key = os.environ.get(
+                "AWS_SECRET_ACCESS_KEY", None)
 
             self.use_https = True
             CbServer.use_https = True

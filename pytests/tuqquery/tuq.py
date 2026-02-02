@@ -150,8 +150,6 @@ class QueryTests(BaseTestCase):
         self.use_advice = self.input.param("use_advice", False)
         self.measure_code_coverage = self.input.param("measure_code_coverage", False)
         self.s3_bucket_cc_name = self.input.param("s3_bucket_cc_name", None)
-        self.aws_access_key_id = self.input.param("aws_access_key_id", None)
-        self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
             self.curl_path = "%scurl" % self.path

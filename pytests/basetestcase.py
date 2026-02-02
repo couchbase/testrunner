@@ -173,6 +173,8 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.task_manager = None
         self.encryption_util = EncryptionUtil(self.task_manager)
 
+        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
+        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
 
         # upgrade related params
         self.product = self.input.param('product', 'couchbase-server')
