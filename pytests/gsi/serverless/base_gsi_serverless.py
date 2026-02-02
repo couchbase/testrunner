@@ -34,8 +34,6 @@ class BaseGSIServerless(QueryBaseServerless):
         self.num_of_load_cycles = self.input.param("num_of_load_cycles", 10000)
         self.num_of_index_creation_batches = self.input.param("num_of_index_creation_batches", 1)
         self.dataset = self.input.param("dataset", "Hotel")
-        self.aws_access_key_id = self.input.param("aws_access_key_id", None)
-        self.aws_secret_access_key = self.input.param("aws_secret_access_key", None)
         self.region = self.input.capella['region']
         self.s3_bucket = self.input.param("s3_bucket", "gsi-onprem-test")
         self.storage_prefix = self.input.param("storage_prefix", None)

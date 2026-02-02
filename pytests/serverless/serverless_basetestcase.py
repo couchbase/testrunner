@@ -62,6 +62,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.create_dataplane_override = self.input.param("create_dataplane_override", False)
         self.java_sdk_client = self.input.param("java_sdk_client", False)
         self.use_magma_loader = self.input.param("use_magma_loader", False)
+        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
+        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
         self.new_dataplane_id = None
         if self.java_sdk_client:
             self.log.info("Building docker image with java sdk client")

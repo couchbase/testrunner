@@ -98,6 +98,10 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.kv_servers = []
         self.otpNodes = []
         self.collection_name = {}
+
+        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
+        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+
         for server in self.servers:
             if "cbas" in server.services:
                 self.cbas_servers.append(server)
