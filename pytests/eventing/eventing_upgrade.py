@@ -710,7 +710,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
 
     def undeploy_and_delete_function(self, function):
         self.undeploy_function_by_name(function)
-        content1 = self.rest.delete_single_function(function)
+        content1 = self.rest.delete_single_function(function, self.function_scope)
 
     def pause_function(self, function):
         script_dir = os.path.dirname(__file__)
@@ -723,7 +723,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # save the function so that it is visible in UI
         #content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'], self.function_scope)
         log.info("Pause Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "paused")
 
@@ -738,7 +738,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         if "dcp_stream_boundary" in body['settings']:
             body['settings'].pop('dcp_stream_boundary')
         log.info("Settings after deleting dcp_stream_boundary : {0}".format(body['settings']))
-        self.rest.set_settings_for_function(body['appname'], body['settings'])
+        self.rest.set_settings_for_function(body['appname'], body['settings'], self.function_scope)
         log.info("Resume Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "deployed")
 
@@ -770,6 +770,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
     def pre_upgrade_handlers(self):
         self.create_handler("bucket_op", "handler_code/delete_doc_bucket_op.js")
         self.create_handler("timers", "handler_code/bucket_op_with_timers_upgrade.js",bucket_bindings=["dst_bucket.dst_bucket1.rw"])
+        self.sleep(20)
         self.deploy_handler_by_name("timers")
 
     def post_upgrade_handlers(self):
@@ -808,8 +809,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         body['settings']['log_level'] = self.eventing_log_level
         body['depcfg']['curl'] = []
         body['depcfg']['buckets'] = []
-        body['function_scope'] = {"bucket": "*",
-                                  "scope": "*"}
+        body['function_scope'] = self.function_scope
         for binding in bucket_bindings:
             bind_map=binding.split(".")
             if  len(bind_map)< 3:
