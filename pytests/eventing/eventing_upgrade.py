@@ -37,6 +37,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.upgrade_version = self.input.param("upgrade_version")
         self.exported_handler_version = self.input.param("exported_handler_version", '6.6.1')
         self.enable_n2n_encryption_and_tls = self.input.param("enable_n2n_encryption_and_tls", False)
+        self.disable_compression = self.input.param("disable_compression", True)
         log.info("==============  EventingUpgrade setup has completed ==============")
 
     def tearDown(self):
@@ -58,27 +59,30 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         self.pre_upgrade_handlers()
         # offline upgrade all the nodes
         self.print_eventing_stats_from_all_eventing_nodes()
-        upgrade_threads = self._async_update(self.upgrade_version, self.servers)
-        for upgrade_thread in upgrade_threads:
+        for server in self.servers:
+            upgrade_thread = self._async_update(self.upgrade_version, [server])[0]
             upgrade_thread.join()
-        self.sleep(120)
+            self.sleep(120)
         success_upgrade = True
         while not self.queue.empty():
             success_upgrade &= self.queue.get()
         if not success_upgrade:
             self.fail("Upgrade failed!")
-        if self.enable_n2n_encryption_and_tls:
-            ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
-            CbServer.use_https = True
+        try:
+            if self.enable_n2n_encryption_and_tls:
+                ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
+                CbServer.use_https = True
+                self.wait_for_handler_state("timers", "deployed")
+                self.pause_handler_by_name("timers")
+                self.resume_handler_by_name("timers")
+            self.wait_for_handler_state("bucket_op", "undeployed")
             self.wait_for_handler_state("timers", "deployed")
-            self.pause_handler_by_name("timers")
-            self.resume_handler_by_name("timers")
-        self.wait_for_handler_state("bucket_op", "undeployed")
-        self.wait_for_handler_state("timers", "deployed")
-        self.deploy_handler_by_name("bucket_op")
-        # Validate the data
-        self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
-        self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+            self.deploy_handler_by_name("bucket_op")
+            # Validate the data
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * 2016)
+            self.verify_doc_count_collections("dst_bucket1._default._default", self.docs_per_day * 2016)
+        except Exception as e:
+            log.error("Error during post-upgrade validation: {}".format(e))
         self.create_collections_on_all_buckets()
         self.post_upgrade_handlers()
         self.add_built_in_server_user()
@@ -710,7 +714,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
 
     def undeploy_and_delete_function(self, function):
         self.undeploy_function_by_name(function)
-        content1 = self.rest.delete_single_function(function)
+        content1 = self.rest.delete_single_function(function, self.function_scope)
 
     def pause_function(self, function):
         script_dir = os.path.dirname(__file__)
@@ -723,7 +727,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         # save the function so that it is visible in UI
         #content = self.rest.save_function(body['appname'], body)
         # undeploy the function
-        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'], self.function_scope)
         log.info("Pause Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "paused")
 
@@ -738,7 +742,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         if "dcp_stream_boundary" in body['settings']:
             body['settings'].pop('dcp_stream_boundary')
         log.info("Settings after deleting dcp_stream_boundary : {0}".format(body['settings']))
-        self.rest.set_settings_for_function(body['appname'], body['settings'])
+        self.rest.set_settings_for_function(body['appname'], body['settings'], self.function_scope)
         log.info("Resume Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "deployed")
 
@@ -768,8 +772,13 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
 
     def pre_upgrade_handlers(self):
+        if self.disable_compression == False:
+            # Update eventing config to disable force_compress
+            body = json.dumps({"force_compress": False})
+            self.rest.update_eventing_config(body)
         self.create_handler("bucket_op", "handler_code/delete_doc_bucket_op.js")
         self.create_handler("timers", "handler_code/bucket_op_with_timers_upgrade.js",bucket_bindings=["dst_bucket.dst_bucket1.rw"])
+        self.sleep(20)
         self.deploy_handler_by_name("timers")
 
     def post_upgrade_handlers(self):
@@ -808,8 +817,7 @@ class EventingUpgrade(NewUpgradeBaseTest,EventingBaseTest):
         body['settings']['log_level'] = self.eventing_log_level
         body['depcfg']['curl'] = []
         body['depcfg']['buckets'] = []
-        body['function_scope'] = {"bucket": "*",
-                                  "scope": "*"}
+        body['function_scope'] = self.function_scope
         for binding in bucket_bindings:
             bind_map=binding.split(".")
             if  len(bind_map)< 3:

@@ -17,4 +17,10 @@ function NDtimerCallback(context) {
 }
 function timerCallback(context) {
     dst_bucket[context.docID] = context.random_text;
+    var val = dst_bucket[meta.id];
+    // Explicit validation for GET
+    if (val === null || val === undefined) {
+       throw new Error("GET failed: document not found for key " + meta.id);
+    }
+    log("GET operation successful for key:", meta.id);
 }
