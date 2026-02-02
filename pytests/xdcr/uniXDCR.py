@@ -1069,3 +1069,24 @@ class unidirectional(XDCRNewBaseTest):
         except XDCRException as e:
             self.fail(f"Exception while verifying existence of replication: {e}")
 
+    def test_alert_when_repl_deleted(self):
+        master_rest = RestConnection(self.src_master)
+        master_remote = RemoteMachineShellConnection(self.src_master)
+        self.setup_xdcr()
+        self.sleep(30)
+        status = master_rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd', alerts='xdcr_replication_deleted',)
+        if not status:
+            self.fail("Did not set alert settings")
+        master_rest.remove_all_replications()
+        self.sleep(30)
+        log_file_path = '/opt/couchbase/var/lib/couchbase/logs/info.log'
+        pattern = 'XDCR replication deleted for target cluster UUID:'
+        cmd  =  f"grep -F '{pattern}' {log_file_path}"
+        o, e, exit_code = master_remote.execute_command(cmd, use_channel=True, timeout=100, get_exit_code=True)
+        if exit_code==0:
+            self.log.info(f"Found pattern '{pattern}' in log")
+        else:
+            self.fail(f"Pattern {pattern} not found in log file {log_file_path}")
+        self.log.info(f"Output: {o}")
+        self.log.error(f"Error: {e}")
+
