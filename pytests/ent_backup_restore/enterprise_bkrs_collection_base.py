@@ -1409,6 +1409,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def backup_info_validate(self, scopes=None, collections=None):
         status, output, message = self.backup_info()
         if not status:
+            self.log.error(output)
             self.fail(message)
         status, message = self.validation_helper.validate_backup_info(output,
                                                                       scopes,
@@ -1422,13 +1423,16 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.log.info("Listing backup details before compact")
         status, output_before_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_before_compact)
             self.fail(message)
         status, output, message = self.backup_compact()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Listing backup details after compact")
         status, output_after_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_after_compact)
             self.fail(message)
         status, message = self.validation_helper.validate_compact_lists(output_before_compact, output_after_compact)
         if not status:
@@ -1499,6 +1503,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     mesg += "\n**************** "
                     self.log.error(mesg)
                 else:
+                    self.log.error(output)
                     self.fail(message)
 
         if repeats < 2 and not skip_validation:

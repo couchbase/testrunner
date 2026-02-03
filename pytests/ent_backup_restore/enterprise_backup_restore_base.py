@@ -1362,6 +1362,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_list_validate(self):
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         status, message = self.validation_helper.validate_backup_list(output)
         if not status:
@@ -1372,13 +1373,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Listing backup details before compact")
         status, output_before_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_before_compact)
             self.fail(message)
         status, output, message = self.backup_compact()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Listing backup details after compact")
         status, output_after_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_after_compact)
             self.fail(message)
         status, message = self.validation_helper.validate_compact_lists(output_before_compact, output_after_compact)
         if not status:
@@ -1594,6 +1598,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.log.info(str(output))
                     status, output, message = self.backup_list()
                     if not status:
+                        self.log.error(output)
                         self.fail(message)
                     for line in output:
                         if "enterprise" in line:
@@ -1627,6 +1632,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail("Taking cluster backup failed.")
             status, output, message = self.backup_list()
             if not status:
+                self.log.error(output)
                 self.fail(message)
             for line in output:
                 if "enterprise" in line:
@@ -1751,6 +1757,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     mesg += "\n**************** "
                     self.log.error(mesg)
                 else:
+                    self.log.error(output)
                     self.fail(message)
 
         if repeats < 2 and not skip_validation:
