@@ -334,6 +334,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.backup_list_name = "backup"
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         for line in output:
             if warnning_mesg in line:
@@ -353,6 +354,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.backup_list_name = "backup2"
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         for line in output:
             if warnning_mesg in line:
@@ -373,6 +375,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.backup_incr_backup = self.backups[0]
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         for line in output:
             if warnning_mesg in line:
@@ -394,6 +397,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.bucket_backup = self.buckets[0].name
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         if output and output[0]:
             output = json.loads(output[0])
@@ -417,6 +421,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._take_n_backups(n=25)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         if output and output[0]:
             bk_info = json.loads(output[0])
@@ -708,6 +713,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         status, output, message = self.backup_list()
         error_msg = "Error merging data: Unable to read bucket settings because bucket-config.json is corrupt"
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         for line in output:
@@ -785,6 +791,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.number_of_backups += 1
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
@@ -794,6 +801,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end -= 1
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets,
                                                  self.skip_consistency, self.per_node)
@@ -821,6 +829,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._take_n_backups(n=self.backupset.number_of_backups)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
@@ -838,10 +847,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             merge_thread.join()
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         result, output, _ = self.backup_merge()
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
 
     def test_merge_backup_with_partial_backup(self):
@@ -863,6 +874,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._take_n_backups(n=self.backupset.number_of_backups)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_threads = []
         backup_thread = Thread(target=self.backup_cluster)
@@ -885,6 +897,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("Test failed as expected as last backup failed to complete")
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
 
     def _kill_cbbackupmgr(self):
@@ -961,6 +974,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.backupset.end = 3
                 status, output, message = self.backup_merge()
                 if not status:
+                    self.log.error(output)
                     self.fail(message)
             else:
                 self.fail("cbcompact failed to purge deleted key")
@@ -1041,6 +1055,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Load 3rd batch docs")
         create_gen3 = BlobGenerator("ent-backup3", "ent-backup-", self.value_size,
@@ -1049,6 +1064,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
 
     def test_backupmgr_with_short_option(self):
@@ -1325,8 +1341,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 else:
                     backup_failed = True
 
-            status, _, message = self.backup_list()
+            status, output, message = self.backup_list()
             if not status:
+                self.log.error(output)
                 self.fail(message)
             if self.do_verify and not backup_failed:
                 current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
@@ -1451,8 +1468,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         else:
             shell.execute_command("cp -r entbackup_{0}/ {1}/entbackup_{0}"\
                                            .format(self.master.ip, self.tmp_path))
-        status, _, message = self.backup_list()
+        status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
 
         self.log.info("Restore data from backup files")
@@ -2306,6 +2324,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._take_n_backups(n=self.backupset.number_of_backups)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         """ remove last 6 chars of offset time in backup name"""
@@ -2330,9 +2349,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
         status, output, message = self.backup_merge(check_for_panic=True)
         if not status:
+            self.log.error(output)
             self.fail(message)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         if output and output[0]:
@@ -2375,6 +2396,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Finished restoring backup before merging")
         status, output, message = self.backup_merge()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.backupset.start = 1
         self.backupset.end = 1
@@ -2400,6 +2422,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Merging existing incremental backups")
         status, output, message = self.backup_merge()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Taking more backups")
         self._take_n_backups(n=2)
@@ -2408,6 +2431,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Merging new backups into already merged backup")
         status, output, message = self.backup_merge()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Successfully merged new backups with already merged backup")
 
@@ -2431,6 +2455,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.number_of_backups += 1
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
@@ -2444,6 +2469,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end -= 1
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets,
                                                  self.skip_consistency, self.per_node)
@@ -2481,6 +2507,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info(str(output))
             status, output, message = self.backup_list()
             if not status:
+                self.log.error(output)
                 self.fail(message)
             if output and output[0]:
                 bk_info = json.loads(output[0])
@@ -2503,6 +2530,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(output)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         if output and output[0]:
             bk_info = json.loads(output[0])
@@ -3973,6 +4001,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         except TimeoutError:
             status, output, message = self.backup_list()
             if not status:
+                self.log.error(output)
                 self.fail(message)
             backup_count = 0
             for line in output:
@@ -3993,6 +4022,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         status, output_before_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_before_compact)
             self.fail(message)
         try:
             compact_result = self.cluster.async_compact_cluster(backup_host=self.backupset.backup_host,
@@ -4007,6 +4037,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         except TimeoutError:
             status, output_after_compact, message = self.backup_list()
             if not status:
+                self.log.error(output_after_compact)
                 self.fail(message)
             status, message = self.validation_helper.validate_compact_lists(output_before_compact,
                                                                             output_after_compact,

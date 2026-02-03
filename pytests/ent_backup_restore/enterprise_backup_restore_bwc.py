@@ -198,6 +198,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self.backupset.number_of_backups += 1
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
@@ -208,6 +209,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self.backupset.end -= 1
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup, self.buckets,
                                                  self.skip_consistency, self.per_node)
@@ -295,6 +297,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self._take_n_backups(n=self.backupset.number_of_backups)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         """ remove last 6 chars of offset time in backup name"""
@@ -319,9 +322,11 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
         status, output, message = self.backup_merge()
         if not status:
+            self.log.error(output)
             self.fail(message)
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         if output and output[0]:
@@ -364,6 +369,7 @@ class EnterpriseBackupRestoreBWCTest(EnterpriseBackupRestoreBase, NewUpgradeBase
         self.log.info("Finished restoring backup before merging")
         status, output, message = self.backup_merge()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.backupset.start = 1
         self.backupset.end = 1
