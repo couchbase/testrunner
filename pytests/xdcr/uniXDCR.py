@@ -1090,3 +1090,99 @@ class unidirectional(XDCRNewBaseTest):
         self.log.info(f"Output: {o}")
         self.log.error(f"Error: {e}")
 
+    def test_alert_when_multiple_repl_deleted(self):
+        n_replications = self._input.param("n_replications", 2)
+        master_rest = RestConnection(self.src_master)
+        dest_rest = RestConnection(self.dest_master)
+        master_remote = RemoteMachineShellConnection(self.src_master)
+
+        # Create buckets on source and destination clusters
+        self.log.info(f"Creating {n_replications} buckets on source and destination clusters")
+        bucket_names = []
+        for i in range(n_replications):
+            bucket_name = f"bucket_{i}"
+            bucket_names.append(bucket_name)
+
+            # Create bucket on source cluster
+            src_create_success = master_rest.create_bucket(bucket=bucket_name, ramQuotaMB=512)
+            if src_create_success:
+                self.log.info(f"Created bucket {bucket_name} on source cluster")
+            else:
+                self.fail(f"Failed to create bucket {bucket_name} on source cluster")
+
+            # Create bucket on destination cluster
+            dest_create_success = dest_rest.create_bucket(bucket=bucket_name, ramQuotaMB=256)
+            if dest_create_success:
+                self.log.info(f"Created bucket {bucket_name} on destination cluster")
+            else:
+                self.fail(f"Failed to create bucket {bucket_name} on destination cluster")
+
+        self.sleep(10, "Waiting for buckets to be ready")
+
+        # Add remote cluster reference
+        remote_cluster_name = "multi_repl_cluster"
+        master_rest.add_remote_cluster(
+            self.dest_master.ip,
+            self.dest_master.port,
+            self.dest_master.rest_username,
+            self.dest_master.rest_password,
+            remote_cluster_name
+        )
+        self.log.info(f"Added remote cluster reference: {remote_cluster_name}")
+
+        # Create replications from each source bucket to corresponding destination bucket
+        for bucket_name in bucket_names:
+            master_rest.start_replication(
+                "continuous",
+                bucket_name,
+                remote_cluster_name,
+                "xmem",
+                bucket_name
+            )
+            self.log.info(f"Started replication for bucket {bucket_name}")
+
+        self.sleep(30, "Waiting for replications to stabilize")
+
+        # Set alert settings for replication deleted
+        status = master_rest.set_alerts_settings(
+            'couchbase@localhost',
+            'root@localhost',
+            'user',
+            'pwd',
+            alerts='xdcr_replication_deleted'
+        )
+        if not status:
+            self.fail("Did not set alert settings")
+        self.log.info("Alert settings configured for xdcr_replication_deleted")
+
+        # Delete all replications
+        master_rest.remove_all_replications()
+        self.log.info("Removed all replications")
+
+        self.sleep(30, "Waiting for alerts to be logged")
+
+        # Verify the number of occurrences of the pattern in the log file
+        log_file_path = '/opt/couchbase/var/lib/couchbase/logs/info.log'
+        pattern = 'XDCR replication deleted for target cluster UUID:'
+        cmd = f"grep -F '{pattern}' {log_file_path} | wc -l"
+        o, e, exit_code = master_remote.execute_command(cmd, use_channel=True, timeout=100, get_exit_code=True)
+
+        if exit_code != 0:
+            self.fail(f"Failed to execute grep command. Error: {e}")
+
+        # Parse the count from output
+        try:
+            count = int(o[0].strip()) if o else 0
+        except (ValueError, IndexError) as ex:
+            self.fail(f"Failed to parse pattern count from output: {o}. Exception: {ex}")
+
+        self.log.info(f"Found {count} occurrences of pattern '{pattern}' in log file")
+        self.log.info(f"Expected {n_replications} occurrences")
+
+        if count >= n_replications:
+            self.log.info(f"SUCCESS: Found {count} occurrences of replication deleted alerts, "
+                         f"expected at least {n_replications}")
+        else:
+            self.fail(f"FAILURE: Found {count} occurrences of replication deleted alerts, "
+                     f"but expected at least {n_replications}")
+
