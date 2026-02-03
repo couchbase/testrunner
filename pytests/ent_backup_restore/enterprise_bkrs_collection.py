@@ -264,6 +264,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self._take_n_backups(n=self.backupset.number_of_backups)
         status, output, message = self.backup_info()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         """ remove last 6 chars of offset time in backup name"""
@@ -289,9 +290,11 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
         status, output, message = self.backup_merge()
         if not status:
+            self.log.error(output)
             self.fail(message)
         status, output, message = self.backup_info()
         if not status:
+            self.log.error(output)
             self.fail(message)
         backup_count = 0
         if output and output[0]:

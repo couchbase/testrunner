@@ -1144,7 +1144,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 replicas=False, mode="memory",
                                 expected_error=None,doc_store=None,restore_iterator=0,connector=None,
                                 validation_list=None,validate_final_backup=False):
-        
+
         if self.vbuckets_filter_no_data:
             self.log.info("No data in backup repo as expected.")
             return
@@ -1228,7 +1228,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         restore_doc_store.append(json.loads(content.decode()).get("base64"))
                     else:
                         self.fail(f"Failed to get doc with key {k}")
-                
+
                 if validate_final_backup:
                     for i in range(10):
                         index = len(doc_store)-10+i
@@ -1242,7 +1242,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         if doc_store[index] != restore_doc_store[i]:
                             self.fail(f"Backup Doc id:{i} != Restore Doc id:{i}\n")
                     self.log.info(f"SUCCESS. Restore data validated\n")
-                        
+
             else:
                 status, msg = self.validation_helper.validate_restore(self.backupset.end,
                                                                     self.vbucket_seqno, current_vseqno,
@@ -1372,6 +1372,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_list_validate(self):
         status, output, message = self.backup_list()
         if not status:
+            self.log.error(output)
             self.fail(message)
         status, message = self.validation_helper.validate_backup_list(output)
         if not status:
@@ -1382,13 +1383,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Listing backup details before compact")
         status, output_before_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_before_compact)
             self.fail(message)
         status, output, message = self.backup_compact()
         if not status:
+            self.log.error(output)
             self.fail(message)
         self.log.info("Listing backup details after compact")
         status, output_after_compact, message = self.backup_list()
         if not status:
+            self.log.error(output_after_compact)
             self.fail(message)
         status, message = self.validation_helper.validate_compact_lists(output_before_compact, output_after_compact)
         if not status:
@@ -1604,6 +1608,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.log.info(str(output))
                     status, output, message = self.backup_list()
                     if not status:
+                        self.log.error(output)
                         self.fail(message)
                     for line in output:
                         if "enterprise" in line:
@@ -1637,6 +1642,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail("Taking cluster backup failed.")
             status, output, message = self.backup_list()
             if not status:
+                self.log.error(output)
                 self.fail(message)
             for line in output:
                 if "enterprise" in line:
@@ -1761,6 +1767,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     mesg += "\n**************** "
                     self.log.error(mesg)
                 else:
+                    self.log.error(output)
                     self.fail(message)
 
         # if repeats < 2 and not skip_validation:
