@@ -58,6 +58,15 @@ class UserAccounts(BaseTestCase):
         # Print the response to check if the login was successful
         self.log.info(f"Status Code: {response.status_code}")
         self.log.info(f"Response Text: {response.text}")
+        
+        if response.status_code == 403:
+            try:
+                msg = response.json()
+                self.log.info("UI login forbidden for user '{0}'. Missing permissions: {1}".format(
+                    user_id, msg.get("permissions")
+                ))
+            except Exception:
+                pass
         if response.status_code == 200:
             return True
         else:
@@ -414,16 +423,31 @@ class UserAccounts(BaseTestCase):
             user activity shown for user_grp_pos
             user activity not shown for user_grp_neg
         """
-        self.rest.add_group_role("grp_pos", "", "analytics_manager[*]")
-        self.rest.add_group_role("grp_neg", "", "admin")
-        self.rest.get_group_list()
+        self.log.info("Creating RBAC groups for activity tracking")
 
-        payload = "name={0}&groups={1}&password={2}".format("user_grp_pos", "grp_pos", "password")
+      
+        status, content = self.rest.add_group_role(
+            "grp_pos",
+            "",
+            "analytics_manager[*],admin"
+        )
+
+        status, content = self.rest.add_group_role(
+            "grp_neg",
+            "",
+            "admin"
+        )
+        
+
+        status, groups = self.rest.get_group_list()
+    
+        password = self.test_user_password
+        payload = "name={0}&groups={1}&password={2}".format("user_grp_pos", "grp_pos", password)
         self.rest.add_set_builtin_user("user_grp_pos", payload)
-        payload = "name={0}&groups={1}&password={2}".format("user_grp_neg", "grp_neg", "password")
+        payload = "name={0}&groups={1}&password={2}".format("user_grp_neg", "grp_neg", password)
         self.rest.add_set_builtin_user("user_grp_neg", payload)
 
-        self.rest.retrieve_user_roles()
+        _ = self.rest.retrieve_user_roles()
 
         param = {
             "enabled": "true",
@@ -431,8 +455,10 @@ class UserAccounts(BaseTestCase):
             "trackedRoles": []
         }
         self.rest.configure_user_activity(param)
-        assert self.check_ui_login(self.master, "user_grp_pos", self.test_user_password)
-        assert self.check_ui_login(self.master, "user_grp_neg", self.test_user_password)
+        self.log.info("User activity tracking config applied: {0}".format(param))
+        self.log.info("Attempting UI login for group users (to generate activity)")
+        assert self.check_ui_login(self.master, "user_grp_pos", password)
+        assert self.check_ui_login(self.master, "user_grp_neg", password)
         time.sleep(60 * 15)  # takes minimum 15 minutes
 
         users = self.rest.retrieve_user_roles()
@@ -464,10 +490,14 @@ class UserAccounts(BaseTestCase):
             user activity shown for user_role_pos
             user activity not shown for user_role_neg
         """
+        password = self.test_user_password
 
-        payload = "name={0}&roles={1}&password={2}".format("user_role_pos", "analytics_manager[*]", "password")
+
+        payload = "name={0}&roles={1}&password={2}".format("user_role_pos", "analytics_manager[*],admin", password)
+        self.log.info("Creating user user_role_pos with roles=analytics_manager[*],admin")
         self.rest.add_set_builtin_user("user_role_pos", payload)
-        payload = "name={0}&roles={1}&password={2}".format("user_role_neg", "ro_admin", "password")
+        payload = "name={0}&roles={1}&password={2}".format("user_role_neg", "admin", password)
+        self.log.info("Creating user user_role_neg with roles=admin")
         self.rest.add_set_builtin_user("user_role_neg", payload)
 
         param = {
@@ -476,8 +506,10 @@ class UserAccounts(BaseTestCase):
             "trackedRoles": ["analytics_manager"]
         }
         self.rest.configure_user_activity(param)
-        assert self.check_ui_login(self.master, "user_role_pos", self.test_user_password)
-        assert self.check_ui_login(self.master, "user_role_neg", self.test_user_password)
+        self.log.info("User activity tracking config applied: {0}".format(param))
+        self.log.info("Attempting UI login for role users (to generate activity)")
+        assert self.check_ui_login(self.master, "user_role_pos", password)
+        assert self.check_ui_login(self.master, "user_role_neg", password)
         self.log.info("Going to sleep for 15 minutes as it takes 15 minutes, minimum")
         time.sleep(60 * 15)  # takes minimum 15 minutes
 
