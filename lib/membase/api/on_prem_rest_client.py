@@ -3604,7 +3604,8 @@ class RestConnection(object):
                                    'emailHost': email_host,
                                    'emailPort': email_port,
                                    'emailEncrypt': email_encrypt,
-                                   'alerts': alerts})
+                                   'alerts': alerts,
+                                    'pop_up_alerts':alerts})
         log.info('settings/alerts params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         return status
