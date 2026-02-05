@@ -59,6 +59,11 @@ except ImportError:
                                   "paramiko due to import error.",
                                   "ssh connections to remote machines will fail!\n"))
 
+try:
+    import pexpect
+except ImportError:
+    log.warning("Warning: pexpect not installed. TTY-based command execution will not be available.")
+
 
 class RemoteMachineInfo(object):
     def __init__(self):
@@ -3412,6 +3417,121 @@ class RemoteMachineShellConnection(KeepRefs):
             else:
                 log.info('command executed successfully with {}'.format(self.username))
         return (output, error, exit_code) if get_exit_code else (output, error)
+
+    def execute_command_with_pty(self, command, prompts_and_responses=None, 
+                                   env_vars=None, timeout=600, debug=True):
+        """
+        Execute a command on the remote machine using paramiko with a PTY.
+        This method requests a pseudo-TTY which is required for commands that
+        use interactive input (like golang.org/x/term for passphrase prompts).
+        
+        Args:
+            command: The command to execute on the remote machine
+            prompts_and_responses: List of tuples (prompt_pattern, response) for interactive input.
+                                   Example: [("passphrase:", "secret"), ("passphrase:", "secret")]
+            env_vars: Dictionary of environment variables to set before running the command.
+                      Example: {"CBAUTH_REVRPC_URL": "http://user:pass@host:8091"}
+            timeout: Timeout in seconds for the command (default: 600)
+            debug: Whether to log debug information (default: True)
+            
+        Returns:
+            Tuple of (output_lines, error_lines, exit_code)
+            - output_lines: List of output lines from the command
+            - error_lines: List of error lines (empty as PTY merges stdout/stderr)
+            - exit_code: The exit code of the command
+        """
+        if debug:
+            log.info("Running command with PTY on {0}: {1}".format(self.ip, command))
+        
+        self.reconnect_if_inactive()
+        
+        prompts_and_responses = prompts_and_responses or []
+        env_vars = env_vars or {}
+        
+        # Build environment variable exports
+        env_exports = ""
+        if env_vars:
+            env_exports = " && ".join([f"export {k}=\"{v}\"" for k, v in env_vars.items()])
+            env_exports += " && "
+        
+        # Construct the full command
+        full_command = f"{env_exports}{command}"
+        
+        if self.use_sudo:
+            full_command = "sudo " + full_command
+        
+        output_data = ""
+        exit_code = -1
+        
+        try:
+            # Open a channel with PTY
+            channel = self._ssh_client.get_transport().open_session()
+            channel.get_pty(term='xterm', width=200, height=50)
+            channel.settimeout(timeout)
+            channel.exec_command(full_command)
+            
+            # Track which prompts we've responded to
+            prompt_index = 0
+            
+            # Read output and respond to prompts
+            while True:
+                if channel.recv_ready():
+                    chunk = channel.recv(4096).decode('utf-8', errors='replace')
+                    output_data += chunk
+                    
+                    if debug and chunk:
+                        log.debug(f"Received: {chunk[:200]}...")
+                    
+                    # Check for prompts to respond to
+                    while prompt_index < len(prompts_and_responses):
+                        prompt_pattern, response = prompts_and_responses[prompt_index]
+                        if prompt_pattern.lower() in output_data.lower():
+                            if debug:
+                                log.info(f"Got prompt matching '{prompt_pattern}', sending response")
+                            channel.send(response + "\n")
+                            prompt_index += 1
+                            time.sleep(0.1)  # Small delay after sending
+                        else:
+                            break
+                
+                # Check if channel is closed
+                if channel.exit_status_ready():
+                    # Read any remaining data
+                    while channel.recv_ready():
+                        chunk = channel.recv(4096).decode('utf-8', errors='replace')
+                        output_data += chunk
+                    break
+                
+                time.sleep(0.1)
+            
+            exit_code = channel.recv_exit_status()
+            channel.close()
+            
+        except Exception as e:
+            log.error(f"Error executing command with PTY on {self.ip}: {str(e)}")
+            output_data = str(e)
+            exit_code = -1
+        
+        # Split output into lines
+        output_lines = output_data.split('\n') if output_data else []
+        # Remove empty trailing lines
+        while output_lines and output_lines[-1].strip() == '':
+            output_lines.pop()
+        
+        if debug:
+            log.info(f"Command exit code: {exit_code}")
+            if output_lines:
+                log.info(f"Output lines count: {len(output_lines)}")
+        
+        # Return empty list for error since PTY merges stdout/stderr
+        return output_lines, [], exit_code
+
+    # Keep pexpect method as alias for backward compatibility
+    def execute_command_with_pexpect(self, command, prompts_and_responses=None, 
+                                      env_vars=None, timeout=600, debug=True):
+        """Alias for execute_command_with_pty for backward compatibility."""
+        return self.execute_command_with_pty(command, prompts_and_responses, 
+                                              env_vars, timeout, debug)
 
     def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):
         info = info or self.extract_remote_info()
