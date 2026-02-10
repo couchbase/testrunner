@@ -844,7 +844,7 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(node=kv_node)
         task.result()
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
@@ -886,7 +886,7 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(60)
@@ -908,7 +908,7 @@ class MovingTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
-        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(60)
@@ -1276,7 +1276,7 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(node=kv_node)
         task.result()
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
@@ -1319,7 +1319,7 @@ class MovingTopFTS(FTSBaseTest):
         index = self.create_index_generate_queries()
         graceful = self._input.param("graceful", False)
         if graceful:
-            node = self._cb_cluster.get_kv_nodes()[0]
+            node = self._cb_cluster.get_kv_nodes()[1]
         else:
             node = self._cb_cluster.get_fts_nodes()[0]
         self._cb_cluster.async_failover(graceful=graceful, node=node).result()
@@ -1344,7 +1344,7 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(30)
@@ -1367,7 +1367,7 @@ class MovingTopFTS(FTSBaseTest):
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.wait_for_indexing_complete()
-        kv_node = self._cb_cluster.get_kv_nodes()[0]
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
         task = self._cb_cluster.async_failover(graceful=True,node=kv_node)
         task.result()
         self.sleep(30)
@@ -1811,7 +1811,7 @@ class MovingTopFTS(FTSBaseTest):
         index = self.create_index_generate_queries()
         if graceful:
             services = ['kv']
-            node = self._cb_cluster.get_kv_nodes()[0]
+            node = self._cb_cluster.get_kv_nodes()[1]
         else:
             services = ['fts']
             node = self._cb_cluster.get_fts_nodes()[0]
