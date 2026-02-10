@@ -157,8 +157,7 @@ class memInfoRunner(object):
                 from lib.remote.remote_util import RemoteMachineShellConnection
                 remote_client = RemoteMachineShellConnection(server)
                 print("Collecting memory info from %s\n" % server.ip)
-                remote_cmd = "sh -c 'if [[ \"$OSTYPE\" == \"darwin\"* ]]; then sysctl hw.memsize|grep -Eo [0-9]; " \
-                                    "else grep MemTotal /proc/meminfo|grep -Eo [0-9]; fi'"
+                remote_cmd = "sh -c 'case \"$OSTYPE\" in darwin*) sysctl hw.memsize|grep -Eo [0-9]+ ;; *) grep MemTotal /proc/meminfo|grep -Eo [0-9]+ ;; esac'"
                 output, error = remote_client.execute_command(remote_cmd)
                 print("\n".join(error))
                 remote_client.disconnect()
