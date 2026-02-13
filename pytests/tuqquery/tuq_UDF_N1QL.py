@@ -1296,7 +1296,7 @@ class QueryUDFN1QLTests(QueryTests):
             self.assertTrue('Keyspace not found in CB datastore: default:default.test._default' in str(error), f"Error is not what we expected {str(ex)}")
 
         prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-        self.assertEqual(prepared_results['results'][0]['prepareds']['name'],'engineer_count(default:default._default)', f"the prepared name is wrong please check prepareds {prepared_results}")
+        self.assertEqual(prepared_results['results'][0]['prepareds']['name'],'engineer_count', f"the prepared name is wrong please check prepareds {prepared_results}")
 
     def test_global_udf_prepare_query_context(self):
         self.run_cbq_query('DELETE FROM system:prepareds WHERE name LIKE "engineer%"')
