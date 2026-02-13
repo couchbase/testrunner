@@ -160,6 +160,49 @@ MATCH_NONE_QUERY = {
     "expected_hits": 0
 }
 
+# Used by: analytics, base64, counter, bucket_cache, xattrs
+MATCH_QUERY_SIMPLE = {
+    "query": {
+        "match": "location hostel",
+        "field": "reviews.content",
+        "operator": "and"
+    },
+    "expected_hits": 10
+}
+
+# Used by: crc64
+MATCH_QUERY_WITH_ANALYZER = {
+    "query": {
+        "match": "location hostel",
+        "field": "reviews.content",
+        "analyzer": "standard",
+        "operator": "and"
+    },
+    "expected_hits": 10
+}
+
+# Used by: curl
+MATCH_QUERY_OR_FUZZY = {
+    "query": {
+        "match": "location hostel",
+        "operator": "and",
+        "field": "reviews.content",
+        "analyzer": "standard",
+        "fuzziness": 2,
+        "prefix_length": 4
+    },
+    "expected_hits": 40
+}
+
+# Used by: subdoc_op
+MATCH_QUERY_HOSTEL = {
+    "query": {
+        "match": "hostel",
+        "field": "reviews.content"
+    },
+    "expected_hits": 12
+}
+
 # Dictionary mapping query names to their definitions
 ALL_QUERIES = {
     "match_query": MATCH_QUERY,
@@ -176,5 +219,9 @@ ALL_QUERIES = {
     "phrase_query": PHRASE_QUERY,
     "prefix_query": PREFIX_QUERY,
     "match_all_query": MATCH_ALL_QUERY,
-    "match_none_query": MATCH_NONE_QUERY
+    "match_none_query": MATCH_NONE_QUERY,
+    "match_query_simple": MATCH_QUERY_SIMPLE,
+    "match_query_with_analyzer": MATCH_QUERY_WITH_ANALYZER,
+    "match_query_or_fuzzy": MATCH_QUERY_OR_FUZZY,
+    "match_query_hostel": MATCH_QUERY_HOSTEL
 }

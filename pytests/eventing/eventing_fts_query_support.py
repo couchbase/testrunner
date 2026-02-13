@@ -71,6 +71,39 @@ class EventingFTSQuerySupport(EventingBaseTest):
         elif handler_code == 'match_none_query':
             self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_NONE_QUERY
             self.fts_query = ALL_QUERIES['match_none_query']
+        elif handler_code == 'match_query_counter':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_COUNTER
+            self.fts_query = ALL_QUERIES['match_query_simple']
+        elif handler_code == 'match_query_crc64':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_CRC64
+            self.fts_query = ALL_QUERIES['match_query_with_analyzer']
+        elif handler_code == 'match_query_base64':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_BASE64
+            self.fts_query = ALL_QUERIES['match_query_simple']
+        elif handler_code == 'match_query_xattrs':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_XATTRS
+            self.fts_query = ALL_QUERIES['match_query_simple']
+        elif handler_code == 'match_query_n1ql':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_N1QL
+            self.fts_query = ALL_QUERIES['match_query']
+        elif handler_code == 'match_query_with_bucket_cache_getop':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_BUCKET_CACHE
+            self.fts_query = ALL_QUERIES['match_query_simple']
+        elif handler_code == 'match_query_subdoc_op':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_SUBDOC_OP
+            self.fts_query = ALL_QUERIES['match_query_hostel']
+        elif handler_code == 'match_query_with_timer':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_TIMER
+            self.fts_query = ALL_QUERIES['match_query']
+        elif handler_code == 'match_query_with_curl':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_CURL
+            self.fts_query = ALL_QUERIES['match_query']
+        elif handler_code == 'match_query_constant_binding':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_CONSTANT_BINDING
+            self.fts_query = ALL_QUERIES['match_query']
+        elif handler_code == 'match_query_analytics_query':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY_ANALYTICS
+            self.fts_query = ALL_QUERIES['match_query_simple']
 
     def tearDown(self):
         if getattr(self, "fts_index", None):
@@ -138,8 +171,19 @@ class EventingFTSQuerySupport(EventingBaseTest):
         self.fts_index = self.create_fts_index(bucket)
         self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
         self.sleep(30, "Waiting for indexing to complete")
-        # Construct proper FTS query structure
-        fts_query = self.construct_fts_query(self.fts_index_name, self.fts_query['query'])
+        self.run_fts_to_test_against_queries()
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        self.sleep(10)
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
+        self.undeploy_and_delete_function(body)
+
+    def run_fts_to_test_against_queries(self):
+        bucket, scope, _ = self._namespace_parts()
+        fts_query = self.construct_fts_query(
+            self.fts_index_name,
+            self.fts_query['query']
+        )
         hits, _, _, _ = self.fts_callable.run_fts_query(
             index_name=self.fts_index_name,
             query_dict=fts_query,
@@ -147,12 +191,128 @@ class EventingFTSQuerySupport(EventingBaseTest):
             scope_name=scope,
             node=self.servers[1]
         )
-        print("hits: ", hits)
-        self.assertEqual(hits, self.fts_query['expected_hits'],
-                         "FTS query should return %s hits, got %s" %
-                         (self.fts_query['expected_hits'], hits))
+        print("hits:", hits)
+        self.assertEqual(
+            hits,
+            self.fts_query['expected_hits'],
+            "FTS query should return %s hits, got %s" % (
+                self.fts_query['expected_hits'],
+                hits
+            )
+        )
+
+    def test_fts_with_subdoc_op(self):
+        '''
+        FTS match query + sub-document lookup
+        '''
+        bucket, scope, _ = self._namespace_parts()
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.load_data_to_collection(1, "default.scope0.collection0")
+        self.fts_index = self.create_fts_index(bucket)
+        self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
+        self.sleep(30, "Waiting for indexing to complete")
+        body = self.create_save_function_body(self.function_name, self.handler_code,
+            src_binding=True)
+        for b in body['depcfg']['buckets']:
+            if b['alias'] == 'src_bucket':
+                b['alias'] = 'src_col'
+                break
+        self.rest.create_function(body['appname'], body, self.function_scope)
+        self.deploy_function(body)
+        self.sleep(10)
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
+        self.run_fts_to_test_against_queries()
+        self.undeploy_and_delete_function(body)
+
+    def test_fts_with_constant_binding(self):
+        '''
+        FTS match query using constant binding for search term
+        '''
+        bucket, scope, _ = self._namespace_parts()
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.load_data_to_collection(1, "default.scope0.collection0")
+        self.fts_index = self.create_fts_index(bucket)
+        self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
+        self.sleep(30, "Waiting for indexing to complete")
+        body = self.create_save_function_body(self.function_name,self.handler_code)
+        body['depcfg']['constants'] = [{"value": "FTS_TERM", "literal": "\"location hostel\""}]
+        self.rest.delete_single_function(body['appname'], self.function_scope)
+        self.log.info("Deleted function to re-create with constant bindings")
+        self.rest.create_function(body['appname'], body, self.function_scope)
+        self.log.info("Re-created function with constants: {}".format(
+            body['depcfg']['constants']))
+        server_def = json.loads(self.rest.get_function_details(
+            body['appname'], self.function_scope))
+        self.log.info("Server-side depcfg.constants = {}".format(
+            server_def.get('depcfg', {}).get('constants', 'NOT FOUND')))
+        self.deploy_function(body)
+        self.sleep(30)
+        exec_stats = self.rest.get_event_execution_stats(
+            body['appname'], self.function_scope)
+        self.log.info("Execution stats: {}".format(exec_stats))
+        fail_stats = self.rest.get_event_failure_stats(
+            body['appname'], self.function_scope)
+        self.log.info("Failure stats: {}".format(fail_stats))
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
+        self.run_fts_to_test_against_queries()
+        self.undeploy_and_delete_function(body)
+
+    def test_fts_with_analytics(self):
+        '''
+        FTS match query + Analytics query
+        '''
+        bucket, scope, _ = self._namespace_parts()
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.load_data_to_collection(1, "default.scope0.collection0")
+        self.fts_index = self.create_fts_index(bucket)
+        self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
+        self.sleep(30, "Waiting for indexing to complete")
+        cbas_node = self.get_nodes_from_services_map(service_type="cbas")
+        cbas_rest = RestConnection(cbas_node)
+        cbas_rest.execute_statement_on_cbas(
+            "CREATE DATAVERSE `travel-sample`.`inventory`", None)
+        cbas_rest.execute_statement_on_cbas(
+            "CREATE ANALYTICS COLLECTION `travel-sample`.`inventory`.`airline` "
+            "ON `travel-sample`.`inventory`.`airline`", None)
+        cbas_rest.execute_statement_on_cbas("CONNECT LINK Local", None)
+        self.sleep(15, "Waiting for analytics to ingest travel-sample data")
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         self.sleep(10)
         self.verify_doc_count_collections("default.scope0.collection1", 1)
+        self.run_fts_to_test_against_queries()
         self.undeploy_and_delete_function(body)
+
+    def test_fts_coexistence(self):
+        """
+        test for counter, timer, crc64, base64, n1ql, curl, bcuket_cache and xattrs.
+        """
+        coexistence_type = self.input.param('coexistence_type', '')
+        expected_doc_count = 1
+        sleep_time = 10
+        sleep_msg = None
+
+        if any(key in coexistence_type for key in ('curl', 'xattrs', 'base64')):
+            expected_doc_count = 2
+        else:
+            expected_doc_count = 1
+
+        if 'timer' in coexistence_type:
+            sleep_time = 60
+            sleep_msg = "Waiting for timer callback to fire and write results"
+
+        bucket, scope, _ = self._namespace_parts()
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.load_data_to_collection(1, "default.scope0.collection0")
+        self.fts_index = self.create_fts_index(bucket)
+        self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count,idx=self.fts_index)
+        self.sleep(30, "Waiting for indexing to complete")
+        self.run_fts_to_test_against_queries()
+        if coexistence_type == 'bucket_cache':
+            body = self.create_save_function_body(self.function_name, self.handler_code,
+            src_binding=True)
+        else:
+            body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        self.sleep(sleep_time, sleep_msg)
+        self.verify_doc_count_collections("default.scope0.collection1", expected_doc_count)

@@ -168,7 +168,6 @@ class HANDLER_CODE_FTS_QUERY_SUPPORT:
     FTS_QUERY_SUPPORT_DOC_IDS_QUERY = 'handler_code/fts_query_support/docids_query.js'
     FTS_QUERY_SUPPORT_MATCH_NONE_QUERY = 'handler_code/fts_query_support/match_none_query.js'
     FTS_QUERY_SUPPORT_MATCH_ALL_QUERY = 'handler_code/fts_query_support/match_all_query.js'
-    
     FTS_QUERY_SUPPORT_MATCH_QUERY_BASE64 = 'handler_code/fts_query_support/match_query_base64.js'
     FTS_QUERY_SUPPORT_MATCH_QUERY_CONSTANT_BINDING = 'handler_code/fts_query_support/match_query_constant_binding.js'
     FTS_QUERY_SUPPORT_MATCH_QUERY_COUNTER = 'handler_code/fts_query_support/match_query_counter.js'
@@ -199,3 +198,4 @@ class HANDLER_CODE_ANALYTICS:
     ANALYTICS_JOINS_WITH_CURL = 'handler_code/analytics/analytics_joins_with_curl.js'
     ANALYTICS_SUBQUERIES_WITH_XATTRS = 'handler_code/analytics/analytics_subqueries_with_xattrs.js'
     ANALYTICS_SUBQUERIES_WITH_CRC = 'handler_code/analytics/analytics_subqueries_with_crc.js'
+>>>>>>> BASE      (10f1ca CBQE-8770 Analytics in Eventing)
