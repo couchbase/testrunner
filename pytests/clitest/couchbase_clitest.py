@@ -448,8 +448,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         # S3 link parameters
         access_key_id = secret_access_key = region = service_endpoint = session_token = None
         if link_type == "s3":
-            access_key_id = self.input.param("access-key-id", None)
-            secret_access_key = self.input.param("secret-access-key", None)
+            access_key_id = os.environ.get('AWS_ACCESS_KEY_ID', None)
+            secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY', None)
             region = self.input.param("region", None)
             service_endpoint = self.input.param("service-endpoint", None)
             session_token = self.input.param("session-token", None)
