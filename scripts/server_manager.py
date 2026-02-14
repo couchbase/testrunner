@@ -256,51 +256,65 @@ class ServerManager:
         """
         self.logger.info(f"get_servers: username={username}, count={count}, "
                          f"os={os_type}")
+        server_list = list()
 
         try:
             # Use Couchbase transaction for atomic server allocation
             def allocate_servers(ctx):
-                allocated = []
+                # Count available servers within transaction
+                count_query = (
+                    f"SELECT count(*) FROM `QE-server-pool` "
+                    f"WHERE state='available' AND os='{os_type}' "
+                    f"AND (poolId='{pool_id}' OR '{pool_id}' IN poolId)")
 
-                query = \
-                    f"SELECT META().id FROM `QE-server-pool` " \
-                    f"WHERE state='available' AND os='{os_type}' " \
-                    f"AND (poolId='{pool_id}' OR '{pool_id}' IN poolId) " \
-                    f"LIMIT {count}"
+                count_result = ctx.query(count_query)
+                available_count = 0
+                for row in count_result.rows():
+                    available_count = row['$1']
+                    break
 
-                result = ctx.query(query)
+                self.logger.info(f"requested count: {count}, "
+                                 f"available count: {available_count}")
 
-                for row in result.rows():
-                    doc = ctx.get(self.default_collection, row["id"])
-                    content = doc.content_as[dict]
+                if count > available_count:
+                    self.logger.warning("Not enough servers available")
+                    return []
 
-                    # Double-check state since another transaction might have taken it
-                    if content["state"] != "available":
-                        continue
+                # Get servers within transaction
+                get_servers_query = (
+                    f"SELECT *, meta().id FROM `QE-server-pool` "
+                    f"WHERE state='available' AND os='{os_type}' "
+                    f"AND (poolId='{pool_id}' OR '{pool_id}' IN poolId) "
+                    f"ORDER BY to_number(memory) ASC LIMIT {count}")
 
-                    content["state"] = "booked"
-                    content["prevUser"] = content.get("username", "")
-                    content["username"] = username
+                self.logger.debug(f"Query: {get_servers_query}")
 
-                    ctx.replace(doc, content)
-                    allocated.append(content["ipaddr"])
+                get_results = ctx.query(get_servers_query)
 
-                if len(allocated) < count:
-                    raise Exception("Not enough servers")
+                # Process results properly
+                for result in get_results.rows():
+                    # Extract the document data from the result
+                    doc_data = result['QE-server-pool']
 
-                return allocated
+                    # Update document state
+                    doc_data['state'] = 'booked'
+                    doc_data['prevUser'] = doc_data.get('username', '')
+                    doc_data['username'] = username
 
-            server_list = self.cluster.transactions.run(allocate_servers)
+                    # Replace document within transaction
+                    target_id = ctx.get(self.default_collection, result['id'])
+                    ctx.replace(target_id, doc_data)
+                    server_list.append(doc_data['ipaddr'])
 
+            # Execute the transaction
+            _ = self.cluster.transactions.run(allocate_servers)
             self.logger.info(
                 f"Allocated {len(server_list)} servers: {server_list}")
 
             try:
-                # Format IP addresses for IN clause: ["ip1", "ip2", "ip3"]
-                ip_list_formatted = ', '.join([f'"{ip}"' for ip in server_list])
                 t_result = self.cluster.query(
-                    f"SELECT ipaddr,state,username FROM `QE-server-pool` "
-                    f"WHERE ipaddr IN [{ip_list_formatted}]")
+                    f"SELECT ipaddr,state FROM `QE-server-pool` "
+                    f"WHERE ipaddr IN {server_list}")
                 for row in t_result.rows():
                     self.logger.info(row)
             except Exception as e:
@@ -309,7 +323,7 @@ class ServerManager:
             return server_list
         except Exception as e:
             self.logger.error(f"Error in get_servers transaction: {str(e)}")
-            return []
+            return list()
 
     def release_ip(self, ipaddr, state='available'):
         """
