@@ -277,8 +277,7 @@ class ServerManager:
                                  f"available count: {available_count}")
 
                 if count > available_count:
-                    self.logger.warning("Not enough servers available")
-                    return []
+                    raise Exception("Not enough servers available")
 
                 # Get servers within transaction
                 get_servers_query = (
@@ -302,28 +301,37 @@ class ServerManager:
                     doc_data['username'] = username
 
                     # Replace document within transaction
-                    target_id = ctx.get(self.default_collection, result['id'])
-                    ctx.replace(target_id, doc_data)
-                    server_list.append(doc_data['ipaddr'])
+                    try:
+                        target_id = ctx.get(self.default_collection, result['id'])
+                        ctx.replace(target_id, doc_data)
+                        server_list.append(doc_data['ipaddr'])
+                    except Exception as e:
+                        # Make sure the transaction aborts without retry
+                        ctx.abort(Exception(f"Allocation failed: {e}"))
 
             # Execute the transaction
             _ = self.cluster.transactions.run(allocate_servers)
             self.logger.info(
                 f"Allocated {len(server_list)} servers: {server_list}")
 
-            try:
-                t_result = self.cluster.query(
-                    f"SELECT ipaddr,state FROM `QE-server-pool` "
-                    f"WHERE ipaddr IN {server_list}")
-                for row in t_result.rows():
-                    self.logger.info(row)
-            except Exception as e:
-                self.logger.error(f"Select query error: {str(e)}")
+            if len(server_list) < count:
+                raise Exception("Booked fewer than expected servers")
 
-            return server_list
+            t_result = self.cluster.query(
+                f"SELECT ipaddr,state,username FROM `QE-server-pool` "
+                f"WHERE ipaddr IN {server_list}")
+
+            for row in t_result.rows():
+                self.logger.info(row)
+                if row['username'] != username:
+                    raise Exception("Username is not as current expected")
+                elif row["state"] != "booked":
+                    raise Exception("State is not booked")
         except Exception as e:
             self.logger.error(f"Error in get_servers transaction: {str(e)}")
-            return list()
+            server_list.clear()
+            raise e
+        return server_list
 
     def release_ip(self, ipaddr, state='available'):
         """
