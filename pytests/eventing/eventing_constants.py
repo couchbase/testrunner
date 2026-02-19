@@ -198,4 +198,3 @@ class HANDLER_CODE_ANALYTICS:
     ANALYTICS_JOINS_WITH_CURL = 'handler_code/analytics/analytics_joins_with_curl.js'
     ANALYTICS_SUBQUERIES_WITH_XATTRS = 'handler_code/analytics/analytics_subqueries_with_xattrs.js'
     ANALYTICS_SUBQUERIES_WITH_CRC = 'handler_code/analytics/analytics_subqueries_with_crc.js'
->>>>>>> BASE      (10f1ca CBQE-8770 Analytics in Eventing)
