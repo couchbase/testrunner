@@ -380,6 +380,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
 
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
+        self.backupset.bkrs_client_version = RestConnection(self.backupset.backup_host).get_nodes_version()
         shell.disconnect()
 
     def tearDown(self):
@@ -1306,20 +1307,22 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         bk_dir = self.backupset.directory
         if ipv6_raw_ip:
             bk_dir = bk_raw_ipv6_dir
-        command = "grep 'Restore completed successfully' " + bk_dir + \
-                  "/logs/{0}".format(bk_log_file_name)
-        output, error = remote_client.execute_command(command)
-        if self.debug_logs:
-            remote_client.log_command_output(output, error)
-        if not output:
-            self.fail("Restoring backup failed.")
-        command = "grep 'Transfer failed' " + bk_dir + \
-                  "/logs/{0}".format(bk_log_file_name)
-        output, error = remote_client.execute_command(command)
-        if self.debug_logs:
-            remote_client.log_command_output(output, error)
-        if output:
-            self.fail("Restoring backup failed.")
+
+        if self.backupset.bkrs_client_version[:3] <= "8.0":
+            command = "grep 'Restore completed successfully' " + bk_dir + \
+                      "/logs/{0}".format(bk_log_file_name)
+            output, error = remote_client.execute_command(command)
+            if self.debug_logs:
+                remote_client.log_command_output(output, error)
+            if not output:
+                self.fail("Restoring backup failed.")
+            command = "grep 'Transfer failed' " + bk_dir + \
+                      "/logs/{0}".format(bk_log_file_name)
+            output, error = remote_client.execute_command(command)
+            if self.debug_logs:
+                remote_client.log_command_output(output, error)
+            if output:
+                self.fail("Restoring backup failed.")
 
         self.log.info("Finished restoring backup")
         self.log.info("Get current vseqno on node %s " % self.cluster_to_restore[0].ip)
@@ -2702,6 +2705,7 @@ class Backupset:
         self.log_to_stdout = False
         self.auto_select_threads = False
         self.date_range = ''
+        self.bkrs_client_version = None
         self.scopes = None
         self.collections = None
         self.map_data_collection = False
