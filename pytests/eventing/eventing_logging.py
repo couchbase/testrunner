@@ -19,10 +19,13 @@ log = logging.getLogger()
 class EventingLogging(EventingBaseTest, LogRedactionBase):
     def setUp(self):
         super(EventingLogging, self).setUp()
+        self.logsize = self.input.param("logsize", None)
+        self.aggregate= self.input.param("aggregate", False)
         auditing = audit(host=self.master)
         log.info("Enabling Audit")
         auditing.setAuditEnable('true')
         self.sleep(30)
+
 
     def tearDown(self):
         super(EventingLogging, self).tearDown()
@@ -105,6 +108,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.function_scope = {"bucket": self.src_bucket_name, "scope": "_default"}
         body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
         body['settings']['app_log_max_size']=3768300
+        body['depcfg']['source_bucket'] = self.src_bucket_name
         self.rest.create_function(body['appname'], body, self.function_scope)
         # deploy a function without any alias
         self.deploy_function(body)
@@ -142,4 +146,59 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
                                    "description": "Authorization failed", "method": "GET", "url": "/api/v1/config"}
         self.check_config(32788, eventing_node, expected_results_authorization_failure)
         shell.disconnect()
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_application_logs_global(self):
+        """
+        Test Eventing /getAppLog Endpoint for the following:
+        - Single Eventing Node
+        - Multiple Eventing Nodes
+        - Size < 40MB
+        - Hit EOF
+        - Very Large Size (throwing Internal Server Error)
+        - Coverage for the following MBs:
+        """
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.src_bucket_name="travel-sample"
+        self.function_scope = {"bucket": "*", "scope": "*"}
+        body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
+        body['depcfg']['source_bucket'] = self.src_bucket_name
+        body['depcfg']['source_scope'] = "_default"
+        body['depcfg']['source_collection'] = "_default"
+        self.rest.create_function(body['appname'], body, self.function_scope)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 31591)
+        applogs = self.get_app_logs(self.function_name, size=self.logsize, aggregate=self.aggregate)
+        if len(applogs) == 0:
+            raise Exception("No app logs found")
+        else:
+            log.info("App logs found, count: {}".format(len(applogs)))
+        self.undeploy_and_delete_function(body)
+
+
+    def test_eventing_application_logs_scoped(self):
+        """
+        Test Eventing /getAppLog Endpoint for the following:
+        - Single Eventing Node
+        - Multiple Eventing Nodes
+        - Size < 40MB
+        - Hit EOF
+        - Very Large Size (throwing Internal Server Error)
+        - Coverage for the following MBs:
+        """
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.src_bucket_name="travel-sample"
+        self.function_scope = {"bucket": self.src_bucket_name, "scope": "inventory"}
+        body = self.create_save_function_body(self.function_name,"handler_code/logger.js")
+        body['depcfg']['source_bucket'] = self.src_bucket_name
+        body['depcfg']['source_scope'] = "_default"
+        body['depcfg']['source_collection'] = "_default"
+        self.rest.create_function(body['appname'], body, self.function_scope)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 31591)
+        applogs = self.get_app_logs(self.function_name, function_scope=self.function_scope, size=self.logsize, aggregate=self.aggregate)
+        if len(applogs) == 0:
+            raise Exception("No app logs found")
+        else:
+            log.info("App logs found, count: {}".format(len(applogs)))
         self.undeploy_and_delete_function(body)

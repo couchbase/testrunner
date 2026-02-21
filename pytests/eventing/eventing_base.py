@@ -916,6 +916,23 @@ class EventingBaseTest(QueryHelperTests):
         self.log.info(content)
         self.log.info("================== App logs end ===============================================================")
 
+    def get_app_logs(self, name, function_scope=None, size=None, aggregate=False):
+        if function_scope is None:
+            function_scope = self.function_scope
+        applogs = self.rest.get_app_logs(handler_name=name, function_scope=function_scope, aggregate=aggregate, size=size)
+        self.log.info("================== {} ============================================================".format(name))
+        # Decode and split into lines to print first 10 lines
+        if isinstance(applogs, bytes):
+            applogs_decoded = applogs.decode('utf-8', errors='replace')
+        else:
+            applogs_decoded = applogs
+        lines = applogs_decoded.split('\n')
+        self.log.info("First 10 lines of app logs:")
+        for i, line in enumerate(lines[:10]):
+            self.log.info("  Line {}: {}".format(i+1, line))
+        self.log.info("================== App logs end ===============================================================")
+        return applogs
+
     def print_timer_alarm_context(self, appname):
         metadata_keyspace = ".".join(self._get_metadata_keyspace())
         alarm_query="select RAW count(0) from {} where meta().id like 'eventing:%:al%'".format(metadata_keyspace)
@@ -1264,3 +1281,4 @@ class EventingBaseTest(QueryHelperTests):
                 log.info("LCB Exception occured: ",total_lcb_exceptions )
                 error_occurred=True
         return error_occurred
+    

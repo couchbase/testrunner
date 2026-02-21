@@ -6293,19 +6293,24 @@ class RestConnection(object):
             return content
 
     '''
-              Get application logs
+              Get eventing application logs
     '''
-    def get_app_logs(self,handler_name, function_scope=None, username="Administrator", password="password"):
+    def get_app_logs(self,handler_name, function_scope=None, username="Administrator", password="password", aggregate=False, size = None):
         authorization = self.get_authorization(username, password)
-        url = "getAppLog?aggregate=true&name=" + handler_name
+        url = "getAppLog?&name=" + handler_name
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
+        if aggregate:
+            url += "&aggregate=true"
+        if size is not None:
+            url += "&size=" + size
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
-        if status:
-            return content
+        if not status:
+            return Exception(content)
+        return content
 
     def create_function(self, name, body, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
