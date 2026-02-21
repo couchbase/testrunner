@@ -575,9 +575,9 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             alias_results = []
             simple_results = []
             for res in alias_result['results']:
-                alias_results.append(res.values()[0])
+                alias_results.append(list(res.values())[0])
             for res in simple_result['results']:
-                simple_results.append(res.values()[0])
+                simple_results.append(list(res.values())[0])
             self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
         except CBQError as e:
             fails_found = 1

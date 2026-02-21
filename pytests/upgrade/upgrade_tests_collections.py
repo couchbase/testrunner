@@ -1012,11 +1012,11 @@ class UpgradeTestsCollections(NewUpgradeBaseTest):
             self.nodes_in_list = self.out_servers_pool.values()[:self.nodes_in]
             if int(self.nodes_in) == 1:
                 if len(free_nodes.keys()) > 1:
-                    free_node_in = [free_nodes.values()[0]]
+                    free_node_in = [list(free_nodes.values())[0]]
                     if len(self.after_upgrade_services_in) > 1:
                         service_in = [self.after_upgrade_services_in[0]]
                 else:
-                    free_node_in = free_nodes.values()
+                    free_node_in = list(free_nodes.values())
                 self.log.info("<<<=== rebalance_in node {0} with services {1}" \
                               .format(free_node_in, service_in[0]))
                 shell = RemoteMachineShellConnection(free_node_in[0])
@@ -1032,7 +1032,7 @@ class UpgradeTestsCollections(NewUpgradeBaseTest):
             if any("index" in services for services in service_in):
                 self.log.info("Set storageMode to forestdb after add "
                               "index node {0} to cluster".format(free_nodes.keys()))
-                RestConnection(free_nodes.values()[0]).set_indexer_storage_mode()
+                RestConnection(list(free_nodes.values())[0]).set_indexer_storage_mode()
             if self.after_upgrade_services_in and \
                     len(self.after_upgrade_services_in) > 1:
                 self.log.info("remove service '{0}' from service list after "
