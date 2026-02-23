@@ -129,6 +129,17 @@ class HANDLER_CODE_FTS_QUERY_SUPPORT:
     FTS_QUERY_SUPPORT_DOC_IDS_QUERY = 'handler_code/fts_query_support/docids_query.js'
     FTS_QUERY_SUPPORT_MATCH_NONE_QUERY = 'handler_code/fts_query_support/match_none_query.js'
     FTS_QUERY_SUPPORT_MATCH_ALL_QUERY = 'handler_code/fts_query_support/match_all_query.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_BASE64 = 'handler_code/fts_query_support/match_query_base64.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_CONSTANT_BINDING = 'handler_code/fts_query_support/match_query_constant_binding.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_COUNTER = 'handler_code/fts_query_support/match_query_counter.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_CRC64 = 'handler_code/fts_query_support/match_query_crc64.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_N1QL = 'handler_code/fts_query_support/match_query_n1ql.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_SUBDOC_OP = 'handler_code/fts_query_support/match_query_subdoc_op.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_BUCKET_CACHE = 'handler_code/fts_query_support/match_query_with_bucket_cache_getop.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_CURL = 'handler_code/fts_query_support/match_query_with_curl.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_TIMER = 'handler_code/fts_query_support/match_query_with_timer.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_ANALYTICS = 'handler_code/fts_query_support/match_query_analytics_query.js'
+    FTS_QUERY_SUPPORT_MATCH_QUERY_XATTRS = 'handler_code/fts_query_support/match_query_xattrs.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
@@ -152,34 +163,6 @@ class EXPORTED_FUNCTION:
     CANCEL_TIMERS='exported_functions/cancel_timers.json'
     ADVANCE_OP='exported_functions/advance_bucket_op.json'
 
-class HANDLER_CODE_FTS_QUERY_SUPPORT:
-    FTS_QUERY_SUPPORT_MATCH_PHRASE_QUERY = 'handler_code/fts_query_support/match_phrase_query.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY = 'handler_code/fts_query_support/match_query.js'
-    FTS_QUERY_SUPPORT_CONJUNCTS_QUERY = 'handler_code/fts_query_support/conjuncts_query.js'
-    FTS_QUERY_SUPPORT_DISJUNCTS_QUERY = 'handler_code/fts_query_support/disjuncts_query.js'
-    FTS_QUERY_SUPPORT_BOOLEAN_QUERY = 'handler_code/fts_query_support/boolean_query.js'
-    FTS_QUERY_SUPPORT_WILDCARD_QUERY = 'handler_code/fts_query_support/wildcard_query.js'
-    FTS_QUERY_SUPPORT_TERM_QUERY = 'handler_code/fts_query_support/term_query.js'
-    FTS_QUERY_SUPPORT_PHRASE_QUERY = 'handler_code/fts_query_support/phrase_query.js'
-    FTS_QUERY_SUPPORT_PREFIX_QUERY = 'handler_code/fts_query_support/prefix_query.js'
-    FTS_QUERY_SUPPORT_QUERY_STRING_QUERY = 'handler_code/fts_query_support/query_string.js'
-    FTS_QUERY_SUPPORT_REGEX_QUERY = 'handler_code/fts_query_support/regex_query.js'
-    FTS_QUERY_SUPPORT_NUMERIC_RANGE_QUERY = 'handler_code/fts_query_support/numeric_range_query.js'
-    FTS_QUERY_SUPPORT_DOC_IDS_QUERY = 'handler_code/fts_query_support/docids_query.js'
-    FTS_QUERY_SUPPORT_MATCH_NONE_QUERY = 'handler_code/fts_query_support/match_none_query.js'
-    FTS_QUERY_SUPPORT_MATCH_ALL_QUERY = 'handler_code/fts_query_support/match_all_query.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_BASE64 = 'handler_code/fts_query_support/match_query_base64.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_CONSTANT_BINDING = 'handler_code/fts_query_support/match_query_constant_binding.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_COUNTER = 'handler_code/fts_query_support/match_query_counter.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_CRC64 = 'handler_code/fts_query_support/match_query_crc64.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_N1QL = 'handler_code/fts_query_support/match_query_n1ql.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_SUBDOC_OP = 'handler_code/fts_query_support/match_query_subdoc_op.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_BUCKET_CACHE = 'handler_code/fts_query_support/match_query_with_bucket_cache_getop.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_CURL = 'handler_code/fts_query_support/match_query_with_curl.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_TIMER = 'handler_code/fts_query_support/match_query_with_timer.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_ANALYTICS = 'handler_code/fts_query_support/match_query_analytics_query.js'
-    FTS_QUERY_SUPPORT_MATCH_QUERY_XATTRS = 'handler_code/fts_query_support/match_query_xattrs.js'
-
 class HANDLER_CODE_ANALYTICS:
     ANALYTICS_BASIC_SELECT = 'handler_code/analytics/analytics_basic_select.js'
     ANALYTICS_COUNT_DISTINCT = 'handler_code/analytics/analytics_count_distinct.js'
@@ -198,3 +181,10 @@ class HANDLER_CODE_ANALYTICS:
     ANALYTICS_JOINS_WITH_CURL = 'handler_code/analytics/analytics_joins_with_curl.js'
     ANALYTICS_SUBQUERIES_WITH_XATTRS = 'handler_code/analytics/analytics_subqueries_with_xattrs.js'
     ANALYTICS_SUBQUERIES_WITH_CRC = 'handler_code/analytics/analytics_subqueries_with_crc.js'
+
+class HANDLER_CODE_VOLUME:
+    BUCKET_OP_INSERT_REBALANCE = "handler_code/ABO/insert_rebalance.js"
+    TIMER_OP_INSERT = "handler_code/ABO/insert_timer.js"
+    SOURCE_BUCKET_MUTATION_INSERT = "handler_code/ABO/insert_sbm.js"
+    CURL_OP_GET = "handler_code/ABO/curl_get.js"
+    N1QL_INSERT_REBALANCE = "handler_code/collections/n1ql_insert_rebalance.js"
