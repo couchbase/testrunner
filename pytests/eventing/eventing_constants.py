@@ -118,3 +118,10 @@ class EXPORTED_FUNCTION:
     EXPIRY='exported_functions/expiry.json'
     CANCEL_TIMERS='exported_functions/cancel_timers.json'
     ADVANCE_OP='exported_functions/advance_bucket_op.json'
+
+class HANDLER_CODE_VOLUME:
+    BUCKET_OP_INSERT_REBALANCE = "handler_code/ABO/insert_rebalance.js"
+    TIMER_OP_INSERT = "handler_code/ABO/insert_timer.js"
+    SOURCE_BUCKET_MUTATION_INSERT = "handler_code/ABO/insert_sbm.js"
+    CURL_OP_GET = "handler_code/ABO/curl_get.js"
+    N1QL_INSERT_REBALANCE = "handler_code/collections/n1ql_insert_rebalance.js"
