@@ -433,7 +433,7 @@ class Scan_Report(FileBasedRebalance):
                                        runDetailed: bool = False,
                                        validate_rows_delta: bool = False,
                                        index_name: str = None,
-                                       log_full_response: bool = True,
+                                       log_full_response: bool = False,
                                        use_python_sdk: bool = False):
         """
         Run a single scan query, validate the scan report, and return it.
@@ -464,7 +464,7 @@ class Scan_Report(FileBasedRebalance):
             ReportValidationError: If scan report validation fails
         """
         if runDetailed:
-            query_params = {"profile": "timings", "scanreport_wait": 1000000}
+            query_params = {"profile": "timings", "scanreport_wait": 15}
             scan_type = "Detailed"
         else:
             query_params = {"profile": "timings"}
@@ -484,7 +484,7 @@ class Scan_Report(FileBasedRebalance):
         
         try:
             if use_python_sdk:
-                result = self._run_query_with_python_sdk(query, {"profile": "timings", "scanreport_wait": "1000000"})
+                result = self._run_query_with_python_sdk(query, {"profile": "timings", "scanreport_wait": "15"})
             else:
                 result = self.n1ql_rest.query_tool(query, query_params=query_params)
         except (TypeError, Exception) as e:
@@ -585,7 +585,7 @@ class Scan_Report(FileBasedRebalance):
                                  runDetailed: bool = False,
                                  validate_rows_delta: bool = False,
                                  index_names: list = None,
-                                 log_full_response: bool = True,
+                                 log_full_response: bool = False,
                                  use_python_sdk: bool = False):
         """
         Run scan queries and validate scan reports for all queries.
@@ -3237,7 +3237,7 @@ class Scan_Report(FileBasedRebalance):
                         q,
                         query_params={
                             "profile": "timings",
-                            "scanreport_wait": 1000000,
+                            "scanreport_wait": 15,
                             "client_context_id": ctx_id
                         }
                     )
@@ -3374,7 +3374,7 @@ class Scan_Report(FileBasedRebalance):
                         q,
                         query_params={
                             "profile": "timings",
-                            "scanreport_wait": 1000000,
+                            "scanreport_wait": 15,
                             "client_context_id": ctx_id
                         }
                     )
@@ -3499,7 +3499,7 @@ class Scan_Report(FileBasedRebalance):
                         q,
                         query_params={
                             "profile": "timings",
-                            "scanreport_wait": 1000000,
+                            "scanreport_wait": 15,
                             "client_context_id": ctx_id
                         }
                     )
@@ -3665,7 +3665,7 @@ class Scan_Report(FileBasedRebalance):
                     try:
                         result = self.n1ql_rest.query_tool(
                             query,
-                            query_params={"profile": "timings", "scanreport_wait": 1000000}
+                            query_params={"profile": "timings", "scanreport_wait": 15}
                         )
                         self.log.info(f"result for query '{query[:50]}...': {json.dumps(result, indent=2)}")
                         scan_report, _ = self.extract_scan_report(result)
@@ -3856,7 +3856,7 @@ class Scan_Report(FileBasedRebalance):
             try:
                 result = self.n1ql_rest.query_tool(
                     query,
-                    query_params={"profile": "timings", "scanreport_wait": 1000000}
+                    query_params={"profile": "timings", "scanreport_wait": 15}
                 )
                 if result is None or not isinstance(result, dict):
                     scan_results["errors"].append({
