@@ -2300,6 +2300,17 @@ class GSIUtils(object):
             except Exception as err:
                 print(err)
 
+    def build_indexes(self, definition_list, namespace, database=None, capella_run=False, query_node=None):
+        """Build deferred indexes using BUILD INDEX statement"""
+        build_query = self.get_build_indexes_query(definition_list=definition_list, namespace=namespace)
+        try:
+            if capella_run:
+                self.run_query(database=database, query=build_query)
+            else:
+                self.run_query(query=build_query, server=query_node)
+        except Exception as err:
+            print(f"Error building indexes: {err}")
+
     def aysnc_run_select_queries(self, select_queries, database=None, capella_run=False, query_node=False,
                                  scan_consistency=None, verbose=True):
         with ThreadPoolExecutor() as executor:

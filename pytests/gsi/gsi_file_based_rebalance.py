@@ -1931,13 +1931,15 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                 print(f"Disk output as seen on {node.ip} is {disk_output}")
                 time.sleep(60)
 
-    def load_until_index_dgm(self, resident_ratio=50):
+    def load_until_index_dgm(self, resident_ratio=50,use_magma_loader=False):
         rr_achieved, end_num, batch_size = False, self.num_of_docs_per_collection, 10000
         avg_avg_rr = self.compute_cluster_avg_rr_index()
         self.log.info(f"Before load_until_index_dgm: Avg of avg_resident_ratio across the cluster is {avg_avg_rr}")
         if avg_avg_rr > resident_ratio:
             while not rr_achieved:
+                all_tasks = []
                 for item in self.namespaces:
+                    bucket_name = item.split(":")[1].split(".")[0]
                     s_item, c_item = item.split(":")[1].split(".")[1], item.split(":")[1].split(".")[2]
                     end_num = end_num + batch_size
                     self.gen_create = SDKDataLoader(num_ops=end_num, percent_create=100,
@@ -1945,16 +1947,27 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     collection=c_item, json_template=self.json_template,
                                                     output=True, username=self.username, password=self.password,
                                                     end=end_num, start_seq_num=end_num - batch_size + 1)
-                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create,
-                                                                    batch_size=batch_size,
-                                                                    dataset=self.json_template)
+                    if use_magma_loader:
+                        task = self.cluster.async_load_gen_docs(
+                            self.master, bucket=bucket_name,
+                            generator=self.gen_create, pause_secs=1,
+                            timeout_secs=300, use_magma_loader=True
+                        )
+                        all_tasks.append(task)
+                    else:
+                        tasks = self.data_ops_javasdk_loader_in_batches(
+                            sdk_data_loader=self.gen_create,
+                            batch_size=batch_size,
+                            dataset=self.json_template
+                        )
+                        all_tasks.extend(tasks)
                 time.sleep(10)
                 avg_avg_rr = self.compute_cluster_avg_rr_index()
                 self.log.info(f"Avg of avg_resident_ratio across the cluster is {avg_avg_rr}")
                 if avg_avg_rr <= resident_ratio:
                     rr_achieved = True
                     self.log.info("Target RR achieved")
-                for task in tasks:
+                for task in all_tasks:
                     task.result()
             self.sleep(10)
         else:

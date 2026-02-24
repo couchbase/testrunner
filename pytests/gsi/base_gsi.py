@@ -3005,12 +3005,68 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         url = f"http://{index_node.ip}:9102/listRebalanceTokens"
         try:
-            response = requests.get(url, auth=('Administrator', 'password'))
+            response = requests.sget(url, auth=('Administrator', 'password'))
             tokens_data = response.json()
             self.log.info(f"tokens_data: {tokens_data}")
         except Exception as e:
             self.log.error(f"Error checking transfer tokens on node {index_node.ip}: {str(e)}")
             raise
+
+    def get_completed_requests(self,query_node):
+            node = query_node[0] if isinstance(query_node, list) else query_node
+            url = f"http://{node.ip}:8093/query/service"
+            headers = {'Content-Type': 'application/json'}
+            payload = {"statement": "SELECT *, meta().plan FROM system:completed_requests"}
+            self.log.info(f"Fetching completed requests from query node {node.ip}")
+            try:
+                response = requests.post(url,auth=(self.rest.username, self.rest.password),headers=headers,data=json.dumps(payload))
+                if response.status_code == 200:
+                    result = response.json()
+                    self.log.info(f"Successfully fetched completed requests from {node.ip}")
+                    self.log.info(f"Completed requests response: {json.dumps(result, indent=2)}")
+                    return result.get("results", [])
+                else:
+                    self.log.error(f"Failed to fetch completed requests from {node.ip}: {response.status_code} - {response.text}")
+                    return None
+            except Exception as e:
+                self.log.error(f"Error fetching completed requests: {str(e)}")
+                return None
+            
+    def extract_scan_report(self, response):
+        """
+        Extract #indexStats (scan report) and actual index name from query response.
+        Recursively searches through executionTimings to find #indexStats.
+        
+        Returns:
+            Tuple of (scan_report, actual_index_name) where:
+            - scan_report: The #indexStats dict or None if not found
+            - actual_index_name: The actual index name used by the query or None
+        """
+        def find_index_stats_and_name(obj, parent_index_name=None):
+            if isinstance(obj, dict):
+                current_index_name = obj.get("index") or parent_index_name
+                if "#indexStats" in obj:
+                    actual_index_name = current_index_name
+                    self.log.debug(f"Found #indexStats, index field at this level: {obj.get('index')}, "
+                                  f"using index_name: {actual_index_name}")
+                    return obj["#indexStats"], actual_index_name
+                for value in obj.values():
+                    result = find_index_stats_and_name(value, current_index_name)
+                    if result[0] is not None:
+                        return result
+            elif isinstance(obj, list):
+                for item in obj:
+                    result = find_index_stats_and_name(item, parent_index_name)
+                    if result[0] is not None:
+                        return result
+            return None, None
+        if "profile" not in response:
+            return None, None
+        execution_timings = response.get("profile", {}).get("executionTimings", {})
+        scan_report, index_name = find_index_stats_and_name(execution_timings)
+        self.log.info(f"Extracted scan report present: {scan_report is not None}, actual_index_name: {index_name}")
+        return scan_report, index_name 
+    
 
     def check_gsi_logs_for_snapshot_recovery(self, log_string="Recovering from recovery point", msg="Index recovery from disk snapshot"):
         count = 0

@@ -1,6 +1,6 @@
 import uuid
 import random
-
+import re
 FULL_SCAN_TEMPLATE = "SELECT {0} FROM %s"
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 RANGE_SCAN_USE_INDEX_TEMPLATE = "SELECT {0} FROM %s USE INDEX (%s USING GSI) WHERE {1}"
@@ -248,7 +248,17 @@ class QueryDefinition(object):
     def generate_use_index_query(self, index_name, bucket=None):
         if not bucket:
             bucket = self.keyspace
-        return self.query_use_index_template % (bucket, index_name)
+        if self.query_use_index_template:
+            return self.query_use_index_template % (bucket, index_name)
+        # Fallback: inject USE INDEX into the regular query template
+        base_query = self.query_template % bucket
+        # Insert USE INDEX clause after the FROM <bucket> portion
+        pattern = re.compile(
+            r'(FROM\s+' + re.escape(bucket) + r')', re.IGNORECASE
+        )
+        replacement = r'\1 USE INDEX (`' + index_name + r'` USING GSI)'
+        result = pattern.sub(replacement, base_query, count=1)
+        return result
 
     def generate_query_with_explain(self, bucket):
         return ("EXPLAIN " + self.query_template) % bucket
