@@ -19,12 +19,15 @@ log = logging.getLogger()
 class EventingLogging(EventingBaseTest, LogRedactionBase):
     def setUp(self):
         super(EventingLogging, self).setUp()
-        self.logsize = self.input.param("logsize", None)
+        self.logsize = self.input.param("size", None)
         self.aggregate= self.input.param("aggregate", False)
         auditing = audit(host=self.master)
         log.info("Enabling Audit")
         auditing.setAuditEnable('true')
         self.sleep(30)
+        self.handler_code = self.input.param("handler_code", "handler_code/logger.js")
+        if self.handler_code == 'heavy_logger':
+            self.handler_code = 'handler_code/heavy_logger.js'
 
 
     def tearDown(self):
@@ -161,7 +164,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.load_sample_buckets(self.server, "travel-sample")
         self.src_bucket_name="travel-sample"
         self.function_scope = {"bucket": "*", "scope": "*"}
-        body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         body['depcfg']['source_bucket'] = self.src_bucket_name
         body['depcfg']['source_scope'] = "_default"
         body['depcfg']['source_collection'] = "_default"
@@ -174,7 +177,6 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         else:
             log.info("App logs found, count: {}".format(len(applogs)))
         self.undeploy_and_delete_function(body)
-
 
     def test_eventing_application_logs_scoped(self):
         """
@@ -189,7 +191,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.load_sample_buckets(self.server, "travel-sample")
         self.src_bucket_name="travel-sample"
         self.function_scope = {"bucket": self.src_bucket_name, "scope": "inventory"}
-        body = self.create_save_function_body(self.function_name,"handler_code/logger.js")
+        body = self.create_save_function_body(self.function_name,self.handler_code)
         body['depcfg']['source_bucket'] = self.src_bucket_name
         body['depcfg']['source_scope'] = "_default"
         body['depcfg']['source_collection'] = "_default"

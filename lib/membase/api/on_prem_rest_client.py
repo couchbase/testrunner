@@ -6424,10 +6424,12 @@ class RestConnection(object):
         if function_scope is not None:
             url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
                                                   function_scope["scope"])
+
         if aggregate:
             url += "&aggregate=true"
         if size is not None:
-            url += "&size=" + size
+            url += "&size=" + str(size)
+
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
