@@ -57,12 +57,12 @@ class Scan_Report(FileBasedRebalance):
         self.replica_repair = self.input.param("replica_repair", False)
         self.chaos_action = self.input.param("chaos_action", None)
         self.topology_change = self.input.param("topology_change", True)
-        self.query_timeout = self.input.param("query_timeout", 12000)
+        self.query_timeout = self.input.param("query_timeout", 300)
         self.stress_factor = self.input.param("stress_factor", 0.5)
         self.disable_shard_affinity = self.input.param("disable_shard_affinity", False)
         self.induce_dgm = self.input.param("induce_dgm", False)
         self.index_resident_ratio = int(self.input.param("index_resident_ratio", 50))
-        self.index_memory_quota = int(self.input.param("index_memory_quota", 256))
+        self.index_memory_quota = int(self.input.param("index_memory_quota", 512))
         self.disk_full = self.input.param("disk_full", False)
         self.rand = random.randint(1, 1000000000)
         self.alter_index = self.input.param("alter_index", None)
@@ -486,7 +486,7 @@ class Scan_Report(FileBasedRebalance):
             if use_python_sdk:
                 result = self._run_query_with_python_sdk(query, {"profile": "timings", "scanreport_wait": "15"})
             else:
-                result = self.n1ql_rest.query_tool(query, query_params=query_params)
+                result = self.n1ql_rest.query_tool(query, query_params=query_params, timeout=self.query_timeout)
         except (TypeError, Exception) as e:
             raise ReportValidationError(
                 f"Query service unavailable - failed to execute query: {query}. Error: {str(e)}"
@@ -778,7 +778,7 @@ class Scan_Report(FileBasedRebalance):
         all_select_queries.extend(scalar_selects[:3] )
         for query in all_select_queries:
             self.log.info("Validating scan report in query response for query: {query[:50]}...")
-            result = self.n1ql_rest.query_tool(query)
+            result = self.n1ql_rest.query_tool(query,timeout=self.query_timeout)
             self.log.info(f"Response for query {query} is: {json.dumps(result, indent=2)}")
             scan_report, _ = self.extract_scan_report(result)
             if scan_report:
@@ -3239,7 +3239,8 @@ class Scan_Report(FileBasedRebalance):
                             "profile": "timings",
                             "scanreport_wait": 15,
                             "client_context_id": ctx_id
-                        }
+                        },
+                        timeout=self.query_timeout
                     )
                     out["result"] = result
                 except Exception as e:
@@ -3376,7 +3377,8 @@ class Scan_Report(FileBasedRebalance):
                             "profile": "timings",
                             "scanreport_wait": 15,
                             "client_context_id": ctx_id
-                        }
+                        },
+                        timeout=self.query_timeout
                     )
                     out["result"] = result
                 except Exception as e:
@@ -3501,7 +3503,8 @@ class Scan_Report(FileBasedRebalance):
                             "profile": "timings",
                             "scanreport_wait": 15,
                             "client_context_id": ctx_id
-                        }
+                        },
+                        timeout=self.query_timeout
                     )
                     out["result"] = result
                 except Exception as e:
@@ -3665,7 +3668,8 @@ class Scan_Report(FileBasedRebalance):
                     try:
                         result = self.n1ql_rest.query_tool(
                             query,
-                            query_params={"profile": "timings", "scanreport_wait": 15}
+                            query_params={"profile": "timings", "scanreport_wait": 15},
+                            timeout=self.query_timeout
                         )
                         self.log.info(f"result for query '{query[:50]}...': {json.dumps(result, indent=2)}")
                         scan_report, _ = self.extract_scan_report(result)
@@ -3856,7 +3860,8 @@ class Scan_Report(FileBasedRebalance):
             try:
                 result = self.n1ql_rest.query_tool(
                     query,
-                    query_params={"profile": "timings", "scanreport_wait": 15}
+                    query_params={"profile": "timings", "scanreport_wait": 15},
+                    timeout=self.query_timeout
                 )
                 if result is None or not isinstance(result, dict):
                     scan_results["errors"].append({
