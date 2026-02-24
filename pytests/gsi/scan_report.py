@@ -200,7 +200,7 @@ class Scan_Report(FileBasedRebalance):
             prefix=f"bhive_{prefix}",
             skip_primary=True,
             similarity=similarity,
-            train_list=self.train_list,
+            train_list=self.trainlist,
             xattr_indexes=self.xattr_indexes,
             scan_nprobes=self.scan_nprobes,
             array_indexes=False,
@@ -956,7 +956,7 @@ class Scan_Report(FileBasedRebalance):
             index_resident_ratio = self.index_resident_ratio
             self.log.info(f"Inducing DGM with index resident ratio: {index_resident_ratio}")
             time.sleep(120)
-            self.load_until_index_dgm(resident_ratio=index_resident_ratio, memory_quota=self.index_memory_quota,use_magma_loader=True)
+            self.load_until_index_dgm(resident_ratio=index_resident_ratio,use_magma_loader=True)
         query_groups = [
             {"name": "scalar", "queries": scalar_selects , "index_names": scalar_index_names },
         ]
