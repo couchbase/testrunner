@@ -784,3 +784,33 @@ class QueryAutoPrepareTests(QueryTests):
                 self.sleep(1)
         if not validated:
             self.fail("System:prepareds was not properly updated, please check logs above.")
+
+    def test_prepared_name_consistency_with_query_context(self):
+        """
+        MB-68868: Verify prepared statement name is consistent across all query nodes when query_context is set.
+        
+        Bug: When a prepared statement is created with query_context, the name was different on different nodes.
+        One node would show 'prepared_name(default:`bucket`.`scope`)' while others showed just 'prepared_name'.
+        Fix ensures all nodes have the same prepared statement name.
+        """
+        prepared_name = "fl_airline"
+        query_context = "default:default.test"
+        
+        try:
+            self.run_cbq_query(
+                query=f"PREPARE {prepared_name} AS SELECT * FROM test1 WHERE name = 'new hotel'",
+                query_context=query_context
+            )
+            self.sleep(5)
+            
+            prepared_results = self.run_cbq_query("SELECT name, node FROM system:prepareds")
+            
+            for result in prepared_results['results']:
+                self.assertEqual(
+                    result['name'], prepared_name,
+                    f"MB-68868: Expected prepared name '{prepared_name}' but got '{result['name']}' on node {result['node']}"
+                )
+                
+        except Exception as e:
+            self.log.error(f"Test failed with exception: {str(e)}")
+            self.fail(f"MB-68868 test failed: {str(e)}")
