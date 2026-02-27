@@ -36,8 +36,9 @@ if [ "$(python3 --version | cut -d' ' -f 2)" != "$PYENV_VERSION" ]; then
   echo "Python version is not $PYENV_VERSION, exiting"
   exit 1
 fi
-# ${py_executable} -m pip install -r requirements.txt
-# ${py_executable} -m easy_install httplib2 ground hypothesis_geometry
+
+# Run pip install to handle any new deps introduced
+${py_executable} -m pip install -r requirements.txt
 
 set +e
 echo newState=available>propfile
