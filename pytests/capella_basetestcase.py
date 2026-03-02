@@ -27,9 +27,9 @@ class BaseTestCase(OnPremBaseTestCase):
             if self.log_level:
                 self.log.setLevel(level=self.log_level)
 
-            self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
+            self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
             self.aws_secret_access_key = os.environ.get(
-                "AWS_SECRET_ACCESS_KEY", None)
+                "AWS_SECRET_ACCESS_KEY", "")
 
             self.use_https = True
             CbServer.use_https = True

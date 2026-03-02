@@ -62,8 +62,8 @@ class ServerlessBaseTestCase(unittest.TestCase):
         self.create_dataplane_override = self.input.param("create_dataplane_override", False)
         self.java_sdk_client = self.input.param("java_sdk_client", False)
         self.use_magma_loader = self.input.param("use_magma_loader", False)
-        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
-        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
         self.new_dataplane_id = None
         if self.java_sdk_client:
             self.log.info("Building docker image with java sdk client")
@@ -74,7 +74,6 @@ class ServerlessBaseTestCase(unittest.TestCase):
             MagmaDocloaderSetup()
 
         if self._testMethodName not in ['suite_tearDown', 'suite_setUp'] and self.create_dataplane:
-            overRide = None
             if self.create_dataplane_override:
                 with open('pytests/serverless/config/dataplane_spec_config.json') as f:
                     overRide = json.load(f)

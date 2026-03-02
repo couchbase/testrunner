@@ -1,6 +1,7 @@
 import ast
 import copy
 import logging
+import os
 import random
 import string
 import subprocess
@@ -99,8 +100,8 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.otpNodes = []
         self.collection_name = {}
 
-        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
-        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", None)
+        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        self.aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
         for server in self.servers:
             if "cbas" in server.services:
