@@ -49,6 +49,7 @@ majorRelease=`echo ${version_number} | awk '{print substr($0,1,1)}'`
 echo the major release is $majorRelease
 echo ${servers}
 
+${py_executable} -m pip install -r requirements.txt
 ${py_executable} -m easy_install httplib2 ground hypothesis_geometry
 
 if [ -f /etc/redhat-release ]; then
