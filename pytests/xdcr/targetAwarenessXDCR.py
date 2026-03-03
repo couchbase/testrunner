@@ -156,7 +156,7 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         self.set_internal_xdcr_settings(self.dest_master, "SrcHeartbeatMinInterval", 10)
         self.src_master_rest.remove_all_replications()
         self.src_master_rest.remove_all_remote_clusters()
-        self.wait_interval(30, "Waiting for replications to be deleted from source cluster")
+        self.wait_interval(90, "Waiting for replications to be deleted from source cluster")
         retries = 5 
         count = 1
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
@@ -179,18 +179,18 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         self.set_internal_xdcr_settings(self.src_master, "SrcHeartbeatMinInterval", 10)
         self.set_internal_xdcr_settings(self.dest_master, "SrcHeartbeatMinInterval", 10)
         self.stop_couchbase(self.src_master)
-        self.wait_interval(20, "Waiting for source cluster to be down")
+        self.wait_interval(30, "Waiting for source cluster to be down")
+        self.restart_couchbase(self.src_master)
+        self.sleep(60, "Waitiing for couchbase to restart")
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
         retries = 5
         count = 1
-        while dest_incoming_repls is not None and count<=retries:
+        while dest_incoming_repls is None and count<=retries:
             dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
             self.wait_interval(20, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
             count += 1
-        if dest_incoming_repls is not None:
+        if dest_incoming_repls is None:
             self.fail("Replications not deleted from dest cluster")
-        self.restart_couchbase(self.src_master)
-        self.wait_interval(20, "Waiting for source cluster to be up")
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
         retries = 5
         count = 1
