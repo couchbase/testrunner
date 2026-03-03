@@ -5,6 +5,7 @@ import json
 import random
 from threading import Thread
 import docker
+import time
 
 import Geohash
 from membase.helper.cluster_helper import ClusterOperationHelper
