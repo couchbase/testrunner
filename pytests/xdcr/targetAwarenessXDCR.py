@@ -2,6 +2,7 @@ from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from lib.membase.api.on_prem_rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 
+
 class TargetAwarenessXDCR(XDCRNewBaseTest):
     def setUp(self):
         super().setUp()
@@ -29,11 +30,12 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
             uuid = repl["SourceClusterReplSpecs"][0]["targetClusterUUID"]
             if uuid not in dest_target_cluster_uuid_list:
                 self.fail(f"Target cluster UUID {uuid} not found in dest cluster's outgoing replications")
-                
+
     def stop_couchbase(self, server):
         remote_shell_conn = RemoteMachineShellConnection(server)
         try:
-            o, err = remote_shell_conn.execute_command("systemctl stop couchbase-server.service", use_channel=True, timeout=10)
+            o, err = remote_shell_conn.execute_command("systemctl stop couchbase-server.service", use_channel=True,
+                                                       timeout=10)
             if err:
                 self.fail(f"Error setting firewall rules: {err}")
         except Exception as e:
@@ -42,9 +44,11 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
     def restart_couchbase(self, server):
         remote_shell_conn = RemoteMachineShellConnection(server)
         try:
-            o, err = remote_shell_conn.execute_command("systemctl start couchbase-server.service && systemctl restart couchbase-server.service", use_channel=True, timeout=10)
+            o, err = remote_shell_conn.execute_command(
+                "systemctl start couchbase-server.service && systemctl restart couchbase-server.service",
+                use_channel=True, timeout=10)
             if err:
-                self.fail(f"Error cleaning firewall rules: {err}")      
+                self.fail(f"Error cleaning firewall rules: {err}")
         except Exception as e:
             self.fail(f"Exception while cleaning firewall rules: {e}")
 
@@ -62,7 +66,7 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
             remote_shell_conn = RemoteMachineShellConnection(dest_node)
             try:
                 cmd = "nft add table inet filter && "
-                cmd += "nft add chain inet filter forward { type filter hook forward priority 0 \; } && " 
+                cmd += "nft add chain inet filter forward { type filter hook forward priority 0 \; } && "
                 cmd += "nft add chain inet filter input { type filter hook input priority 0 \; policy accept \; } && "
                 cmd += "nft add chain inet filter output { type filter hook output priority 0 \; policy accept \; } && "
                 cmd += f"nft add rule inet filter input ip saddr {{ {src_nodes_str} }} drop"
@@ -125,13 +129,13 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         self.wait_interval(40, "Waiting for heartbeats to be sent and updated in target cluster")
         src_outgoing_repls = self.get_outgoing_replications(self.src_master_rest)
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-        
+
         self.verify_source_to_dest_replication(src_outgoing_repls, dest_incoming_repls)
 
-        src_target_cluster_uuid_list = set() 
+        src_target_cluster_uuid_list = set()
         for outgoing_repl in src_outgoing_repls:
             src_target_cluster_uuid_list.add(outgoing_repl["uuid"])
-        
+
         for replications in dest_incoming_repls:
             src_cluster_uuid_on_dest = replications["SourceClusterUUID"]
             for specs in replications["SourceClusterReplSpecs"]:
@@ -140,10 +144,11 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
                     search_str = f"GOXDCR.P2PManager: Heartbeats heard from - SrcUUID: {src_cluster_uuid_on_dest}"
                     matches, count = NodeHelper.check_goxdcr_log(self.dest_master, search_str, timeout=30)
                     if count == 0:
-                        self.fail(f"No heartbeat heard in dest cluster for source cluster UUID {src_cluster_uuid_on_dest}")
-                    self.log.info(f"Found logs for heartbeat in dest cluster with source cluster UUID {src_cluster_uuid_on_dest}")
-    
-    
+                        self.fail(
+                            f"No heartbeat heard in dest cluster for source cluster UUID {src_cluster_uuid_on_dest}")
+                    self.log.info(
+                        f"Found logs for heartbeat in dest cluster with source cluster UUID {src_cluster_uuid_on_dest}")
+
     def test_replication_delete(self):
         self.setup_xdcr_and_load()
         self.wait_interval(40, "Waiting for heartbeats to be sent and updated in target cluster")
@@ -156,11 +161,11 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         self.set_internal_xdcr_settings(self.dest_master, "SrcHeartbeatMinInterval", 10)
         self.src_master_rest.remove_all_replications()
         self.src_master_rest.remove_all_remote_clusters()
-        self.wait_interval(30, "Waiting for replications to be deleted from source cluster")
-        retries = 5 
+        self.wait_interval(90, "Waiting for replications to be deleted from source cluster")
+        retries = 5
         count = 1
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-        while dest_incoming_repls is not None and count<=retries:
+        while dest_incoming_repls is not None and count <= retries:
             dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
             self.wait_interval(10, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
             count += 1
@@ -173,24 +178,24 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         self.wait_interval(40, "Waiting for heartbeats to be sent and updated in target cluster")
         src_outgoing_repls = self.get_outgoing_replications(self.src_master_rest)
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-        
+
         self.verify_source_to_dest_replication(src_outgoing_repls, dest_incoming_repls)
 
         self.set_internal_xdcr_settings(self.src_master, "SrcHeartbeatMinInterval", 10)
         self.set_internal_xdcr_settings(self.dest_master, "SrcHeartbeatMinInterval", 10)
         self.stop_couchbase(self.src_master)
-        self.wait_interval(20, "Waiting for source cluster to be down")
+        self.wait_interval(30, "Waiting for source cluster to be down")
+        self.restart_couchbase(self.src_master)
+        self.sleep(60, "Waitiing for couchbase to restart")
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
         retries = 5
         count = 1
-        while dest_incoming_repls is not None and count<=retries:
+        while dest_incoming_repls is None and count <= retries:
             dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
             self.wait_interval(20, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
             count += 1
-        if dest_incoming_repls is not None:
+        if dest_incoming_repls is None:
             self.fail("Replications not deleted from dest cluster")
-        self.restart_couchbase(self.src_master)
-        self.wait_interval(20, "Waiting for source cluster to be up")
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
         retries = 5
         count = 1
@@ -201,7 +206,7 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         if dest_incoming_repls is None:
             self.fail("Replications not added back in dest cluster")
         self.sleep(10, "Delay for server to be ready to recieve requests")
-    
+
     def test_network_failure(self):
         self.setup_xdcr_and_load()
         self.wait_interval(40, "Waiting for heartbeats to be sent and updated in target cluster")
@@ -220,7 +225,7 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         # Verify replication stops or errors occur
         dest_incoming_repls_after_block = self.get_incoming_replications(self.dest_master_rest)
         if dest_incoming_repls_after_block is not None:
-           self.fail(f"Replications exists despite network failure.")
+            self.fail(f"Replications exists despite network failure.")
 
         # Unblock network
         self.unblock_network_nftables(self.src_cluster, self.dest_cluster)
