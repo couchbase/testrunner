@@ -32,6 +32,8 @@ from testconstants import INDEX_QUOTA, FTS_QUOTA, CLUSTER_QUOTA_RATIO
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
 
+from ent_backup_restore.provider.s3 import S3
+
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 
