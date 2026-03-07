@@ -7,9 +7,8 @@ import os as OS
 import subprocess
 import time
 import traceback
-import urllib.error
 import urllib.parse
-import urllib.request
+import requests
 from copy import deepcopy
 from optparse import OptionParser
 from uuid import uuid4
@@ -24,7 +23,6 @@ import cloud_provision
 import find_rerun_job
 import httplib2
 from server_manager import ServerManager
-import get_jenkins_params
 from table_view import TableView
 
 # takes an ini template as input, standard out is populated with the server pool
@@ -429,6 +427,26 @@ def extract_individual_tests_from_query_result(col_rel_version,
             # Append to list for returning back
             test_jobs_list.append(sub_comp_dict)
     return test_jobs_list
+
+
+def is_executor_available_for_label(target_url, target_slave):
+    try:
+        api_url = f"{target_url.rstrip('/')}/queue/api/json"
+        response = requests.get(api_url)
+        response.raise_for_status()
+        data = response.json()
+        count = 0
+        for item in data.get('items', []):
+            for action in item.get('actions', []):
+                if action.get('_class') == 'hudson.model.ParametersAction':
+                    for param in action.get('parameters', []):
+                        if param.get('_class') == 'org.jvnet.jenkins.plugins.nodelabelparameter.LabelParameterValue' \
+                                and param.get('name') == 'slave' and param.get('value') == target_slave:
+                            count += 1
+        return count <= 1
+    except Exception as e:
+        log.error(f"Error checking job queue: {e}")
+    return False
 
 
 def main():
@@ -962,6 +980,12 @@ def main():
                         testsToLaunch[i][
                             'target_jenkins'] = 'http://172.23.120.81'
                         slave_to_use = "P3XDCR"
+
+                if not is_executor_available_for_label(
+                        testsToLaunch[i]['target_jenkins'], slave_to_use):
+                    print(f"No free executors for slave label: {slave_to_use}")
+                    sleep_function(60, "Sleep 60 seconds")
+                    continue
 
                 # grab the server resources
                 # this bit is Docker/VM dependent
