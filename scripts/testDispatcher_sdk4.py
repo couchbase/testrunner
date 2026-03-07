@@ -723,18 +723,17 @@ def main():
     if options.serverType != DEFAULT_SERVER_TYPE or options.server_type_name is not None:
         server_type = options.serverType if options.server_type_name is None else options.server_type_name
         launchString = launchString + '&server_type=' + server_type
-    b_url = options.build_url
-    if b_url is None:
-        b_url = OS.getenv("BUILD_URL")
-    currentExecutorParams = get_jenkins_params.get_params(b_url)
-    if currentExecutorParams is None:
-        currentExecutorParams = {}
-    if options.job_url is not None:
-        currentExecutorParams['dispatcher_url'] = options.job_url
-    elif OS.getenv('JOB_URL') is not None:
-        currentExecutorParams['dispatcher_url'] = OS.getenv('JOB_URL')
-    currentExecutorParams = json.dumps(currentExecutorParams)
-    log.info(currentExecutorParams)
+
+    # Block to pass dispatcher job / build num for backtracking purpose
+    b_url = OS.getenv("BUILD_URL", None)
+    j_url = OS.getenv('JOB_URL', None)
+    if not b_url and options.build_url:
+        b_url = options.build_url
+    if not j_url and options.job_url:
+        j_url = options.job_url
+    curr_job_info = {"build_url": b_url, "dispatcher_url": j_url}
+    curr_job_info = json.dumps(curr_job_info)
+
     summary = []
     total_jobs_count = len(testsToLaunch)
     job_index = 1
@@ -779,7 +778,7 @@ def main():
                                           testsToLaunch[i]['mixed_build_config'],
                                           options.is_dynamic_vms)
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
-                    {"parameters": currentExecutorParams})
+                    {"parameters": curr_job_info})
                 # optional add [-docker] [-Jenkins extension] - TBD duplicate
                 launchStringBase = testsToLaunch[i]['target_jenkins'] \
                     + '/job/' + str(options.launch_job)
@@ -1052,9 +1051,8 @@ def main():
                                           options.columnar_version,
                                           testsToLaunch[i]['mixed_build_config'],
                                           options.is_dynamic_vms)
-                url = url + '&dispatcher_params=' + \
-                                urllib.parse.urlencode({"parameters":
-                                                currentExecutorParams})
+                url = url + '&dispatcher_params=' + urllib.parse.urlencode(
+                    {"parameters": curr_job_info})
 
                 if options.serverType != DOCKER:
                     servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)

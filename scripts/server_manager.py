@@ -322,7 +322,7 @@ class ServerManager:
                 f"WHERE ipaddr IN {server_list}")
 
             for row in t_result.rows():
-                self.logger.info(row)
+                self.logger.debug(row)
                 if row['username'] != username:
                     raise Exception("Username is not as current expected")
                 elif row["state"] != "booked":
