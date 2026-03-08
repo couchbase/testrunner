@@ -431,22 +431,26 @@ def extract_individual_tests_from_query_result(col_rel_version,
 
 def is_executor_available_for_label(target_url, target_slave):
     try:
+        # Query Jenkins queue to see if the target label already has a queued job.
         api_url = f"{target_url.rstrip('/')}/queue/api/json"
         response = requests.get(api_url)
         response.raise_for_status()
         data = response.json()
-        count = 0
         for item in data.get('items', []):
             for action in item.get('actions', []):
+                # Look for parameters that include the node label.
                 if action.get('_class') == 'hudson.model.ParametersAction':
                     for param in action.get('parameters', []):
                         if param.get('_class') == 'org.jvnet.jenkins.plugins.nodelabelparameter.LabelParameterValue' \
                                 and param.get('name') == 'slave' and param.get('value') == target_slave:
-                            count += 1
-        return count <= 1
+                            # Queue size limit is 1, no slot is available.
+                            return False
+        # No matching queue entries found for this label, executor is free
+        return True
     except Exception as e:
         log.error(f"Error checking job queue: {e}")
-    return False
+    # On queue API errors, allow dispatching to avoid blocking jobs.
+    return True
 
 
 def main():
@@ -983,8 +987,8 @@ def main():
 
                 if not is_executor_available_for_label(
                         testsToLaunch[i]['target_jenkins'], slave_to_use):
-                    print(f"No free executors for slave label: {slave_to_use}")
-                    sleep_function(60, "Sleep 60 seconds")
+                    msg = f"No free executors for slave label: {slave_to_use}"
+                    sleep_function(60, message=msg)
                     continue
 
                 # grab the server resources
