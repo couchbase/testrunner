@@ -71,8 +71,8 @@ class ServerManager:
                         f" WHERE ipaddr='{result['ipaddr']}'")
 
                     self.logger.debug(f"Query: {update_string}")
-                    self.cluster.query(update_string)
-
+                    r = self.cluster.query(update_string)
+                    for _ in r.rows(): pass
                     docker_ip_list.append(result['ipaddr'])
 
             # No available Docker servers found
@@ -126,7 +126,8 @@ class ServerManager:
                         f"users='{json.dumps(users)}' WHERE ipaddr='{ipaddr}'")
 
                     self.logger.debug(f"Query: {update_string}")
-                    self.cluster.query(update_string)
+                    r = self.cluster.query(update_string)
+                    for _ in r.rows(): pass
 
                     self.logger.info(f"release_dockers: username={username}, "
                                      f"ipaddr={ipaddr}")
@@ -350,7 +351,8 @@ class ServerManager:
         self.logger.debug(f"Query: {update_string}")
 
         try:
-            self.cluster.query(update_string)
+            r = self.cluster.query(update_string)
+            for _ in r.rows(): pass
             self.logger.info(f"IP {ipaddr} released")
         except Exception as e:
             self.logger.error(f"Error in release_ip: {str(e)}")
