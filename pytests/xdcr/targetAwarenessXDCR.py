@@ -160,13 +160,15 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         retries = 5 
         count = 1
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-        while dest_incoming_repls is not None and count<=retries:
+        while count<=retries:
             dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
+            if dest_incoming_repls is None:
+                break
             self.wait_interval(10, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
             count += 1
 
         if dest_incoming_repls is not None:
-            self.fail("Replications not deleted from dest cluster")
+            self.fail("Incoming replications not deleted from dest cluster")
 
     def test_node_crash(self):
         self.setup_xdcr_and_load()
