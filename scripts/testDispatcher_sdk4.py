@@ -539,10 +539,14 @@ def main():
     RELEASE_VERSION = float('.'.join(options.version.split('.')[:2]))
 
     if options.branch == "default":
-        options.branch = CB_VERSION_NAME[RELEASE_VERSION]
-    elif CB_VERSION_NAME[RELEASE_VERSION] != options.branch:
+        options.branch = CB_VERSION_NAME.get(str(RELEASE_VERSION),
+                                             options.branch)
+    elif CB_VERSION_NAME.get(str(RELEASE_VERSION)) != options.branch:
         branch_mismatch_warning = \
-            f"[Alert: Expected branch {CB_VERSION_NAME[RELEASE_VERSION]}]"
+            f"[Alert: Expected branch {CB_VERSION_NAME.get(str(RELEASE_VERSION), options.branch)}]"
+
+    if options.branch == "default":
+        raise Exception(f"Unable to select a valid branch for {RELEASE_VERSION}")
 
     columnar_rel_version = float('.'.join(options.columnar_version.split('.')[:2])) \
         if options.columnar_version else float(0.0)
