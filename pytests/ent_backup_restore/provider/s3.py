@@ -2,6 +2,7 @@
 
 import json
 import re
+import os
 
 import boto3
 import botocore
@@ -18,8 +19,12 @@ class S3(provider.Provider):
         # boto3 will raise an exception if given an empty string as the endpoint_url so we must construct a kwargs
         # dictionary and conditionally populate it.
         kwargs = {}
+
         if self.access_key_id:
             kwargs['aws_access_key_id'] = self.access_key_id
+        elif "BACKUP_RESTORE_AWS_ACCESS_KEY_ID" in os.environ:
+            kwargs['aws_access_key_id'] = os.environ["BACKUP_RESTORE_AWS_ACCESS_KEY_ID"]
+
         if self.cacert:
             kwargs['verify'] = self.cacert
         if self.endpoint != '':
@@ -29,8 +34,11 @@ class S3(provider.Provider):
             kwargs['verify'] = False
         if self.region:
             kwargs['region_name'] = self.region
+
         if self.secret_access_key:
             kwargs['aws_secret_access_key'] = self.secret_access_key
+        elif "BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY" in os.environ:
+            kwargs['aws_secret_access_key'] = os.environ["BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY"]
 
         self.resource = boto3.resource('s3', **kwargs)
         self.not_found_error = re.compile("bucket '.*' not found")
