@@ -22,6 +22,7 @@ import capella
 import cloud_provision
 import find_rerun_job
 import httplib2
+from constants.cb_constants.rel_branch_map import CB_VERSION_NAME
 from server_manager import ServerManager
 from table_view import TableView
 
@@ -533,8 +534,15 @@ def main():
     setup_logging(options.log_level)
 
     # Using debian since we have now upgraded all elastic-fts VMs to debian
+    branch_mismatch_warning = ""
     addPoolServer_os = "debian"
     RELEASE_VERSION = float('.'.join(options.version.split('.')[:2]))
+
+    if options.branch == "default":
+        options.branch = CB_VERSION_NAME[RELEASE_VERSION]
+    elif CB_VERSION_NAME[RELEASE_VERSION] != options.branch:
+        branch_mismatch_warning = \
+            f"[Alert: Expected branch {CB_VERSION_NAME[RELEASE_VERSION]}]"
 
     columnar_rel_version = float('.'.join(options.columnar_version.split('.')[:2])) \
         if options.columnar_version else float(0.0)
@@ -543,7 +551,7 @@ def main():
           Run..................{}
           Version..............{}
           Release version......{}
-          Branch...............{}
+          Branch...............{} {}
           OS...................{}
           URL..................{}
           cherry-pick..........{}
@@ -554,8 +562,9 @@ def main():
           is_dynamic_vms.......{}
           Columnar version.....{}
           """.format(options.run, options.version, RELEASE_VERSION,
-                     options.branch, options.os, options.url,
-                     options.cherrypick, options.dashboardReportedParameters,
+                     options.branch, branch_mismatch_warning, options.os,
+                     options.url, options.cherrypick,
+                     options.dashboardReportedParameters,
                      options.rerun_params, options.TIMEOUT, options.noLaunch,
                      options.is_dynamic_vms, options.columnar_version))
 
