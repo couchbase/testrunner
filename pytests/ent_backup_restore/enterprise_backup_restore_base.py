@@ -352,6 +352,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if provider_region != None:
             self.backupset.objstore_region = provider_region
         if provider == "s3":
+            if not self.backupset.objstore_access_key_id and "BACKUP_RESTORE_AWS_ACCESS_KEY_ID" in os.environ:
+                self.backupset.objstore_access_key_id = os.environ["BACKUP_RESTORE_AWS_ACCESS_KEY_ID"]
+
+            if not self.backupset.objstore_secret_access_key and "BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY" in os.environ:
+                self.backupset.objstore_secret_access_key = os.environ["BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY"]
+
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
                                         self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
