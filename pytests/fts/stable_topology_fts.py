@@ -3,9 +3,8 @@
 import copy
 import json
 import random
-from threading import Thread
-import docker
 import time
+from threading import Thread
 
 import Geohash
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -1187,7 +1186,6 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
-
         if self.dataset == "all" and int(TestInputSingleton.input.param("doc_maps", 1)) == 1:
             #ignoring wiki results from the elastic result to match couchbase behaviour
             self.ignore_wiki = True
@@ -2861,13 +2859,7 @@ class StableTopFTS(FTSBaseTest):
         dic['array'] = ['element1', 1234, True]
         try:
             from couchbase.cluster import Cluster
-            try:
-                # For SDK2 (legacy) runs
-                from couchbase.cluster import PasswordAuthenticator
-            except ImportError:
-                # For SDK4 compatible runs
-                from couchbase.auth import PasswordAuthenticator
-
+            from couchbase.cluster import PasswordAuthenticator
             cluster = Cluster('couchbase://{0}'.format(master.ip))
             authenticator = PasswordAuthenticator('Administrator', 'password')
             cluster.authenticate(authenticator)

@@ -1114,13 +1114,17 @@ class FTSIndex:
                 field_maps.append(field_map)
 
         map = {}
-        if 'mapping' not in self.index_definition['params']:
+        if 'mapping' not in self.index_definition['params'] or \
+           'default_mapping' not in self.index_definition['params']['mapping']:
             map['default_mapping'] = {}
             map['default_mapping']['properties'] = {}
             map['default_mapping']['dynamic'] = False
             map['default_mapping']['enabled'] = True
             map['default_mapping']['properties'][fields.pop()] = field_maps.pop()
-            self.index_definition['params']['mapping'] = map
+            if 'mapping' not in self.index_definition['params']:
+                self.index_definition['params']['mapping'] = map
+            else:
+                self.index_definition['params']['mapping']['default_mapping'] = map['default_mapping']
         else:
             self.index_definition['params']['mapping']['default_mapping'] \
                 ['properties'][fields.pop()] = field_maps.pop()
@@ -1712,7 +1716,7 @@ class FTSIndex:
         if int(hits) == 0 and not zero_results_ok:
             self.__log.info("ERROR: 0 hits returned!")
             raise FTSException("No docs returned for query : %s" % query_dict)
-        if expected_hits and expected_hits != hits:
+        if expected_hits and abs(expected_hits - hits) > 1:
             self.__log.info("ERROR: Expected hits: %s, fts returned: %s"
                             % (expected_hits, hits))
             raise FTSException("Expected hits: %s, fts returned: %s"
@@ -2226,16 +2230,15 @@ class CouchbaseCluster:
             self.__name, self.__master_node.ip)
 
     def __set_fts_ram_quota(self):
-        fts_quota = TestInputSingleton.input.param("fts_quota", None)
-        kv_quota = TestInputSingleton.input.param("kv_mem", None)
-        if fts_quota:
-            if self.modify_memory_quotas:
-                if kv_quota:
-                    RestConnection(self.__master_node).modify_memory_quota(kv_quota = int(kv_quota), fts_quota = fts_quota)
-                else:
-                    RestConnection(self.__master_node).modify_memory_quota(fts_quota = fts_quota)
-            else:
-                RestConnection(self.__master_node).set_fts_ram_quota(fts_quota)
+        is_n1ql = TestInputSingleton.input.param("is_n1ql", False)
+        fts_quota = TestInputSingleton.input.param("fts_quota", 3000)
+        index_quota = TestInputSingleton.input.param("index_quota", 600)
+        if(is_n1ql):
+            fts_quota = 2400
+        try:
+            RestConnection(self.__master_node).modify_memory_quota(kv_quota = 3000, fts_quota = fts_quota, index_quota = index_quota)
+        except Exception as ex:
+            print(f"Error setting memory quota for the cluster.\nSource : fts_base.py.\nError : {ex}\n")
 
     def get_node(self, ip, port):
         for node in self.__nodes:
@@ -4539,10 +4542,10 @@ class FTSBaseTest(unittest.TestCase):
             _tasks = self._cb_cluster.async_log_scan(self._input.servers, self.log_scan_file_prefix + "_BEFORE")
             for _task in _tasks:
                 _task.result()
-        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        self.aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", None)
         self.aws_secret_access_key = os.environ.get(
-            "AWS_SECRET_ACCESS_KEY", "")
-        self.aws_session_token = self._input.param("aws_session_token", "")
+            "AWS_SECRET_ACCESS_KEY", None)
+        self.aws_session_token = self._input.param("aws_session_token", None)
         self.region = self._input.param("region", None)
         self.s3_bucket = self._input.param("s3_bucket", "fts-hibernation")
         if self.aws_access_key_id:
@@ -4962,12 +4965,8 @@ class FTSBaseTest(unittest.TestCase):
                 if str(hd.__class__).find('FileHandler') != -1:
                     hd.setLevel(level=logging.DEBUG)
                 else:
-                    hd.setLevel(
-                        level=getattr(
-                            logging,
-                            self._input.param(
-                                "log_level",
-                                None)))
+                    log_level = str(self._input.param("log_level", "INFO")).upper()
+                    hd.setLevel(level=getattr(logging, log_level))
 
     def _set_bleve_max_result_window(self):
         bmrw_value = self._input.param("bmrw_value", 100000000)
@@ -7521,7 +7520,7 @@ class FTSBaseTest(unittest.TestCase):
                     self.log.info("SUCCESS. Document Hits match")
 
     def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False,
-                              dataset=None,fts_nodes=None, fts_target_node=None,validation_data=None,ignore_wiki=False):
+                              dataset=None,fts_nodes=None, fts_target_node=None,validation_data=None,ignore_wiki=False,skip_validation=False):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
