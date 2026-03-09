@@ -331,13 +331,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
         # Common configuration which are shared accross cloud providers
-        self.backupset.objstore_access_key_id = os.environ.get('AWS_ACCESS_KEY_ID', '')
-        self.backupset.objstore_secret_access_key = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+        self.backupset.objstore_access_key_id = self.input.param('access_key_id', '')
         self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', str(uuid.uuid1()))
         self.backupset.objstore_cacert = self.input.cbbackupmgr_param('cacert', '')
         self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
         self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
         self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
+        self.backupset.objstore_secret_access_key = self.input.param('secret_access_key', '') # Required
         self.backupset.objstore_staging_directory = self.change_root_of_path(info, self.input.cbbackupmgr_param('staging_directory'))
 
         # S3 specific configuration
@@ -350,6 +350,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if provider_region != None:
             self.backupset.objstore_region = provider_region
         if provider == "s3":
+            if not self.backupset.objstore_access_key_id and "BACKUP_RESTORE_AWS_ACCESS_KEY_ID" in os.environ:
+                self.backupset.objstore_access_key_id = os.environ["BACKUP_RESTORE_AWS_ACCESS_KEY_ID"]
+
+            if not self.backupset.objstore_secret_access_key and "BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY" in os.environ:
+                self.backupset.objstore_secret_access_key = os.environ["BACKUP_RESTORE_AWS_SECRET_ACCESS_KEY"]
+
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
                                         self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
