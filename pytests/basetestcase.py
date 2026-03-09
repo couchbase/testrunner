@@ -8,7 +8,6 @@ import string
 import subprocess
 import traceback
 import unittest
-import os
 
 import logger
 from couchbase_helper.cluster import Cluster
