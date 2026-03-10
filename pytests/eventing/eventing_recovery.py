@@ -10,8 +10,10 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_ONDEPLOY
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_ONDEPLOY, HANDLER_CODE_FTS_QUERY_SUPPORT
 from pytests.eventing.eventing_base import EventingBaseTest
+from pytests.fts.fts_callable import FTSCallable
+from pytests.eventing.fts_query_definitions import ALL_QUERIES
 import logging
 import time
 
@@ -61,17 +63,46 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP
         elif handler_code == 'ondeploy_test_pause_resume':
             self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_PAUSE_RESUME
+        elif handler_code == 'fts_match_query':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY
+            self.is_fts = True
+            self.fts_query = ALL_QUERIES['match_query']
         else:
             self.handler_code = "handler_code/ABO/insert_recovery.js"
         if self.is_expired:
             # set expiry pager interval
             ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
+        # FTS setup
+        if getattr(self, 'is_fts', False):
+            self.fts_index_name = "travel_sample_test"
+            self.fts_doc_count = 31500
+            self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
+            self.fts_memory_quota = 3000
+            log.info("Setting FTS memory quota to %s MB" % self.fts_memory_quota)
+            self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=self.fts_memory_quota)
 
     def tearDown(self):
+        if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
+            try:
+                self.fts_callable.delete_fts_index(self.fts_index_name)
+                log.info("Deleted FTS index: %s" % self.fts_index_name)
+            except Exception as e:
+                log.warning("Failed to delete FTS index %s: %s" % (self.fts_index_name, str(e)))
         super(EventingRecovery, self).tearDown()
 
     def test_killing_eventing_consumer_when_eventing_is_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.server, "travel-sample")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         body = self.create_save_function_body(self.function_name, self.handler_code)
         if self.is_curl:
             body['depcfg']['curl'] = []
@@ -99,6 +130,8 @@ class EventingRecovery(EventingBaseTest):
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
         self.wait_for_handler_state(body['appname'], "deployed")
+        # Run FTS validation if FTS handler is being used
+        self.run_fts_validation()
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -126,6 +159,8 @@ class EventingRecovery(EventingBaseTest):
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
         self.wait_for_handler_state(body['appname'], "deployed")
+        # Run FTS validation if FTS handler is being used
+        self.run_fts_validation()
         # Wait for eventing to catch up with all the delete mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -149,6 +184,17 @@ class EventingRecovery(EventingBaseTest):
 
     def test_killing_eventing_producer_when_eventing_is_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.server, "travel-sample")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         body = self.create_save_function_body(self.function_name, self.handler_code)
         if self.is_curl:
             body['depcfg']['curl'] = []
@@ -179,6 +225,8 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         else:
             self.wait_for_handler_state(body['appname'], "deployed")
+        # Run FTS validation if FTS handler is being used
+        self.run_fts_validation()
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -208,6 +256,8 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         else:
             self.wait_for_handler_state(body['appname'], "deployed")
+        # Run FTS validation if FTS handler is being used
+        self.run_fts_validation()
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-30772
         if not self.cancel_timer:
@@ -1262,12 +1312,23 @@ class EventingRecovery(EventingBaseTest):
         self.undeploy_and_delete_function(body)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
-    
+
     def test_is_balanced_after_stopping_couchbase_server(self):
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         if len(nodes_out_list)<2:
             self.fail("Need two or more eventing nodes")
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.server, "travel-sample")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         body = self.create_save_function_body(self.function_name,self.handler_code)
         # load some data
         if self.non_default_collection:
@@ -1294,6 +1355,8 @@ class EventingRecovery(EventingBaseTest):
                 servicesNeedRebalance=json_response['servicesNeedRebalance'][0]['services']
                 self.assertFalse('eventing' in servicesNeedRebalance,
                         msg="Eventing Nodes are not balanced, need rebalance after starting couchbase server."  )
+        # Run FTS validation if FTS handler is being used
+        self.run_fts_validation()
 
     def test_checkpointing_failure_by_cursor_aware_functions(self):
         body = self.create_save_function_body(self.function_name, self.handler_code, cursor_aware=True)
@@ -1407,3 +1470,54 @@ class EventingRecovery(EventingBaseTest):
         #Function goes back to the "resuming..." state which is the previous state and then gets deployed
         self.wait_for_handler_state(body ['appname'], "deployed")
         self.undeploy_and_delete_function(body)
+
+    def construct_fts_query(self, index_name, query):
+        """Helper method to construct FTS query for validation"""
+        fts_query = {
+            "indexName": index_name,
+            "query": query,
+            "size": 10,
+            "from": 0,
+            "explain": False,
+            "fields": [],
+            "ctl": {
+                "consistency": {
+                    "level": "",
+                    "vectors": {}
+                }
+            }
+        }
+        return fts_query
+
+    def run_fts_validation(self):
+        """Run FTS query validation to ensure FTS is working correctly"""
+        if not getattr(self, 'is_fts', False):
+            return
+
+        log.info("Running FTS validation...")
+        bucket = "travel-sample"
+        scope = "_default"
+
+        fts_query = self.construct_fts_query(
+            self.fts_index_name,
+            self.fts_query['query']
+        )
+
+        hits, _, _, _ = self.fts_callable.run_fts_query(
+            index_name=self.fts_index_name,
+            query_dict=fts_query,
+            bucket_name=bucket,
+            scope_name=scope,
+            node=self.get_nodes_from_services_map(service_type="fts", get_all_nodes=False)
+        )
+
+        log.info("FTS query returned %s hits, expected %s" % (hits, self.fts_query['expected_hits']))
+        self.assertEqual(
+            hits,
+            self.fts_query['expected_hits'],
+            "FTS query should return %s hits, got %s" % (
+                self.fts_query['expected_hits'],
+                hits
+            )
+        )
+        log.info("FTS validation passed successfully")

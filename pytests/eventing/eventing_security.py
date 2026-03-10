@@ -5,10 +5,12 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator, BlobGenerator
-from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ONDEPLOY
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ONDEPLOY, HANDLER_CODE_FTS_QUERY_SUPPORT
 from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.security.ntonencryptionBase import ntonencryptionBase
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
+from pytests.fts.fts_callable import FTSCallable
+from pytests.eventing.fts_query_definitions import ALL_QUERIES
 import logging
 import json
 
@@ -25,8 +27,27 @@ class EventingSecurity(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
         elif handler_code == 'ondeploy_test':
             self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_TLS_N2N
+        elif handler_code == 'fts_match_query':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY
+            self.is_fts = True
+            self.fts_query = ALL_QUERIES['match_query']
+
+        # FTS setup
+        if getattr(self, 'is_fts', False):
+            self.fts_index_name = "travel_sample_test"
+            self.fts_doc_count = 31500
+            self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
+            self.fts_memory_quota = 3000
+            log.info("Setting FTS memory quota to %s MB" % self.fts_memory_quota)
+            self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=self.fts_memory_quota)
 
     def tearDown(self):
+        if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
+            try:
+                self.fts_callable.delete_fts_index(self.fts_index_name)
+                log.info("Deleted FTS index: %s" % self.fts_index_name)
+            except Exception as e:
+                log.warning("Failed to delete FTS index %s: %s" % (self.fts_index_name, str(e)))
         super(EventingSecurity, self).tearDown()
 
     '''
@@ -38,6 +59,17 @@ class EventingSecurity(EventingBaseTest):
     5. Pause/undeploy handler, disable n2n encryption, deploy/resume handler, delete docs from src bucket and verify mutations are processed or not.
     '''
     def test_eventing_with_n2n_encryption_enabled(self):
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.server, "travel-sample")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
         body = self.create_save_function_body(self.function_name, "handler_code/ABO/insert_rebalance.js")
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
@@ -53,7 +85,8 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        if not getattr(self, 'is_fts', False):
+            self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body)
         else:
@@ -65,6 +98,10 @@ class EventingSecurity(EventingBaseTest):
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        # Run FTS validation if FTS handler is being used
+        if getattr(self, 'is_fts', False):
+            self.run_fts_validation()
+
         if self.pause_resume:
             self.pause_function(body)
         else:
@@ -75,7 +112,8 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        if not getattr(self, 'is_fts', False):
+            self.verify_doc_count_collections("default.scope0.collection1", 0)
         self.undeploy_and_delete_function(body)
 
     '''
@@ -89,6 +127,17 @@ class EventingSecurity(EventingBaseTest):
     7. Pause/undeploy handler, disable n2n encryption, deploy/resume handler, delete docs from src bucket and verify mutations are processed or not.
     '''
     def test_eventing_with_enforce_tls_feature(self):
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.server, "travel-sample")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
@@ -104,7 +153,8 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        if not getattr(self, 'is_fts', False):
+            self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body)
         else:
@@ -116,6 +166,9 @@ class EventingSecurity(EventingBaseTest):
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+        # Run FTS validation if FTS handler is being used
+        if getattr(self, 'is_fts', False):
+            self.run_fts_validation()
         assert ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master]), "Port binding after enforcing TLS incorrect"
         if self.pause_resume:
             self.pause_function(body)
@@ -127,7 +180,8 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        if not getattr(self, 'is_fts', False):
+            self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body)
         else:
@@ -259,3 +313,54 @@ class EventingSecurity(EventingBaseTest):
             self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
             self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
+
+    def construct_fts_query(self, index_name, query):
+        """Helper method to construct FTS query for validation"""
+        fts_query = {
+            "indexName": index_name,
+            "query": query,
+            "size": 10,
+            "from": 0,
+            "explain": False,
+            "fields": [],
+            "ctl": {
+                "consistency": {
+                    "level": "",
+                    "vectors": {}
+                }
+            }
+        }
+        return fts_query
+
+    def run_fts_validation(self):
+        """Run FTS query validation to ensure FTS is working correctly"""
+        if not getattr(self, 'is_fts', False):
+            return
+
+        log.info("Running FTS validation...")
+        bucket = "travel-sample"
+        scope = "_default"
+
+        fts_query = self.construct_fts_query(
+            self.fts_index_name,
+            self.fts_query['query']
+        )
+
+        hits, _, _, _ = self.fts_callable.run_fts_query(
+            index_name=self.fts_index_name,
+            query_dict=fts_query,
+            bucket_name=bucket,
+            scope_name=scope,
+            node=self.get_nodes_from_services_map(service_type="fts", get_all_nodes=False)
+        )
+
+        log.info("FTS query returned %s hits, expected %s" % (hits, self.fts_query['expected_hits']))
+        self.assertEqual(
+            hits,
+            self.fts_query['expected_hits'],
+            "FTS query should return %s hits, got %s" % (
+                self.fts_query['expected_hits'],
+                hits
+            )
+        )
+        log.info("FTS validation passed successfully")

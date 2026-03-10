@@ -30,3 +30,8 @@ function writeQueryResult(queryName, ids, meta) {
     dst_bucket[destDocId] = { query: queryName, ids: ids };
     log("Wrote results for " + queryName + " to " + destDocId);
 }
+
+function OnDelete(meta) {
+    log('Deleting Document', meta.id);
+    delete dst_bucket[meta.id]; 
+}

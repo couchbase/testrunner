@@ -4,8 +4,10 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_FTS_QUERY_SUPPORT
 from pytests.eventing.eventing_base import EventingBaseTest
+from pytests.fts.fts_callable import FTSCallable
+from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from membase.helper.cluster_helper import ClusterOperationHelper
 import logging
 
@@ -69,6 +71,10 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.SBM_MULTI_COLLECTION
         elif handler_code == 'multi_collection_timers':
             self.handler_code = HANDLER_CODE.TIMERS_MULTI_COLLECTION
+        elif handler_code == 'fts_match_query':
+            self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY
+            self.is_fts = True
+            self.fts_query = ALL_QUERIES['match_query']
         else:
             self.handler_code = "handler_code/ABO/insert_rebalance.js"
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
@@ -77,11 +83,36 @@ class EventingRebalance(EventingBaseTest):
         if self.is_expired:
             # set expiry pager interval
             ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
+        # FTS setup
+        if getattr(self, 'is_fts', False):
+            self.fts_index_name = "travel_sample_test"
+            self.fts_doc_count = 31500
+            self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
+            self.fts_memory_quota = 3000
+            log.info("Setting FTS memory quota to %s MB" % self.fts_memory_quota)
+            self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=self.fts_memory_quota)
 
     def tearDown(self):
+        if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
+            try:
+                self.fts_callable.delete_fts_index(self.fts_index_name)
+                log.info("Deleted FTS index: %s" % self.fts_index_name)
+            except Exception as e:
+                log.warning("Failed to delete FTS index %s: %s" % (self.fts_index_name, str(e)))
         super(EventingRebalance, self).tearDown()
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.master, "travel-sample")
+            self.sleep(60, "Waiting for travel-sample bucket to load")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
@@ -107,6 +138,9 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
+        # Run FTS validation if FTS handler is being used
+        if getattr(self, 'is_fts', False):
+            self.run_fts_validation()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if not self.cancel_timer:
             if self.is_sbm:
@@ -114,7 +148,7 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        if not self.is_expired:
+        if not self.is_expired and not getattr(self, 'is_fts', False):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
@@ -123,7 +157,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if not self.cancel_timer:
+        if not self.cancel_timer and not getattr(self, 'is_fts', False):
             if self.is_sbm and (self.handler_code !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and self.handler_code
                     !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -141,6 +175,18 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
 
     def test_eventing_rebalance_out_when_existing_eventing_node_is_processing_mutations(self):
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.master, "travel-sample")
+            self.sleep(60, "Waiting for travel-sample bucket to load")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
@@ -165,6 +211,9 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
+        # Run FTS validation if FTS handler is being used
+        if getattr(self, 'is_fts', False):
+            self.run_fts_validation()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if not self.cancel_timer:
             if self.is_sbm:
@@ -172,7 +221,7 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        if not self.is_expired:
+        if not self.is_expired and not getattr(self, 'is_fts', False):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
@@ -181,7 +230,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if not self.cancel_timer:
+        if not self.cancel_timer and not getattr(self, 'is_fts', False):
             if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
                     self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -366,6 +415,18 @@ class EventingRebalance(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_kv_swap_rebalance_when_existing_eventing_node_is_processing_mutations(self):
+        # FTS setup if using FTS handler
+        if getattr(self, 'is_fts', False):
+            self.load_sample_buckets(self.master, "travel-sample")
+            self.sleep(60, "Waiting for travel-sample bucket to load")
+            plan_params = {"indexPartitions": 1, "numReplicas": 0}
+            fts_index = self.fts_callable.create_default_index(
+                index_name=self.fts_index_name,
+                bucket_name="travel-sample",
+                plan_params=plan_params
+            )
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.sleep(30, "Waiting for FTS indexing to complete")
         sock_batch_size = self.input.param('sock_batch_size', 1)
         worker_count = self.input.param('worker_count', 3)
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
@@ -392,6 +453,9 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
+        # Run FTS validation if FTS handler is being used
+        if getattr(self, 'is_fts', False):
+            self.run_fts_validation()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if not self.cancel_timer:
             if self.is_sbm:
@@ -399,7 +463,7 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        if not self.is_expired:
+        if not self.is_expired and not getattr(self, 'is_fts', False):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
@@ -408,7 +472,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if not self.cancel_timer:
+        if not self.cancel_timer and not getattr(self, 'is_fts', False):
             if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
                                 self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -1811,3 +1875,54 @@ class EventingRebalance(EventingBaseTest):
             # data mismatch is expected in case of a failover
             pass
         self.undeploy_and_delete_function(body)
+
+    def construct_fts_query(self, index_name, query):
+        """Helper method to construct FTS query for validation"""
+        fts_query = {
+            "indexName": index_name,
+            "query": query,
+            "size": 10,
+            "from": 0,
+            "explain": False,
+            "fields": [],
+            "ctl": {
+                "consistency": {
+                    "level": "",
+                    "vectors": {}
+                }
+            }
+        }
+        return fts_query
+
+    def run_fts_validation(self):
+        """Run FTS query validation to ensure FTS is working correctly"""
+        if not getattr(self, 'is_fts', False):
+            return
+
+        log.info("Running FTS validation...")
+        bucket = "travel-sample"
+        scope = "_default"
+
+        fts_query = self.construct_fts_query(
+            self.fts_index_name,
+            self.fts_query['query']
+        )
+
+        hits, _, _, _ = self.fts_callable.run_fts_query(
+            index_name=self.fts_index_name,
+            query_dict=fts_query,
+            bucket_name=bucket,
+            scope_name=scope,
+            node=self.get_nodes_from_services_map(service_type="fts", get_all_nodes=False)
+        )
+
+        log.info("FTS query returned %s hits, expected %s" % (hits, self.fts_query['expected_hits']))
+        self.assertEqual(
+            hits,
+            self.fts_query['expected_hits'],
+            "FTS query should return %s hits, got %s" % (
+                self.fts_query['expected_hits'],
+                hits
+            )
+        )
+        log.info("FTS validation passed successfully")
