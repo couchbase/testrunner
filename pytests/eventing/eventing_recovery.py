@@ -10,7 +10,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_ONDEPLOY, HANDLER_CODE_FTS_QUERY_SUPPORT
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_ONDEPLOY, HANDLER_CODE_FTS_QUERY_SUPPORT, HANDLER_CODE_ANALYTICS
 from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
@@ -67,6 +67,9 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE_FTS_QUERY_SUPPORT.FTS_QUERY_SUPPORT_MATCH_QUERY
             self.is_fts = True
             self.fts_query = ALL_QUERIES['match_query']
+        elif handler_code == 'analytics_basic_select':
+            self.handler_code = HANDLER_CODE_ANALYTICS.ANALYTICS_BASIC_SELECT
+            self.is_analytics = True
         else:
             self.handler_code = "handler_code/ABO/insert_recovery.js"
         if self.is_expired:
@@ -80,6 +83,11 @@ class EventingRecovery(EventingBaseTest):
             self.fts_memory_quota = 3000
             log.info("Setting FTS memory quota to %s MB" % self.fts_memory_quota)
             self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=self.fts_memory_quota)
+        # analytics setup
+        if getattr(self, 'is_analytics', False):
+            self.load_sample_buckets(self.server, "travel-sample")
+            self.load_data_to_collection(1, "default.scope0.collection0")
+            self._setup_analytics()
 
     def tearDown(self):
         if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
@@ -88,6 +96,14 @@ class EventingRecovery(EventingBaseTest):
                 log.info("Deleted FTS index: %s" % self.fts_index_name)
             except Exception as e:
                 log.warning("Failed to delete FTS index %s: %s" % (self.fts_index_name, str(e)))
+        elif getattr(self, 'is_analytics', False):
+            try:
+                cbas_node = self.get_nodes_from_services_map(service_type="cbas")
+                if cbas_node:
+                    cbas_rest = RestConnection(cbas_node)
+                    cbas_rest.execute_statement_on_cbas("DISCONNECT LINK Local", None)
+            except Exception as e:
+                log.exception("Analytics teardown cleanup failed: %s", str(e))
         super(EventingRecovery, self).tearDown()
 
     def test_killing_eventing_consumer_when_eventing_is_processing_mutations(self):
@@ -132,6 +148,13 @@ class EventingRecovery(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "deployed")
         # Run FTS validation if FTS handler is being used
         self.run_fts_validation()
+        # Run analytics validation if analytics handler is being used
+        if getattr(self, 'is_analytics', False):
+            self.sleep(10, "Waiting for eventing to reprocess after consumer kill")
+            self.verify_doc_count_collections("default.scope0.collection1", 1)
+            self._verify_analytics_result_matches_direct_query()
+            self.undeploy_and_delete_function(body)
+            return
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -227,6 +250,13 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "deployed")
         # Run FTS validation if FTS handler is being used
         self.run_fts_validation()
+        # Run analytics validation if analytics handler is being used
+        if getattr(self, 'is_analytics', False):
+            self.sleep(10, "Waiting for eventing to reprocess after producer kill")
+            self.verify_doc_count_collections("default.scope0.collection1", 1)
+            self._verify_analytics_result_matches_direct_query()
+            self.undeploy_and_delete_function(body)
+            return
         # Wait for eventing to catch up with all the update mutations and verify results
         if not self.cancel_timer:
             if self.is_sbm:
@@ -1331,16 +1361,18 @@ class EventingRecovery(EventingBaseTest):
             self.sleep(30, "Waiting for FTS indexing to complete")
         body = self.create_save_function_body(self.function_name,self.handler_code)
         # load some data
-        if self.non_default_collection:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
-        else:
-            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+        if not getattr(self, 'is_analytics', False):
+            if self.non_default_collection:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket.src_bucket.src_bucket")
+            else:
+                self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.non_default_collection:
-            self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
-        else:
-            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+        if not getattr(self, 'is_analytics', False):
+            if self.non_default_collection:
+                self.verify_doc_count_collections("dst_bucket.dst_bucket.dst_bucket", self.docs_per_day * self.num_docs)
+            else:
+                self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         for node in nodes_out_list:
             self.stop_server(node,True)
         self.log.info("Couchbase stopped on all eventing nodes")
@@ -1357,6 +1389,13 @@ class EventingRecovery(EventingBaseTest):
                         msg="Eventing Nodes are not balanced, need rebalance after starting couchbase server."  )
         # Run FTS validation if FTS handler is being used
         self.run_fts_validation()
+        # Run analytics validation if analytics handler is being used
+        if getattr(self, 'is_analytics', False):
+            self.sleep(10, "Waiting for eventing to reprocess after server restart")
+            self.verify_doc_count_collections("default.scope0.collection1", 1)
+            self._verify_analytics_result_matches_direct_query()
+            self.undeploy_and_delete_function(body)
+            return
 
     def test_checkpointing_failure_by_cursor_aware_functions(self):
         body = self.create_save_function_body(self.function_name, self.handler_code, cursor_aware=True)
@@ -1521,3 +1560,77 @@ class EventingRecovery(EventingBaseTest):
             )
         )
         log.info("FTS validation passed successfully")
+
+    def _setup_analytics(self):
+        """
+        Create analytics dataverse + collection on travel-sample airline
+        data, connect the local link, and wait for data ingestion.
+        """
+        cbas_node = self.get_nodes_from_services_map(service_type="cbas")
+        cbas_rest = RestConnection(cbas_node)
+        cbas_rest.execute_statement_on_cbas("CREATE DATAVERSE `travel-sample`.`inventory`", None)
+        cbas_rest.execute_statement_on_cbas("CREATE ANALYTICS COLLECTION `travel-sample`.`inventory`.`airline` ON `travel-sample`.`inventory`.`airline`", None)
+        cbas_rest.execute_statement_on_cbas("CONNECT LINK Local", None)
+        self.sleep(15, "Waiting for analytics to ingest travel-sample data")
+        # Verify analytics returns data before deploying any handler
+        result = cbas_rest.execute_statement_on_cbas("SELECT COUNT(*) AS cnt FROM `travel-sample`.`inventory`.`airline`", None)
+        if isinstance(result, bytes):
+            result = result.decode("utf-8")
+        parsed = json.loads(result)
+        count = parsed["results"][0]["cnt"]
+        log.info("Analytics airline collection has %s docs" % count)
+        self.assertTrue(count > 0, "Analytics airline collection has 0 docs — ingestion failed")
+
+    def _verify_analytics_result_matches_direct_query(self):
+        """
+        Run the analytics basic select query directly via the CBAS REST API,
+        then read the doc written by the eventing handler from collection1 via N1QL,
+        and compare the results.
+        """
+        analytics_query = "SELECT name, country FROM `travel-sample`.`inventory`.`airline` LIMIT 5"
+        data_field = 'data'
+
+        # Run the analytics query directly via CBAS REST
+        cbas_node = self.get_nodes_from_services_map(service_type="cbas")
+        cbas_rest = RestConnection(cbas_node)
+        direct_result = cbas_rest.execute_statement_on_cbas(analytics_query, None)
+        if isinstance(direct_result, bytes):
+            direct_result = direct_result.decode("utf-8")
+        direct_parsed = json.loads(direct_result)
+        direct_rows = direct_parsed["results"]
+        log.info("Direct analytics query returned %s rows" % len(direct_rows))
+
+        # Read the eventing-written doc from collection1 via N1QL
+        try:
+            self.n1ql_helper.run_cbq_query(
+                query="CREATE PRIMARY INDEX IF NOT EXISTS ON default.scope0.collection1",
+                server=self.n1ql_server)
+        except Exception as e:
+            log.info("Index creation note: %s" % str(e))
+
+        n1ql_result = self.n1ql_helper.run_cbq_query(
+            query="SELECT * FROM default.scope0.collection1",
+            server=self.n1ql_server)
+        self.assertTrue(len(n1ql_result["results"]) > 0, "No docs found in collection1 written by eventing handler")
+
+        eventing_doc = n1ql_result["results"][0]["collection1"]
+        eventing_data = eventing_doc.get(data_field, [])
+        log.info("Eventing handler wrote %s rows in field '%s'" % (len(eventing_data), data_field))
+
+        # Sort both result sets for deterministic comparison
+        def sort_key(row):
+            return json.dumps(row, sort_keys=True)
+
+        direct_sorted = sorted(direct_rows, key=sort_key)
+        eventing_sorted = sorted(eventing_data, key=sort_key)
+
+        self.assertEqual(
+            len(eventing_sorted), len(direct_sorted),
+            "Row count mismatch: eventing=%d, direct=%d" % (len(eventing_sorted), len(direct_sorted)))
+
+        for i, (ev_row, direct_row) in enumerate(zip(eventing_sorted, direct_sorted)):
+            self.assertEqual(
+                ev_row, direct_row,
+                "Row %d mismatch:\n  eventing: %s\n  direct:   %s" % (i, ev_row, direct_row))
+
+        log.info("Analytics result verification PASSED (%d rows match)" % len(direct_sorted))

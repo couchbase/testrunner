@@ -32,7 +32,7 @@ class EventingAnalytics(EventingBaseTest):
 
     def setUp(self):
         super(EventingAnalytics, self).setUp()
-        self.handler_code_param = self.input.param('handler_code', 'analytics_basic')
+        self.handler_code_param = self.input.param('handler_code', 'analytics_basic_select')
         handler_code = self.handler_code_param
         if handler_code == 'analytics_basic_select':
             self.handler_code = HANDLER_CODE_ANALYTICS.ANALYTICS_BASIC_SELECT
@@ -69,7 +69,6 @@ class EventingAnalytics(EventingBaseTest):
         elif handler_code == 'analytics_subqueries_with_crc':
             self.handler_code = HANDLER_CODE_ANALYTICS.ANALYTICS_SUBQUERIES_WITH_CRC
 
-        # Common setup for all analytics tests
         self.load_sample_buckets(self.server, "travel-sample")
         self.load_data_to_collection(1, "default.scope0.collection0")
         self._setup_analytics()
@@ -192,7 +191,6 @@ class EventingAnalytics(EventingBaseTest):
         self._verify_analytics_result_matches_direct_query()
         self.undeploy_and_delete_function(body)
 
-
     def test_analytics_coexistence(self):
         coexistence_type = self.input.param('coexistence_type', '')
         expected_doc_count = 1
@@ -209,5 +207,47 @@ class EventingAnalytics(EventingBaseTest):
         self.deploy_function(body)
         self.sleep(sleep_time, sleep_msg)
         self.verify_doc_count_collections("default.scope0.collection1", expected_doc_count)
+        self._verify_analytics_result_matches_direct_query()
+        self.undeploy_and_delete_function(body)
+    
+    def test_eventing_analytics_dropping_function_scope_when_handler_is_deployed(self):
+        '''
+        Dropping the function scope and checking if the function is getting undeployed
+        '''
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        # drop function scope (drop the source bucket)
+        self.rest.delete_bucket(self.default_bucket_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+
+    def test_eventing_analytics_dropping_metadata_keyspace_when_handler_is_deployed(self):
+        '''
+        Dropping the metadata keyspace and checking if the function is getting undeployed
+        '''
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        # drop metadata keyspace (drop the metadata bucket)
+        self.rest.delete_bucket(self.default_bucket_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+
+    def test_num_nodes_running(self):
+        '''
+        Configure the Eventing service so that functions in the current scope run on
+        (total_eventing_nodes - 1) nodes, then deploy a basic analytics handler and
+        verify it behaves correctly.
+        '''
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        total_nodes = len(eventing_nodes)
+        self.assertTrue(total_nodes >= 2, "Need at least 2 eventing nodes to run this test")
+        target_nodes = total_nodes - 1
+        self.config_num_nodes_running(target_nodes, self.default_bucket_name, self.scope_name)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        self.sleep(10, "Waiting for eventing handler to write analytics results")
+        self.verify_doc_count_collections("default.scope0.collection1", 1)
         self._verify_analytics_result_matches_direct_query()
         self.undeploy_and_delete_function(body)

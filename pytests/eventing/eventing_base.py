@@ -1013,7 +1013,6 @@ class EventingBaseTest(QueryHelperTests):
                 raise Exception("Failover not started even after waiting for long")
         self.log.info("Failover started")
 
-
     def enable_disable_vb_distribution(self,enable=True):
         if enable:
             body = "{\"auto_redistribute_vbs_on_failover\": true}"
@@ -1022,6 +1021,11 @@ class EventingBaseTest(QueryHelperTests):
         self.rest.update_eventing_config(body)
         self.log.info(self.rest.get_eventing_config())
 
+    def config_num_nodes_running(self, num_nodes, bucket, scope):
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)[0]
+        eventing_rest = RestConnection(eventing_node)
+        eventing_rest.set_eventing_num_nodes_running(num_nodes, bucket, scope)
+        self.log.info("Successfully set num_nodes_running={} for bucket={}, scope={}".format(num_nodes, bucket, scope))
 
     def create_scope_collection(self,bucket,scope,collection):
         collection_rest = CollectionsRest(self.master)

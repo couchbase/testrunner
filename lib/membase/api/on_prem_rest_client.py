@@ -6383,6 +6383,17 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    def set_eventing_num_nodes_running(self, num_nodes, bucket, scope):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/config?bucket={0}&scope={1}".format(bucket, scope)
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        body = json.dumps({"num_nodes_running": num_nodes})
+        status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
     '''
                 GET eventing config
     '''
