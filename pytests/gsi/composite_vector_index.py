@@ -2961,6 +2961,118 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.drop_index_node_resources_utilization_validations()
 
 
+    def test_vector_index_trainlist_retry(self):
+
+        """
+    Test scenario for vector index training retry when the number of
+    qualifying vector documents is less than the specified train_list.
+
+    Steps:
+    1. Create bucket, scope, and collection.
+    2. Load 40k documents using the Hotel dataset (without vector embeddings).
+    3. Update 10k documents using the Cars dataset to add vector embeddings.
+    4. Create a vector index with train_list=1000 and defer_build=True.
+    5. Trigger index build.
+    6. Verify that the index metadata exists.
+
+    Expected Behaviour:
+    Index creation should succeed even when the sampled vectors are less than
+    the specified train_list. Training continues asynchronously in the background.
+
+    Dataset Distribution:
+    - Total documents: 40000
+    - Documents with vectors: 10000
+
+    This verifies the fix where index creation no longer fails due to
+    insufficient sampled vectors during training.
+    """
+        
+        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                        replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=self.eviction_policy, lww=self.lww)
+        self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                            bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+        self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                             num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                             json_template=self.json_template,
+                                             load_default_coll=False)
+
+        collection_namespace = self.namespaces[0]
+        data_node = self.get_nodes_from_services_map(service_type="kv")
+
+        
+        for namespace in self.namespaces:
+            _, keyspace = namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            bucket = bucket.split(':')[-1]
+
+            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, scope=scope,
+                                            collection=collection, json_template="Cars",
+                                            output=True, username=self.username, password=self.password,
+                                            base64=self.base64,model=self.data_model,dim=384,
+                                            workers=10, timeout=1500, key_prefix="doc_",
+                                            update_start=0,
+                                            update_end=10000)
+            
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_create,
+                                                    timeout_secs=1500, use_magma_loader=True)
+            
+            task.result()
+
+            
+           
+        vector_idx = QueryDefinition(
+        index_name='idx',
+        index_fields=['descriptionVector VECTOR'],
+        dimension=384,
+        description="IVF32,SQ8",
+        similarity="L2_SQUARED",
+        train_list=1000 )
+     
+
+        query = vector_idx.generate_index_create_query(
+        namespace=collection_namespace,
+        defer_build=True
+    )         
+        self.run_cbq_query(query=query, server=self.n1ql_node)
+
+        
+        build_query = f"BUILD INDEX ON {collection_namespace}(idx) USING GSI"
+        self.run_cbq_query(query=build_query, server=self.n1ql_node)
+
+        
+        timeout = 600
+        interval = 10
+        elapsed = 0
+        index_ready = False
+        
+        while elapsed < timeout:
+            index_metadata = self.index_rest.get_indexer_metadata()['status']
+            for index in index_metadata:
+                if index['name'] == 'idx':
+                    self.log.info(f"Index 'idx' status: {index['status']}")
+                    if index['status'] == 'Ready':
+                        index_ready = True
+                        break
+            if index_ready:
+                break
+            self.sleep(interval, f"Waiting for index to be Ready... ({elapsed}s elapsed)")
+            elapsed += interval
+        
+        self.assertTrue(index_ready, 
+            f"Index 'idx' did not become Ready within {timeout}s. Last status: {index.get('status', 'unknown')}")
+
+        self.drop_index_node_resources_utilization_validations()
+
+
+   
+
+
+
     def test_drop_multiple_indexes_in_training_state(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         create_queries = set()
