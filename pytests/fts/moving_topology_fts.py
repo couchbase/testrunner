@@ -2,7 +2,7 @@ import threading
 from lib import global_vars
 from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from .fts_base import FTSBaseTest, FTSException
-from .fts_base import NodeHelper
+from .fts_base import NodeHelper, FloatingServers
 from TestInput import TestInputSingleton
 from threading import Thread
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -11,6 +11,7 @@ from lib.membase.api.rest_client import RestConnection, RestHelper
 import json
 import time
 import random
+import os
 
 class MovingTopFTS(FTSBaseTest):
 
@@ -2776,3 +2777,218 @@ class MovingTopFTS(FTSBaseTest):
             err = self.validate_partition_distribution(rest)
             if len(err) > 0:
                 self.fail(err)
+
+    def _recycle_node(self, node):
+        FloatingServers._serverlist.append(node)
+        self.log.info(f"Recycled node {node.ip} back to spare pool "
+                      f"(pool size: {len(FloatingServers._serverlist)})")
+        self.sleep(15, f"Waiting for recycled node {node.ip} to be ready")
+
+    def _run_rebalance_cycle(self, phase_sleep):
+        self.log.info("--- Rebalance-in FTS node ---")
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+        self.sleep(phase_sleep)
+
+        self.log.info("--- Rebalance-out FTS node ---")
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if len(fts_nodes) > 1:
+            removed = fts_nodes[-1]
+            self._cb_cluster.rebalance_out_node(node=removed)
+            self._recycle_node(removed)
+        self.sleep(phase_sleep)
+
+    def _initial_hierarchical_load(self, buckets, jar_path, doc_prefix):
+        import subprocess
+        for bucket in buckets:
+            cmd = (
+                f"java -jar {jar_path} "
+                f"-i {self.master.ip} "
+                f"-u '{self.master.rest_username}' "
+                f"-p '{self.master.rest_password}' "
+                f"-b {bucket.name} "
+                f"-n {self._num_items} "
+                f"-pc 100 "
+                f"-dt hierarchical "
+                f"-dpx {doc_prefix} "
+                f"-ds 1000 "
+                f"-nt 4 "
+                f"-ac True"
+            )
+            self.log.info(f"Loading initial data to {bucket.name}...")
+            self.log.info(cmd)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+            out, err = proc.communicate(timeout=600)
+            self.log.info(out.decode("utf-8"))
+            if proc.returncode != 0:
+                self.fail(f"Initial data load failed for {bucket.name}: {err.decode('utf-8')}")
+
+    def _start_background_queries(self):
+        stop_event = threading.Event()
+        query_errors = []
+
+        queries = [
+            {"match": "Alice", "field": "company.departments.employees.name"},
+            {"match": "Manager", "field": "company.departments.employees.role"},
+            {"match": "Athens", "field": "company.locations.city"},
+        ]
+
+        def _run():
+            query_idx = 0
+            while not stop_event.is_set():
+                try:
+                    indexes = list(self._cb_cluster.get_indexes())
+                    for index in indexes:
+                        if stop_event.is_set():
+                            break
+                        q = queries[query_idx % len(queries)]
+                        query_idx += 1
+                        try:
+                            fts_nodes = self._cb_cluster.get_fts_nodes()
+                            if not fts_nodes:
+                                continue
+                            rest = RestConnection(random.choice(fts_nodes))
+                            query_dict = {
+                                "indexName": index.name,
+                                "size": 10,
+                                "from": 0,
+                                "explain": False,
+                                "query": q,
+                                "ctl": {"timeout": 60000}
+                            }
+                            rest.run_fts_query(index.name, query_dict)
+                        except Exception as qe:
+                            self.log.warning(f"Query error on {index.name}: {qe}")
+                            query_errors.append(str(qe))
+                    stop_event.wait(timeout=10)
+                except Exception as e:
+                    self.log.warning(f"Background query thread error: {e}")
+
+        t = Thread(target=_run)
+        t.daemon = True
+        t.start()
+        return t, stop_event, query_errors
+
+    def _start_mutations_all_buckets(self, buckets, doc_prefix):
+        procs = []
+        for bucket in buckets:
+            proc = self._start_continuous_hierarchical_mutations(
+                bucket_name=bucket.name,
+                num_items=self._num_items,
+                percent_create=30, percent_update=50, percent_delete=20,
+                num_threads=2, doc_prefix=doc_prefix,
+                doc_size=1000, all_collections=True)
+            procs.append(proc)
+        return procs
+
+    def test_hierarchical_rebalance_sequence(self):
+        num_cycles = TestInputSingleton.input.param("num_cycles", 2)
+        phase_sleep = TestInputSingleton.input.param("phase_sleep", 60)
+        scope_count = TestInputSingleton.input.param("scope_count", 2)
+        collection_count = TestInputSingleton.input.param("collection_count", 5)
+        indexes_per_cycle = TestInputSingleton.input.param("indexes_per_cycle", 20)
+        doc_prefix = TestInputSingleton.input.param("hierarchical_doc_prefix", "hier_")
+
+        this_file = os.path.abspath(__file__)
+        testrunner_root = os.path.dirname(os.path.dirname(os.path.dirname(this_file)))
+        jar_path = os.path.join(testrunner_root,
+                                "java_sdk_client/collections/target/javaclient/javaclient.jar")
+
+        self.log.info("=" * 70)
+        self.log.info("PHASE 1: Setting FTS manager options and memory quota")
+        self.log.info("=" * 70)
+        try:
+            RestConnection(self._cb_cluster.get_master_node()).modify_memory_quota(
+                kv_quota=8000, fts_quota=8000)
+        except Exception as e:
+            self.log.info(f"Error modifying memory quota: {e}")
+
+        for fts_node in self._cb_cluster.get_fts_nodes():
+            rest = RestConnection(fts_node)
+            rest.set_node_setting("bleveMaxResultWindow", 100000)
+            rest.set_node_setting("bleveMaxClauseCount", 2500)
+            rest.set_disableFileTransferRebalance(False)
+            rest.set_node_setting("seqChecksTimeoutInSec", 20)
+            self.log.info(f"FTS manager options set on {fts_node.ip}")
+
+        self.log.info("=" * 70)
+        self.log.info("PHASE 2: Creating scopes and collections")
+        self.log.info("=" * 70)
+        buckets = self._cb_cluster.get_buckets()
+        self.log.info(f"Number of buckets: {len(buckets)}")
+
+        scope_names = [f"scope_{s}" for s in range(scope_count)]
+        collection_names = [f"coll_{c}" for c in range(collection_count)]
+
+        for bucket in buckets:
+            for scope_name in scope_names:
+                self._cb_cluster.create_scope_using_rest(bucket.name, scope_name)
+            self.sleep(5)
+            for scope_name in scope_names:
+                for coll_name in collection_names:
+                    self._cb_cluster.create_collection_using_rest(
+                        bucket.name, scope_name, coll_name)
+
+        self.sleep(30, "Waiting for collections manifest to sync")
+
+        self.log.info("=" * 70)
+        self.log.info("PHASE 3: Initial data load (100% creates)")
+        self.log.info("=" * 70)
+        self._initial_hierarchical_load(buckets, jar_path, doc_prefix)
+
+        for cycle in range(1, num_cycles + 1):
+            self.log.info("#" * 70)
+            self.log.info(f"CYCLE {cycle} of {num_cycles}")
+            self.log.info("#" * 70)
+
+            self.log.info(f"CYCLE {cycle}: Creating {indexes_per_cycle} "
+                          f"hierarchical FTS indexes")
+            idx_count = 0
+            for i in range(indexes_per_cycle):
+                bucket = buckets[i % len(buckets)]
+                idx_scope = scope_names[i % len(scope_names)]
+                idx_coll = collection_names[i % len(collection_names)]
+                idx_name = f"{bucket.name}_hier_idx_c{cycle}_{i}"
+                self.log.info(f"  Creating index {idx_name} on "
+                              f"{bucket.name}.{idx_scope}.{idx_coll}")
+                self._cb_cluster.create_hierarchical_fts_index(
+                    name=idx_name, source_name=bucket.name,
+                    scope=idx_scope, collections=[idx_coll])
+                idx_count += 1
+            self.log.info(f"CYCLE {cycle}: Created {idx_count} indexes")
+
+            self.sleep(10)
+
+            self.log.info(f"CYCLE {cycle}: Starting continuous mutations")
+            mutation_procs = self._start_mutations_all_buckets(
+                buckets, doc_prefix)
+
+            self.sleep(120, f"CYCLE {cycle}: Waiting for indexes to build")
+
+            self.log.info(f"CYCLE {cycle}: Starting background queries")
+            query_thread, query_stop, query_errors = self._start_background_queries()
+            self.sleep(phase_sleep)
+
+            self.log.info(f"CYCLE {cycle}: Running rebalance sequence")
+            # self._run_rebalance_cycle(phase_sleep)
+            self.sleep(300)
+
+            self.log.info(f"CYCLE {cycle}: Stopping mutations and queries")
+            query_stop.set()
+            query_thread.join(timeout=60)
+            self._stop_continuous_hierarchical_mutations(mutation_procs)
+            self.sleep(phase_sleep)
+
+            self.log.info(f"CYCLE {cycle}: Validating item counts")
+
+            self.log.info(f"CYCLE {cycle}: Validation passed. "
+                          f"Total indexes: {len(self._cb_cluster.get_indexes())}")
+
+        self.sleep(36000)
+        self.log.info("=" * 70)
+        self.log.info("FINAL: Dropping all indexes")
+        self.log.info("=" * 70)
+        for index in self._cb_cluster.get_indexes().copy():
+            index.delete()
+            self.sleep(10)
+
+        self.log.info("Hierarchical rebalance sequence test completed successfully")

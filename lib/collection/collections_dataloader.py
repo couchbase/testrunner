@@ -2,6 +2,27 @@ import docker
 from requests.exceptions import ConnectionError
 
 
+class SDKDocloaderParams(object):
+    """Parameters for Java SDK Client document loader"""
+    def __init__(self, username, password, json_template, key_prefix, key_suffix,
+                 start_seq_num, num_ops, percent_create, percent_update, percent_delete,
+                 load_pattern, print_sdk_logs, scope="", collection=""):
+        self.username = username
+        self.password = password
+        self.json_template = json_template
+        self.key_prefix = key_prefix
+        self.key_suffix = key_suffix
+        self.start_seq_num = start_seq_num
+        self.num_ops = num_ops
+        self.percent_create = percent_create
+        self.percent_update = percent_update
+        self.percent_delete = percent_delete
+        self.load_pattern = load_pattern
+        self.print_sdk_logs = print_sdk_logs
+        self.scope = scope
+        self.collection = collection
+
+
 class DockerManager(object):
     def __init__(self, tag):
         self.tag = tag
