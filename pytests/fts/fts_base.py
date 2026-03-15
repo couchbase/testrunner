@@ -3176,8 +3176,8 @@ class CouchbaseCluster:
                         "floorSegmentFileSize": 20971520
                     },
                     "scorchPersisterOptions": {
-                        "maxSizeInMemoryMergePerWorker": 20971520,
-                        "numPersisterWorkers": 4
+                        "maxSizeInMemoryMergePerWorker": 1,
+                        "numPersisterWorkers": 100
                     },
                     "segmentVersion": 16
                 }
@@ -3199,7 +3199,7 @@ class CouchbaseCluster:
             "planParams": {
                 "maxPartitionsPerPIndex": 128,
                 "indexPartitions": 1,
-                "numReplicas": 0
+                "numReplicas": 1
             }
         }
 
@@ -6898,6 +6898,71 @@ class FTSBaseTest(unittest.TestCase):
                 proc.terminate()
             self.log.error(f"Error loading hierarchical data: {e}")
             raise
+
+    def _start_continuous_hierarchical_mutations(self, bucket_name, num_items=100000,
+                                                  percent_create=30, percent_update=50,
+                                                  percent_delete=20,
+                                                  num_threads=2, doc_prefix="hier_",
+                                                  dataset_type="hierarchical",
+                                                  doc_size=1000, all_collections=True):
+        """
+        Start continuous hierarchical mutations as a background subprocess.
+        Uses a very high -n so the process keeps running until explicitly killed
+        via _stop_continuous_hierarchical_mutations.
+
+        Returns the subprocess.Popen handle.
+        """
+        import os
+        import subprocess
+
+        this_file = os.path.abspath(__file__)
+        testrunner_root = os.path.dirname(os.path.dirname(os.path.dirname(this_file)))
+        jar_path = os.path.join(testrunner_root, "java_sdk_client/collections/target/javaclient/javaclient.jar")
+
+        continuous_ops = num_items * 100
+
+        cmd = (
+            f"java -jar {jar_path} "
+            f"-i {self.master.ip} "
+            f"-u '{self.master.rest_username}' "
+            f"-p '{self.master.rest_password}' "
+            f"-b {bucket_name} "
+            f"-n {continuous_ops} "
+            f"-pc {percent_create} -pu {percent_update} -pd {percent_delete} "
+            f"-dt {dataset_type} "
+            f"-dpx {doc_prefix} "
+            f"-ds {doc_size} "
+            f"-nt {num_threads}"
+        )
+        if all_collections:
+            cmd += " -ac True"
+
+        self.log.info(f"Starting continuous mutations on bucket {bucket_name}:")
+        self.log.info(cmd)
+
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        self.log.info(f"Continuous mutations started on {bucket_name} with PID {proc.pid}")
+        return proc
+
+    def _stop_continuous_hierarchical_mutations(self, procs):
+        """
+        Terminate background mutation processes started by
+        _start_continuous_hierarchical_mutations.
+
+        @param procs: list of subprocess.Popen handles
+        """
+        import signal
+        for proc in procs:
+            if proc.poll() is None:
+                self.log.info(f"Terminating mutation process PID {proc.pid}")
+                try:
+                    proc.send_signal(signal.SIGTERM)
+                    proc.wait(timeout=30)
+                except Exception:
+                    proc.kill()
+                    proc.wait(timeout=10)
+            else:
+                self.log.info(f"Mutation process PID {proc.pid} already exited with code {proc.returncode}")
 
     def load_data(self, generator=None, data_loader_output=False, num_items=20000, exempt_bucket_prefix=None):
         """
