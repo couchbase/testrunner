@@ -117,7 +117,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if self.same_cluster:
                     self.log.info("Same cluster")
                     self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
-                    if self.hostname and self.master.ip.endswith(".com"):
+                    if (self.use_hostnames or self.hostname) and self.master.ip.endswith(".com"):
                         options = '--node-init-hostname ' + self.master.ip
                         shell = RemoteMachineShellConnection(self.master)
                         output, _ = shell.execute_couchbase_cli(cli_command=cmd_init,
@@ -135,7 +135,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     rest = RestConnection(self.backupset.restore_cluster_host)
                     rest.force_eject_node()
                     rest.init_node()
-                    if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+                    if (self.use_hostnames or self.hostname) and self.backupset.restore_cluster_host.ip.endswith(".com"):
                         options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
                         output, _ = shell.execute_couchbase_cli(cli_command=cmd_init, options=options,
                                                     cluster_host="localhost",
@@ -1800,7 +1800,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if info.memoryQuota and int(info.memoryQuota) > 0:
             self.quota = info.memoryQuota
         rest.init_node()
-        if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+        if (self.use_hostnames or self.hostname) and self.backupset.restore_cluster_host.ip.endswith(".com"):
             self.log.info("\n*** Set node with hostname")
             cmd_init = 'node-init'
             options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip

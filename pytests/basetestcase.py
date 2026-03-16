@@ -587,6 +587,7 @@ class OnPremBaseTestCase(unittest.TestCase):
         self.ntonencrypt = self.input.param('ntonencrypt', 'disable')
         self.ntonencrypt_level = self.input.param('ntonencrypt_level', 'control')
         self.hostname = self.input.param('hostname', False)
+        self.use_hostnames = self.input.param("use_hostnames", False)
         self.x509enable = self.input.param('x509enable', False)
         self.enable_secrets = self.input.param("enable_secrets", False)
         self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
