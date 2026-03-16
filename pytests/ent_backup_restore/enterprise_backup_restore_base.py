@@ -2189,7 +2189,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         cmd_init = 'node-init'
                         shell = RemoteMachineShellConnection(server)
                         shell.enable_diag_eval_on_non_local_hosts()
-                        if self.hostname and server.ip.endswith(".com"):
+                        if (self.use_hostnames or self.hostname) and server.ip.endswith(".com"):
                             options = '--node-init-hostname ' + server.ip
                             output, _ = shell.execute_couchbase_cli(cli_command=cmd_init,
                                                     options=options,
@@ -3055,7 +3055,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             sv_in_rs = self.backupset.restore_cluster_host.services[0].split(",")
         kv_quota = rest_rs.init_node(sv_in_rs)
         """ set node to hostname if hostname=true """
-        if self.hostname and self.backupset.restore_cluster_host.ip.endswith(".com"):
+        if (self.use_hostnames or self.hostname) and self.backupset.restore_cluster_host.ip.endswith(".com"):
             self.log.info("\n*** Set node with hostname")
             cmd_init = 'node-init'
             options = '--node-init-hostname ' + self.backupset.restore_cluster_host.ip
