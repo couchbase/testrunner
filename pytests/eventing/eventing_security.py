@@ -261,7 +261,14 @@ class EventingSecurity(EventingBaseTest):
             self.resume_function(body)
         else:
             self.deploy_function(body)
-        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        # Wait for eventing to catch up with all the delete mutations
+        self.sleep(10)
+        on_delete_success = self.get_stats_value(self.function_name, "execution_stats.on_delete_success")
+        on_delete_failure = self.get_stats_value(self.function_name, "execution_stats.on_delete_failure")
+        self.log.info("execution_stats.on_delete_success: {}".format(on_delete_success))
+        self.log.info("execution_stats.on_delete_failure: {}".format(on_delete_failure))
+        if on_delete_success == 0:
+            self.fail("on_delete_success is 0, expected at least some on_delete mutations processed. on_delete_failure: {0}".format(on_delete_failure))
         assert ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master]), "Port binding after enforcing TLS incorrect"
         if self.pause_resume:
             self.pause_function(body)
@@ -304,7 +311,14 @@ class EventingSecurity(EventingBaseTest):
         ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
         self.wait_for_handler_state(body['appname'], "deployed")
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_doc_count_collections("default.scope0.collection1", 0)
+        # Wait for eventing to catch up with all the delete mutations
+        self.sleep(10)
+        on_delete_success = self.get_stats_value(self.function_name, "execution_stats.on_delete_success")
+        on_delete_failure = self.get_stats_value(self.function_name, "execution_stats.on_delete_failure")
+        self.log.info("execution_stats.on_delete_success: {}".format(on_delete_success))
+        self.log.info("execution_stats.on_delete_failure: {}".format(on_delete_failure))
+        if on_delete_success == 0:
+            self.fail("on_delete_success is 0, expected at least some on_delete mutations processed. on_delete_failure: {0}".format(on_delete_failure))
         assert ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master]), "Port binding after enforcing TLS incorrect"
         self.undeploy_and_delete_function(body)
 

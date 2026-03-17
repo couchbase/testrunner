@@ -1,6 +1,6 @@
 function OnUpdate(doc, meta) {
     log("Doc created/updated", meta.id);
-    var result1= couchbase.insert(dst_bucket,meta,doc);
+    var result1= couchbase.upsert(dst_bucket,meta,doc);
     log(result1);
 
 }
