@@ -860,6 +860,25 @@ class SDKClient(object):
             except CouchbaseException as e:
                 raise
 
+    def get_and_lock(self, key, lock_time, scope=None, collection=None):
+        try:
+            if collection:
+                self.collection_connect(scope, collection)
+                result = self.collection.get_and_lock(key, timedelta(seconds=lock_time))
+            else:
+                result = self.default_collection.get_and_lock(key, timedelta(seconds=lock_time))
+            return result.cas, result.content_as[dict]
+        except CouchbaseException as e:
+            try:
+                time.sleep(10)
+                if collection:
+                    result = self.collection.get_and_lock(key, timedelta(seconds=lock_time))
+                else:
+                    result = self.default_collection.get_and_lock(key, timedelta(seconds=lock_time))
+                return result.cas, result.content_as[dict]
+            except CouchbaseException as e:
+                raise
+
     def lock_multi(self, keys, ttl=0, scope=None, collection=None):
         try:
             if collection:
@@ -893,6 +912,23 @@ class SDKClient(object):
                     return self.collection.unlock(key)
                 else:
                     return self.default_collection.unlock(key)
+            except CouchbaseException as e:
+                raise
+
+    def unlock_with_cas(self, key, cas, scope=None, collection=None):
+        try:
+            if collection:
+                self.collection_connect(scope, collection)
+                return self.collection.unlock(key, cas)
+            else:
+                return self.default_collection.unlock(key, cas)
+        except CouchbaseException as e:
+            try:
+                time.sleep(10)
+                if collection:
+                    return self.collection.unlock(key, cas)
+                else:
+                    return self.default_collection.unlock(key, cas)
             except CouchbaseException as e:
                 raise
 

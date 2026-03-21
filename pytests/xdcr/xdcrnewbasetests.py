@@ -6,6 +6,7 @@ import re
 import time
 import unittest
 import base64
+import yaml
 
 import logger
 from collection.collections_rest_client import CollectionsRest
@@ -4441,4 +4442,157 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self.wait_interval(10, "Waiting for couchbase service to be running. {0}".format(output))
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
+
+    def init_xdcr_differ(self, src_cluster, src_master, src_master_shell,
+                         bin_path="/opt/couchbase/bin/xdcrDiffer",
+                         yaml_conf_path="/tmp/xdcr_differ_params.yaml",
+                         output_dir="/tmp/xdcr_differ_outputs"):
+        self._xdcr_differ_src_cluster = src_cluster
+        self._xdcr_differ_src_master = src_master
+        self._xdcr_differ_src_master_shell = src_master_shell
+        self._xdcr_differ_bin_path = bin_path
+        self._xdcr_differ_yaml_conf_path = yaml_conf_path
+        self._xdcr_differ_output_dir = output_dir
+
+    def _setup_xdcr_differ_config(self, bucket_name):
+        remote_cluster_name = None
+        for remote_cluster in self._xdcr_differ_src_cluster.get_remote_clusters():
+            remote_cluster_name = remote_cluster.get_name()
+            break
+
+        if not remote_cluster_name:
+            remote_cluster_name = "remote_cluster_C1-C2"
+
+        xdcr_differ_params = {
+            "sourceUrl": f"{self._xdcr_differ_src_master.ip}:8091",
+            "sourceUsername": self._xdcr_differ_src_master.rest_username,
+            "sourcePassword": self._xdcr_differ_src_master.rest_password,
+            "sourceBucketName": bucket_name,
+            "remoteClusterName": remote_cluster_name,
+            "targetUrl": "",
+            "targetUsername": "",
+            "targetPassword": "",
+            "targetBucketName": bucket_name,
+            "outputFileDir": self._xdcr_differ_output_dir,
+            "sourceFileDir": f"{self._xdcr_differ_output_dir}/source",
+            "targetFileDir": f"{self._xdcr_differ_output_dir}/target",
+            "checkpointFileDir": f"{self._xdcr_differ_output_dir}/checkpoint",
+            "fileDifferDir": f"{self._xdcr_differ_output_dir}/fileDiff",
+            "mutationDifferDir": f"{self._xdcr_differ_output_dir}/mutationDiff",
+            "oldCheckpointFileName": "",
+            "newCheckpointFileName": "checkpoint.json",
+            "checkpointInterval": 600,
+            "completeByDuration": 0,
+            "completeBySeqno": True,
+            "compareType": "body",
+            "runDataGeneration": True,
+            "runFileDiffer": True,
+            "runMutationDiffer": True,
+            "enforceTLS": False,
+            "clearBeforeRun": "true",
+            "numberOfSourceDcpClients": 1,
+            "numberOfWorkersPerSourceDcpClient": 64,
+            "numberOfTargetDcpClients": 1,
+            "numberOfWorkersPerTargetDcpClient": 64,
+            "numberOfWorkersForFileDiffer": 30,
+            "numberOfWorkersForMutationDiffer": 30,
+            "numberOfBins": 5,
+            "numberOfFileDesc": 500,
+            "mutationDifferBatchSize": 100,
+            "mutationDifferTimeout": 30,
+            "debugMode": False,
+            "setupTimeout": 10,
+        }
+
+        with open(self._xdcr_differ_yaml_conf_path, "w") as f:
+            yaml.dump(xdcr_differ_params, f)
+        self._xdcr_differ_src_master_shell.copy_file_local_to_remote(
+            self._xdcr_differ_yaml_conf_path, self._xdcr_differ_yaml_conf_path
+        )
+        self.log.info(f"xdcrDiffer config written to {self._xdcr_differ_yaml_conf_path}")
+
+    def _cleanup_xdcr_differ_output(self):
+        cmd = f"rm -rf {self._xdcr_differ_output_dir}"
+        self._xdcr_differ_src_master_shell.execute_command(cmd)
+
+    def _run_xdcr_differ(self, bucket_name, timeout=600):
+        self._setup_xdcr_differ_config(bucket_name)
+        self._cleanup_xdcr_differ_output()
+
+        cbauth_url = (
+            f"http://{self._xdcr_differ_src_master.rest_username}:"
+            f"{self._xdcr_differ_src_master.rest_password}@{self._xdcr_differ_src_master.ip}:8091"
+        )
+
+        cmd = (
+            f"export CBAUTH_REVRPC_URL=\"{cbauth_url}\" && "
+            f"{self._xdcr_differ_bin_path} -yamlConfigFilePath {self._xdcr_differ_yaml_conf_path}"
+        )
+
+        self.log.info(f"Running xdcrDiffer for bucket {bucket_name}...")
+        output, err = self._xdcr_differ_src_master_shell.execute_command(cmd, timeout=timeout)
+
+        if err:
+            self.log.warning(f"xdcrDiffer stderr: {err}")
+
+        combined_output = '\n'.join(output) if output else ''
+        self.log.info(f"xdcrDiffer output: {combined_output}")
+
+        mismatch_count = self._parse_xdcr_differ_results()
+        success = mismatch_count == 0
+
+        return success, mismatch_count, combined_output
+
+    def _parse_xdcr_differ_results(self):
+        mutation_dir = f"{self._xdcr_differ_output_dir}/mutationDiff"
+
+        cmd = f"find {mutation_dir} -name '*.json' -type f 2>/dev/null"
+        files, _ = self._xdcr_differ_src_master_shell.execute_command(cmd)
+
+        total_mismatches = 0
+        for file_path in files:
+            file_path = file_path.strip()
+            if not file_path:
+                continue
+
+            cat_cmd = f"cat {file_path}"
+            content, _ = self._xdcr_differ_src_master_shell.execute_command(cat_cmd)
+            if content:
+                try:
+                    data = json.loads('\n'.join(content))
+                    if isinstance(data, list):
+                        total_mismatches += len(data)
+                    elif isinstance(data, dict):
+                        total_mismatches += len(data.get('mismatches', []))
+                except json.JSONDecodeError:
+                    self.log.warning(f"Could not parse differ result: {file_path}")
+
+        self.log.info(f"xdcrDiffer found {total_mismatches} mismatched documents")
+        return total_mismatches
+
+    def _verify_no_data_loss_with_differ(self, bucket_name):
+        self.log.info(f"Running xdcrDiffer to verify no data loss for bucket {bucket_name}")
+        success, mismatch_count, output = self._run_xdcr_differ(bucket_name)
+
+        if not success:
+            self.fail(f"Data loss detected! xdcrDiffer found {mismatch_count} mismatched documents.")
+
+        self.log.info(f"xdcrDiffer verification passed: No data loss detected for bucket {bucket_name}")
+
+    def _enable_eccv_on_cluster(self, cluster):
+        rest = RestConnection(cluster.get_master_node())
+        for bucket in cluster.get_buckets():
+            try:
+                bucket_info = rest.get_bucket_json(bucket.name)
+                if bucket_info.get('enableCrossClusterVersioning', False):
+                    self.log.info(f"ECCV already enabled for bucket {bucket.name} on cluster {cluster.get_name()}")
+                    continue
+                self.log.info(f"Enabling ECCV for bucket {bucket.name} on cluster {cluster.get_name()}")
+                result = rest.change_bucket_props(bucket, enableCrossClusterVersioning="true")
+                self.log.info(f"ECCV enable result: {result}")
+            except Exception as e:
+                if "already enabled" in str(e).lower():
+                    self.log.info(f"ECCV already enabled for bucket {bucket.name}")
+                else:
+                    raise
 
