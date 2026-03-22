@@ -430,6 +430,72 @@ def extract_individual_tests_from_query_result(col_rel_version,
     return test_jobs_list
 
 
+def handle_no_launch_flag(testsToLaunch, options, job_index, total_jobs_count,
+                         total_servers_being_used, total_addl_servers_being_used,
+                         launchString, curr_job_info):
+    """Handle no launch mode by processing all tests to launch without actually launching."""
+    while len(testsToLaunch) > 0:
+        i = 0
+        print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
+              "additional "
+              "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
+                                                            testsToLaunch[i]['serverCount'],
+                                                            total_servers_being_used,
+                                                            testsToLaunch[i][
+                                                                'addPoolServerCount'],
+                                                            total_addl_servers_being_used,
+                                                            testsToLaunch[i]['component'],
+                                                            testsToLaunch[i][
+                                                                'subcomponent'],
+                                                            testsToLaunch[i][
+                                                                'framework'], ))
+        # sample data as it is a noLaunch to get the general URL
+        descriptor = "descriptor"
+        dashboardDescriptor = "dashboardDescriptor"
+        parameters = "parameters"
+        url = launchString.format(options.version, testsToLaunch[i]['confFile'], descriptor,
+                                  testsToLaunch[i]['component'], dashboardDescriptor,
+                                  testsToLaunch[i]['iniFile'],
+                                  urllib.parse.quote(parameters), options.os,
+                                  testsToLaunch[i]['initNodes'],
+                                  testsToLaunch[i]['installParameters'], options.branch,
+                                  testsToLaunch[i]['slave'],
+                                  urllib.parse.quote(testsToLaunch[i]['owner']),
+                                  urllib.parse.quote(testsToLaunch[i]['mailing_list']),
+                                  testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'],
+                                  options.columnar_version,
+                                  testsToLaunch[i]['mixed_build_config'],
+                                  options.is_dynamic_vms)
+        url = url + '&dispatcher_params=' + urllib.parse.urlencode(
+            {"parameters": curr_job_info})
+        # optional add [-docker] [-Jenkins extension] - TBD duplicate
+        launchStringBase = testsToLaunch[i]['target_jenkins'] \
+            + '/job/' + str(options.launch_job)
+        launchStringBaseF = launchStringBase
+        if options.serverType == DOCKER:
+            launchStringBaseF = launchStringBase + '-docker'
+        if options.test:
+            launchStringBaseF = launchStringBase + '-test'
+        framework = testsToLaunch[i]['framework']
+        if framework != 'testrunner':
+            launchStringBaseF = launchStringBaseF + "-" + framework
+        elif options.jenkins is not None:
+            launchStringBaseF = launchStringBaseF + '-' + options.jenkins
+
+        url = launchStringBaseF + url
+        if options.job_params:
+            url = update_url_with_job_params(url, options.job_params)
+
+        print('\n', time.asctime(time.localtime(time.time())), 'launching ', url)
+        total_servers_being_used += testsToLaunch[0]['serverCount']
+        total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
+        testsToLaunch.pop(0)
+        job_index += 1
+
+    print("\n Done!")
+    return
+
+
 def is_executor_available_for_label(target_url, target_slave):
     try:
         # Query Jenkins queue to see if the target label already has a queued job.
@@ -777,69 +843,14 @@ def main():
 
     if options.noLaunch:
         log.critical("\n -- No launch selected -- \n")
+        handle_no_launch_flag(
+            testsToLaunch, options, job_index, total_jobs_count,
+            total_servers_being_used, total_addl_servers_being_used,
+            launchString, curr_job_info)
 
     while len(testsToLaunch) > 0:
         try:
-            if options.noLaunch:
-                i = 0
-                print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
-                      "additional "
-                      "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
-                                                                    testsToLaunch[i]['serverCount'],
-                                                                    total_servers_being_used,
-                                                                    testsToLaunch[i][
-                                                                        'addPoolServerCount'],
-                                                                    total_addl_servers_being_used,
-                                                                    testsToLaunch[i]['component'],
-                                                                    testsToLaunch[i][
-                                                                        'subcomponent'],
-                                                                    testsToLaunch[i][
-                                                                        'framework'], ))
-                # sample data as it is a noLaunch to get the general URL
-                descriptor = "descriptor"
-                dashboardDescriptor = "dashboardDescriptor"
-                parameters = "parameters"
-                url = launchString.format(options.version, testsToLaunch[i]['confFile'], descriptor,
-                                          testsToLaunch[i]['component'], dashboardDescriptor,
-                                          testsToLaunch[i]['iniFile'],
-                                          urllib.parse.quote(parameters), options.os,
-                                          testsToLaunch[i]['initNodes'],
-                                          testsToLaunch[i]['installParameters'], options.branch,
-                                          testsToLaunch[i]['slave'],
-                                          urllib.parse.quote(testsToLaunch[i]['owner']),
-                                          urllib.parse.quote(testsToLaunch[i]['mailing_list']),
-                                          testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'],
-                                          options.columnar_version,
-                                          testsToLaunch[i]['mixed_build_config'],
-                                          options.is_dynamic_vms)
-                url = url + '&dispatcher_params=' + urllib.parse.urlencode(
-                    {"parameters": curr_job_info})
-                # optional add [-docker] [-Jenkins extension] - TBD duplicate
-                launchStringBase = testsToLaunch[i]['target_jenkins'] \
-                    + '/job/' + str(options.launch_job)
-                launchStringBaseF = launchStringBase
-                if options.serverType == DOCKER:
-                    launchStringBaseF = launchStringBase + '-docker'
-                if options.test:
-                    launchStringBaseF = launchStringBase + '-test'
-                framework = testsToLaunch[i]['framework']
-                if framework != 'testrunner':
-                    launchStringBaseF = launchStringBaseF + "-" + framework
-                elif options.jenkins is not None:
-                    launchStringBaseF = launchStringBaseF + '-' + options.jenkins
-
-                url = launchStringBaseF + url
-                if options.job_params:
-                    url = update_url_with_job_params(url, options.job_params)
-
-                print('\n', time.asctime(time.localtime(time.time())), 'launching ', url)
-                total_servers_being_used += testsToLaunch[0]['serverCount']
-                total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
-                testsToLaunch.pop(0)
-                job_index += 1
-                continue
             # this bit is Docker/VM dependent
-
             # see if we can match a test
             haveTestToLaunch = False
             i = 0
@@ -882,11 +893,6 @@ def main():
                     break
 
             if haveTestToLaunch:
-                if options.noLaunch:
-                    job_index += 1
-                    testsToLaunch.pop(i)
-                    continue
-
                 print("\n\n *** Dispatching job#{} of {} with {} servers "
                       "(total={}) and {} additional servers(total={}):  {}-{} with {}\n"
                       .format(job_index, total_jobs_count,
@@ -897,11 +903,6 @@ def main():
                               testsToLaunch[i]['component'],
                               testsToLaunch[i]['subcomponent'],
                               testsToLaunch[i]['framework'],))
-
-                if options.noLaunch:
-                    job_index += 1
-                    testsToLaunch.pop(i)
-                    continue
 
                 # build the dashboard descriptor
                 dashboardDescriptor = urllib.parse.quote(testsToLaunch[i]['subcomponent'])
@@ -1164,7 +1165,7 @@ def main():
                     url = update_url_with_job_params(url, options.job_params)
                 log.info(f"Launching {url}")
 
-                if options.noLaunch or not dispatch_job:
+                if not dispatch_job:
                     # free the VMs
                     sleep_function(3, f"Freeing servers for {descriptor}")
                     if options.serverType == DOCKER:
@@ -1205,15 +1206,13 @@ def main():
                 summary.append({
                     'test': descriptor,
                     'time': time.asctime(time.localtime(time.time()))})
-                if options.noLaunch:
-                    # no sleeping necessary
-                    pass
-                elif options.serverType == DOCKER:
-                    sleep_function(240, f"Waiting for docker port allocation for {descriptor}")     # this is due to the docker port allocation race
-                elif int(options.sleep_between_trigger) != 0:
-                    sleep_function(int(options.sleep_between_trigger), f"Waiting for {options.sleep_between_trigger} seconds between triggers for {descriptor}")
-                else:
-                    sleep_function(30)
+                if len(testsToLaunch) > 0:
+                    if options.serverType == DOCKER:
+                        sleep_function(240, f"Waiting for docker port allocation for {descriptor}")     # this is due to the docker port allocation race
+                    elif int(options.sleep_between_trigger) != 0:
+                        sleep_function(int(options.sleep_between_trigger), f"Waiting for {options.sleep_between_trigger} seconds between triggers for {descriptor}")
+                    else:
+                        sleep_function(30)
             else:
                 sleep_function(POLL_INTERVAL, 'Not enough servers')
         except Exception as e:
@@ -1226,7 +1225,7 @@ def main():
                 except Exception:
                     pass
             sleep_function(POLL_INTERVAL, 'Exception in main loop')
-    # endwhile
+    # end of while
 
     if not options.noLaunch:
         print('\n\n\ndone, everything is launched')
@@ -1237,8 +1236,6 @@ def main():
               "\n".format(total_jobs_count,
                           total_servers_being_used,
                           total_addl_servers_being_used))
-    else:
-        print("\n Done!")
     return
 
 
