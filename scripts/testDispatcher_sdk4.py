@@ -430,15 +430,17 @@ def extract_individual_tests_from_query_result(col_rel_version,
     return test_jobs_list
 
 
-def handle_no_launch_flag(testsToLaunch, options, job_index, total_jobs_count,
+def handle_no_launch_flag(testsToLaunch, options, total_jobs_count,
                          total_servers_being_used, total_addl_servers_being_used,
                          launchString, curr_job_info):
     """Handle no launch mode by processing all tests to launch without actually launching."""
+    t_index = 0
     while len(testsToLaunch) > 0:
         i = 0
+        t_index += 1
         print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
               "additional "
-              "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
+              "servers(total={}) :  {}-{} with {}\n".format(t_index, total_jobs_count,
                                                             testsToLaunch[i]['serverCount'],
                                                             total_servers_being_used,
                                                             testsToLaunch[i][
@@ -490,7 +492,6 @@ def handle_no_launch_flag(testsToLaunch, options, job_index, total_jobs_count,
         total_servers_being_used += testsToLaunch[0]['serverCount']
         total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
         testsToLaunch.pop(0)
-        job_index += 1
 
     print("\n Done!")
     return
@@ -666,6 +667,8 @@ def main():
                 + options.dashboardReportedParameters
 
     testsToLaunch = []
+    active_jobs = list()
+    retry_jobs = list()
     auth = ClusterOptions(PasswordAuthenticator(TEST_SUITE_DB_USER_NAME,
                                                 TEST_SUITE_DB_PASSWORD))
     cluster = Cluster('couchbase://{}'.format(TEST_SUITE_DB), auth)
@@ -742,7 +745,7 @@ def main():
     if not options.fresh_run:
         # Filter out jobs which have already passed in rerun (not a fresh_run)
         job_index_to_pop = list()
-        for job_index, test_to_launch in enumerate(testsToLaunch):
+        for t_job_index, test_to_launch in enumerate(testsToLaunch):
             # build the dashboard descriptor
             dashboard_desc = urllib.parse.quote(
                 test_to_launch['subcomponent'])
@@ -765,12 +768,12 @@ def main():
                 options.version,
                 parameters)
             if not dispatch_job:
-                job_index_to_pop.append(job_index)
+                job_index_to_pop.append(t_job_index)
 
         # Popping in reverse so the indexes won't mess up
         job_index_to_pop.reverse()
-        for job_index in job_index_to_pop:
-            testsToLaunch.pop(job_index)
+        for t_job_index in job_index_to_pop:
+            testsToLaunch.pop(t_job_index)
 
     total_req_servercount = 0
     total_req_addservercount = 0
@@ -844,11 +847,12 @@ def main():
     if options.noLaunch:
         log.critical("\n -- No launch selected -- \n")
         handle_no_launch_flag(
-            testsToLaunch, options, job_index, total_jobs_count,
+            testsToLaunch, options, total_jobs_count,
             total_servers_being_used, total_addl_servers_being_used,
             launchString, curr_job_info)
 
-    while len(testsToLaunch) > 0:
+    active_jobs = testsToLaunch
+    while len(active_jobs) > 0:
         try:
             # this bit is Docker/VM dependent
             # see if we can match a test
@@ -869,10 +873,10 @@ def main():
                     continue
 
                 test_index = 0
-                while not haveTestToLaunch and test_index < len(testsToLaunch):
-                    if testsToLaunch[test_index]['serverCount'] <= serverCount:
-                        if testsToLaunch[test_index]['addPoolServerCount']:
-                            addPoolId = testsToLaunch[test_index]['addPoolId']
+                while not haveTestToLaunch and test_index < len(active_jobs):
+                    if active_jobs[test_index]['serverCount'] <= serverCount:
+                        if active_jobs[test_index]['addPoolServerCount']:
+                            addPoolId = active_jobs[test_index]['addPoolId']
                             addlServersCount = get_available_servers_count(options=options, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
                             if addlServersCount == 0:
                                 print(time.asctime(time.localtime(time.time())), 'no {0} VMs at this time'.format(addPoolId))
@@ -892,20 +896,21 @@ def main():
                 if haveTestToLaunch:
                     break
 
+            curr_job = active_jobs[i]
             if haveTestToLaunch:
                 print("\n\n *** Dispatching job#{} of {} with {} servers "
                       "(total={}) and {} additional servers(total={}):  {}-{} with {}\n"
                       .format(job_index, total_jobs_count,
-                              testsToLaunch[i]['serverCount'],
+                              curr_job['serverCount'],
                               total_servers_being_used,
-                              testsToLaunch[i]['addPoolServerCount'],
+                              curr_job['addPoolServerCount'],
                               total_addl_servers_being_used,
-                              testsToLaunch[i]['component'],
-                              testsToLaunch[i]['subcomponent'],
-                              testsToLaunch[i]['framework'],))
+                              curr_job['component'],
+                              curr_job['subcomponent'],
+                              curr_job['framework'],))
 
                 # build the dashboard descriptor
-                dashboardDescriptor = urllib.parse.quote(testsToLaunch[i]['subcomponent'])
+                dashboardDescriptor = urllib.parse.quote(curr_job['subcomponent'])
                 if options.dashboardReportedParameters is not None:
                     for o in options.dashboardReportedParameters.split(','):
                         dashboardDescriptor += '_' + o.split('=')[1]
@@ -913,13 +918,12 @@ def main():
                 dispatch_job = True
                 if not options.fresh_run:
                     if runTimeTestRunnerParameters is None:
-                        parameters = testsToLaunch[i]['parameters']
+                        parameters = curr_job['parameters']
                     else:
-                        if testsToLaunch[i]['parameters'] == 'None':
+                        if curr_job['parameters'] == 'None':
                             parameters = runTimeTestRunnerParameters
                         else:
-                            parameters = testsToLaunch[i][
-                                             'parameters'] + ',' + runTimeTestRunnerParameters
+                            parameters = curr_job['parameters'] + ',' + runTimeTestRunnerParameters
                     rerun_condition = options.rerun_condition
                     only_failed = False
                     only_pending = False
@@ -935,13 +939,12 @@ def main():
                         only_install_failed = True
                     dispatch_job = \
                         find_rerun_job.should_dispatch_job(
-                            options.os, testsToLaunch[i][
-                                'component'], dashboardDescriptor
+                            options.os, curr_job['component'], dashboardDescriptor
                             , options.version, parameters,
                             only_pending, only_failed, only_unstable, only_install_failed)
 
                 # and this is the Jenkins descriptor
-                descriptor = testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
+                descriptor = curr_job['component'] + '-' + curr_job['subcomponent'] + '-' + time.strftime('%b-%d-%X') + '-' + options.version
 
                 if options.serverType == GCP:
                     # GCP labels are limited to 63 characters which might be too small.
@@ -957,10 +960,10 @@ def main():
                 descriptor = urllib.parse.quote(descriptor)
 
                 branch_to_trigger = options.branch
-                slave_to_use = testsToLaunch[i]['slave']
-                if testsToLaunch[i]['framework'] == "TAF":
+                slave_to_use = curr_job['slave']
+                if curr_job['framework'] == "TAF":
                     if float(options.version[:3]) >= 8.1:
-                        if testsToLaunch[i]["component"] == "analytics" \
+                        if curr_job["component"] == "analytics" \
                                 and str(options.columnar_version) == "0":
                             # TAF::analytics and 8.1 or greater and EA is None
                             # Force to use this branch
@@ -968,19 +971,17 @@ def main():
                         else:
                             # TAF and 8.1 or greater
                             slave_to_use = "deb12_jython_slave"
-                            testsToLaunch[i][
-                                'target_jenkins'] = 'http://172.23.121.80'
+                            curr_job['target_jenkins'] = 'http://172.23.121.80'
                     elif (str(options.version[:3]) == "8.0"
                           and options.branch == "morpheus"
-                          and testsToLaunch[i]["support_py3"] == "false"):
+                          and curr_job["support_py3"] == "false"):
                         # TAF and 8.0 morpheus branch with support_py3=false
                         branch_to_trigger = "master_jython"
-                elif testsToLaunch[i]['framework'] == "testrunner":
+                elif curr_job['framework'] == "testrunner":
                     if float(options.version[:3]) >= 8.1:
                         # Force to use qe jenkins and deb12 slave for all
                         # testrunner jobs on 8.1 and above
-                        testsToLaunch[i][
-                            'target_jenkins'] = 'http://172.23.121.80'
+                        curr_job['target_jenkins'] = 'http://172.23.121.80'
                         if slave_to_use in ["rqg_testing"]:
                             # Force to use qe jenkins and deb12_rqg slave
                             slave_to_use = "deb12_rqg_slave"
@@ -991,16 +992,14 @@ def main():
                         else:
                             # If nothing matches, fallback to default slave
                             slave_to_use = "deb12_P0_slave"
-                    elif testsToLaunch[i]['component'] in ["xdcr",
-                                                           "backup_recovery"]:
+                    elif curr_job['component'] in ["xdcr", "backup_recovery"]:
                         # For all version <= 8.0 use legacy slaves on
                         # qa jenkins with particular slave
-                        testsToLaunch[i][
-                            'target_jenkins'] = 'http://172.23.120.81'
+                        curr_job['target_jenkins'] = 'http://172.23.120.81'
                         slave_to_use = "P3XDCR"
 
                 if not is_executor_available_for_label(
-                        testsToLaunch[i]['target_jenkins'], slave_to_use):
+                        curr_job['target_jenkins'], slave_to_use):
                     msg = f"No free executors for slave label: {slave_to_use}"
                     sleep_function(60, message=msg)
                     continue
@@ -1010,30 +1009,30 @@ def main():
                 servers = []
                 internal_servers = None
                 unreachable_servers = []
-                how_many = testsToLaunch[i]['serverCount'] - len(servers)
+                how_many = curr_job['serverCount'] - len(servers)
                 if options.check_vm == "True":
                     while how_many > 0:
                         unchecked_servers, _ = get_servers(
                             options=options,
                             descriptor=descriptor,
-                            test=testsToLaunch[i],
+                            test=curr_job,
                             how_many=how_many,
                             os_version=options.os,
                             pool_id=pool_to_use)
                         checked_servers, bad_servers = check_servers_via_ssh(
                             servers=unchecked_servers,
-                            test=testsToLaunch[i])
+                            test=curr_job)
                         for ss in checked_servers:
                             servers.append(ss)
                         for ss in bad_servers:
                             unreachable_servers.append(ss)
-                        how_many = testsToLaunch[i]['serverCount'] - len(servers)
+                        how_many = curr_job['serverCount'] - len(servers)
 
                 else:
                     servers, internal_servers = get_servers(
                         options=options,
                         descriptor=descriptor,
-                        test=testsToLaunch[i],
+                        test=curr_job,
                         how_many=how_many,
                         os_version=options.os,
                         pool_id=pool_to_use)
@@ -1042,23 +1041,27 @@ def main():
                     # sometimes there could be a race, before a dispatcher process acquires vms,
                     # another waiting dispatcher process could grab them, resulting in lesser vms
                     # for the second dispatcher process
-                    if len(servers) != testsToLaunch[i]['serverCount']:
+                    if len(servers) != curr_job['serverCount']:
                         release_servers(options, descriptor)
-                        sleep_function(POLL_INTERVAL,
-                                       f"Received server count \"{len(servers)} != {testsToLaunch[i]['serverCount']}\" expected")
+                        msg = (f"Received server count \"{len(servers)} != "
+                               f"{curr_job['serverCount']}\" expected")
+                        sleep_function(POLL_INTERVAL, msg)
                         continue
 
                 # get additional pool servers as needed
                 addl_servers = []
 
-                if testsToLaunch[i]['addPoolServerCount']:
-                    how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
-                    addPoolId = testsToLaunch[i]['addPoolId']
-                    addl_servers, _ = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os, pool_id=addPoolId)
-                    if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
-                        print(
-                            "Received additional servers count does not match the expected "
-                            "test additional servers count!")
+                if curr_job['addPoolServerCount']:
+                    how_many_addl = curr_job['addPoolServerCount'] - len(addl_servers)
+                    addPoolId = curr_job['addPoolId']
+                    addl_servers, _ = get_servers(
+                        options=options, descriptor=descriptor,
+                        test=curr_job, how_many=how_many_addl,
+                        is_addl_pool=True, os_version=addPoolServer_os,
+                        pool_id=addPoolId)
+                    if len(addl_servers) != curr_job['addPoolServerCount']:
+                        print("Received additional servers count doesn't match"
+                              " the expected test additional servers count!")
                         release_servers(options, descriptor)
                         continue
 
@@ -1066,32 +1069,32 @@ def main():
 
                 # figure out the parameters, there are test suite specific, and added at dispatch time
                 if runTimeTestRunnerParameters is None:
-                    parameters = testsToLaunch[i]['parameters']
+                    parameters = curr_job['parameters']
                 else:
-                    if testsToLaunch[i]['parameters'] == 'None':
+                    if curr_job['parameters'] == 'None':
                         parameters = runTimeTestRunnerParameters
                     else:
-                        parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
+                        parameters = curr_job['parameters'] + ',' + runTimeTestRunnerParameters
 
                 url = launchString.format(options.version,
-                                          testsToLaunch[i]['confFile'],
+                                          curr_job['confFile'],
                                           descriptor,
-                                          testsToLaunch[i]['component'],
+                                          curr_job['component'],
                                           dashboardDescriptor,
-                                          testsToLaunch[i]['iniFile'],
+                                          curr_job['iniFile'],
                                           urllib.parse.quote(parameters),
                                           options.os,
-                                          testsToLaunch[i]['initNodes'],
-                                          testsToLaunch[i]['installParameters'],
+                                          curr_job['initNodes'],
+                                          curr_job['installParameters'],
                                           branch_to_trigger,
                                           slave_to_use,
-                                          urllib.parse.quote(testsToLaunch[i]['owner']),
+                                          urllib.parse.quote(curr_job['owner']),
                                           urllib.parse.quote(
-                                              testsToLaunch[i]['mailing_list']),
-                                          testsToLaunch[i]['mode'],
-                                          testsToLaunch[i]['timeLimit'],
+                                              curr_job['mailing_list']),
+                                          curr_job['mode'],
+                                          curr_job['timeLimit'],
                                           options.columnar_version,
-                                          testsToLaunch[i]['mixed_build_config'],
+                                          curr_job['mixed_build_config'],
                                           options.is_dynamic_vms)
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": curr_job_info})
@@ -1106,11 +1109,11 @@ def main():
                         internal_servers_str = rreplace(internal_servers_str, ']', 1)
                         url = url + '&internal_servers=' + urllib.parse.quote(internal_servers_str)
 
-                    if testsToLaunch[i]['addPoolServerCount']:
+                    if curr_job['addPoolServerCount']:
                         addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
                         addPoolServers = rreplace(addPoolServers, ']', 1)
                         url = url + '&addPoolServerId=' +\
-                                testsToLaunch[i]['addPoolId'] +\
+                                curr_job['addPoolId'] +\
                                 '&addPoolServers=' +\
                                 urllib.parse.quote(addPoolServers)
 
@@ -1121,7 +1124,7 @@ def main():
 
                 # optional add [-docker] [-Jenkins extension]
                 launchStringBase = "%s/job/%s" % (
-                    testsToLaunch[i]['target_jenkins'],
+                    curr_job['target_jenkins'],
                     str(options.launch_job))
                 launchStringBaseF = launchStringBase
                 if options.serverType == DOCKER:
@@ -1129,7 +1132,7 @@ def main():
                 if options.test:
                     launchStringBaseF = launchStringBase + '-test'
                 #     if options.framework.lower() == "jython":
-                framework = testsToLaunch[i]['framework']
+                framework = curr_job['framework']
                 if framework != 'testrunner':
                     launchStringBaseF = launchStringBaseF + "-" + framework
                 elif options.jenkins is not None:
@@ -1157,7 +1160,7 @@ def main():
                         if invited_user is None or invited_password is None:
                             print("CAPELLA: We could not invite user to capella cluster. Skipping job.")
                             job_index += 1
-                            testsToLaunch.pop(i)
+                            active_jobs.pop(i)
                             continue
                         url = update_url_with_job_params(url, f"capella_user={invited_user}&capella_password={invited_password}")
 
@@ -1199,14 +1202,14 @@ def main():
                     if int(response['status'])>=400:
                         raise Exception("Unexpected response while dispatching the request!")
 
-                total_servers_being_used += testsToLaunch[0]['serverCount']
-                total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
+                total_servers_being_used += curr_job['serverCount']
+                total_addl_servers_being_used += curr_job['addPoolServerCount']
                 job_index += 1
-                testsToLaunch.pop(i)
+                active_jobs.pop(i)
                 summary.append({
                     'test': descriptor,
                     'time': time.asctime(time.localtime(time.time()))})
-                if len(testsToLaunch) > 0:
+                if len(active_jobs) > 0:
                     if options.serverType == DOCKER:
                         sleep_function(240, f"Waiting for docker port allocation for {descriptor}")     # this is due to the docker port allocation race
                     elif int(options.sleep_between_trigger) != 0:
