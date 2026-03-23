@@ -2499,7 +2499,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.backstore_mainstore_check()
         self.validate_replica_indexes_item_counts()
 
-
+    # making this temp change of disabling disk check due to https://jira.issues.couchbase.com/browse/MB-70239
     def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
         self.update_master_node()
         self.drop_all_indexes()
@@ -3686,9 +3686,17 @@ class BaseSecondaryIndexingTests(QueryTests):
             rest = RestConnection(node)
             storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
             used_space = self.get_storage_directory_used_space(node, storage_dir)
+            used_space_indexer_metadata = self.get_storage_directory_used_space(node, f"{storage_dir}/metadata_repo_v2")
+            #this is for checking in general the indexer directory size a warning is logged
             if used_space > threshold_gb:
+                self.log.warning(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+            '''
+            As a result of https://jira.issues.couchbase.com/browse/MB-70239 the size of the metadata folder is being excluded from the calculation of space left
+            post index dropping
+            '''
+            if used_space-used_space_indexer_metadata > threshold_gb:
                 self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
-                raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+                raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space ignoring metadata folder: {used_space-used_space_indexer_metadata} GB (threshold: {threshold_gb} GB)")
 
     def get_storage_directory_used_space(self, node, storage_dir):
         """
