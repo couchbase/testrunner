@@ -247,22 +247,26 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
         # Validate magma is being used by all index nodes.
         self.assert_all_indexers_metastore_type(expected="magma", index_nodes=index_nodes)
 
+        #drop all indexes and check for disk usage post dropping
+        self.drop_index_node_resources_utilization_validations(sleep_time=900)
+
     def test_indexes_compaction(self):
         """
-        Tests metadata compaction under continuous document mutation workload by:
-        1. Create a bucket and load documents.
-        2. Create a large initial batch of indexes over multiple iterations.
-        3. Capture initial metadata size after indexes reach steady state.
-        4. Run continuous mutation workload for a fixed duration on existing indexes:
-           - Uses perform_continuous_kv_mutations method
-           - Continuous create and delete operations
-           - NO additional index creation or deletion during mutation phase
-           - Document churn drives metadata fragmentation
-        5. Let cluster settle and compare final metadata size to initial size.
+        Tests metadata compaction by creating, building, and dropping indexes to trigger compaction:
+        1. Create bucket and load documents.
+        2. Create a large initial batch of indexes (scalar + bhive) over multiple iterations.
+        3. Wait for indexes to reach steady state for several minutes.
+        4. Capture baseline compaction count (NCompacts) and initial metadata size at steady state.
+        5. Create indexes (defer_build=true), both scalar and bhive types, build them, 
+           let them run for 2-3 minutes, then drop them. Monitor metadata size after each cycle.
+        6. Repeat step 5 until compaction count exceeds baseline (or max_cycles reached).
+        7. Validate that final metadata size does not exceed 35% of the initial steady state size.
         """
-        steady_state_sleep = self.input.param("steady_state_sleep", 30)
-        workload_duration = self.input.param("workload_duration", 600)
+        steady_state_sleep = self.input.param("steady_state_sleep", 120)
+        index_lifespan = self.input.param("index_lifespan", 180)
         num_initial_index_iterations = self.input.param("num_initial_index_iterations", 3)
+        max_compaction_cycles = self.input.param("max_compaction_cycles", 20)
+        max_size_increase_percent = self.input.param("max_size_increase_percent", 35)
 
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -283,8 +287,14 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
 
         namespace = self.namespaces[0]
 
+        self.log.info("=== Compaction stats before initial index creation ===")
+        initial_ncompacts_before_creation, initial_node_ncompacts_before_creation = self._get_total_ncompacts(index_nodes)
+        self.log.info(f"Total NCompacts before initial index creation: {initial_ncompacts_before_creation}")
+        self.log.info(f"Per-node NCompacts: {initial_node_ncompacts_before_creation}")
+
         # Step 2: Create a large initial batch of indexes over multiple iterations.
         self.log.info(f"Creating initial batch of indexes over {num_initial_index_iterations} iterations...")
+        created_index_names = []
         for iteration in range(num_initial_index_iterations):
             self.log.info(f"--- Initial index creation iteration {iteration + 1}/{num_initial_index_iterations} ---")
 
@@ -299,6 +309,7 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
                 definition_list=iteration_scalar_definitions,
                 namespace=namespace)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            created_index_names.extend([idx.index_name for idx in iteration_scalar_definitions])
             self.log.info(f"Iteration {iteration + 1}: Created {len(iteration_scalar_definitions)} scalar indexes")
 
             # Create bhive indexes for this iteration
@@ -313,57 +324,187 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
                 namespace=namespace,
                 bhive_index=True)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
+            created_index_names.extend([idx.index_name for idx in iteration_bhive_definitions])
             self.log.info(f"Iteration {iteration + 1}: Created {len(iteration_bhive_definitions)} bhive indexes")
 
         # Wait for all initial indexes to come online
         self.log.info("Waiting for all initial indexes to come online...")
         self.wait_until_indexes_online(timeout=1200)
         self.log.info(f"All {num_initial_index_iterations} iterations of initial indexes are online")
-        self.index_rest.set_index_settings({"indexer.plasma.mainIndex.LSSFragmentation":20})
+        indexes_before_comapction = self.get_all_indexes_in_the_cluster()
+        self.log.info(f"indexes in the cluster before are{indexes_before_comapction} and no of indexes are {len(indexes_before_comapction)}")
+        
+        # Log compaction stats after initial index creation
+        self.log.info("=== Compaction stats after initial index creation ===")
+        initial_ncompacts_after_creation, initial_node_ncompacts_after_creation = self._get_total_ncompacts(index_nodes)
+        self.log.info(f"Total NCompacts after initial index creation: {initial_ncompacts_after_creation}")
+        self.log.info(f"Per-node NCompacts: {initial_node_ncompacts_after_creation}")
+
         self.sleep(10)
 
-        # Capture initial metadata size after steady state.
+        # Step 3: Let indexes reach steady state
+        self.log.info(f"Letting indexes reach steady state for {steady_state_sleep} seconds...")
+        self.sleep(steady_state_sleep, "Waiting for indexes to reach steady state")
+
+        # Step 4: Capture baseline compaction count and initial metadata size after steady state.
+        baseline_ncompacts, baseline_node_ncompacts = self._get_total_ncompacts(index_nodes)
+        self.log.info(f"Baseline NCompacts at steady state: {baseline_ncompacts}")
+        self.log.info(f"Baseline per-node NCompacts: {baseline_node_ncompacts}")
+        
         initial_total_size, initial_node_sizes = self._get_total_metastore_size(index_nodes)
-        self.log.info(f"Initial metastore size after steady state: {initial_total_size}")
+        self.log.info(f"Initial metadata size at steady state: {initial_total_size}")
+        cycle_metadata_sizes = []
+        cycle_metadata_sizes.append(("steady_state", initial_total_size))
 
-        # Step 3: Run continuous mutation workload for a fixed duration.
-        self.log.info(f"Starting continuous mutation workload for {workload_duration} seconds")
-        self.log.info("Mutation workload: continuous create and delete operations")
-        self.log.info("Workload runs via perform_continuous_kv_mutations while indexes remain unchanged")
-        self.log.info("NO new indexes will be created or deleted during this phase")
+        # Step 5: Create, build, and drop indexes until compaction count increases
+        self.log.info(f"Starting compaction trigger cycles (max {max_compaction_cycles} cycles)...")
+        self.log.info("Each cycle: Create indexes (defer_build=true) -> Build -> Wait -> Drop")
+        self.log.info(f"Will run until NCompacts > baseline ({baseline_ncompacts}) or max cycles reached")
+        
+        cycle = 0
+        compaction_triggered = False
+        
+        while cycle < max_compaction_cycles:
+            cycle += 1
+            self.log.info(f"\n=== Compaction Cycle {cycle} ===")
+            
+            # Use defer_build for these indexes
+            self.defer_build = True
+            
+            # Create scalar indexes (deferred build)
+            cycle_scalar_definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=f"idx_compact_scalar_{cycle}_",
+                array_indexes=False,
+                bhive_index=False,
+                scalar=True)
+            
+            scalar_create_queries = self.gsi_util_obj.get_create_index_list(
+                definition_list=cycle_scalar_definitions,
+                namespace=namespace, defer_build=self.defer_build)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=scalar_create_queries, query_node=query_node)
+            scalar_index_names = [idx.index_name for idx in cycle_scalar_definitions]
+            self.log.info(f"Cycle {cycle}: Created {len(scalar_index_names)} scalar indexes (defer_build=true)")
+            
+            # Create bhive indexes (deferred build)
+            cycle_bhive_definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=f"idx_compact_bhive_{cycle}_",
+                array_indexes=False,
+                bhive_index=True,
+                scalar=False)
+            
+            bhive_create_queries = self.gsi_util_obj.get_create_index_list(
+                definition_list=cycle_bhive_definitions,
+                namespace=namespace,
+                bhive_index=True, defer_build=self.defer_build)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=bhive_create_queries, query_node=query_node)
+            bhive_index_names = [idx.index_name for idx in cycle_bhive_definitions]
+            self.log.info(f"Cycle {cycle}: Created {len(bhive_index_names)} bhive indexes (defer_build=true)")
+            
+            # Query system:indexes to get all deferred index names for this namespace
+            self.log.info(f"Cycle {cycle}: Querying for deferred indexes in namespace {namespace}...")
+            
 
-        try:
-            mutation_event = Event()
-            self.perform_continuous_kv_mutations(event=mutation_event, timeout=workload_duration,
-                                                 num_docs_mutating=self.num_of_docs_per_collection)
-        finally:
-            mutation_event.set()
+            # Build all indexes at once using correct BUILD INDEX syntax
+            self.log.info(f"Cycle {cycle}: Building all deferred indexes...")
+            index_names_str = ", ".join([f"`{name}`" for name in bhive_index_names+scalar_index_names])
+            build_query = f"BUILD INDEX ON {namespace} ({index_names_str})"
+            self.log.info(f"Build query: {build_query}")
+            self.run_cbq_query(query=build_query, server=query_node)
 
-        self.log.info("Continuous mutation workload completed")
+            # Wait for indexes to build
+            self.log.info(f"Cycle {cycle}: Waiting for indexes to come online...")
+            self.wait_until_indexes_online(timeout=600)
+            
+            # Let indexes be in steady state for specified lifespan
+            self.sleep(index_lifespan, f"Cycle {cycle}:indexes running")
+            
+            # Drop all current cycle indexes (both scalar and bhive)
+            self.log.info(f"Cycle {cycle}: Dropping indexes created in this cycle...")
+            all_cycle_index_names = scalar_index_names + bhive_index_names
+            # Accumulate all drop queries
+            drop_queries = []
+            for idx_name in all_cycle_index_names:
+                drop_query = f"DROP INDEX `{idx_name}` ON {namespace}"
+                drop_queries.append(drop_query)
+            # Execute all drop queries at once using async_create_indexes
+            if drop_queries:
+                self.log.info(f"Cycle {cycle}: Dropping {len(drop_queries)} indexes asynchronously")
+                self.gsi_util_obj.async_create_indexes(create_queries=drop_queries, database=namespace, query_node=query_node)
+            self.log.info(f"Cycle {cycle}: Dropped {len(all_cycle_index_names)} indexes ({len(scalar_index_names)} scalar, {len(bhive_index_names)} bhive)")
+            self.sleep(30, "Sleeping post index drops")
+            
+            # Capture metadata size after cycle
+            cycle_total_size, _ = self._get_total_metastore_size(index_nodes)
+            cycle_metadata_sizes.append((f"cycle_{cycle}", cycle_total_size))
+            
+            # Calculate size increase from initial steady state
+            size_diff = cycle_total_size - initial_total_size
+            size_diff_percent = (size_diff / initial_total_size * 100) if initial_total_size > 0 else 0
+            
+            self.log.info(f"Cycle {cycle}: Metadata size = {cycle_total_size} (diff: {size_diff}, {size_diff_percent:.2f}% from initial)")
+            
+            # Check if compaction has been triggered
+            current_ncompacts, current_node_ncompacts = self._get_total_ncompacts(index_nodes)
+            self.log.info(f"Cycle {cycle}: Current NCompacts = {current_ncompacts} (baseline: {baseline_ncompacts})")
+            
+            if current_ncompacts > baseline_ncompacts:
+                compaction_triggered = True
+                self.log.info(f"Cycle {cycle}: Compaction triggered! NCompacts increased from {baseline_ncompacts} to {current_ncompacts}")
+                break
+            
+            # Small sleep before next cycle
+            self.sleep(10, f"Cycle {cycle}: Brief pause before next cycle")
 
-        # Step 4: Let cluster settle after workload.
-        self.log.info(f"Letting cluster settle for {steady_state_sleep} seconds after workload...")
-        self.sleep(steady_state_sleep, "Waiting for cluster to settle after workload")
+        indexes_post_comapction = self.get_all_indexes_in_the_cluster()
+        self.log.info(
+            f"indexes in the cluster after are{indexes_post_comapction} and no of indexes are {len(indexes_post_comapction)}")
+        # Step 6: Log cycle completion status
+        if compaction_triggered:
+            self.log.info(f"\nCompaction was triggered after {cycle} cycles")
+        else:
+            self.log.info(f"\nCompaction was NOT triggered after {cycle} cycles (max: {max_compaction_cycles})")
+        
+        # Step 7: Let cluster settle
+        self.sleep(30, "Waiting for cluster to settle after compaction cycles")
 
-        # Capture final metadata size.
+        # Step 8: Capture final metadata size and validate
         final_total_size, final_node_sizes = self._get_total_metastore_size(index_nodes)
-        self.log.info(f"Final metastore size after workload: {final_total_size}")
-
-        # Step 5: Compare metadata sizes.
+        final_ncompacts, final_node_ncompacts = self._get_total_ncompacts(index_nodes)
+        
+        self.log.info(f"\n=== Final Results ===")
+        self.log.info(f"Total cycles run: {cycle}")
+        self.log.info(f"Compaction triggered: {compaction_triggered}")
+        self.log.info(f"Baseline NCompacts: {baseline_ncompacts}")
+        self.log.info(f"Final NCompacts: {final_ncompacts} (increase: {final_ncompacts - baseline_ncompacts})")
+        self.log.info(f"\nMetadata size at each stage:")
+        for stage, size in cycle_metadata_sizes:
+            diff = size - initial_total_size
+            diff_percent = (diff / initial_total_size * 100) if initial_total_size > 0 else 0
+            self.log.info(f"  {stage}: {size} (diff: {diff}, {diff_percent:.2f}% from initial)")
+        
+        self.log.info(f"\nFinal metadata size: {final_total_size}")
         size_diff = final_total_size - initial_total_size
         size_diff_percent = (size_diff / initial_total_size * 100) if initial_total_size > 0 else 0
-
-        self.log.info(f"Metadata size comparison:")
-        self.log.info(f"  Initial size: {initial_total_size}")
-        self.log.info(f"  Final size:   {final_total_size}")
-        self.log.info(f"  Difference:   {size_diff} ({size_diff_percent:.2f}%)")
-
-        # Log per-node comparison.
+        
+        self.log.info(f"Total size increase: {size_diff} ({size_diff_percent:.2f}%)")
+        
+        # Log per-node comparison
         for node_ip in initial_node_sizes:
             initial = initial_node_sizes.get(node_ip, 0)
             final = final_node_sizes.get(node_ip, 0)
             diff = final - initial
-            self.log.info(f"  Node {node_ip}: initial={initial}, final={final}, diff={diff}")
+            diff_percent = (diff / initial * 100) if initial > 0 else 0
+            self.log.info(f"  Node {node_ip}: initial={initial}, final={final}, diff={diff} ({diff_percent:.2f}%)")
+        
+        self.log.info(f"\nNCompacts: {final_ncompacts}")
+        
+        # Validate that metadata size does not exceed max_size_increase_percent of initial
+        self.assertTrue(size_diff_percent <= max_size_increase_percent, 
+                        f"Metadata size increased by {size_diff_percent:.2f}%, which exceeds the maximum allowed {max_size_increase_percent}%")
+        
+        self.log.info(f"Compaction test completed successfully: Metadata size ({size_diff_percent:.2f}% increase) is within acceptable limit of {max_size_increase_percent}%")
 
     def test_corrupt_sstables_data_files(self):
         """

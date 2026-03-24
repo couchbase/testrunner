@@ -679,6 +679,24 @@ class BaseSecondaryIndexingTests(QueryTests):
                 partial_index_list.append(index['name'])
         return partial_index_list
 
+    def _get_total_ncompacts(self, index_nodes=None):
+        """
+        Returns the total NCompacts count across all indexer nodes. NCompacts in this case signifies the no of compactions triggered by magma on
+        the indexer metadata
+        Uses the :9102/stats/metadata?debug=1 endpoint.
+        """
+        if index_nodes is None:
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        total_ncompacts = 0
+        node_ncompacts = {}
+        for node in index_nodes:
+            stats = RestConnection(node).get_indexer_metastore_stats()
+            ncompacts = stats.get("magma_stats", {}).get("NCompacts", 0)
+            node_ncompacts[node.ip] = ncompacts
+            total_ncompacts += ncompacts
+        self.log.info(f"NCompacts per node: {node_ncompacts}, total: {total_ncompacts}")
+        return total_ncompacts, node_ncompacts
+
     def validate_shard_seggregation(self, shard_index_map):
         bhive_indexes = self.get_all_bhive_index_names()
         composite_indexes = self.get_all_composite_index_names()
@@ -2500,14 +2518,14 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.validate_replica_indexes_item_counts()
 
     # making this temp change of disabling disk check due to https://jira.issues.couchbase.com/browse/MB-70239
-    def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False):
+    def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False, sleep_time=360):
         self.update_master_node()
         self.drop_all_indexes()
         remote_client = RemoteMachineShellConnection(self.master)
         type = remote_client.extract_remote_info().distribution_type.lower()
         if type != "windows":
             if not skip_disk_cleared_check:
-                self.sleep(360, "sleeping to destroy empty shards")
+                self.sleep(sleep_time, "sleeping to destroy empty shards")
                 self.check_storage_directory_cleaned_up()
         if not self.validate_memory_released():
             raise AssertionError("Memory not released despite dropping all the indexes")
@@ -3685,8 +3703,11 @@ class BaseSecondaryIndexingTests(QueryTests):
         for node in idx_node_list:
             rest = RestConnection(node)
             storage_dir = rest.get_indexer_internal_stats()['indexer.storage_dir']
-            used_space = self.get_storage_directory_used_space(node, storage_dir)
             used_space_indexer_metadata = self.get_storage_directory_used_space(node, f"{storage_dir}/metadata_repo_v2")
+            # in case if the metadata directory no longer exists
+            if used_space_indexer_metadata is None:
+                used_space_indexer_metadata = 0.0
+            used_space = self.get_storage_directory_used_space(node, storage_dir)
             #this is for checking in general the indexer directory size a warning is logged
             if used_space > threshold_gb:
                 self.log.warning(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
