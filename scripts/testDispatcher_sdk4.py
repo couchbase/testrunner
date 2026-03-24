@@ -127,8 +127,6 @@ def get_available_servers_count(options=None, is_addl_pool=False,
                                                        pool_id=pool_id)
 
     count = int(count)
-    if count == 0:
-        sleep_function(POLL_INTERVAL, 'no VMs')
     return count
 
 
@@ -1006,9 +1004,9 @@ def main():
 
                 if not is_executor_available_for_label(
                         curr_job['target_jenkins'], slave_to_use):
-                    msg = f"No free executors for slave label: {slave_to_use}"
-                    sleep_function(60, message=msg)
-                    log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to executor unavailability for slave {slave_to_use}")
+                    log.warning(
+                        f"Adding job {curr_job['component']}-{curr_job['subcomponent']} "
+                        f"to retry_jobs, reason: No free executors for slave label: {slave_to_use}")
                     retry_jobs.append(curr_job)
                     active_jobs.pop(i)
                     continue
@@ -1052,10 +1050,9 @@ def main():
                     # for the second dispatcher process
                     if len(servers) != curr_job['serverCount']:
                         release_servers(options, descriptor)
-                        msg = (f"Received server count \"{len(servers)} != "
-                               f"{curr_job['serverCount']}\" expected")
-                        sleep_function(POLL_INTERVAL, msg)
-                        log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to VM count mismatch: got {len(servers)}, expected {curr_job['serverCount']}")
+                        log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} "
+                                    f"to retry_jobs, reason: Received server count "
+                                    f"\"{len(servers)} != {curr_job['serverCount']}\" expected")
                         retry_jobs.append(curr_job)
                         active_jobs.pop(i)
                         continue
@@ -1072,10 +1069,12 @@ def main():
                         is_addl_pool=True, os_version=addPoolServer_os,
                         pool_id=addPoolId)
                     if len(addl_servers) != curr_job['addPoolServerCount']:
-                        print("Received additional servers count doesn't match"
-                              " the expected test additional servers count!")
                         release_servers(options, descriptor)
-                        log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to additional pool {addPoolId} VM count mismatch: got {len(addl_servers)}, expected {curr_job['addPoolServerCount']}")
+                        log.warning(
+                            f"Adding job {curr_job['component']}-{curr_job['subcomponent']} "
+                            f"to retry_jobs due to additional pool {addPoolId}."
+                            f"VM count mismatch: got {len(addl_servers)}, "
+                            f"expected {curr_job['addPoolServerCount']}")
                         retry_jobs.append(curr_job)
                         active_jobs.pop(i)
                         continue
@@ -1232,15 +1231,16 @@ def main():
                     else:
                         sleep_function(5)
             else:
-                sleep_function(POLL_INTERVAL, 'Not enough servers')
-                log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to insufficient servers")
+                log.warning(
+                    f"Adding job {curr_job['component']}-{curr_job['subcomponent']} "
+                    f"to retry_jobs due to insufficient servers")
                 retry_jobs.append(curr_job)
                 active_jobs.pop(i)
 
             if len(active_jobs) == 0 and len(retry_jobs) > 0:
-                msg = (f"Flipping retry_jobs to active_jobs: "
-                       f"{len(retry_jobs)} jobs to retry")
-                sleep_function(30, msg)
+                sleep_function(seconds=60,
+                               message=f"Flipping retry_jobs to active_jobs: "
+                                       f"{len(retry_jobs)} jobs to retry")
                 active_jobs = retry_jobs.copy()
                 retry_jobs.clear()
         except Exception as e:
