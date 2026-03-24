@@ -33,5 +33,5 @@ function writeQueryResult(queryName, ids, meta) {
 
 function OnDelete(meta) {
     log('Deleting Document', meta.id);
-    delete dst_bucket[meta.id]; 
+    delete dst_bucket["matchQuery_" + meta.id];
 }

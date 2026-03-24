@@ -32,3 +32,8 @@ function OnUpdate(doc, meta) {
         log("Error: ", e);
     }
 }
+
+function OnDelete(meta) {
+    log('Deleting Document', meta.id);
+    delete dst_bucket[meta.id];
+}

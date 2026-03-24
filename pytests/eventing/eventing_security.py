@@ -97,21 +97,20 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enabling n2n encryption")
         if self.pause_resume:
             self.resume_function(body)
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
-        if not (getattr(self, 'is_fts', False) and getattr(self, 'is_analytics', False)):
-            self.verify_doc_count_collections("default.scope0.collection1", 0)
+        self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body)
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel="all")
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after changing encryption level to all")
         if self.pause_resume:
             self.resume_function(body)
@@ -132,15 +131,14 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().disable_nton_cluster([self.master])
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after disabling n2n encryption")
         if self.pause_resume:
             self.resume_function(body)
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        if not (getattr(self, 'is_fts', False) and getattr(self, 'is_analytics', False)):
-            self.verify_doc_count_collections("default.scope0.collection1", 0)
+        self.verify_doc_count_collections("default.scope0.collection1", 0)
         self.undeploy_and_delete_function(body)
 
     '''
@@ -175,21 +173,20 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enabling n2n encryption")
         if self.pause_resume:
             self.resume_function(body)
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        if not (getattr(self, 'is_fts', False) and getattr(self, 'is_analytics', False)):
-            self.verify_doc_count_collections("default.scope0.collection1", 0)
+        self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body)
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enforcing strict TLS")
         if self.pause_resume:
             self.resume_function(body)
@@ -209,21 +206,20 @@ class EventingSecurity(EventingBaseTest):
         else:
             self.undeploy_function(body)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after changing encryption level")
         if self.pause_resume:
             self.resume_function(body)
         else:
             self.deploy_function(body)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        if not (getattr(self, 'is_fts', False) and getattr(self, 'is_analytics', False)):
-            self.verify_doc_count_collections("default.scope0.collection1", 0)
+        self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
             self.pause_function(body)
         else:
             self.undeploy_function(body)
         ntonencryptionBase().disable_nton_cluster([self.master])
-        if getattr(self, 'is_analytics', False):
+        if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after disabling n2n encryption")
         if self.pause_resume:
             self.resume_function(body)
