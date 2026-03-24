@@ -1229,7 +1229,8 @@ def main():
                     elif int(options.sleep_between_trigger) != 0:
                         sleep_function(int(options.sleep_between_trigger), f"Waiting for {options.sleep_between_trigger} seconds between triggers for {descriptor}")
                     else:
-                        sleep_function(5)
+                        # sleep=10sec else the waiting job may trigger false-negative as job queued
+                        sleep_function(10)
             else:
                 log.warning(
                     f"Adding job {curr_job['component']}-{curr_job['subcomponent']} "
