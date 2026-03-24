@@ -186,11 +186,16 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             # deleting docs
             query = f'SELECT meta().id FROM {collection_namespace}'
             doc_ids = self.run_cbq_query(query=query)['results']
+            # pick candidate docs to delete (may contain duplicates when using choices)
             docs_to_delete = [doc_id['id'] for doc_id in random.choices(doc_ids, k=10)]
-            doc_ids = ", ".join([f'"{item}"' for item in docs_to_delete])
-            delete_query = f'DELETE FROM {collection_namespace} d WHERE meta(d).id in [{doc_ids}] RETURNING d'
-            self.run_cbq_query(query=delete_query)
-            count -= len(docs_to_delete)
+            doc_ids_str = ", ".join([f'"{item}"' for item in docs_to_delete])
+            delete_query = f'DELETE FROM {collection_namespace} d WHERE meta(d).id in [{doc_ids_str}] RETURNING d'
+            # use DELETE ... RETURNING to know how many rows were actually removed
+            delete_resp = self.run_cbq_query(query=delete_query)
+            deleted = len(delete_resp.get('results', []))
+            self.log.info("Requested deletes: %d, actually deleted: %d", len(docs_to_delete), deleted)
+            # decrement expected count by the actual number of deleted rows
+            count -= deleted
             doc_count = self.run_query_with_retry(query=doc_count_query, expected_result=count, is_count_query=True)
             self.assertEqual(doc_count, count, f"Actual: {doc_count}, Expected: {count}")
 
