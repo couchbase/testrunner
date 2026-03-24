@@ -393,9 +393,12 @@ def should_dispatch_job(os, component, sub_component, version,
         print("None of the rerun conditions were met. Running the job")
         return True
     except Exception as e:
-        print("Exception occured while finding if job has to be "
-              "dispatched: %s" % e)
-        traceback.print_exc()
+        if "DocumentNotFoundException" in str(e):
+            print("Document not found")
+        else:
+            print("Exception occurred while finding if job has to be "
+                  "dispatched: %s" % e)
+            traceback.print_exc()
         return True
 
 
