@@ -860,6 +860,8 @@ def main():
             i = 0
             pool_to_use = options.poolId[0]
 
+            # Following loop check if we have enough servers in pool before
+            # proceeding to actual booking+trigger of the job
             for pool_id in options.poolId:
                 if options.serverType in CLOUD_SERVER_TYPES:
                     haveTestToLaunch = True
@@ -895,6 +897,10 @@ def main():
 
                 if haveTestToLaunch:
                     break
+
+            # If no job can be launched (i >= len(active_jobs)), use first job
+            if i >= len(active_jobs):
+                i = 0
 
             curr_job = active_jobs[i]
             if haveTestToLaunch:
@@ -1002,6 +1008,9 @@ def main():
                         curr_job['target_jenkins'], slave_to_use):
                     msg = f"No free executors for slave label: {slave_to_use}"
                     sleep_function(60, message=msg)
+                    log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to executor unavailability for slave {slave_to_use}")
+                    retry_jobs.append(curr_job)
+                    active_jobs.pop(i)
                     continue
 
                 # grab the server resources
@@ -1046,6 +1055,9 @@ def main():
                         msg = (f"Received server count \"{len(servers)} != "
                                f"{curr_job['serverCount']}\" expected")
                         sleep_function(POLL_INTERVAL, msg)
+                        log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to VM count mismatch: got {len(servers)}, expected {curr_job['serverCount']}")
+                        retry_jobs.append(curr_job)
+                        active_jobs.pop(i)
                         continue
 
                 # get additional pool servers as needed
@@ -1063,6 +1075,9 @@ def main():
                         print("Received additional servers count doesn't match"
                               " the expected test additional servers count!")
                         release_servers(options, descriptor)
+                        log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to additional pool {addPoolId} VM count mismatch: got {len(addl_servers)}, expected {curr_job['addPoolServerCount']}")
+                        retry_jobs.append(curr_job)
+                        active_jobs.pop(i)
                         continue
 
                 # and send the request to the test executor
@@ -1215,9 +1230,19 @@ def main():
                     elif int(options.sleep_between_trigger) != 0:
                         sleep_function(int(options.sleep_between_trigger), f"Waiting for {options.sleep_between_trigger} seconds between triggers for {descriptor}")
                     else:
-                        sleep_function(30)
+                        sleep_function(5)
             else:
                 sleep_function(POLL_INTERVAL, 'Not enough servers')
+                log.warning(f"Adding job {curr_job['component']}-{curr_job['subcomponent']} to retry_jobs due to insufficient servers")
+                retry_jobs.append(curr_job)
+                active_jobs.pop(i)
+
+            if len(active_jobs) == 0 and len(retry_jobs) > 0:
+                msg = (f"Flipping retry_jobs to active_jobs: "
+                       f"{len(retry_jobs)} jobs to retry")
+                sleep_function(30, msg)
+                active_jobs = retry_jobs.copy()
+                retry_jobs.clear()
         except Exception as e:
             log.critical(f'Have an exception: {str(e)}\n'
                          f'{traceback.format_exc()}')
