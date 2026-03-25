@@ -1,7 +1,10 @@
+
 from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.couchbase_helper.documentgenerator import BlobGenerator
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 
 class VariableVbucketXDCR(XDCRNewBaseTest):
@@ -169,3 +172,71 @@ class VariableVbucketXDCR(XDCRNewBaseTest):
         self._kill_goxdcr_both_clusters(wait_to_recover=True)
         
         self._wait_for_replication_to_catchup(timeout=600)
+
+    # ---- 10K Collections Scale Tests ----
+    def test_ephemeral_bucket_10k_collections(self):
+        """
+        Verify XDCR with ephemeral buckets at 10K collection scale.
+        Bucket type is set via conf params (bucket_type=ephemeral).
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="ephemeral10k")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Ephemeral 10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.assertEqual(src_count, dest_count,
+                         "Ephemeral mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("Ephemeral bucket 10K test passed")
+
+    def test_magma_storage_10k_collections(self):
+        """
+        Verify XDCR with magma storage backend at 10K collection scale.
+        Bucket storage backend is set via conf params (bucket_storage=magma).
+        Tests with different vbucket counts when specified.
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="magma10k")
+
+        self._kill_goxdcr_both_clusters(wait_to_recover=True)
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Magma 10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.assertEqual(src_count, dest_count,
+                         "Magma mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("Magma storage 10K test passed")

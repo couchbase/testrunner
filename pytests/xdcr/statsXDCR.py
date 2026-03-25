@@ -8,6 +8,9 @@ import re
 import subprocess
 import multiprocessing
 import os
+import time
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 class StatsXDCR(XDCRNewBaseTest):
     def setUp(self):
@@ -172,3 +175,59 @@ class StatsXDCR(XDCRNewBaseTest):
 
         self.assertTrue(metrics['Main'] == 0.0, "Expected metrics value did not match main pipeline")
         self.assertTrue(metrics['Backfill'] == 0.0, "Expected metrics value did not match backfill pipeline")
+
+    # ---- 10K Collections Scale Tests ----
+    def test_xdcr_stats_latency_10k_collections(self):
+        """
+        Verify XDCR stats REST API remains responsive with 10K collections.
+        Queries bucket stats endpoint and measures response time to detect
+        stats lag that could cause UI timeouts.
+
+        Conf params:
+            stats_timeout: max acceptable response time in seconds (default 30)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        stats_timeout = self._input.param("stats_timeout", 30)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="stats10k")
+
+        rest = RestConnection(self.src_master)
+        start_time = time.time()
+        try:
+            stats = rest.fetch_bucket_xdcr_stats(bucket_name)
+        except Exception:
+            stats = rest.get_bucket_stats(bucket_name)
+        elapsed = time.time() - start_time
+        self.log.info("Stats query took {:.2f}s (threshold: {}s)".format(
+            elapsed, stats_timeout))
+        self.assertLess(elapsed, stats_timeout,
+                        "Stats query took {:.2f}s, exceeds {}s threshold".format(
+                            elapsed, stats_timeout))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Stats latency 10K catch-up failed: {}".format(e))
+
+        start_time = time.time()
+        try:
+            stats = rest.fetch_bucket_xdcr_stats(bucket_name)
+        except Exception:
+            stats = rest.get_bucket_stats(bucket_name)
+        elapsed = time.time() - start_time
+        self.log.info("Post-replication stats query took {:.2f}s".format(elapsed))
+        self.assertLess(elapsed, stats_timeout,
+                        "Post-replication stats query too slow: {:.2f}s".format(elapsed))
+        self.log.info("Stats latency 10K test passed")

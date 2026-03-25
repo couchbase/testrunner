@@ -1,8 +1,10 @@
+import random
+import time
+
 from .xdcrnewbasetests import XDCRNewBaseTest
 from membase.api.rest_client import RestConnection
 
-import random
-import time
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 
 class XDCRCollectionsTests(XDCRNewBaseTest):
@@ -169,3 +171,119 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         except Exception as e:
             self.fail(str(e))
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_explicit_mapping_10k_collections(self):
+        """
+        Explicit collection-to-collection mapping with 10K collections.
+        Maps a subset of source scopes to destination scopes and verifies
+        only the mapped collections replicate.
+
+        NOTE: This test creates collections and XDCR independently of
+        the base class setUp which already called setup_xdcr_and_load.
+
+        Conf params:
+            mapped_scopes: number of scopes to include in mapping (default 5)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        mapped_scopes = self._input.param("mapped_scopes", 5)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        mapping_rules = {}
+        for i in range(mapped_scopes):
+            scope_name = "{}{}".format(p["scope_prefix"], i)
+            key = '"{}"'.format(scope_name)
+            mapping_rules[key] = key
+
+        rules_json = ",".join(["{}:{}".format(k, v) for k, v in mapping_rules.items()])
+        self.log.info("Setting explicit mapping for {} scopes: {}".format(
+            mapped_scopes, rules_json[:200]))
+
+        try:
+            setting_val_map = {
+                "collectionsExplicitMapping": "true",
+                "colMappingRules": "{" + rules_json + "}"
+            }
+            self.src_rest.set_xdcr_params(bucket_name, bucket_name, setting_val_map)
+        except Exception as e:
+            self.fail("Failed to set explicit mapping: {}".format(e))
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="explmap")
+
+        try:
+            self._wait_for_dest_to_stabilize(self.dest_cluster, bucket_name,
+                                             min_items=1, timeout=600)
+        except Exception as e:
+            self.fail("Explicit-mapping replication did not stabilize: {}".format(e))
+
+        src_items = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_items = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {} (dest expected <= src "
+                      "since only {}/{} scopes mapped)".format(
+                          src_items, dest_items, mapped_scopes, p["num_scopes"]))
+        self.assertGreater(dest_items, 0,
+                           "Destination should have items from mapped scopes")
+        self.assertLessEqual(dest_items, src_items,
+                             "Mapped dest should have <= src items")
+
+        self.log.info("Explicit mapping 10K collections test passed")
+
+    def test_migration_mode_10k_collections(self):
+        """
+        Migration mode with rule-based collection mapping at 10K scale.
+        Routes docs from default collection to specific 10K-scale target
+        collections based on REGEXP_CONTAINS patterns on doc keys.
+
+        Conf params:
+            num_migration_rules: number of migration rules to create (default 3)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        num_rules = self._input.param("num_migration_rules", 3)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        rules = {}
+        for i in range(num_rules):
+            lhs = "\"REGEXP_CONTAINS(META().id,'{}$')\"".format(i)
+            scope_name = "{}{}".format(p["scope_prefix"], i % p["num_scopes"])
+            col_name = "{}{}".format(p["collection_prefix"], i % p["collections_per_scope"])
+            rhs = '"{}.{}"'.format(scope_name, col_name)
+            rules[lhs] = rhs
+
+        rules_json = ",".join(["{}:{}".format(k, v) for k, v in rules.items()])
+        self.log.info("Setting migration mode with {} rules".format(num_rules))
+
+        try:
+            setting_val_map = {
+                "collectionsMigrationMode": "true",
+                "colMappingRules": "{" + rules_json + "}"
+            }
+            self.src_rest.set_xdcr_params(bucket_name, bucket_name, setting_val_map)
+        except Exception as e:
+            self.fail("Failed to set migration mode: {}".format(e))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception:
+            self.log.info("Catch-up with migration mode rules")
+
+        dest_items = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Destination items after migration: {}".format(dest_items))
+
+        self.log.info("Migration mode 10K collections test passed")

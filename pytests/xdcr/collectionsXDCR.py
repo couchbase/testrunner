@@ -1,7 +1,11 @@
-from .xdcrnewbasetests import XDCRNewBaseTest
+import random
+import time
+
+from .xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
-import random
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 
 class XDCRCollectionsTests(XDCRNewBaseTest):
@@ -357,3 +361,305 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
 
         except Exception as e:
             self.fail(f"Migration mode with xattrs test failed: {str(e)}")
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_non_existent_collections_10k(self):
+        """
+        Destination is missing a percentage of source collections.
+        Verify XDCR logs errors for missing collections but continues
+        replicating the existing ones.
+
+        Conf params:
+            missing_ratio: fraction of collections missing on dest (default 0.1)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        missing_ratio = float(self._input.param("missing_ratio", 0.1))
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        dest_cps = int(p["collections_per_scope"] * (1 - missing_ratio))
+        if dest_cps < 1:
+            dest_cps = 1
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name,
+            num_scopes=p["num_scopes"],
+            collections_per_scope=dest_cps,
+            scope_prefix=p["scope_prefix"],
+            collection_prefix=p["collection_prefix"])
+
+        expected_missing = p["num_scopes"] * (p["collections_per_scope"] - dest_cps)
+        self.log.info("Source has {} collections, dest has {} (missing {})".format(
+            p["num_scopes"] * p["collections_per_scope"],
+            p["num_scopes"] * dest_cps, expected_missing))
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="nonexist")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception:
+            self.log.info("Catch-up timed out as expected with missing collections")
+
+        dest_count = TenKCollectionHelper.get_manifest_collection_count(
+            self.dest_master, bucket_name)
+        self.assertGreaterEqual(dest_count, p["num_scopes"] * dest_cps,
+                                "Destination lost collections during replication")
+
+        src_items = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_items = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {} (dest expected < src due to missing collections)".format(
+            src_items, dest_items))
+        self.assertGreater(dest_items, 0,
+                           "Destination should have received some items despite missing collections")
+
+        self.log.info("Non-existent collections test passed: replication continued "
+                      "for existing {} dest collections".format(dest_count))
+
+    def test_collection_id_mismatch_recreate(self):
+        """
+        Delete and recreate a collection on dest (new manifest ID) while
+        replication is active. Verify XDCR detects the mismatch and heals.
+
+        Conf params:
+            drop_count: number of collections to drop+recreate (default 5)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        drop_count = self._input.param("drop_count", 5)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="mismatch_pre")
+
+        self.sleep(15, "Allowing initial replication before collection recreate")
+
+        for i in range(drop_count):
+            scope_idx = i % p["num_scopes"]
+            scope_name = "{}{}".format(p["scope_prefix"], scope_idx)
+            col_name = "{}{}".format(p["collection_prefix"], i % p["collections_per_scope"])
+            self.log.info("Drop+recreate {}.{} on destination".format(scope_name, col_name))
+            try:
+                self.dest_rest.delete_collection(bucket_name, scope_name, col_name)
+                self.sleep(2)
+                self.dest_rest.create_collection(bucket_name, scope_name, col_name)
+            except Exception as e:
+                self.log.warning("Error during drop+recreate of {}.{}: {}".format(
+                    scope_name, col_name, e))
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="mismatch_post")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception as e:
+            self.log.warning("Catch-up after collection recreate: {}".format(e))
+
+        dest_count = TenKCollectionHelper.get_manifest_collection_count(
+            self.dest_master, bucket_name)
+        expected = p["num_scopes"] * p["collections_per_scope"]
+        self.assertGreaterEqual(dest_count, expected,
+                                "Destination lost collections after recreate: {} < {}".format(
+                                    dest_count, expected))
+        self.log.info("Collection ID mismatch test passed: {} dest collections intact".format(
+            dest_count))
+
+    def test_drop_scope_during_replication(self):
+        """
+        Drop scopes on destination repeatedly while 10K replication is active.
+        Verify the pipeline does not crash.
+
+        Conf params:
+            drop_target: C1 or C2 (default C2)
+            num_drops: number of scopes to drop (default 3)
+            drop_interval: seconds between drops (default 5)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        drop_target = self._input.param("drop_target", "C2")
+        num_drops = self._input.param("num_drops", 3)
+        drop_interval = self._input.param("drop_interval", 5)
+
+        target_server = self.dest_master if drop_target == "C2" else self.src_master
+        target_rest = RestConnection(target_server)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="dropscope_pre")
+
+        self.sleep(10, "Allowing replication to start before dropping scopes")
+
+        for i in range(num_drops):
+            scope_name = "{}{}".format(p["scope_prefix"], p["num_scopes"] - 1 - i)
+            self.log.info("Dropping scope '{}' on {} (iteration {}/{})".format(
+                scope_name, drop_target, i + 1, num_drops))
+            try:
+                target_rest.delete_scope(bucket_name, scope_name)
+            except Exception as e:
+                self.log.warning("Error dropping scope '{}': {}".format(scope_name, e))
+            if i < num_drops - 1:
+                time.sleep(drop_interval)
+
+        self.sleep(30, "Waiting after scope drops for pipeline to stabilize")
+
+        for node in self.src_cluster.get_nodes():
+            _, crash_count = NodeHelper.check_goxdcr_log(node, "panic")
+            self.assertEqual(crash_count, 0,
+                             "goxdcr panic detected on {} after dropping scopes".format(node.ip))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception:
+            self.log.info("Catch-up may time out due to dropped scopes, verifying pipeline is alive")
+
+        self.log.info("Drop scope during replication test passed: no crashes detected")
+
+    def test_drop_collection_during_replication(self):
+        """
+        Drop collections on destination repeatedly while 10K replication is
+        active. Verify 'Collection Not Found' is handled gracefully.
+
+        Conf params:
+            drop_target: C1 or C2 (default C2)
+            num_drops: number of collections to drop (default 10)
+            drop_interval: seconds between drops (default 2)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        drop_target = self._input.param("drop_target", "C2")
+        num_drops = self._input.param("num_drops", 10)
+        drop_interval = self._input.param("drop_interval", 2)
+
+        target_server = self.dest_master if drop_target == "C2" else self.src_master
+        target_rest = RestConnection(target_server)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="dropcol_pre")
+
+        self.sleep(10, "Allowing replication to start before dropping collections")
+
+        for i in range(num_drops):
+            scope_idx = i % p["num_scopes"]
+            scope_name = "{}{}".format(p["scope_prefix"], scope_idx)
+            col_name = "{}{}".format(p["collection_prefix"],
+                                     p["collections_per_scope"] - 1 - (i % p["collections_per_scope"]))
+            self.log.info("Dropping collection {}.{} on {} (iteration {}/{})".format(
+                scope_name, col_name, drop_target, i + 1, num_drops))
+            try:
+                target_rest.delete_collection(bucket_name, scope_name, col_name)
+            except Exception as e:
+                self.log.warning("Error dropping collection {}.{}: {}".format(
+                    scope_name, col_name, e))
+            if i < num_drops - 1:
+                time.sleep(drop_interval)
+
+        self.sleep(30, "Waiting after collection drops for pipeline to stabilize")
+
+        for node in self.src_cluster.get_nodes():
+            _, crash_count = NodeHelper.check_goxdcr_log(node, "panic")
+            self.assertEqual(crash_count, 0,
+                             "goxdcr panic detected on {} after dropping collections".format(node.ip))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception:
+            self.log.info("Catch-up may time out due to dropped collections, verifying pipeline is alive")
+
+        self.log.info("Drop collection during replication test passed: no crashes detected")
+
+    def test_eccv_metadata_10k_collections(self):
+        """
+        Enable ECCV (enableCrossClusterVersioning) on both clusters and verify
+        conflict resolution metadata is handled correctly at 10K scale.
+
+        Verifies ECCV can be toggled on buckets with 10K collections and that
+        replication continues without errors after enabling it.
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.log.info("Enabling ECCV on both clusters")
+        for cluster in [self.src_cluster, self.dest_cluster]:
+            rest = RestConnection(cluster.get_master_node())
+            for bucket in cluster.get_buckets():
+                rest.change_bucket_props(bucket,
+                                         enableCrossClusterVersioning="true")
+                self.log.info("ECCV enabled on {} bucket '{}'".format(
+                    cluster.get_name(), bucket.name))
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="eccv")
+        self.assertTrue(result.success_rate > 0.9,
+                        "Too many load failures: {}/{}".format(
+                            len(result.failed_pairs), result.total_attempted))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception as e:
+            self.fail("Replication catch-up failed with ECCV enabled: {}".format(e))
+
+        for cluster in [self.src_cluster, self.dest_cluster]:
+            rest = RestConnection(cluster.get_master_node())
+            bucket_info = rest.get_bucket_json(bucket_name)
+            eccv_val = bucket_info.get("enableCrossClusterVersioning", False)
+            self.assertTrue(eccv_val,
+                            "ECCV not enabled on {} after replication".format(
+                                cluster.get_name()))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch with ECCV: src={}, dest={}".format(
+                             src_count, dest_count))
+
+        for node in self.src_cluster.get_nodes():
+            _, crash_count = NodeHelper.check_goxdcr_log(node, "panic")
+            self.assertEqual(crash_count, 0,
+                             "goxdcr panic on {} with ECCV at 10K scale".format(node.ip))
+
+        self.log.info("ECCV metadata test with 10K collections passed")

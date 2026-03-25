@@ -1,5 +1,9 @@
+
 from .xdcrnewbasetests import XDCRNewBaseTest
 from .xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 """Testing Rebalance on Unidirectional and Bidirectional XDCR replication setup"""
 
 
@@ -276,3 +280,137 @@ class Rebalance(XDCRNewBaseTest):
             # Some query tasks not finished after timeout and keep on running,
             # it should be cancelled before proceeding to next test.
             [task.cancel() for task in tasks]
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_rebalance_10k_collections(self):
+        """
+        Rebalance source or destination cluster while 10K collection
+        replication is active.
+
+        Conf params:
+            rebalance_target: C1 (source) or C2 (destination)
+            rebalance_type: in, out, or swap
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        rebalance_target = self._input.param("rebalance_target", "C2")
+        rebalance_type = self._input.param("rebalance_type", "in")
+
+        target_cluster = self.src_cluster if rebalance_target == "C1" else self.dest_cluster
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="rebal_pre")
+        self.assertTrue(result.success_rate > 0.9,
+                        "Too many load failures: {}/{}".format(
+                            len(result.failed_pairs), result.total_attempted))
+
+        self.sleep(15, "Allowing initial replication before rebalance")
+
+        self.log.info("Rebalance {} on {} cluster".format(
+            rebalance_type, rebalance_target))
+        if rebalance_type == "out":
+            target_cluster.rebalance_out()
+        elif rebalance_type == "swap":
+            target_cluster.swap_rebalance()
+        else:
+            target_cluster.rebalance_in()
+
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_master = self.dest_cluster.get_master_node()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="rebal_post")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Replication catch-up failed after {} rebalance on {}: {}".format(
+                rebalance_type, rebalance_target, e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket item counts - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch after rebalance: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Rebalance {} on {} with 10K collections passed".format(
+            rebalance_type, rebalance_target))
+
+    def test_failover_10k_collections(self):
+        """
+        Failover a non-master node on source or destination while 10K
+        collection replication is active.
+
+        Conf params:
+            failover_target: C1 (source) or C2 (destination)
+            graceful: True or False
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        failover_target = self._input.param("failover_target", "C2")
+        graceful = self._input.param("graceful", False)
+
+        target_cluster = self.src_cluster if failover_target == "C1" else self.dest_cluster
+
+        if len(target_cluster.get_nodes()) < 2:
+            self.log.warning("{} cluster has < 2 nodes, skipping failover test".format(
+                failover_target))
+            return
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="failover_pre")
+        self.assertTrue(result.success_rate > 0.9,
+                        "Too many load failures: {}/{}".format(
+                            len(result.failed_pairs), result.total_attempted))
+
+        self.sleep(15, "Allowing initial replication before failover")
+
+        self.log.info("Failover on {} cluster (graceful={})".format(
+            failover_target, graceful))
+        target_cluster.failover_and_rebalance_nodes(
+            num_nodes=1, graceful=graceful, rebalance=True)
+
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_master = self.dest_cluster.get_master_node()
+
+        pipelines_timeout = self._input.param("pipelines_ready_timeout", 180)
+        self._wait_for_xdcr_pipelines_ready(timeout=pipelines_timeout)
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="failover_post")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Replication catch-up failed after failover on {}: {}".format(
+                failover_target, e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket item counts - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch after failover: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Failover on {} (graceful={}) with 10K collections passed".format(
+            failover_target, graceful))

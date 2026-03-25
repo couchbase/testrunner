@@ -6,6 +6,8 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from .xdcrnewbasetests import XDCRNewBaseTest
 
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 
 class XDCRPrioritization(XDCRNewBaseTest):
 
@@ -193,3 +195,58 @@ class XDCRPrioritization(XDCRNewBaseTest):
 
         self.async_perform_update_delete()
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+    def test_priority_change_10k_collections(self):
+        """
+        Change replication priority mid-replication with 10K collections.
+        Starts at initial_priority, loads data, switches to target_priority,
+        loads more, then verifies replication completes.
+
+        Conf params:
+            initial_priority: starting priority (default High)
+            target_priority: priority to switch to mid-replication (default Low)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        initial_priority = self._input.param("initial_priority", "High")
+        target_priority = self._input.param("target_priority", "Low")
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+        self.sleep(30)
+
+        src_conn = RestConnection(self.src_master)
+        src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', initial_priority)
+        self.log.info("Set initial priority to {}".format(initial_priority))
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="prio_phase1")
+
+        self.sleep(15, "Mid-replication pause before priority change")
+
+        src_conn.set_xdcr_param(bucket_name, bucket_name, 'priority', target_priority)
+        self.log.info("Switched priority from {} to {}".format(
+            initial_priority, target_priority))
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="prio_phase2")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Priority change 10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.assertEqual(src_count, dest_count,
+                         "Priority change mismatch: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Priority change 10K test passed")

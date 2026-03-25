@@ -1,5 +1,10 @@
-from .xdcrnewbasetests import XDCRNewBaseTest, Utility, OPS
+
+from .xdcrnewbasetests import XDCRNewBaseTest, NodeHelper, Utility, OPS
+from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 from threading import Thread
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 class PauseResumeTest(XDCRNewBaseTest):
     def setUp(self):
@@ -187,4 +192,135 @@ class PauseResumeTest(XDCRNewBaseTest):
 
         [task.result() for task in load_tasks]
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_pause_resume_cycles_checkpoint_10k(self):
+        """
+        Perform multiple pause/resume cycles on a 10K collection replication
+        and verify checkpoint recovery after each cycle by checking that
+        replication_changes_left drops back to 0.
+
+        Conf params:
+            num_cycles: number of pause/resume cycles (default 3)
+            pause_duration: seconds to stay paused each cycle (default 10)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        num_cycles = self._input.param("num_cycles", 3)
+        pause_duration = self._input.param("pause_duration", 10)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="prcycle_init")
+
+        self.sleep(15, "Allowing initial replication before pause/resume cycles")
+
+        for cycle in range(num_cycles):
+            self.log.info("Pause/resume cycle {}/{}".format(cycle + 1, num_cycles))
+
+            for remote_cluster_ref in self.src_cluster.get_remote_clusters():
+                remote_cluster_ref.pause_all_replications(verify=True)
+
+            TenKCollectionHelper.select_and_load(
+                self.src_master, bucket_name, p,
+                run_id="prcycle_{}".format(cycle),
+                sample_size=min(50, p["sample_collections"]))
+
+            self.sleep(pause_duration, "Paused for cycle {}".format(cycle + 1))
+
+            for remote_cluster_ref in self.src_cluster.get_remote_clusters():
+                remote_cluster_ref.resume_all_replications(verify=True)
+
+            try:
+                self._wait_for_replication_to_catchup(
+                    timeout=self._input.param("wait_timeout", 300))
+                self.log.info("Checkpoint recovery verified for cycle {}".format(
+                    cycle + 1))
+            except Exception as e:
+                self.log.warning("Catch-up incomplete after cycle {}: {}".format(
+                    cycle + 1, e))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception as e:
+            self.fail("Final replication catch-up failed after {} cycles: {}".format(
+                num_cycles, e))
+
+
+    def test_kill_memcached_10k_collections(self):
+        """
+        Kill memcached on source or destination while 10K collection
+        replication is active. Verify replication recovers after memcached
+        restarts.
+
+        Conf params:
+            kill_target: C1 (source) or C2 (destination), default C1
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        kill_target = self._input.param("kill_target", "C1")
+
+        target_cluster = self.src_cluster if kill_target == "C1" else self.dest_cluster
+        target_server = target_cluster.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="killmc_pre")
+        self.assertTrue(result.success_rate > 0.9,
+                        "Too many load failures: {}/{}".format(
+                            len(result.failed_pairs), result.total_attempted))
+
+        self.sleep(15, "Allowing initial replication before killing memcached")
+
+        self.log.info("Killing memcached on {} ({})".format(
+            kill_target, target_server.ip))
+        shell = RemoteMachineShellConnection(target_server)
+        shell.kill_memcached()
+        shell.disconnect()
+
+        self.sleep(30, "Waiting for memcached to restart and warmup")
+
+        NodeHelper.wait_warmup_completed(
+            [target_server], bucket_names=[bucket_name])
+
+        self.src_master = self.src_cluster.get_master_node()
+        self.dest_master = self.dest_cluster.get_master_node()
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="killmc_post",
+            sample_size=min(50, p["sample_collections"]))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Replication catch-up failed after memcached kill on {}: {}".format(
+                kill_target, e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch after memcached kill: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Kill memcached test on {} with 10K collections passed".format(
+            kill_target))
 

@@ -1,8 +1,11 @@
+
 from .xdcrnewbasetests import XDCRNewBaseTest, TOPOLOGY
 from remote.remote_util import RemoteMachineShellConnection, RestConnection
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.cluster import Cluster
 import json, time
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 class compression(XDCRNewBaseTest):
     def setUp(self):
@@ -596,5 +599,57 @@ class compression(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup()
 
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+    def test_compression_config_10k_collections(self):
+        """
+        Verify compression mode changes (None -> Auto -> Snappy -> None) work
+        correctly while replicating across 10K collections.
+
+        Conf params:
+            compression_type: initial compression type (default Auto)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+        self.sleep(30)
+
+        self._set_compression_type(self.src_cluster, bucket_name, self.compression_type)
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="compr_phase1")
+        self.log.info("Phase 1 ({}) loaded {} docs".format(
+            self.compression_type, result.total_docs_loaded))
+
+        self.sleep(30, "Waiting for partial replication")
+
+        new_type = "None" if self.compression_type != "None" else "Auto"
+        self.log.info("Switching compression from {} to {}".format(
+            self.compression_type, new_type))
+        self._set_compression_type(self.src_cluster, bucket_name, new_type)
+
+        TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="compr_phase2")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Compression config 10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.assertEqual(src_count, dest_count,
+                         "Item mismatch after compression change: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Compression config 10K test passed")
 
 

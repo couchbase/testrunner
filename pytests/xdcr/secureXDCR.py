@@ -11,6 +11,8 @@ from pytests.security.x509_multiple_CA_util import x509main
 from .xdcrnewbasetests import XDCRNewBaseTest
 from lib.remote.remote_util import RemoteMachineShellConnection
 
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 
 class XDCRSecurityTests(XDCRNewBaseTest):
 
@@ -197,6 +199,55 @@ class XDCRSecurityTests(XDCRNewBaseTest):
 
         self.perform_update_delete()
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+    def test_tls_enabled_10k_collections(self):
+        """
+        Verify XDCR works with TLS encryption enabled across 10K collections.
+        Tests that TLS overhead does not break replication at scale.
+
+        Conf params:
+            enforce_tls: clusters to enforce TLS on (e.g. "C1:C2")
+            tls_level: TLS level (control, all, strict)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        enforce_tls = self._input.param("enforce_tls", "C1:C2")
+        tls_level = self._input.param("tls_level", "strict")
+
+        src_cluster = self.get_cb_cluster_by_name('C1')
+        dest_cluster = self.get_cb_cluster_by_name('C2')
+        src_master = src_cluster.get_master_node()
+        dest_master = dest_cluster.get_master_node()
+
+        for cluster in self.get_cluster_objects_for_input(enforce_tls):
+            cluster.toggle_security_setting(
+                [cluster.get_master_node()], "tls", tls_level)
+        self.sleep(10, "Waiting for TLS enforcement")
+
+        TenKCollectionHelper.create_10k_collections(
+            src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="tls10k")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("TLS 10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(dest_master, bucket_name)
+        self.assertEqual(src_count, dest_count,
+                         "TLS 10K mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("TLS enabled 10K test passed")
 
 
 def tearDown(self):

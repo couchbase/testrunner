@@ -8,6 +8,8 @@ from lib.couchbase_helper.documentgenerator import BlobGenerator
 from lib.remote.remote_util import RemoteMachineShellConnection
 from .xdcrnewbasetests import XDCRNewBaseTest
 
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 class CCVTestXDCR(XDCRNewBaseTest):
     def setUp(self):
         self.input = TestInputSingleton.input
@@ -22,8 +24,14 @@ class CCVTestXDCR(XDCRNewBaseTest):
         super().setUp()
         self.cluster_a = self.get_cb_cluster_by_name("C1")
         self.cluster_b = self.get_cb_cluster_by_name("C2")
-        self.cluster_c = self.get_cb_cluster_by_name("C3")
-        self.cluster_d = self.get_cb_cluster_by_name("C4")
+        try:
+            self.cluster_c = self.get_cb_cluster_by_name("C3")
+        except Exception:
+            self.cluster_c = None
+        try:
+            self.cluster_d = self.get_cb_cluster_by_name("C4")
+        except Exception:
+            self.cluster_d = None
 
     def _upgrade(self, server):
         remote_conn = RemoteMachineShellConnection(server)
@@ -141,3 +149,44 @@ class CCVTestXDCR(XDCRNewBaseTest):
         self.log.info("ERRORS: ", errors)
         if self.use_mobile:
             self.cleanup_mobileimport_sim()
+
+    # ---- 10K Collections Scale Tests ----
+    def test_cr_revision_id_10k_collections(self):
+        """
+        Default RevisionID-based conflict resolution with 10K collections.
+        Loads docs on both clusters concurrently using same docid prefix to
+        create conflicts, verifies CR resolves correctly at scale.
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        c1_master = self.cluster_a.get_master_node()
+        c2_master = self.cluster_b.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            c1_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            c2_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+        self.sleep(30)
+
+        TenKCollectionHelper.select_and_load(
+            c1_master, bucket_name, p, run_id="revid_c1")
+        TenKCollectionHelper.select_and_load(
+            c2_master, bucket_name, p, run_id="revid_c2")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("RevisionID CR 10K catch-up failed: {}".format(e))
+
+        c1_count = TenKCollectionHelper.get_bucket_item_count(c1_master, bucket_name)
+        c2_count = TenKCollectionHelper.get_bucket_item_count(c2_master, bucket_name)
+        self.log.info("RevisionID CR: C1={}, C2={}".format(c1_count, c2_count))
+        self.assertEqual(c1_count, c2_count,
+                         "RevisionID CR mismatch: C1={}, C2={}".format(c1_count, c2_count))
+        self.log.info("RevisionID CR 10K test passed")

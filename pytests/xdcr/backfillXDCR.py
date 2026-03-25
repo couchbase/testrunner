@@ -1,8 +1,14 @@
+
+from collections import defaultdict
+
 from lib.couchbase_helper.documentgenerator import BlobGenerator
 from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from lib.membase.api.rest_client import RestConnection
+from lib.membase.helper.bucket_helper import BucketOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import VBucketAwareMemcached
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 
 class BackfillXDCR(XDCRNewBaseTest):
@@ -378,3 +384,199 @@ class BackfillXDCR(XDCRNewBaseTest):
         finally:
             # Cleanup will be handled by verify_results and tearDown
             self.log.info("Test completed, cleanup will be handled by framework")
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_backfill_progressive_collections(self):
+        """
+        2-phase test for progressive backfill:
+          Phase 1: load only into collections that exist on dest → verify replication
+          Phase 2: load into missing collections → verify NO replication (expected)
+          Then progressively create missing collections on dest in batches →
+          verify backfill completes for newly created collections.
+
+        Conf params:
+            initial_dest_ratio: fraction of collections on dest at start (default 0.5)
+            num_batches: number of progressive addition batches (default 5)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        initial_dest_ratio = float(self._input.param("initial_dest_ratio", 0.5))
+        num_batches = self._input.param("num_batches", 5)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        initial_cps = max(1, int(p["collections_per_scope"] * initial_dest_ratio))
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name,
+            num_scopes=p["num_scopes"],
+            collections_per_scope=initial_cps,
+            scope_prefix=p["scope_prefix"],
+            collection_prefix=p["collection_prefix"])
+
+        self.log.info("Source: {} collections, Dest initial: {} collections".format(
+            p["num_scopes"] * p["collections_per_scope"],
+            p["num_scopes"] * initial_cps))
+
+        self.setup_xdcr()
+
+        # Phase 1: load into existing dest collections -- should replicate
+        existing_pairs, missing_pairs = TenKCollectionHelper.get_collection_pairs_on_dest(
+            self.src_master, self.dest_master, bucket_name)
+
+        self.log.info("Phase 1: loading into {} existing dest pairs".format(len(existing_pairs)))
+        TenKCollectionHelper.load_into_pairs(
+            self.src_master, bucket_name, existing_pairs,
+            p.get("docs_per_collection", 10), run_id="prog_phase1")
+
+        self.sleep(15, "Allowing phase-1 replication")
+        phase1_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.assertGreater(phase1_dest, 0,
+                           "Phase 1: dest should have replicated items for existing collections")
+        self.log.info("Phase 1 verified: dest has {} items".format(phase1_dest))
+
+        # Phase 2: load into missing collections -- should NOT replicate yet
+        if missing_pairs:
+            self.log.info("Phase 2: loading into {} missing dest pairs (expect no replication)".format(
+                len(missing_pairs)))
+            TenKCollectionHelper.load_into_pairs(
+                self.src_master, bucket_name, missing_pairs,
+                p.get("docs_per_collection", 10), run_id="prog_phase2")
+            self.sleep(10, "Verifying missing-collection docs do NOT replicate")
+            phase2_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+            self.assertEqual(phase2_dest, phase1_dest,
+                             "Phase 2: dest count should not increase for missing collections "
+                             "(was {}, now {})".format(phase1_dest, phase2_dest))
+            self.log.info("Phase 2 verified: dest still at {} items (no premature backfill)".format(
+                phase2_dest))
+
+        # Progressive creation: split known missing_pairs into batches and PUT
+        # each as a single manifest update (1 REST call per batch instead of
+        # num_scopes*batch_size individual create_collection calls).
+        total_missing = len(missing_pairs)
+        batch_size = max(1, (total_missing + num_batches - 1) // num_batches)
+        dest_rest = RestConnection(self.dest_master)
+
+        for batch_idx in range(num_batches):
+            start = batch_idx * batch_size
+            batch_pairs = missing_pairs[start:start + batch_size]
+            if not batch_pairs:
+                break
+
+            self.log.info("Batch {}/{}: adding {} collection pairs on dest "
+                          "(single manifest PUT)".format(
+                              batch_idx + 1, num_batches, len(batch_pairs)))
+
+            by_scope = defaultdict(list)
+            for scope, col in batch_pairs:
+                by_scope[scope].append({"name": col})
+            new_manifest = {
+                "scopes": [{"name": s, "collections": cols}
+                           for s, cols in by_scope.items()]
+            }
+
+            current_manifest = BucketOperationHelper.get_api_manifest_json_from_bucket(
+                self.dest_master, bucket_name)
+            merged = BucketOperationHelper.merge_collection_manifests(
+                current_manifest, new_manifest)
+            status = dest_rest.put_collection_scope_manifest(
+                bucket_name, merged, ensure_manifest=True)
+            if not status:
+                self.fail("put_collection_scope_manifest failed on batch {}".format(
+                    batch_idx + 1))
+
+            self.log.info("Dest now has {} newly-added collections of {}".format(
+                start + len(batch_pairs), total_missing))
+            self.sleep(10, "Waiting for backfill after batch {}".format(batch_idx + 1))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Backfill catch-up failed after progressive additions: {}".format(e))
+
+    def test_backfill_bulk_create_missing(self):
+        """
+        2-phase test for bulk backfill:
+          Phase 1: load into collections that exist on dest → verify replication
+          Phase 2: load into missing collections → verify NO replication
+          Then bulk-create all missing collections on dest (batched REST) →
+          verify backfill completes.
+
+        Conf params:
+            initial_dest_ratio: fraction of collections on dest at start (default 0.5)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        initial_dest_ratio = float(self._input.param("initial_dest_ratio", 0.5))
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        initial_cps = max(1, int(p["collections_per_scope"] * initial_dest_ratio))
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name,
+            num_scopes=p["num_scopes"],
+            collections_per_scope=initial_cps,
+            scope_prefix=p["scope_prefix"],
+            collection_prefix=p["collection_prefix"])
+
+        self.log.info("Source: {} collections, Dest initial: {} collections".format(
+            p["num_scopes"] * p["collections_per_scope"],
+            p["num_scopes"] * initial_cps))
+
+        self.setup_xdcr()
+
+        # Phase 1: load into existing dest collections -- should replicate
+        existing_pairs, missing_pairs = TenKCollectionHelper.get_collection_pairs_on_dest(
+            self.src_master, self.dest_master, bucket_name)
+
+        self.log.info("Phase 1: loading into {} existing dest pairs".format(len(existing_pairs)))
+        TenKCollectionHelper.load_into_pairs(
+            self.src_master, bucket_name, existing_pairs,
+            p.get("docs_per_collection", 10), run_id="bulk_phase1")
+
+        self.sleep(15, "Allowing phase-1 replication")
+        phase1_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.assertGreater(phase1_dest, 0,
+                           "Phase 1: dest should have replicated items for existing collections")
+        self.log.info("Phase 1 verified: dest has {} items".format(phase1_dest))
+
+        # Phase 2: load into missing collections -- should NOT replicate yet
+        if missing_pairs:
+            self.log.info("Phase 2: loading into {} missing dest pairs (expect no replication)".format(
+                len(missing_pairs)))
+            TenKCollectionHelper.load_into_pairs(
+                self.src_master, bucket_name, missing_pairs,
+                p.get("docs_per_collection", 10), run_id="bulk_phase2")
+            self.sleep(10, "Verifying missing-collection docs do NOT replicate")
+            phase2_dest = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+            self.assertEqual(phase2_dest, phase1_dest,
+                             "Phase 2: dest count should not increase for missing collections "
+                             "(was {}, now {})".format(phase1_dest, phase2_dest))
+            self.log.info("Phase 2 verified: dest still at {} items".format(phase2_dest))
+
+        # Bulk create missing collections in batches
+        self.log.info("Bulk creating missing collections on destination (batched)")
+        success, missing_count, created_count = TenKCollectionHelper.create_missing_collections(
+            self.src_master, self.dest_master, bucket_name)
+        self.log.info("Missing: {}, Created: {}, Success: {}".format(
+            missing_count, created_count, success))
+        self.assertTrue(success, "Bulk creation of missing collections failed")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Backfill catch-up failed after bulk creation: {}".format(e))
+
+        src_items = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_items = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_items, dest_items))
+        self.assertEqual(src_items, dest_items,
+                         "Item count mismatch after bulk backfill: src={}, dest={}".format(
+                             src_items, dest_items))
+        self.log.info("Bulk create missing backfill test passed")

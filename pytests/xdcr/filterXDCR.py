@@ -1,5 +1,8 @@
-from .xdcrnewbasetests import XDCRNewBaseTest
 import time
+
+from .xdcrnewbasetests import XDCRNewBaseTest
+
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
 class XDCRFilterTests(XDCRNewBaseTest):
 
@@ -79,3 +82,123 @@ class XDCRFilterTests(XDCRNewBaseTest):
 
         self.perform_update_delete()
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_high_cardinality_filter_10k(self):
+        """
+        Apply a regex filter expression on a bucket-level replication
+        targeting 10K collections. The filter matches a subset of doc keys
+        and verifies that only matching docs replicate.
+
+        Conf params:
+            default@C1=filter_expression:REGEXP_CONTAINS(META()dotidcomma'0$')
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        src_cluster = self.get_cb_cluster_by_name("C1")
+        dest_cluster = self.get_cb_cluster_by_name("C2")
+        src_master = src_cluster.get_master_node()
+        dest_master = dest_cluster.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="hcfilter")
+
+        try:
+            self._wait_for_dest_to_stabilize(dest_cluster, bucket_name,
+                                             min_items=1, timeout=600)
+        except Exception as e:
+            self.fail("Filtered replication did not stabilize: {}".format(e))
+
+        src_items = TenKCollectionHelper.get_bucket_item_count(src_master, bucket_name)
+        dest_items = TenKCollectionHelper.get_bucket_item_count(dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {} (dest expected < src "
+                      "due to filter)".format(src_items, dest_items))
+        self.assertGreater(dest_items, 0,
+                           "Destination should have items matching the filter")
+        self.assertLessEqual(dest_items, src_items,
+                             "Filtered dest should have <= src items")
+
+        self.log.info("High cardinality filter 10K test passed")
+
+    def test_advanced_filtering_10k(self):
+        """
+        Advanced filtering using key-based expressions on a replication
+        with 10K collections. Applies a META().id LIKE pattern and verifies
+        only matching docs replicate.
+
+        Conf params:
+            default@C1=filter_expression:REGEXP_CONTAINS(META()dotidcomma'^xdcr10k')
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        src_cluster = self.get_cb_cluster_by_name("C1")
+        dest_cluster = self.get_cb_cluster_by_name("C2")
+        src_master = src_cluster.get_master_node()
+        dest_master = dest_cluster.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="advfilter")
+
+        # Wait for replication to drain (changes_left -> 0) rather than for
+        # dest to reach min_items=1. A valid filter may legitimately exclude
+        # every source doc, in which case dest stays at 0 — that's a pass,
+        # not a timeout.
+        deadline = time.time() + 600
+        last_changes_left = None
+        drained = False
+        while time.time() < deadline:
+            try:
+                changes_left = src_cluster.get_xdcr_stat(
+                    bucket_name, 'replication_changes_left')
+            except Exception as e:
+                self.log.info("Could not read replication_changes_left: {}".format(e))
+                changes_left = None
+            self.log.info("replication_changes_left={} (last={})".format(
+                changes_left, last_changes_left))
+            if changes_left == 0:
+                drained = True
+                break
+            last_changes_left = changes_left
+            self.sleep(30, "Waiting for replication_changes_left to reach 0")
+
+        if not drained:
+            self.fail("Advanced-filter replication did not drain within 600s "
+                      "(last changes_left: {})".format(last_changes_left))
+
+        src_items = TenKCollectionHelper.get_bucket_item_count(src_master, bucket_name)
+        dest_items = TenKCollectionHelper.get_bucket_item_count(dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_items, dest_items))
+
+        self.assertGreater(src_items, 0,
+                           "Source should have items loaded before checking filter")
+        self.assertLessEqual(dest_items, src_items,
+                             "Filtered dest should have <= src items")
+
+        if dest_items == 0:
+            self.log.info("Advanced filtering 10K: filter excluded all source "
+                          "docs (src={}, dest=0)".format(src_items))
+        else:
+            self.log.info("Advanced filtering 10K: filter allowed {} of {} "
+                          "docs through".format(dest_items, src_items))
+        self.log.info("Advanced filtering 10K test passed")

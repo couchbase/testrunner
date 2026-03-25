@@ -1,13 +1,19 @@
 import copy
 import json
 import logging
+import os
 import random
 import re
 import time
 import unittest
+import uuid
 import base64
 import urllib.parse
 import yaml
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from typing import List, Tuple
 
 import logger
 from collection.collections_rest_client import CollectionsRest
@@ -37,6 +43,25 @@ from lib import global_vars
 from scripts import collect_data_files
 from scripts.collect_server_info import cbcollectRunner
 from scripts.java_sdk_setup import JavaSdkSetup
+
+@dataclass
+class LoadResult:
+    success_pairs: List[Tuple[str, str]] = field(default_factory=list)
+    failed_pairs: List[Tuple[str, str]] = field(default_factory=list)
+    errors: dict = field(default_factory=dict)
+    total_docs_loaded: int = 0
+    elapsed_seconds: float = 0.0
+
+    @property
+    def total_attempted(self):
+        return len(self.success_pairs) + len(self.failed_pairs)
+
+    @property
+    def success_rate(self):
+        if self.total_attempted == 0:
+            return 0.0
+        return len(self.success_pairs) / self.total_attempted
+
 
 class RenameNodeException(XDCRException):
 
@@ -4421,6 +4446,192 @@ class XDCRNewBaseTest(unittest.TestCase):
         server_shell.disconnect()
         self.log.info(f"Data loaded into {bucket}.{scope}.{collection} successfully")
 
+    @staticmethod
+    def select_collections(server, bucket_name, mode="sample",
+                           sample_size=200, explicit_pairs=None, seed=None):
+        """
+        Select (scope, collection) pairs from a bucket manifest.
+
+        Args:
+            server: Server object
+            bucket_name: Bucket name
+            mode: "sample" | "all" | "explicit"
+            sample_size: Number of collections to sample (mode="sample")
+            explicit_pairs: List of (scope, collection) tuples (mode="explicit")
+            seed: Random seed for reproducible sampling
+
+        Returns:
+            list of (scope_name, collection_name) tuples
+        """
+        if mode == "explicit":
+            if not explicit_pairs:
+                raise ValueError("explicit_pairs required when mode='explicit'")
+            return list(explicit_pairs)
+
+        manifest = BucketOperationHelper.get_api_manifest_json_from_bucket(
+            server, bucket_name
+        )
+
+        all_pairs = []
+        for scope in manifest.get("scopes", []):
+            scope_name = scope["name"]
+            if scope_name.startswith("_"):
+                continue
+            for col in scope.get("collections", []):
+                all_pairs.append((scope_name, col["name"]))
+
+        if mode == "all":
+            return all_pairs
+
+        if seed is not None:
+            rng = random.Random(seed)
+        else:
+            rng = random.Random()
+
+        if len(all_pairs) <= sample_size:
+            return all_pairs
+        return rng.sample(all_pairs, sample_size)
+
+    @staticmethod
+    def load_collections_with_sdk(server, bucket, pairs=None,
+                                  docs_per_collection=5,
+                                  doc_size=100,
+                                  docid_prefix="xdcr10k",
+                                  run_id=None,
+                                  json_template="Person",
+                                  all_collections=False,
+                                  parallel_loaders=8,
+                                  timeout=900):
+        """
+        SDK-based parallel collection loader. Replaces load_with_pillowfight_parallel.
+
+        Spawns the Java SDK doc-loader jar (java_sdk_client/collections/...) directly
+        as subprocesses. The shared TaskManager scheduler is bypassed because
+        SDKLoadDocumentsTask runs serially (single-threaded queue + 30s ES-indexing
+        sleep per task) — for thousands of collections that adds hours of wall time.
+
+        Modes:
+          all_collections=True  -> ONE Java invocation with -ac True (the jar
+                                   iterates all non-system collections internally).
+                                   `pairs` is ignored; LoadResult.success_pairs is
+                                   populated by enumerating the bucket manifest.
+          all_collections=False -> One Java subprocess per (scope, collection)
+                                   in `pairs`, run concurrently in a
+                                   ThreadPoolExecutor of size `parallel_loaders`.
+
+        Args:
+            server: Server object on the source cluster.
+            bucket: Bucket name (string).
+            pairs: List of (scope, collection) tuples. Required unless
+                   all_collections=True.
+            docs_per_collection: Number of docs to create per collection.
+            doc_size: Document size in bytes.
+            docid_prefix: Prefix for doc-key uniqueness.
+            run_id: Unique run identifier (auto-generated if None).
+            json_template: Java SDK json template (e.g. "Person").
+            all_collections: If True, take the bulk fast-path (single Java process).
+            parallel_loaders: Per-pair mode only — concurrent Java subprocesses.
+                              Cap reflects JVM startup memory; default 8.
+            timeout: Per-subprocess timeout in seconds.
+
+        Returns:
+            LoadResult with success/failed pairs and stats.
+        """
+        log = logger.Logger.get_logger()
+        result = LoadResult()
+        if run_id is None:
+            run_id = uuid.uuid4().hex[:8]
+        start_time = time.time()
+
+        def _build_cmd(scope, collection, key_prefix, ac=False):
+            return (
+                "java -jar java_sdk_client/collections/target/javaclient/javaclient.jar "
+                "-i {ip} -u '{u}' -p '{pw}' -b {bucket} "
+                "-s {scope} -c {col} "
+                "-n {n} -pc 100 -pu 0 -pd 0 -l uniform -dsn 0 -dpx {kp} -dt {tpl} "
+                "-de 0 -ds {ds} -ac {ac} -st 0 -en {en} -o False -sd False "
+                "--secure False -cpl False"
+            ).format(
+                ip=server.ip, u=server.rest_username, pw=server.rest_password,
+                bucket=bucket, scope=scope, col=collection,
+                n=docs_per_collection, kp=key_prefix, tpl=json_template,
+                ds=doc_size, ac=ac, en=max(0, docs_per_collection - 1),
+            )
+
+        def _run_one(scope, collection, key_prefix, ac=False):
+            cmd = _build_cmd(scope, collection, key_prefix, ac=ac)
+            try:
+                proc = subprocess.run(
+                    cmd, shell=True, capture_output=True, timeout=timeout)
+                if proc.returncode != 0:
+                    return False, "exit={} stderr={}".format(
+                        proc.returncode,
+                        proc.stderr.decode("utf-8", "replace")[:200])
+                return True, None
+            except Exception as e:
+                return False, str(e)
+
+        if all_collections:
+            log.info("SDK bulk load: all collections in {}, {} docs each, "
+                     "run_id={}".format(bucket, docs_per_collection, run_id))
+            ok, err = _run_one(
+                "_default", "_default",
+                "{}_{}_".format(docid_prefix, run_id), ac=True)
+            manifest = BucketOperationHelper.get_api_manifest_json_from_bucket(
+                server, bucket)
+            for scope in manifest.get("scopes", []):
+                if scope["name"].startswith("_"):
+                    continue
+                for col in scope.get("collections", []):
+                    if col["name"].startswith("_"):
+                        continue
+                    if ok:
+                        result.success_pairs.append((scope["name"], col["name"]))
+                        result.total_docs_loaded += docs_per_collection
+                    else:
+                        result.failed_pairs.append((scope["name"], col["name"]))
+                        result.errors[(scope["name"], col["name"])] = err
+            if not ok:
+                log.error("Bulk all_collections load failed: {}".format(err))
+        else:
+            if not pairs:
+                log.warning("load_collections_with_sdk called with no pairs "
+                            "and all_collections=False; nothing to do")
+                return result
+            log.info("SDK per-pair load: {} collections, {} docs each, "
+                     "parallel_loaders={}, run_id={}".format(
+                         len(pairs), docs_per_collection, parallel_loaders, run_id))
+            with ThreadPoolExecutor(max_workers=parallel_loaders) as executor:
+                futures = {}
+                for scope_name, col_name in pairs:
+                    kp = "{}_{}_{}_{}_".format(
+                        docid_prefix, run_id, scope_name, col_name)
+                    fut = executor.submit(_run_one, scope_name, col_name, kp, False)
+                    futures[fut] = (scope_name, col_name)
+                for fut in as_completed(futures):
+                    scope_name, col_name = futures[fut]
+                    try:
+                        ok, err = fut.result()
+                    except Exception as e:
+                        ok, err = False, str(e)
+                    if ok:
+                        result.success_pairs.append((scope_name, col_name))
+                        result.total_docs_loaded += docs_per_collection
+                    else:
+                        log.error("SDK load failed for {}.{}: {}".format(
+                            scope_name, col_name, err))
+                        result.failed_pairs.append((scope_name, col_name))
+                        result.errors[(scope_name, col_name)] = err
+
+        result.elapsed_seconds = time.time() - start_time
+        log.info("SDK load done: {}/{} pairs ok, {} docs in {:.1f}s".format(
+            len(result.success_pairs), result.total_attempted,
+            result.total_docs_loaded, result.elapsed_seconds))
+        if result.failed_pairs:
+            log.warning("Failed pairs (first 10): {}".format(
+                result.failed_pairs[:10]))
+        return result
+
     def insert_docs_with_xattr(self, server, bucket_name, num_docs, num_xattrs, xattr_key_values={}):
 
         """Uses docker image to insert xattrs """
@@ -4520,6 +4731,125 @@ class XDCRNewBaseTest(unittest.TestCase):
                     print(f"DOCS COUNT DID NOT MATCH SRC:{src_count}, TARGET:{dest_count}")
                     docs_match_map[bucket.name] = False
         return all(docs_match_map.values())
+
+    def _wait_for_xdcr_pipelines_ready(self, timeout=180, poll_interval=5):
+        """
+        Poll until every replication on every source cluster reports
+        status=='running' AND xdc_queue_size is queryable for every bucket.
+
+        Used after disruptive ops (failover, goxdcr restart, node remove)
+        to replace fixed sleeps. Does NOT wait for outbound queue to drain
+        (that is _wait_for_replication_to_catchup's job).
+
+        Returns True if pipelines became ready before timeout, False otherwise.
+        Logs a warning on timeout but does NOT raise — caller decides.
+        """
+        end_time = time.time() + timeout
+        start = time.time()
+        while time.time() < end_time:
+            all_ready = True
+            for cb_cluster in self.__cb_clusters:
+                src_master = cb_cluster.get_master_node()
+                try:
+                    rest = RestConnection(src_master)
+                    replications = rest.get_replications()
+                except Exception as e:
+                    self.log.info("Pipeline-ready poll: REST not responsive on %s yet: %s"
+                                  % (src_master.ip, e))
+                    all_ready = False
+                    break
+
+                if not replications:
+                    continue
+
+                for repl in replications:
+                    status = repl.get("status") if isinstance(repl, dict) else getattr(repl, "status", None)
+                    if status != "running":
+                        self.log.info("Pipeline-ready poll: replication on %s status=%s"
+                                      % (src_master.ip, status))
+                        all_ready = False
+                        break
+                if not all_ready:
+                    break
+
+                for bucket in cb_cluster.get_buckets():
+                    try:
+                        rest.get_xdc_queue_size(bucket.name)
+                    except Exception as e:
+                        self.log.info("Pipeline-ready poll: xdc_queue_size not yet exposed for "
+                                      "%s on %s: %s" % (bucket.name, src_master.ip, e))
+                        all_ready = False
+                        break
+                if not all_ready:
+                    break
+
+            if all_ready:
+                self.log.info("XDCR pipelines reported ready after %.1fs"
+                              % (time.time() - start))
+                return True
+            time.sleep(poll_interval)
+
+        self.log.warning("XDCR pipelines not confirmed ready within %ds; "
+                         "proceeding anyway" % timeout)
+        return False
+
+    @staticmethod
+    def _wait_for_collection_manifest_sync(src_server, dest_server, bucket_name,
+                                           timeout=180, poll_interval=5):
+        """
+        Poll until destination bucket's manifest contains every (scope, collection)
+        pair from source (excluding system scopes whose names start with '_').
+
+        Used before _wait_for_replication_to_catchup in tests where a fresh
+        manifest may not have synced yet — replaces fixed pre-replication sleeps.
+
+        Returns True on sync, False on timeout. Caller decides whether to fail.
+        """
+        log = logger.Logger.get_logger()
+        end_time = time.time() + timeout
+        last_missing = -1
+        missing = set()
+        src_pairs = set()
+        while time.time() < end_time:
+            try:
+                src_manifest = BucketOperationHelper.get_api_manifest_json_from_bucket(
+                    src_server, bucket_name)
+                dest_manifest = BucketOperationHelper.get_api_manifest_json_from_bucket(
+                    dest_server, bucket_name)
+            except Exception as e:
+                log.info("Manifest-sync poll: fetch failed (%s); retrying" % e)
+                time.sleep(poll_interval)
+                continue
+
+            src_pairs = set()
+            for s in src_manifest.get("scopes", []):
+                if s["name"].startswith("_"):
+                    continue
+                for c in s.get("collections", []):
+                    src_pairs.add((s["name"], c["name"]))
+
+            dest_pairs = set()
+            for s in dest_manifest.get("scopes", []):
+                if s["name"].startswith("_"):
+                    continue
+                for c in s.get("collections", []):
+                    dest_pairs.add((s["name"], c["name"]))
+
+            missing = src_pairs - dest_pairs
+            if not missing:
+                log.info("Manifest sync confirmed: %d collections present on dest"
+                         % len(src_pairs))
+                return True
+            if len(missing) != last_missing:
+                log.info("Manifest sync poll: %d collections still missing on dest "
+                         "(of %d on source)" % (len(missing), len(src_pairs)))
+                last_missing = len(missing)
+            time.sleep(poll_interval)
+
+        log.warning("Manifest sync did not converge within %ds; "
+                    "%d collections still missing on dest" % (timeout, len(missing)))
+        return False
+
     def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute", exclude_paths=[]):
 
         _count1 = _count2 = 0
@@ -4560,21 +4890,20 @@ class XDCRNewBaseTest(unittest.TestCase):
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
                     else:
-                        # SDKLoader loads docs in all collections, hence accounting for _query collection in _system scope, which is not replicated
-                        collections_info = self.get_collection_info(bucket, cb_cluster.get_master_node())[0]
-                        dest_collections_info = self.get_collection_info(bucket, remote_cluster.get_dest_cluster().get_master_node())[0]
-
-                        if "_query" in collections_info or "_query" in dest_collections_info:
-                            for node in cb_cluster.get_nodes():
-                                collections_info = self.get_collection_info(bucket, node)[0]
-                                self.log.info(collections_info)
-                                _count1 -= collections_info["_query"]
-                                _count1 -= collections_info["_mobile"]
-                            for node in remote_cluster.get_dest_cluster().get_nodes():
-                                dest_collections_info = self.get_collection_info(bucket, node)[0]
-                                self.log.info(dest_collections_info)
-                                _count2 -= dest_collections_info["_query"]
-                                _count2 -= dest_collections_info["_mobile"]
+                        # SDKLoader loads docs in all collections including _system._query
+                        # and _system._mobile, which are NOT replicated. Subtract them from
+                        # both sides so we compare replicated-item totals. Nodes missing
+                        # these collections contribute zero.
+                        for node in cb_cluster.get_nodes():
+                            collections_info = self.get_collection_info(bucket, node)[0]
+                            self.log.info(collections_info)
+                            _count1 -= collections_info.get("_query", 0)
+                            _count1 -= collections_info.get("_mobile", 0)
+                        for node in remote_cluster.get_dest_cluster().get_nodes():
+                            dest_collections_info = self.get_collection_info(bucket, node)[0]
+                            self.log.info(dest_collections_info)
+                            _count2 -= dest_collections_info.get("_query", 0)
+                            _count2 -= dest_collections_info.get("_mobile", 0)
 
                         self.log.info(f"Count1: {_count1}, Count2: {_count2}")
 
@@ -4620,6 +4949,44 @@ class XDCRNewBaseTest(unittest.TestCase):
                         self.fail("Not all items replicated in {0} sec for {1} "
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
+
+    def _wait_for_dest_to_stabilize(self, dest_cluster, bucket_name,
+                                    min_items=1, stable_window_s=60,
+                                    poll_interval_s=30, timeout=900):
+        """Poll dest cluster's bucket item count until it has reached
+        `min_items` and has not changed for `stable_window_s` seconds.
+
+        Use this for tests where pairwise src == dest is not the right
+        invariant (filtered, explicitly-mapped, cross-version, etc.) —
+        the caller runs its scenario-specific assertion after this returns.
+
+        Returns the final item count. Raises on timeout.
+        """
+        end_time = time.time() + timeout
+        last_count = -1
+        last_change_time = time.time()
+        while time.time() < end_time:
+            rest = RestConnection(dest_cluster.get_master_node())
+            try:
+                count = rest.fetch_bucket_stats(
+                    bucket=bucket_name, zoom="minute"
+                )["op"]["samples"]["curr_items"][-1]
+            except Exception:
+                bucket_info = rest.get_bucket_json(bucket_name)
+                count = sum(node["interestingStats"]["curr_items"]
+                            for node in bucket_info["nodes"])
+            self.log.info("Dest stabilization poll: bucket={} count={} last={}".format(
+                bucket_name, count, last_count))
+            if count != last_count:
+                last_count = count
+                last_change_time = time.time()
+            elif count >= min_items and (time.time() - last_change_time) >= stable_window_s:
+                self.log.info("Dest bucket {} stable at {} items for {}s".format(
+                    bucket_name, count, stable_window_s))
+                return count
+            time.sleep(poll_interval_s)
+        raise Exception("Dest bucket {} did not stabilize within {}s "
+                        "(last count: {})".format(bucket_name, timeout, last_count))
 
     def _wait_for_es_replication_to_catchup(self, timeout=300):
         from membase.api.esrest_client import EsRestConnection

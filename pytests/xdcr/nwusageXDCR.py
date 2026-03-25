@@ -9,6 +9,8 @@ from remote.remote_util import RemoteMachineShellConnection
 
 from .xdcrnewbasetests import XDCRNewBaseTest, NodeHelper, FloatingServers
 
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 
 class nwusage(XDCRNewBaseTest):
     def setUp(self):
@@ -519,3 +521,219 @@ class nwusage(XDCRNewBaseTest):
                                      end_time=node_back_time, no_of_nodes=self.num_src_nodes)
         self._verify_bandwidth_usage(node=self.src_cluster.get_master_node(), event_time=node_back_time,
                                      no_of_nodes=self.num_src_nodes + 1)
+
+    # ---- 10K Collections Scale Tests ----
+
+    def test_small_doc_stress_10k_collections(self):
+        """
+        Stress test: replicate many small docs across 10K collections.
+
+        Conf params:
+            doc_size: doc value size in bytes (default 1024 = 1KB)
+            docs_per_collection: docs per collection (default 1000)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        doc_size = self._input.param("doc_size", 1024)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="smalldoc")
+        self.log.info("Small doc stress: loaded {} docs in {:.1f}s".format(
+            result.total_docs_loaded, result.elapsed_seconds))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Small doc stress catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("Small doc stress 10K test passed")
+
+    def test_large_doc_stress_10k_collections(self):
+        """
+        Stress test: replicate large docs across 10K collections.
+
+        Conf params:
+            doc_size: doc value size in bytes (default 5242880 = 5MB)
+            docs_per_collection: docs per collection (default 10)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        doc_size = self._input.param("doc_size", 5242880)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="largedoc")
+        self.log.info("Large doc stress: loaded {} docs in {:.1f}s".format(
+            result.total_docs_loaded, result.elapsed_seconds))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 1800))
+        except Exception as e:
+            self.fail("Large doc stress catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("Large doc stress 10K test passed")
+
+    def test_bandwidth_throttling_10k_collections(self):
+        """
+        Apply XDCR bandwidth throttling and verify it is respected across
+        all 10K collection streams.
+
+        Conf params:
+            nw_limit: bandwidth limit in MB (default random 1-100)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        nw_limit = self._input.param("nw_limit", self._get_nwusage_limit())
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+        self.sleep(30, "Waiting for XDCR pipelines to initialize")
+
+        self.log.info("Setting bandwidth throttle to {} MB".format(nw_limit))
+        self._set_nwusage_limit(self.src_cluster, nw_limit * self.num_src_nodes)
+
+        result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="bwthrottle")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Bandwidth throttle catch-up failed: {}".format(e))
+
+        self._verify_bandwidth_usage(
+            node=self.src_master, nw_limit=nw_limit,
+            no_of_nodes=self.num_src_nodes)
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch with throttle: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Bandwidth throttling 10K test passed")
+
+    def test_stress_add_docs_then_repl_10k_collections(self):
+        """
+        Load a large dataset across 10K collections first, then create
+        XDCR replication and verify the backfill completes.
+
+        Conf params:
+            load_batches: number of load batches before starting replication (default 3)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        load_batches = self._input.param("load_batches", 3)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        for batch in range(load_batches):
+            self.log.info("Pre-replication load batch {}/{}".format(
+                batch + 1, load_batches))
+            TenKCollectionHelper.select_and_load(
+                self.src_master, bucket_name, p,
+                run_id="prerepl_{}".format(batch))
+
+        src_count_before = TenKCollectionHelper.get_bucket_item_count(
+            self.src_master, bucket_name)
+        self.log.info("Source items before replication: {}".format(src_count_before))
+
+        self.setup_xdcr()
+        self.log.info("XDCR started after data load, backfill in progress")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 1800))
+        except Exception as e:
+            self.fail("Backfill catch-up failed after pre-loaded data: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Backfill mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("Add docs then replicate 10K test passed")
+
+    def test_stress_repl_then_add_docs_10k_collections(self):
+        """
+        Start XDCR replication first, then progressively load data across
+        10K collections in batches. Verify real-time replication keeps up.
+
+        Conf params:
+            load_batches: number of progressive load batches (default 3)
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+        load_batches = self._input.param("load_batches", 3)
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+        self.log.info("XDCR started, now progressively loading data")
+
+        for batch in range(load_batches):
+            self.log.info("Progressive load batch {}/{}".format(
+                batch + 1, load_batches))
+            TenKCollectionHelper.select_and_load(
+                self.src_master, bucket_name, p,
+                run_id="postrepl_{}".format(batch))
+            self.sleep(10, "Pause between load batches")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 1800))
+        except Exception as e:
+            self.fail("Real-time replication catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Progressive load mismatch: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Replicate then add docs 10K test passed")

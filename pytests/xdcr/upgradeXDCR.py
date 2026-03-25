@@ -17,6 +17,8 @@ from couchbase_helper.document import DesignDocument, View
 from testconstants import STANDARD_BUCKET_PORT
 from security.rbac_base import RbacBase
 
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
     def setUp(self):
         super(UpgradeTests, self).setUp()
@@ -891,3 +893,152 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
                                         "error message not found as expected in " + str(node.ip))
                 self.assertEqual(count4, 0, "Disconnect errors found in " + str(node.ip))
                 self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
+
+    # ---- 10K Collections Scale Tests ----
+    def test_cross_version_10k_to_1k_limit(self):
+        """
+        Source at 10K collections limit replicating to a destination that
+        only supports 1K collections. Verifies the system handles the
+        mismatch gracefully -- either by error or by replicating only
+        the collections that exist on both sides.
+
+        Expects initial_version (dest) < 8.1 supporting only 1K collections.
+        Source creates 10K collections; dest creates only 1K.
+        """
+        _inp = TestInputSingleton.input
+        p = TenKCollectionHelper.read_10k_params(_inp)
+        bucket_name = _inp.param("bucket_name", "default")
+        dest_scopes = _inp.param("dest_scopes", 10)
+        dest_cols = _inp.param("dest_collections_per_scope", 100)
+
+        src_cluster = self.get_cb_cluster_by_name('C1')
+        dest_cluster = self.get_cb_cluster_by_name('C2')
+        src_master = src_cluster.get_master_node()
+        dest_master = dest_cluster.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            dest_master, bucket_name,
+            num_scopes=dest_scopes, collections_per_scope=dest_cols,
+            scope_prefix=p["scope_prefix"], collection_prefix=p["collection_prefix"])
+
+        try:
+            self.setup_xdcr()
+        except Exception as e:
+            self.log.info("Expected error during 10K->1K setup: {}".format(e))
+            return
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="10kto1k")
+
+        try:
+            self._wait_for_dest_to_stabilize(dest_cluster, bucket_name,
+                                             min_items=1, timeout=600)
+        except Exception as e:
+            self.log.info("Dest did not stabilize within timeout (expected for "
+                          "10K->1K mismatch if no overlapping collections): {}".format(e))
+
+        dest_count = TenKCollectionHelper.get_bucket_item_count(dest_master, bucket_name)
+        self.log.info("Dest received {} items despite collection limit".format(dest_count))
+        self.assertGreater(dest_count, 0,
+                           "Dest should have received items into overlapping collections")
+        self.log.info("Cross-version 10K->1K test passed")
+
+    def test_cross_version_1k_to_10k(self):
+        """
+        Source at 1K collections replicating to destination with 10K
+        collections. Verifies destination receives data into the subset
+        of collections that exist on the source.
+        """
+        _inp = TestInputSingleton.input
+        p = TenKCollectionHelper.read_10k_params(_inp)
+        bucket_name = _inp.param("bucket_name", "default")
+        src_scopes = _inp.param("src_scopes", 10)
+        src_cols = _inp.param("src_collections_per_scope", 100)
+
+        src_cluster = self.get_cb_cluster_by_name('C1')
+        dest_cluster = self.get_cb_cluster_by_name('C2')
+        src_master = src_cluster.get_master_node()
+        dest_master = dest_cluster.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            src_master, bucket_name,
+            num_scopes=src_scopes, collections_per_scope=src_cols,
+            scope_prefix=p["scope_prefix"], collection_prefix=p["collection_prefix"])
+        TenKCollectionHelper.create_10k_collections(
+            dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="1kto10k",
+            sample_size=min(p["sample_collections"], src_scopes * src_cols))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 600))
+        except Exception as e:
+            self.fail("1K->10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(dest_master, bucket_name)
+        self.log.info("1K->10K: src={}, dest={}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "1K->10K mismatch: src={}, dest={}".format(src_count, dest_count))
+        self.log.info("Cross-version 1K->10K test passed")
+
+    def test_rolling_upgrade_10k_collections(self):
+        """
+        Rolling upgrade while XDCR pipeline runs with 10K collections.
+        Creates 10K collections, starts replication, then performs an
+        online upgrade of all nodes. Verifies the pipeline recovers and
+        replication completes after upgrade.
+
+        Requires upgrade_version param.
+        """
+        _inp = TestInputSingleton.input
+        p = TenKCollectionHelper.read_10k_params(_inp)
+        bucket_name = _inp.param("bucket_name", "default")
+
+        src_cluster = self.get_cb_cluster_by_name('C1')
+        dest_cluster = self.get_cb_cluster_by_name('C2')
+        src_master = src_cluster.get_master_node()
+        dest_master = dest_cluster.get_master_node()
+
+        TenKCollectionHelper.create_10k_collections(
+            src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="preupgrade")
+
+        for upgrade_version in self.upgrade_versions:
+            self.log.info("Starting rolling upgrade to {}".format(upgrade_version))
+            for node in src_cluster.get_nodes():
+                self._upgrade(upgrade_version, [node])
+            for node in dest_cluster.get_nodes():
+                self._upgrade(upgrade_version, [node])
+
+        TenKCollectionHelper.select_and_load(
+            src_master, bucket_name, p, run_id="postupgrade")
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 1200))
+        except Exception as e:
+            self.fail("Rolling upgrade 10K catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(dest_master, bucket_name)
+        self.assertEqual(src_count, dest_count,
+                         "Rolling upgrade mismatch: src={}, dest={}".format(
+                             src_count, dest_count))
+        self.log.info("Rolling upgrade 10K test passed")

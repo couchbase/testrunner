@@ -9,6 +9,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
 
+from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
+
 
 # Assumption that at least 2 nodes on every cluster
 class bidirectional(XDCRNewBaseTest):
@@ -534,3 +536,51 @@ class bidirectional(XDCRNewBaseTest):
             else:
                 self.log.info("SCRAM-SHA auth successful on node {0}".format(node.ip))
         self.verify_results()
+
+    # ---- 10K Collections Scale Tests ----
+    def test_bidirectional_10k_collections(self):
+        """
+        Active-Active (bi-directional) replication with 10K collections.
+        Loads docs on both clusters concurrently using disjoint key prefixes,
+        then verifies replication catches up and item counts converge.
+        """
+        p = TenKCollectionHelper.read_10k_params(self._input)
+        bucket_name = self._input.param("bucket_name", "default")
+
+        TenKCollectionHelper.create_10k_collections(
+            self.src_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+        TenKCollectionHelper.create_10k_collections(
+            self.dest_master, bucket_name, **{k: p[k] for k in
+            ("num_scopes", "collections_per_scope", "scope_prefix", "collection_prefix")})
+
+        self.setup_xdcr()
+
+        src_result = TenKCollectionHelper.select_and_load(
+            self.src_master, bucket_name, p, run_id="bidir_src")
+        dest_result = TenKCollectionHelper.select_and_load(
+            self.dest_master, bucket_name, p, run_id="bidir_dest")
+
+        self.log.info("Loaded on src: {}/{}, dest: {}/{}".format(
+            len(src_result.success_pairs), src_result.total_attempted,
+            len(dest_result.success_pairs), dest_result.total_attempted))
+
+        try:
+            self._wait_for_replication_to_catchup(
+                timeout=self._input.param("wait_timeout", 900))
+        except Exception as e:
+            self.fail("Bi-directional replication catch-up failed: {}".format(e))
+
+        src_count = TenKCollectionHelper.get_bucket_item_count(self.src_master, bucket_name)
+        dest_count = TenKCollectionHelper.get_bucket_item_count(self.dest_master, bucket_name)
+        self.log.info("Bucket items - src: {}, dest: {}".format(src_count, dest_count))
+        self.assertEqual(src_count, dest_count,
+                         "Item count mismatch in bidirectional replication: "
+                         "src={}, dest={}".format(src_count, dest_count))
+
+        for node in self.src_cluster.get_nodes() + self.dest_cluster.get_nodes():
+            _, crash_count = NodeHelper.check_goxdcr_log(node, "panic")
+            self.assertEqual(crash_count, 0,
+                             "goxdcr panic on {} during bidirectional 10K test".format(node.ip))
+
+        self.log.info("Bidirectional 10K collections test passed")
