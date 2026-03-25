@@ -855,9 +855,8 @@ def main():
             # Flip retry_jobs to active_jobs if active is empty
             if len(active_jobs) == 0:
                 if len(retry_jobs) > 0:
-                    sleep_function(seconds=60,
-                                   message=f"Flipping retry_jobs to active_jobs: "
-                                           f"{len(retry_jobs)} jobs to retry")
+                    sleep_function(seconds=120,
+                                   message=f"{len(retry_jobs)} jobs to retry")
                     active_jobs = retry_jobs.copy()
                     retry_jobs.clear()
                 elif len(retry_jobs) == 0:

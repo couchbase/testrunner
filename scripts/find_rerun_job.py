@@ -1,3 +1,4 @@
+import logging
 import os as OS
 import subprocess
 import sys
@@ -21,6 +22,7 @@ import traceback
 
 host = '172.23.104.97'
 bucket_name = 'rerun_jobs'
+log = logging.getLogger()
 
 
 def get_run_results():
@@ -110,7 +112,7 @@ def select_bucket(cluster, bucket_name, scope_name=None, collection_name=None):
 
 
 def run_query(cluster, bucket, query):
-    print(f"Running query: {query}")
+    log.debug(f"Running query: {query}")
     try:
         # SDK 4 way of running and fetching the result rows
         res = cluster.query(query)
@@ -200,7 +202,7 @@ def find_rerun_job(args):
         rerun_jobs.upsert(doc_id, run_document, ttl=(7*24*60*60))
         return rerun, run_document
     except Exception as e:
-        print(e)
+        log.warning(e)
         return False, {}
 
 
@@ -253,7 +255,7 @@ def should_dispatch_job(os, component, sub_component, version,
         qe_server_pool.timeout = 60
         n1ql_result = run_query(cluster, qe_server_pool, query)
         if list(n1ql_result):
-            print("Tests are already running. Not dispatching another job")
+            log.critical("Tests are already running. Not dispatching another job")
             return False
         pending = False
         failed = False
@@ -275,7 +277,7 @@ def should_dispatch_job(os, component, sub_component, version,
         jobs_doc = greenboard.get(job_doc_id, quiet=True)
 
         if not jobs_doc.success and pending:
-            print("No jobs found for this build yet. Run the job")
+            log.debug("No jobs found for this build yet. Run the job")
             return True
 
         try:
@@ -325,7 +327,7 @@ def should_dispatch_job(os, component, sub_component, version,
                 if not job_found:
                     pending = True
                 else:
-                    print("Found the job run in greenboard records")
+                    log.critical("Found the job run in greenboard records")
             else:
                 pending = True
         else:
@@ -353,51 +355,46 @@ def should_dispatch_job(os, component, sub_component, version,
         if successful:
             # there was a successful run for this job. Don't dispatch
             # further jobs
-            print("Job had run successfully previously.")
-            print("{} is the successful job.".format(last_job_url))
+            log.critical(f"Job had run successfully previously: {last_job_url}")
             return False
         if only_install_failed:
             if (not successful and not unstable) and install_failed and not pending:
                 # Run only if the job had install failure
-                print("Job had install failure previously. Running only install failed jobs")
+                log.critical("Job had install failure previously. Running only install failed jobs")
                 return True
             else:
-                print("Job has run previously without install failure. Or is still pending")
+                log.critical("Job has run previously without install failure. Or is still pending")
                 return False
         if only_failed_jobs:
             if (not successful and not unstable) and failed and not pending:
                 # Run only if the job had failed
-                print("Job had failed previously. Running only failed jobs")
+                log.critical("Job had failed previously. Running only failed jobs")
                 return True
             else:
-                print("Job has run previously without Failure. Or is "
-                      "still pending")
+                log.critical("Job has run previously without Failure / still pending")
                 return False
         if only_unstable_jobs:
             if (not successful) and unstable and not pending:
                 # Run only if previous jobs were unstable
-                print("Previous jobs were unstable. Running only unstable jobs")
+                log.critical("Previous jobs were unstable. Running only unstable jobs")
                 return True
             else:
-                print("Job has run previously successfully. Or they are "
-                      "still pending. ")
+                log.critical("Job has run previously successfully / still pending")
                 return False
         if only_pending_jobs:
             if pending:
                 # Run only if the job wasn't run previously
-                print("Running pending jobs")
+                log.debug("Running pending jobs")
                 return True
             else:
-                print("Job were run previously")
                 return False
-        print("None of the rerun conditions were met. Running the job")
         return True
     except Exception as e:
         if "DocumentNotFoundException" in str(e):
-            print("Document not found")
+            log.debug("Document not found")
         else:
-            print("Exception occurred while finding if job has to be "
-                  "dispatched: %s" % e)
+            log.critical("Exception occurred while finding if job has to be "
+                         "dispatched: %s" % e)
             traceback.print_exc()
         return True
 
@@ -433,7 +430,6 @@ if __name__ == "__main__":
     unstable = sys.argv[7] == "true"
     pending = sys.argv[8] == "true"
     install_failed = sys.argv[9] == "true"
-    # print(rerun.__str__())
     output = should_dispatch_job(os, component, subcomponent,
                                  version, parameters,
                                  only_pending_jobs=pending,
