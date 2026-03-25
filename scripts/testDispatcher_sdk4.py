@@ -896,9 +896,13 @@ def main():
                 if haveTestToLaunch:
                     break
 
-            # If no job can be launched (i >= len(active_jobs)), use first job
+            # If no job can be launched (i >= len(active_jobs)), no job matches current server availability
+            # Do NOT default to index 0, as that creates infinite retry loops
+            # Instead, sleep and continue the loop to wait for servers to become available
             if i >= len(active_jobs):
-                i = 0
+                log.info(f"No job matches current server availability. Active jobs: {len(active_jobs)}, Retry jobs: {len(retry_jobs)}")
+                sleep_function(seconds=POLL_INTERVAL, message="No job matches server availability, waiting...")
+                continue
 
             curr_job = active_jobs[i]
             if haveTestToLaunch:
