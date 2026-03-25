@@ -850,8 +850,20 @@ def main():
             launchString, curr_job_info)
 
     active_jobs = testsToLaunch
-    while len(active_jobs) > 0:
+    while len(active_jobs) > 0 or len(retry_jobs) > 0:
         try:
+            # Flip retry_jobs to active_jobs if active is empty
+            if len(active_jobs) == 0:
+                if len(retry_jobs) > 0:
+                    sleep_function(seconds=60,
+                                   message=f"Flipping retry_jobs to active_jobs: "
+                                           f"{len(retry_jobs)} jobs to retry")
+                    active_jobs = retry_jobs.copy()
+                    retry_jobs.clear()
+                elif len(retry_jobs) == 0:
+                    # If both lists are empty, exit the loop
+                    break
+
             # this bit is Docker/VM dependent
             # see if we can match a test
             haveTestToLaunch = False
@@ -1241,13 +1253,6 @@ def main():
                     f"to retry_jobs due to insufficient servers")
                 retry_jobs.append(curr_job)
                 active_jobs.pop(i)
-
-            if len(active_jobs) == 0 and len(retry_jobs) > 0:
-                sleep_function(seconds=60,
-                               message=f"Flipping retry_jobs to active_jobs: "
-                                       f"{len(retry_jobs)} jobs to retry")
-                active_jobs = retry_jobs.copy()
-                retry_jobs.clear()
         except Exception as e:
             log.critical(f'Have an exception: {str(e)}\n'
                          f'{traceback.format_exc()}')
