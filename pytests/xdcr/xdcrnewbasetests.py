@@ -6,6 +6,7 @@ import re
 import time
 import unittest
 import base64
+import urllib.parse
 import yaml
 
 import logger
@@ -60,6 +61,12 @@ def raise_if(cond, ex):
     """
     if cond:
         raise ex
+
+
+class CONNECTIVITY_STATUS:
+    RC_OK = "RC_OK"
+    RC_DEGRADED = "RC_DEGRADED"
+    RC_ERROR = "RC_ERROR"
 
 
 class TOPOLOGY:
@@ -572,6 +579,462 @@ class NodeHelper:
         if not cluster_run:
             for server in servers:
                 NodeHelper.collect_data_files(server)
+
+    @staticmethod
+    def setup_x509_certificates(cluster, encryption_type=None):
+        """Generate and upload x509 certificates for a cluster.
+        
+        Generates CA-signed certificates using x509main utility and uploads
+        them to all nodes in the cluster. Uses unencrypted PKCS8 keys by default.
+        
+        @param cluster: CouchbaseCluster object.
+        @param encryption_type: Key encryption type (None for unencrypted,
+                                'aes256' for encrypted). Defaults to None.
+        """
+        import logger
+        log = logger.Logger.get_logger()
+        from lib.Cb_constants.CBServer import CbServer
+        
+        master = cluster.get_master_node()
+        CbServer.x509 = x509main(host=master, encryption_type=encryption_type)
+
+        # Clean up any old certs
+        for server in cluster.get_nodes():
+            CbServer.x509.delete_inbox_folder_on_server(server=server)
+
+        # Generate new CA-signed certificates
+        CbServer.x509.generate_multiple_x509_certs(servers=cluster.get_nodes())
+
+        # Upload root CAs to all nodes
+        for server in cluster.get_nodes():
+            CbServer.x509.upload_root_certs(server)
+
+        # Upload node certificates
+        CbServer.x509.upload_node_certs(servers=cluster.get_nodes())
+
+        log.info("x509 certificates configured on cluster {0}".format(
+            cluster.get_name()))
+
+    @staticmethod
+    def teardown_x509_certificates(clusters):
+        """Remove x509 certificates from all nodes in given clusters.
+        Retries once on failure to handle transient SSH/REST errors that
+        could leave stale certs on VMs.
+        
+        @param clusters: List of CouchbaseCluster objects.
+        """
+        import logger
+        log = logger.Logger.get_logger()
+        from lib.Cb_constants.CBServer import CbServer
+        
+        if not CbServer.x509:
+            return
+
+        for attempt in range(2):
+            try:
+                for cluster in clusters:
+                    CbServer.x509.teardown_certs(servers=cluster.get_nodes())
+                return
+            except Exception as e:
+                if attempt == 0:
+                    log.warning("Certificate teardown failed (attempt 1), "
+                                "retrying in 5s: {0}".format(e))
+                    time.sleep(5)
+                else:
+                    log.error("Certificate teardown failed after 2 attempts: "
+                              "{0}".format(e))
+
+    @staticmethod
+    def get_ca_paths_for_node(node_ip):
+        """Get intermediate CA paths for a given node.
+        
+        Looks up the CA that signed the node's certificate and returns
+        paths to the intermediate CA key and certificate.
+        
+        @param node_ip: IP address of the node.
+        @return: Tuple of (int_ca_key_path, int_ca_pem_path, int_ca_name).
+        @raises Exception: If no certificate is found for the node.
+        """
+        from lib.Cb_constants.CBServer import CbServer
+        
+        x509_obj = CbServer.x509
+        if not x509_obj:
+            raise Exception("x509main not initialized. Call setup_x509_certificates first.")
+        
+        node_ca_info = x509_obj.node_ca_map.get(node_ip)
+        if not node_ca_info:
+            raise Exception(
+                "No node certificate found for {0}".format(node_ip))
+
+        int_ca_name = node_ca_info["signed_by"]
+        root_ca_name = int_ca_name.split("_")[1]
+        root_ca_dir = x509_obj.CACERTFILEPATH + root_ca_name + "/"
+        int_ca_dir = root_ca_dir + int_ca_name + "/"
+        int_ca_key = int_ca_dir + "int.key"
+        int_ca_pem = int_ca_dir + "int.pem"
+        
+        return int_ca_key, int_ca_pem, int_ca_name
+
+    @staticmethod
+    def create_cert_with_san(cert_dir, cert_name, san_ips, int_ca_key, int_ca_pem,
+                            cn="service.couchbase.svc", dns_names=None):
+        """Generate a certificate with multiple IP/DNS SANs signed by an intermediate CA.
+        
+        Useful for creating certificates for load balancers, gateways, or services
+        that need to be valid for multiple IPs or DNS names.
+        
+        @param cert_dir: Local directory to store cert files.
+        @param cert_name: Base name for cert files (e.g., 'cng', 'haproxy').
+        @param san_ips: List of IP addresses for subjectAltName (e.g., ['192.168.1.1', '192.168.1.2']).
+        @param int_ca_key: Path to intermediate CA private key.
+        @param int_ca_pem: Path to intermediate CA certificate.
+        @param cn: Common Name for the certificate (default: 'service.couchbase.svc').
+        @param dns_names: Optional list of DNS names for subjectAltName (e.g., ['*.example.com']).
+        @return: Tuple of (key_path, cert_path, chain_path).
+        """
+        import os
+        import subprocess
+        
+        os.makedirs(cert_dir, exist_ok=True)
+
+        key_path = os.path.join(cert_dir, "{0}.key".format(cert_name))
+        csr_path = os.path.join(cert_dir, "{0}.csr".format(cert_name))
+        cert_path = os.path.join(cert_dir, "{0}.pem".format(cert_name))
+        chain_path = os.path.join(cert_dir, "{0}_chain.pem".format(cert_name))
+        ext_path = os.path.join(cert_dir, "{0}.ext".format(cert_name))
+
+        # Build SAN string with IPs and optional DNS names
+        san_entries = ["IP:{0}".format(ip) for ip in san_ips]
+        if dns_names:
+            san_entries.extend(["DNS:{0}".format(dns) for dns in dns_names])
+        san_str = ",".join(san_entries)
+        
+        # Write extensions file with SANs
+        with open(ext_path, "w") as f:
+            f.write("basicConstraints=CA:FALSE\n")
+            f.write("subjectAltName = {0}\n".format(san_str))
+
+        # Generate private key
+        subprocess.check_call([
+            "openssl", "genrsa", "-out", key_path, "2048"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Generate CSR
+        subprocess.check_call([
+            "openssl", "req", "-new", "-key", key_path,
+            "-out", csr_path,
+            "-subj", "/C=UA/O=MyCompany/OU=TestRunner/CN={0}".format(cn)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Sign with intermediate CA
+        subprocess.check_call([
+            "openssl", "x509", "-req", "-in", csr_path,
+            "-CA", int_ca_pem, "-CAkey", int_ca_key,
+            "-CAcreateserial", "-out", cert_path,
+            "-days", "365", "-sha256",
+            "-extfile", ext_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Create chain: cert + intermediate CA
+        with open(chain_path, "w") as chain:
+            for pem_file in [cert_path, int_ca_pem]:
+                with open(pem_file, "r") as f:
+                    chain.write(f.read())
+
+        return key_path, cert_path, chain_path
+
+    GOXDCR_DEFAULT_SCAN_PATTERNS = [
+        "panic", "fatal error", "nil pointer", "ERRO",
+    ]
+
+    @staticmethod
+    def scan_goxdcr_log(cluster, label, patterns=None, rc_name=None,
+                        repl_ids=None, tail_lines=10, extra_patterns=None):
+        """Scan goxdcr.log on every node of a cluster for one or more patterns.
+
+        @param patterns: list of regex/literal patterns. Defaults to
+                         GOXDCR_DEFAULT_SCAN_PATTERNS (panic / nil pointer / ERRO).
+        @param rc_name: when supplied, also greps for the remote-cluster name.
+        @param repl_ids: replication IDs added to the search list so hits are
+                         attributable to a specific pipeline.
+        @param tail_lines: how many trailing matches to log per pattern hit.
+        @return: dict {pattern: [(node_ip, count)]}.
+        """
+        patterns = list(patterns or NodeHelper.GOXDCR_DEFAULT_SCAN_PATTERNS)
+        if extra_patterns:
+            patterns.extend(extra_patterns)
+        if rc_name:
+            patterns.append(rc_name)
+        if repl_ids:
+            for rid in repl_ids:
+                if rid:
+                    patterns.append(rid)
+
+        results = {}
+        for node in cluster.get_nodes():
+            try:
+                goxdcr_log = NodeHelper.get_goxdcr_log_dir(node) + "/goxdcr.log*"
+            except Exception as e:
+                NodeHelper._log.warning(
+                    "[{0}] goxdcr log dir lookup failed on {1}: {2}".format(
+                        label, node.ip, e))
+                continue
+            for pattern in patterns:
+                try:
+                    matches, count = NodeHelper.check_goxdcr_log(
+                        node, pattern, goxdcr_log, print_matches=False)
+                except Exception as e:
+                    NodeHelper._log.warning(
+                        "[{0}] goxdcr scan on {1} for '{2}' failed: {3}".format(
+                            label, node.ip, pattern, e))
+                    continue
+                results.setdefault(pattern, []).append((node.ip, count))
+                if count:
+                    tail = matches[-tail_lines:] if isinstance(matches, list) \
+                        else [matches]
+                    NodeHelper._log.info(
+                        "[{0}] goxdcr.log {1} pattern='{2}' count={3}".format(
+                            label, node.ip, pattern, count))
+                    for line in tail:
+                        NodeHelper._log.info("[{0}]   {1}".format(label, str(line).rstrip()))
+        return results
+
+    @staticmethod
+    def start_pillowfight_burst_loaders(src_master, src_buckets, items_per_worker,
+                                        docsize, rate_limit, workers_per_bucket):
+        """Launch parallel cbc-pillowfight workers across every bucket.
+
+        @return: list of (shell, pid, key_prefix) tuples; pass to
+                 wait_for_pillowfight_completion or kill manually for cleanup.
+        """
+        loaders = []
+        for bucket in src_buckets:
+            for worker_id in range(workers_per_bucket):
+                shell = RemoteMachineShellConnection(src_master)
+                key_prefix = "burst-{0}-{1}".format(bucket.name, worker_id)
+                cmd = (
+                    "nohup /opt/couchbase/bin/cbc-pillowfight "
+                    "-u {user} -P {pw} -U couchbase://localhost/{bucket} "
+                    "-I {items} -m {sz} -M {sz} -B 1000 --rate-limit={rl} "
+                    "--populate-only --collection _default._default "
+                    "--key-prefix {kp}- "
+                    ">/tmp/{kp}.log 2>&1 & echo $!"
+                ).format(
+                    user=src_master.rest_username, pw=src_master.rest_password,
+                    bucket=bucket.name, items=items_per_worker, sz=docsize,
+                    rl=rate_limit, kp=key_prefix)
+                out, _ = shell.execute_command(cmd)
+                pid = (out[0].strip() if out else "")
+                NodeHelper._log.info(
+                    "Launched burst worker {0} on bucket '{1}', pid={2}".format(
+                        worker_id, bucket.name, pid))
+                loaders.append((shell, pid, key_prefix))
+        return loaders
+
+    @staticmethod
+    def wait_for_pillowfight_completion(loaders, timeout):
+        """Wait for cbc-pillowfight workers to exit; force-kill any still
+        running after the timeout. Always disconnects shells."""
+        end_time = time.time() + timeout
+        for shell, pid, label in loaders:
+            try:                
+                if not pid or not str(pid).isdigit():
+                    NodeHelper._log.warning(
+                        "Burst worker '{0}' has empty/non-numeric pid={1!r}; "
+                        "skipping wait+kill".format(label, pid))
+                    continue
+                while time.time() < end_time:
+                    out, _ = shell.execute_command(
+                        "kill -0 {0} 2>/dev/null && echo RUNNING || echo DONE".format(pid))
+                    if out and "DONE" in out[0]:
+                        break
+                    time.sleep(5)
+                else:
+                    NodeHelper._log.warning(
+                        "Burst worker {0} (pid={1}) did not exit; killing".format(
+                            label, pid))
+                    shell.execute_command("kill -9 {0} 2>/dev/null || true".format(pid))
+            finally:
+                shell.disconnect()
+
+    @staticmethod
+    def setup_x509_certificates_multi_cluster(clusters, encryption_type=None):
+        """Generate one trust chain across multiple clusters and upload to all
+        nodes. Superset of setup_x509_certificates: cross-cluster trusted-CA
+        propagation + master load step that XDCR replication needs.
+
+        @param clusters: list of CouchbaseCluster.
+        @param encryption_type: x509main encryption_type (None for unencrypted).
+        """
+        all_nodes = []
+        for cluster in clusters:
+            all_nodes.extend(cluster.get_nodes())
+
+        master = clusters[0].get_master_node()
+        CbServer.x509 = x509main(host=master, encryption_type=encryption_type)
+
+        for node in all_nodes:
+            CbServer.x509.delete_inbox_folder_on_server(server=node)
+
+        CbServer.x509.generate_multiple_x509_certs(servers=all_nodes)
+
+        for node in all_nodes:
+            CbServer.x509.copy_trusted_CAs(
+                root_ca_names=CbServer.x509.root_ca_names, server=node)
+
+        for cluster in clusters:
+            CbServer.x509.load_trusted_CAs(server=cluster.get_master_node())
+
+        CbServer.x509.upload_node_certs(servers=all_nodes)
+        NodeHelper._log.info(
+            "x509 certificates configured on {0} clusters ({1} nodes)".format(
+                len(clusters), len(all_nodes)))
+
+    @staticmethod
+    def teardown_x509_certificates_with_retry(clusters, max_attempts=4,
+                                              log_fd_fn=None):
+        """EMFILE-aware x509 teardown.
+
+        Tests that open many paramiko transports (per-node TLS install, gateway
+        setup, kill/restart cycles) can hit RLIMIT_NOFILE during teardown; the
+        shared 2-attempt retry isn't enough — bailing halfway leaves stale
+        trusted CAs that fail the next run's add_node TLS handshake. Force gc
+        between attempts and retry on EMFILE specifically.
+        """
+        import errno
+        import gc as _gc
+        if not CbServer.x509:
+            return
+        last_err = None
+        for attempt in range(1, max_attempts + 1):
+            _gc.collect()
+            if log_fd_fn:
+                log_fd_fn("pre-cert-teardown attempt {0}".format(attempt))
+            try:
+                for cluster in clusters:
+                    CbServer.x509.teardown_certs(servers=cluster.get_nodes())
+                return
+            except OSError as e:
+                last_err = e
+                if e.errno == errno.EMFILE and attempt < max_attempts:
+                    NodeHelper._log.warning(
+                        "Certificate teardown hit EMFILE on attempt {0}/{1};"
+                        " forcing gc and retrying in {2}s".format(
+                            attempt, max_attempts, attempt * 5))
+                    _gc.collect()
+                    time.sleep(attempt * 5)
+                    continue
+                raise
+            except Exception as e:
+                last_err = e
+                if attempt < max_attempts:
+                    NodeHelper._log.warning(
+                        "Certificate teardown failed on attempt {0}/{1}: {2};"
+                        " retrying in {3}s".format(
+                            attempt, max_attempts, e, attempt * 5))
+                    _gc.collect()
+                    time.sleep(attempt * 5)
+                    continue
+                raise
+        if last_err is not None:
+            NodeHelper._log.error(
+                "Certificate teardown failed after {0} attempts: {1}".format(
+                    max_attempts, last_err))
+
+    @staticmethod
+    def provision_certs_for_floating_servers(num_nodes, floating_pool):
+        """Pre-provision certs on the next num_nodes floating servers that
+        async_rebalance_in / async_swap_rebalance will consume.
+
+        CouchbaseCluster rebalance pops from the tail of the pool. Cluster-
+        wide cert setup only covers already-joined nodes, so joiners would
+        arrive with no node cert and no trusted CAs — add_node fails the
+        TLS handshake with "unknown CA". Idempotent.
+        """
+        if CbServer.x509 is None:
+            raise Exception(
+                "x509 not initialised; setup_x509_certificates_multi_cluster "
+                "must run before pre-provisioning floating-server certs")
+        if len(floating_pool) < num_nodes:
+            raise Exception(
+                "Not enough floating servers ({0}) to provision for a "
+                "{1}-node rebalance-in".format(len(floating_pool), num_nodes))
+        if num_nodes <= 0:
+            return []
+
+        pending = list(floating_pool[-num_nodes:])
+        NodeHelper._log.info(
+            "Pre-provisioning certs for floating servers: {0}".format(
+                [n.ip for n in pending]))
+
+        if not CbServer.x509.node_ca_map:
+            raise Exception(
+                "CbServer.x509.node_ca_map is empty — no existing "
+                "intermediate CA to sign floating-server certs with")
+        existing = next(iter(CbServer.x509.node_ca_map.values()))
+        int_ca_name = existing["signed_by"]
+        root_ca_name = int_ca_name.split("_")[1]
+
+        for node in pending:
+            try:
+                CbServer.x509.delete_inbox_folder_on_server(server=node)
+            except Exception as e:
+                NodeHelper._log.warning(
+                    "delete_inbox_folder on {0} failed: {1}".format(node.ip, e))
+            CbServer.x509.generate_node_certificate(
+                root_ca_name, int_ca_name, node.ip)
+            CbServer.x509.copy_trusted_CAs(
+                root_ca_names=CbServer.x509.root_ca_names, server=node)
+            try:
+                CbServer.x509.load_trusted_CAs(server=node)
+            except Exception as e:
+                NodeHelper._log.warning(
+                    "load_trusted_CAs on {0} failed (node may not be "
+                    "initialised yet, continuing): {1}".format(node.ip, e))
+
+        CbServer.x509.upload_node_certs(servers=pending)
+        NodeHelper._log.info(
+            "Pre-provisioned certs for {0} floating server(s): {1}".format(
+                len(pending), [n.ip for n in pending]))
+        return pending
+
+    @staticmethod
+    def log_fd_count(label, log=None):
+        """Open-FD probe for EMFILE diagnosis. Linux /proc/self/fd; macOS /dev/fd."""
+        import os as _os
+        log = log or NodeHelper._log
+        try:
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        except Exception:
+            soft = hard = None
+        count = None
+        try:
+            if _os.path.isdir("/proc/self/fd"):
+                count = len(_os.listdir("/proc/self/fd"))
+            elif _os.path.isdir("/dev/fd"):
+                count = len(_os.listdir("/dev/fd"))
+        except Exception as e:
+            log.warning("[{0}] fd count probe failed: {1}".format(label, e))
+        log.info("[{0}] open fds={1}, rlimit_nofile soft={2} hard={3}".format(
+            label, count, soft, hard))
+
+    @staticmethod
+    def raise_fd_soft_limit(log=None):
+        """Raise RLIMIT_NOFILE soft limit to hard. macOS default of 256 is
+        too low for tests that open many paramiko transports."""
+        log = log or NodeHelper._log
+        try:
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            if soft < hard:
+                target = hard if hard != resource.RLIM_INFINITY else 65536
+                resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+                log.info("RLIMIT_NOFILE raised: soft {0} -> {1} (hard={2})".format(
+                    soft, target, hard))
+        except Exception as e:
+            log.warning("Could not raise RLIMIT_NOFILE: {0}".format(e))
+
 
 class ValidateAuditEvent:
 
@@ -4606,4 +5069,561 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.log.info(f"ECCV already enabled for bucket {bucket.name}")
                 else:
                     raise
+
+    # ------------------------------------------------------------------ #
+    #  Reusable XDCR utility methods                                       #
+    # ------------------------------------------------------------------ #
+
+    def get_connectivity_status(self, rest, rc_name=None):
+        """Get connectivityStatus from remote cluster references.
+
+        @param rest: RestConnection to the cluster.
+        @param rc_name: If given, return status for this ref only.
+        @return: Single status string if rc_name given, else dict {name: status}.
+        """
+        remote_clusters = rest.get_remote_clusters()
+        statuses = {}
+        for rc in remote_clusters:
+            statuses[rc["name"]] = rc.get("connectivityStatus", "UNKNOWN")
+        if rc_name:
+            return statuses.get(rc_name, "UNKNOWN")
+        return statuses
+
+    def wait_for_connectivity_status(self, rest, expected_status,
+                                     rc_name=None, timeout=120, interval=5):
+        """Poll until a remote cluster ref reaches the expected connectivity status.
+
+        @return: True if reached, False on timeout.
+        """
+        self.log.info("Waiting for connectivity status '{0}'".format(expected_status))
+        end_time = time.time() + timeout
+        statuses = {}
+        while time.time() < end_time:
+            statuses = self.get_connectivity_status(rest)
+            for name, status in statuses.items():
+                if rc_name and name != rc_name:
+                    continue
+                if status == expected_status:
+                    self.log.info("Remote cluster '{0}' reached status: {1}".format(
+                        name, status))
+                    return True
+            time.sleep(interval)
+        self.log.warning("Timeout waiting for status '{0}'. Current: {1}".format(
+            expected_status, statuses))
+        return False
+
+    def wait_for_error_connectivity_status(self, rest, rc_name=None,
+                                           timeout=120, interval=5):
+        """Wait for any error connectivity status (RC_DEGRADED or RC_ERROR).
+
+        @return: The error status string, or None on timeout.
+        """
+        self.log.info("Waiting for error connectivity status")
+        end_time = time.time() + timeout
+        error_statuses = [CONNECTIVITY_STATUS.RC_DEGRADED,
+                          CONNECTIVITY_STATUS.RC_ERROR]
+        statuses = {}
+        while time.time() < end_time:
+            statuses = self.get_connectivity_status(rest)
+            for name, status in statuses.items():
+                if rc_name and name != rc_name:
+                    continue
+                if status in error_statuses:
+                    self.log.info("Remote cluster '{0}' reached error status: {1}".format(
+                        name, status))
+                    return status
+            time.sleep(interval)
+        self.log.warning("Timeout waiting for error status. Current: {0}".format(statuses))
+        return None
+
+    def block_nftables_traffic(self, cluster, target_ip):
+        """Block outbound traffic from all nodes in a cluster to the target IP
+        using nftables. Verifies the rule was applied."""
+        for node in cluster.get_nodes():
+            shell = RemoteMachineShellConnection(node)
+            try:
+                cmd = ("nft add table inet filter 2>/dev/null; "
+                       "nft 'add chain inet filter output "
+                       "{{ type filter hook output priority 0 ; policy accept ; }}' "
+                       "2>/dev/null; "
+                       "nft add rule inet filter output ip daddr {0} drop".format(
+                           target_ip))
+                shell.execute_command(cmd, use_channel=True, timeout=10)
+                verify_out, _ = shell.execute_command(
+                    "nft list ruleset | grep '{0}' || echo NFT_RULE_MISSING".format(
+                        target_ip))
+                verify_str = " ".join(verify_out) if verify_out else ""
+                if "NFT_RULE_MISSING" in verify_str:
+                    raise Exception(
+                        "nftables rule to block {0} was not applied on {1}".format(
+                            target_ip, node.ip))
+                self.log.info("Blocked traffic from {0} to {1}".format(
+                    node.ip, target_ip))
+            finally:
+                shell.disconnect()
+
+    def unblock_nftables(self, cluster):
+        """Flush all nftables rules on all nodes of a cluster."""
+        for node in cluster.get_nodes():
+            shell = RemoteMachineShellConnection(node)
+            try:
+                shell.execute_command(
+                    "nft flush ruleset 2>/dev/null; true",
+                    use_channel=True, timeout=10)
+                self.log.info("Flushed nftables on {0}".format(node.ip))
+            except Exception as e:
+                self.log.warning("Failed to flush nftables on {0}: {1}".format(
+                    node.ip, e))
+            finally:
+                shell.disconnect()
+
+    def kill_goxdcr_on_cluster(self, cluster, wait_to_recover=True):
+        """Kill goxdcr process on all nodes in a cluster."""
+        for node in cluster.get_nodes():
+            shell = RemoteMachineShellConnection(node)
+            try:
+                shell.execute_command("pkill -9 goxdcr || true", use_channel=True)
+                self.log.info("Killed goxdcr on {0}".format(node.ip))
+            except Exception as e:
+                self.log.error("Error killing goxdcr on {0}: {1}".format(node.ip, e))
+            finally:
+                shell.disconnect()
+        if wait_to_recover:
+            self.sleep(15, "Waiting for goxdcr to restart")
+
+    def _goxdcr_admin_auth_header(self, server):
+        """Build a base64 Authorization header value for the goxdcr debug
+        endpoint. The endpoint is localhost-only on port 9998, so we must
+        run curl on the remote node — but credentials and form data are
+        interpolated into a shell command. base64 + shlex.quote keeps that
+        interpolation injection-safe even when the password / param /
+        value contains shell metacharacters (`&`, `'`, `$`, space, `!`).
+        """
+        import base64
+        creds = "{0}:{1}".format(
+            server.rest_username, server.rest_password).encode("utf-8")
+        return base64.b64encode(creds).decode("ascii")
+
+    def set_goxdcr_internal_setting(self, server, param, value):
+        """Set an internal XDCR setting via the goxdcr debug endpoint."""
+        import shlex
+        shell = RemoteMachineShellConnection(server)
+        try:            
+            data_arg = shlex.quote(urllib.parse.urlencode({param: value}))
+            auth = self._goxdcr_admin_auth_header(server)
+            cmd = ("curl -s -X POST "
+                   "-H 'Authorization: Basic {auth}' "
+                   "http://localhost:9998/xdcr/internalSettings "
+                   "-d {data}").format(auth=auth, data=data_arg)
+            shell.execute_command(cmd, timeout=5, use_channel=True)
+        finally:
+            shell.disconnect()
+
+    def get_goxdcr_internal_setting(self, server, param):
+        """Get an internal XDCR setting from the goxdcr debug endpoint.
+
+        @return: The setting value, or None on failure.
+        """
+        shell = RemoteMachineShellConnection(server)
+        try:
+            auth = self._goxdcr_admin_auth_header(server)
+            cmd = ("curl -s -H 'Authorization: Basic {auth}' "
+                   "http://localhost:9998/xdcr/internalSettings").format(
+                       auth=auth)
+            output, _ = shell.execute_command(cmd, timeout=5)
+            if output:
+                settings = json.loads(" ".join(output))
+                return settings.get(param)
+        except Exception as e:
+            self.log.warning("Failed to get internal XDCR setting '{0}': {1}".format(
+                param, e))
+        finally:
+            shell.disconnect()
+        return None
+
+    def set_replication_setting_by_id(self, rest, repl_id, param, value):
+        """Set a per-replication setting via POST /settings/replications/<id>.
+
+        @param rest: RestConnection to the source cluster.
+        @param repl_id: Full replication spec ID (e.g. "uuid/bucket/bucket").
+        @param param: Setting name.
+        @param value: Setting value.
+        """
+        repl_id_encoded = repl_id.replace("/", "%2F")
+        api = rest.baseUrl + "settings/replications/" + repl_id_encoded
+        params = urllib.parse.urlencode({param: value})
+        status, content, _ = rest._http_request(api, "POST", params)
+        if not status:
+            raise Exception(
+                "Failed to set {0}={1} on replication {2}: {3}".format(
+                    param, value, repl_id, content))
+        self.log.info("Set {0}={1} on replication {2}".format(
+            param, value, repl_id))
+
+    def wait_for_replications_to_clear(self, rest, timeout=120, interval=5):
+        """Poll until no XDCR replications exist on the cluster.
+
+        @return: True if replications cleared, False on timeout.
+        """
+        self.log.info("Waiting for all replications to be garbage collected")
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            replications = rest.get_replications()
+            if not replications:
+                self.log.info("All replications have been garbage collected")
+                return True
+            self.log.info("Still {0} replication(s) active, waiting...".format(
+                len(replications)))
+            time.sleep(interval)
+        self.log.warning("Timeout: replications still exist after {0}s".format(timeout))
+        return False
+
+    def wait_for_replications_paused(self, rest, timeout=90, interval=5):
+        """Poll until every active replication acknowledges pauseRequested or
+        reports a paused status. Used as a bounded substitute for a blind
+        post-pause sleep — a teardown DELETE during goxdcr's drain is what
+        triggers the historical 500 from cancelXDCR.
+
+        Returns True once paused, False on timeout, or True immediately if
+        no replications exist.
+        """
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                repls = rest.get_replications()
+            except Exception as e:
+                self.log.warning(
+                    "get_replications during pause-wait failed: {0}".format(e))
+                time.sleep(interval)
+                continue
+            if not repls:
+                return True
+            if all(
+                str(r.get("pauseRequested", "")).lower() == "true"
+                or r.get("status") == "paused"
+                for r in repls
+            ):
+                return True
+            time.sleep(interval)
+        self.log.warning(
+            "Timeout: replications did not reach paused after {0}s".format(timeout))
+        return False
+
+    def get_cluster_certificates(self, cluster):
+        """Extract all trusted CA certificate PEMs from a cluster.
+
+        @return: Concatenated PEM string of all trusted CAs.
+        """
+        rest_conn = RestConnection(cluster.get_master_node())
+        raw_content = rest_conn.get_trusted_CAs()
+        certificate = ""
+        for ca_dict in raw_content:
+            certificate += ca_dict["pem"]
+        return certificate
+
+    def get_successful_checkpoint_count(self, rest):
+        """Get the total number of successful checkpoints across all replications."""
+        replications = rest.get_replications()
+        total = 0
+        for repl in replications:
+            try:                
+                api = rest.baseUrl + "pools/default/buckets/@xdcr-{0}/stats".format(
+                    urllib.parse.quote(repl["source"], safe=""))
+                status, content, _ = rest._http_request(api, "GET")
+                if status:
+                    stats = json.loads(content)
+                    ckpt_key = "replications/{0}/num_checkpoints".format(repl["id"])
+                    if ckpt_key in stats.get("op", {}).get("samples", {}):
+                        samples = stats["op"]["samples"][ckpt_key]
+                        if samples:
+                            total += samples[-1]
+            except Exception as e:
+                self.log.warning("Error fetching checkpoint stats: {0}".format(e))
+        return total
+
+    def wait_for_new_checkpoint(self, rest, baseline, poll_interval=10,
+                                timeout=180):
+        """Poll get_successful_checkpoint_count until it exceeds a baseline.
+
+        Returns the most recent count (may equal baseline on timeout).
+        """
+        end = time.time() + timeout
+        current = baseline
+        while time.time() < end:
+            current = self.get_successful_checkpoint_count(rest)
+            if current > baseline:
+                return current
+            self.sleep(poll_interval,
+                       "waiting for checkpoint > {0}".format(baseline))
+        return current
+
+    def log_per_replication_checkpoints(self, rest, label):
+        """Dump num_checkpoints per replication via the xdcr stats endpoint.
+
+        get_successful_checkpoint_count sums across all replications; if the
+        total is flat we can't tell whether every replication is stuck or
+        just one. This helper prints the raw sample for each replication.
+        """
+        try:
+            replications = rest.get_replications()
+        except Exception as e:
+            self.log.warning("[{0}] get_replications failed: {1}".format(label, e))
+            return
+        for repl in replications:
+            try:                
+                api = rest.baseUrl + "pools/default/buckets/@xdcr-{0}/stats".format(
+                    urllib.parse.quote(repl.get("source", "?"), safe=""))
+                status, content, _ = rest._http_request(api, "GET")
+                if not status:
+                    self.log.warning("[{0}] stats fetch failed for {1}: status={2}".format(
+                        label, repl.get("id"), status))
+                    continue
+                stats = json.loads(content)
+                ckpt_key = "replications/{0}/num_checkpoints".format(repl.get("id"))
+                samples = stats.get("op", {}).get("samples", {}).get(ckpt_key, [])
+                last = samples[-1] if samples else None
+                self.log.info("[{0}] repl {1} source={2} status={3} "
+                              "num_checkpoints last_sample={4} samples_len={5}".format(
+                                  label, repl.get("id"), repl.get("source"),
+                                  repl.get("status"), last, len(samples)))
+            except Exception as e:
+                self.log.warning("[{0}] per-repl ckpt fetch failed for {1}: {2}".format(
+                    label, repl.get("id"), e))
+
+    def log_replications_state(self, rest, label):
+        """Dump every active replication spec visible via ns_server tasks."""
+        try:
+            replications = rest.get_replications()
+        except Exception as e:
+            self.log.warning("[{0}] get_replications failed on {1}: {2}".format(
+                label, rest.ip, e))
+            return []
+        self.log.info("[{0}] Active replications on {1}: count={2}".format(
+            label, rest.ip, len(replications)))
+        for i, r in enumerate(replications):
+            summary = {k: r.get(k) for k in (
+                "id", "source", "target", "status", "pauseRequested",
+                "cancelURI", "settingsURI", "errors")}
+            self.log.info("[{0}]   replication[{1}]={2}".format(label, i, summary))
+        return replications
+
+    def log_remote_clusters_state(self, rest, label):
+        """Dump every remote cluster ref and its connectivity status."""
+        try:
+            refs = rest.get_remote_clusters()
+        except Exception as e:
+            self.log.warning("[{0}] get_remote_clusters failed on {1}: {2}".format(
+                label, rest.ip, e))
+            return []
+        self.log.info("[{0}] Remote cluster refs on {1}: count={2}".format(
+            label, rest.ip, len(refs)))
+        for ref in refs:
+            summary = {k: ref.get(k) for k in (
+                "name", "uuid", "hostname", "encryptionType",
+                "connectivityStatus", "connectivityErrors",
+                "secureType", "deleted")}
+            self.log.info("[{0}]   remote_cluster={1}".format(label, summary))
+        return refs
+
+    def log_xdcr_state(self, rest, cluster, label):
+        """Combined replications + remote-refs snapshot under one label."""
+        self.log.info("==== [{0}] XDCR state snapshot on cluster={1} ====".format(
+            label, cluster.get_name() if cluster else "?"))
+        self.log_remote_clusters_state(rest, label)
+        self.log_replications_state(rest, label)
+
+    def active_remote_refs(self, rest):
+        """Active (non-deleted) remote cluster refs."""
+        return [r for r in rest.get_remote_clusters() if not r.get('deleted')]
+
+    def bucket_item_count(self, cluster, bucket_name):
+        """Current bucket item count via REST bucket stats with a per-node
+        fallback that some bucket configurations require."""
+        rest = RestConnection(cluster.get_master_node())
+        try:
+            samples = rest.fetch_bucket_stats(
+                bucket=bucket_name, zoom="minute")["op"]["samples"]
+            return int(samples["curr_items"][-1])
+        except Exception as e:
+            self.log.warning("fetch_bucket_stats failed for {0}/{1}: {2}".format(
+                cluster.get_name(), bucket_name, e))
+            info = rest.get_bucket_json(bucket_name)
+            return sum(n["interestingStats"]["curr_items"] for n in info["nodes"])
+
+    def get_total_changes_left(self, src_cluster):
+        """Sum replication_changes_left across every bucket on a source cluster."""
+        total = 0
+        for bucket in src_cluster.get_buckets():
+            try:
+                total += src_cluster.get_xdcr_stat(
+                    bucket.name, 'replication_changes_left')
+            except Exception as e:
+                self.log.warning("changes_left fetch failed for {0}: {1}".format(
+                    bucket.name, e))
+        return total
+
+    def wait_for_backlog_to_drain(self, src_cluster, timeout, poll_interval=60):
+        """Poll replication_changes_left until 0 or timeout.
+
+        Logs drain rate / ETA on every poll so a slow-but-progressing drain
+        is obvious in the log and a stalled drain is distinguishable from
+        a zero one. Returns the final backlog — caller asserts.
+        """
+        end_time = time.time() + timeout
+        prev_backlog = None
+        prev_ts = None
+        last_backlog = self.get_total_changes_left(src_cluster)
+        self.log.info("Waiting for backlog to drain: start={0}, timeout={1}s, "
+                      "poll={2}s".format(last_backlog, timeout, poll_interval))
+        while time.time() < end_time:
+            if last_backlog <= 0:
+                self.log.info("Backlog fully drained.")
+                return last_backlog
+            now = time.time()
+            if prev_backlog is not None and prev_ts is not None:
+                dt = max(now - prev_ts, 1.0)
+                drained = max(prev_backlog - last_backlog, 0)
+                rate_per_min = drained / dt * 60.0
+                eta = (last_backlog / (drained / dt)) if drained > 0 else None
+                eta_str = "{0:.0f}s".format(eta) if eta is not None else "stalled"
+                self.log.info("Backlog drain: changes_left={0}, "
+                              "rate={1:.0f} docs/min, eta={2}".format(
+                                  last_backlog, rate_per_min, eta_str))
+            else:
+                self.log.info("Backlog drain: changes_left={0}".format(last_backlog))
+            prev_backlog = last_backlog
+            prev_ts = now
+            self.sleep(poll_interval,
+                       "Polling changes_left (current={0})".format(last_backlog))
+            last_backlog = self.get_total_changes_left(src_cluster)
+        self.log.warning("Backlog drain timed out after {0}s: final={1}".format(
+            timeout, last_backlog))
+        return last_backlog
+
+    def change_standard_remote_ref_credentials(self, src_cluster, dest_cluster,
+                                               rc_name, username, password):
+        """Rotate the auth credentials on a non-CNG (couchbase://) remote ref."""
+        rest = RestConnection(src_cluster.get_master_node())
+        dest_master = dest_cluster.get_master_node()
+        certificate = self.get_cluster_certificates(dest_cluster)
+        rest.modify_remote_cluster(
+            dest_master.cluster_ip, str(dest_master.port),
+            username, password, rc_name,
+            demandEncryption=1, certificate=certificate, encryptionType="full")
+        self.log.info("Updated credentials for ref '{0}' (username={1})".format(
+            rc_name, username))
+
+    @staticmethod
+    def find_matching_bucket(src_bucket, dest_buckets):
+        """Find a destination bucket matching the source bucket name."""
+        for db in dest_buckets:
+            if db.name == src_bucket.name:
+                return db
+        return dest_buckets[0] if dest_buckets else src_bucket
+
+    def create_scope_and_collection(self, rest, bucket_name,
+                                    scope_name, collection_name):
+        """Create a scope and a collection under it."""
+        rest.create_scope(bucket_name, scope_name)
+        time.sleep(2)
+        rest.create_collection(bucket_name, scope_name, collection_name)
+        self.log.info("Created {0}.{1}.{2}".format(
+            bucket_name, scope_name, collection_name))
+
+    def delete_scope_with_collections(self, rest, bucket_name, scope_name):
+        """Delete a scope (which also drops all its collections).
+
+        @return: True if deletion succeeded.
+        """
+        status = rest.delete_scope(bucket_name, scope_name)
+        if status:
+            self.log.info("Deleted scope {0}.{1}".format(bucket_name, scope_name))
+        else:
+            self.log.warning("Failed to delete scope {0}.{1}".format(
+                bucket_name, scope_name))
+        return status
+
+    def verify_scope_exists(self, rest, bucket_name, scope_name):
+        """Check if a scope exists in the bucket manifest."""
+        manifest = rest.get_bucket_manifest(bucket_name)
+        for scope in manifest.get("scopes", []):
+            if scope["name"] == scope_name:
+                return True
+        return False
+
+    def verify_collection_exists(self, rest, bucket_name, scope_name,
+                                 collection_name):
+        """Check if a collection exists under a scope."""
+        manifest = rest.get_bucket_manifest(bucket_name)
+        for scope in manifest.get("scopes", []):
+            if scope["name"] == scope_name:
+                for coll in scope.get("collections", []):
+                    if coll["name"] == collection_name:
+                        return True
+        return False
+
+    # ------------------------------------------------------------------ #
+    #  RBAC user management helpers (cluster-scoped API)                   #
+    # ------------------------------------------------------------------ #
+    # These operate on a CouchbaseCluster object (not a single node) and
+    # delegate to the cluster master. The node-scoped variants in
+    # stagedCredentialsXDCR.py predate this API and are kept for that
+    # suite's existing call sites; new code should use the cluster API here.
+
+    def _create_xdcr_user(self, cluster, username, password,
+                          roles="replication_target[*]"):
+        """Create a local XDCR user on the cluster master with given roles."""
+        node = cluster.get_master_node()
+        testuser = [{'id': username, 'name': username, 'password': password}]
+        RbacBase().create_user_source(testuser, 'builtin', node)
+        self.sleep(2, "User creation propagation for '{0}'".format(username))
+        role_list = [{'id': username, 'name': username,
+                      'roles': roles, 'password': password}]
+        RbacBase().add_user_role(role_list, RestConnection(node), 'builtin')
+        self.log.info("Created user '{0}' with roles='{1}' on {2}".format(
+            username, roles, node.ip))
+
+    def _set_user_roles(self, cluster, username, roles, password=None):
+        """Reassign roles for an existing user on the cluster master."""
+        node = cluster.get_master_node()
+        pw = password or node.rest_password
+        role_list = [{'id': username, 'name': username,
+                      'roles': roles, 'password': pw}]
+        RbacBase().add_user_role(role_list, RestConnection(node), 'builtin')
+        self.log.info("Set roles='{0}' for user '{1}' on {2}".format(
+            roles, username, node.ip))
+
+    def _strip_xdcr_roles(self, cluster, username, password=None):
+        """Downgrade user to ro_admin to remove XDCR permissions."""
+        self._set_user_roles(cluster, username, "ro_admin", password=password)
+        self.log.info("Stripped XDCR roles from user '{0}'".format(username))
+
+    def _delete_user(self, cluster, username):
+        """Delete a user from the cluster; logs warning on failure."""
+        try:
+            RbacBase().remove_user_role(
+                [username], RestConnection(cluster.get_master_node()))
+            self.log.info("Deleted user '{0}'".format(username))
+        except Exception as e:
+            self.log.warning("Error deleting user '{0}': {1}".format(
+                username, e))
+
+    def _change_admin_password(self, cluster, new_password):
+        """Change the Administrator password; updates node.rest_password.
+
+        Body must be URL-encoded — a `&`, `=`, `+`, `%`, or space in the
+        password would otherwise corrupt the x-www-form-urlencoded field
+        (silent rotation to a truncated / garbled value, or rotation
+        succeeding under a wrong key entirely).
+        """
+        node = cluster.get_master_node()
+        rest = RestConnection(node)
+        api = rest.baseUrl + "controller/changePassword"
+        params = urllib.parse.urlencode({"password": new_password})
+        status, content, _ = rest._http_request(api, 'POST', params)
+        if not status:
+            self.fail("Failed to change Administrator password on {0}: {1}".format(
+                node.ip, content))
+        node.rest_password = new_password
+        self.log.info("Changed Administrator password on {0}".format(node.ip))
 

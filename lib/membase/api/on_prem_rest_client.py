@@ -1545,15 +1545,40 @@ class RestConnection(object):
         params = urllib.parse.urlencode(param_map)
         log.info("with settings {0}".format(param_map))
         retries = 5
+        last_content = None
         while retries:
             status, content, _ = self._http_request(api, 'POST', params)
-            # sample response :
-            # [{"name":"two","uri":"/pools/default/remoteClusters/two","validateURI":"/pools/default/remoteClusters/two?just_validate=1","hostname":"127.0.0.1:9002","username":"Administrator"}]
-            remoteCluster = json.loads(content)
-            if status or "Duplicate cluster" in remoteCluster["_"]:
+            last_content = content
+            # Sample success response:
+            # [{"name":"two","uri":"/pools/default/remoteClusters/two", ...}]
+            # Failure responses vary: {"_":"msg"}, [{"error":"..."}],
+            # {"errors": {...}}, or a plain string. Parse defensively —
+            # subscripting without shape checks used to crash on CNG
+            # couchbase2:// refs whose failure payload is list-shaped.
+            try:
+                remoteCluster = json.loads(content)
+            except (ValueError, TypeError):
+                remoteCluster = None
+            if status:
+                if remoteCluster is None:
+                    raise Exception(
+                        "remoteCluster API '{0} remote cluster' returned "
+                        "HTTP success but body was not JSON; content={1!r}".format(
+                            op, content))
                 return remoteCluster
+            # Treat "Duplicate cluster" as non-fatal only when the payload
+            # actually has the legacy "_" field.
+            if isinstance(remoteCluster, dict) and \
+                    "Duplicate cluster" in str(remoteCluster.get("_", "")):
+                return remoteCluster
+            log.warning(
+                "remoteCluster '{0}' attempt failed "
+                "(status={1}, content={2!r}); retries left={3}".format(
+                    op, status, content, retries - 1))
             retries -= 1
-        raise Exception("remoteCluster API '{0} remote cluster' failed".format(op))
+        raise Exception(
+            "remoteCluster API '{0} remote cluster' failed after retries; "
+            "last response: {1!r}".format(op, last_content))
 
     def add_remote_cluster(self, remoteIp, remotePort, username, password, name, demandEncryption=0, certificate=None,
                            clientCertificate=None, clientKey=None, encryptionType="full"):
