@@ -32,6 +32,8 @@ from table_view import TableView
 from memcached.helper.data_helper import MemcachedClientHelper
 from threading import Thread
 import random
+import os
+import re
 
 
 
@@ -40,6 +42,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         super(CompositeVectorIndex, self).setUp()
         self.log.info("==============  CompositeVectorIndex setup has started ==============")
         self.encoder = SentenceTransformer(self.data_model, device="cpu")
+        self.isSparse = self.input.param("isSparse", False)
         self.encoder.cpu()
         self.gsi_util_obj.set_encoder(encoder=self.encoder)
         self.namespaces = []
@@ -78,11 +81,100 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         remote = RemoteMachineShellConnection(data_node)
         remote.execute_command(command="pkill memecached")
         remote.disconnect()
+
+    def calculate_mean_reciprocal_rank(self, select_queries, expected_title):
+        """
+        Calculate Mean Reciprocal Rank (MRR) for a set of queries with a single expected title.
+        
+        For each query, this function:
+        1. Executes the query to get ordered results
+        2. Finds the position of the expected title in the results (1-indexed)
+        3. Calculates reciprocal rank: 1/position (or 0 if not found)
+        4. Returns the mean across all queries
+        
+        Args:
+            select_queries: List of select queries to execute
+            expected_title: Single expected title to search for in all query results
+            
+        Returns:
+            float: Mean Reciprocal Rank (0.0 to 1.0)
+        """
+        reciprocal_ranks = []
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        
+        self.log.info(f"[MRR] Searching for expected title: '{expected_title}' across {len(select_queries)} queries")
+        
+        for idx, query in enumerate(select_queries, start=1):
+            try:
+                # Execute query and get results
+                result = self.run_cbq_query(query=query, server=n1ql_node)
+                query_results = result.get('results', [])
+                
+                # Find position of expected title (1-indexed)
+                position = None
+                for pos, doc in enumerate(query_results, start=1):
+                    if doc.get('title') == expected_title:
+                        position = pos
+                        break
+                
+                # Calculate reciprocal rank
+                if position is not None:
+                    rr = 1.0 / position
+                    self.log.info(f"[MRR] Query {idx}: Expected title found at position {position}, RR = {rr:.4f}")
+                else:
+                    rr = 0.0
+                    self.log.info(f"[MRR] Query {idx}: Expected title NOT FOUND in results, RR = 0")
+                
+                reciprocal_ranks.append(rr)
+                
+            except Exception as e:
+                self.log.error(f"[MRR] Query {idx}: Error executing query: {e}")
+                reciprocal_ranks.append(0.0)
+        
+        # Calculate mean
+        mrr = sum(reciprocal_ranks) / len(reciprocal_ranks) if reciprocal_ranks else 0.0
+        self.log.info(f"[MRR] Mean Reciprocal Rank across {len(reciprocal_ranks)} queries: {mrr:.4f}")
+        
+        return mrr
+    
     def gen_table_view(self, query_stats_map, message="query stats"):
+        """
+        Generate a table view of query statistics (recall and accuracy).
+        
+        For sparse vector indexes, accuracy is None (not applicable), so we handle
+        this case by displaying 'N/A' instead of trying to multiply None by 100.
+        
+        Args:
+            query_stats_map: dict mapping query -> [recall, accuracy]
+                           For dense vectors: accuracy is a float (0.0 to 1.0)
+                           For sparse vectors: accuracy is None
+            message: Message to display with the table
+        """
         table = TableView(self.log.info)
-        table.set_headers(['Query', 'Recall', 'Accuracy'])
-        for query in query_stats_map:
-            table.add_row([query, query_stats_map[query][0]*100, query_stats_map[query][1]*100])
+        
+        # Check if any query has accuracy (to determine if this is dense or sparse)
+        has_accuracy = any(
+            query_stats_map[q][1] is not None 
+            for q in query_stats_map if len(query_stats_map[q]) > 1
+        )
+        
+        if has_accuracy:
+            # Dense vectors - show both recall and accuracy
+            table.set_headers(['Query', 'Recall (%)', 'Accuracy (%)'])
+            for query in query_stats_map:
+                recall = query_stats_map[query][0]
+                accuracy = query_stats_map[query][1]
+                recall_pct = recall * 100 if recall is not None else 'N/A'
+                accuracy_pct = accuracy * 100 if accuracy is not None else 'N/A'
+                table.add_row([query, recall_pct, accuracy_pct])
+        else:
+            # Sparse vectors - only show recall (accuracy not applicable)
+            table.set_headers(['Query', 'Recall (%)', 'Accuracy'])
+            for query in query_stats_map:
+                recall = query_stats_map[query][0]
+                recall_pct = recall * 100 if recall is not None else 'N/A'
+                table.add_row([query, recall_pct, 'N/A (sparse)'])
+        
         table.display(message=message)
 
     def populate_vectors_in_xattr(self, bucket, scope):
@@ -184,22 +276,39 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 bucket, scope, _ = namespace.split('.')
                 self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
 
-
         simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
         query_comparison_list = []
+        
+        # Track index type for display messages during bhive_composite_comparison
+        comparison_index_types = []
+        
         if self.bhive_composite_comparison:
             self.bhive_index = True
             similarity = random.choice(simlarity_list)
             simlarity_list = [similarity] * 2
+            comparison_index_types = ["bhive", "composite"]
         if self.single_distance_function:
             similarity = random.choice(simlarity_list)
             simlarity_list = [similarity]
+        if self.isSparse:
+            simlarity_list = ["DOT"]
+            if self.bhive_composite_comparison:
+                simlarity_list = ["DOT"] * 2
+                comparison_index_types = ["bhive_sparse", "composite_sparse"]
+        
+        # Track iteration for bhive_composite_comparison
+        comparison_iteration = 0
+        
         for similarity in simlarity_list:
             for namespace in self.namespaces:
                 if self.bhive_index:
                     prefix = f'test_{similarity}_bhive'
+                    if self.isSparse:
+                        prefix = f'test_{similarity}_bhive_sparse'
                 else:
                     prefix = f'test_{similarity}_composite'
+                    if self.isSparse:
+                        prefix = f'test_{similarity}_composite_sparse'
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                           prefix=prefix,
                                                                           similarity=similarity,
@@ -212,9 +321,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                           bhive_index=self.bhive_index, description_dimension=self.dimension,
                                                                          )
+                    
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          bhive_index=self.bhive_index)
+
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                       namespace=namespace, limit=self.scan_limit)
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
@@ -222,51 +333,378 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
                 self.wait_until_indexes_online(timeout=3600)
                 self.log.info(f"select queries are {select_queries}")
-                self.sleep(60)
                 self.item_count_related_validations()
                 self.validate_num_centroids_from_metadata()
-                for query in select_queries:
-                    # self.run_cbq_query(query=create)
-                    if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                
+                # Get single expected title for MRR calculation (from first sparse vector definition)
+                expected_title_for_mrr = None
+                if self.isSparse:
+                    for defn in definitions:
+                        if defn.expected_title:
+                            expected_title_for_mrr = defn.expected_title
+                            break
+                
+                # Iterate through definitions and select_queries together
+                for defn, query in zip(definitions, select_queries):
+                    required_metric = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
+                    if "DISTINCT" in query or required_metric not in query:
                         continue
+                    
+                    # Get expected_title from the definition
+                    if self.isSparse:
+                        expected_title = defn.expected_title
+                    else:
+                        expected_title = None
+                    
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                           similarity=similarity,
-                                                                                          scan_consitency=True)
+                                                                                          scan_consitency=True, 
+                                                                                          expected_title=expected_title)
                     query_stats_map[query] = [recall, accuracy]
-                    # todo validate indexer metadata for indexes
 
+                self.log.info(f"query_stats_map is {query_stats_map}")
+                
+                # Calculate and log MRR for sparse vectors using select_queries
+                if self.isSparse and expected_title_for_mrr:
+                    self.log.info("")
+                    self.log.info("=" * 100)
+                    self.log.info("CALCULATING MEAN RECIPROCAL RANK (MRR)")
+                    self.log.info("=" * 100)
+                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr)
+                    self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
+                    self.log.info("=" * 100)
                 codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
                 self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
                 self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
 
                 for query in drop_queries:
                     self.run_cbq_query(query=query, server=self.n1ql_node)
+                    
                 if self.bhive_composite_comparison:
+                    # Store results and switch index type for next iteration
                     self.bhive_index = False
                     query_stats_map_new = deepcopy(query_stats_map)
                     query_stats_map = {}
                     query_comparison_list.append(query_stats_map_new)
-                    self.gen_table_view(query_stats_map=query_stats_map_new,
-                                        message=f"Bhive is  {self.bhive_index}")
+                    
+                    # Generate appropriate message for the index type
+                    if comparison_index_types:
+                        index_type_msg = comparison_index_types[comparison_iteration]
+                    else:
+                        index_type_msg = "bhive" if comparison_iteration == 0 else "composite"
+                    
+                    if self.isSparse:
+                        self.gen_table_view(query_stats_map=query_stats_map_new,
+                                            message=f"Sparse Vector Index Type: {index_type_msg}")
+                    else:
+                        self.gen_table_view(query_stats_map=query_stats_map_new,
+                                            message=f"Index Type: {index_type_msg} (Bhive={comparison_iteration == 0})")
+                    comparison_iteration += 1
 
-            # self.run_cbq_query(query=drop)
         if not self.bhive_composite_comparison:
-            self.gen_table_view(query_stats_map=query_stats_map,
-                                message=f"quantization value is {self.quantization_algo_description_vector}")
+            if self.isSparse:
+                self.gen_table_view(query_stats_map=query_stats_map,
+                                    message=f"Sparse Vector - quantization: {self.quantization_algo_description_vector}")
+            else:
+                self.gen_table_view(query_stats_map=query_stats_map,
+                                    message=f"quantization value is {self.quantization_algo_description_vector}")
             query_comparison_list.append(query_stats_map)
 
+        # Validate recall thresholds
         for query_stats_map in query_comparison_list:
             for query in query_stats_map:
                 if "colorRGBVector" in query or "colorVector" in query or self.dimension == 4096:
                     continue
-                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
-                                        f"recall for query {query} is less than threshold 70")
-                #uncomment the below code snippet to do assertions for accuracy
-                # self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
-                #                         f"accuracy for query {query} is less than threshold 70")
+                recall = query_stats_map[query][0]
+                accuracy = query_stats_map[query][1]
+                
+                # For sparse vectors, recall is binary (0 or 1), so threshold check applies differently
+                if self.isSparse:
+                    # For sparse vectors, we expect the expected document to be found (recall = 1)
+                    # Allow some tolerance since we're doing approximate search
+                    self.assertGreater(recall, 0,
+                                            f"recall for sparse query {query} is {recall * 100}%")
+                else:
+                    # For dense vectors, check recall threshold
+                    self.assertGreaterEqual(recall * 100, 70,
+                                            f"recall for query {query} is less than threshold 70")
+                    # Uncomment the below code snippet to do assertions for accuracy (dense vectors only)
+                    # if accuracy is not None:
+                    #     self.assertGreaterEqual(accuracy * 100, 70,
+                    #                             f"accuracy for query {query} is less than threshold 70")
 
         self.rest.delete_bucket(bucket='metadata_bucket')
         self.drop_index_node_resources_utilization_validations()
+
+    def test_sparse_vector_all_queries_experiment(self):
+        """
+        EXPERIMENTAL TEST: Create indexes, run ALL query vectors from JSONL, and calculate recall.
+        
+        This test:
+        1. Restores the dataset
+        2. Creates all sparse vector indexes
+        3. For each query vector, runs all select queries and checks binary recall
+        4. Displays results table with query and recall
+        
+        Recall is binary: 1 if expected title is in results, 0 otherwise.
+        """
+        # Only run for sparse vectors
+        if not self.isSparse:
+            self.log.info("Skipping test_sparse_vector_all_queries_experiment - only for sparse vectors")
+            return
+        
+        # Step 1: Restore the dataset
+        self.log.info("=" * 100)
+        self.log.info("STEP 1: RESTORING DATASET")
+        self.log.info("=" * 100)
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        
+        # Load ALL sparse vectors and their titles from the JSONL file
+        jsonl_path = os.path.join(os.path.dirname(__file__), 
+                                  'sparse_vector_embeddings', 
+                                  self.sparse_query_vectors_file)
+        
+        all_query_vectors = []
+        all_titles = []
+        
+        self.log.info(f"Loading all sparse vectors from: {jsonl_path}")
+        with open(jsonl_path, 'r') as f:
+            for line in f:
+                if line.strip():
+                    entry = json.loads(line)
+                    title = entry['title']
+                    sparse_emb = entry['sparse_embedding']
+                    indices = sparse_emb['indices']
+                    values = sparse_emb['values']
+                    # Sparse vector format is [indices, values] - matching gsi_utils format
+                    sparse_vector = [indices, values]
+                    all_query_vectors.append(sparse_vector)
+                    all_titles.append(title)
+        
+        self.log.info(f"Loaded {len(all_query_vectors)} sparse query vectors")
+        
+        namespace = self.namespaces[0] if self.namespaces else "test_bucket.test_scope_1.test_collection_1"
+        prefix = 'test_DOT_sparse_experiment'
+        
+        # Step 2: Get index definitions and create indexes
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 2: CREATING INDEXES")
+        self.log.info("=" * 100)
+        
+        definitions = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template,
+            prefix=prefix,
+            similarity="DOT",
+            train_list=self.trainlist,
+            scan_nprobes=self.scan_nprobes,
+            array_indexes=False,
+            xattr_indexes=self.xattr_indexes,
+            limit=self.scan_limit, 
+            is_base64=self.base64,
+            quantization_algo_color_vector=self.quantization_algo_color_vector,
+            quantization_algo_description_vector=self.quantization_algo_description_vector,
+            bhive_index=self.bhive_index, 
+            description_dimension=self.dimension,
+        )
+        
+        create_queries = self.gsi_util_obj.get_create_index_list(
+            definition_list=definitions,
+            namespace=namespace,
+            bhive_index=self.bhive_index
+        )
+        
+        self.log.info("Index creation queries:")
+        for i, query in enumerate(create_queries):
+            self.log.info(f"  {i+1}. {query[:150]}...")
+        
+        # Create indexes
+        self.gsi_util_obj.async_create_indexes(
+            create_queries=create_queries, 
+            database=namespace, 
+            query_node=self.n1ql_node
+        )
+        
+        self.log.info("Waiting for indexes to come online...")
+        self.wait_until_indexes_online(timeout=3600)
+        self.item_count_related_validations()
+        self.log.info("All indexes are online!")
+        
+        # Get the original select queries (these contain one specific sparse vector)
+        original_select_queries = self.gsi_util_obj.get_select_queries(
+            definition_list=definitions,
+            namespace=namespace,
+            limit=self.scan_limit
+        )
+        
+        # Pattern to match SPARSE_VECTOR_DISTANCE calls with the embedded vector
+        # Format: SPARSE_VECTOR_DISTANCE(`sparse`, [[indices], [values]], nprobes)
+        sparse_vector_pattern = r'SPARSE_VECTOR_DISTANCE\s*\(\s*([^,]+)\s*,\s*(\[\[[^\]]+\],\s*\[[^\]]+\]\])\s*,\s*(\d+)\s*\)'
+        
+        # Step 3: Run all queries and calculate recall
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 3: RUNNING QUERIES AND CALCULATING RECALL")
+        self.log.info("=" * 100)
+        
+        # Results storage: {index_name: {vec_idx: recall}}
+        results_by_index = {}
+        # Also store per-vector results: [(vec_idx, title, {index_name: recall})]
+        results_by_vector = []
+        
+        # Get non-primary definitions
+        vector_definitions = [(defn, orig_query) for defn, orig_query in zip(definitions, original_select_queries) 
+                              if not defn.is_primary]
+        
+        for vec_idx, (query_vector, expected_title) in enumerate(zip(all_query_vectors, all_titles)):
+            vector_str = json.dumps(query_vector)
+            
+            self.log.info(f"Processing query vector {vec_idx + 1}/{len(all_query_vectors)}: {expected_title}...")
+            
+            vector_results = {}
+            
+            for defn, orig_query in vector_definitions:
+                # Replace the sparse vector in the query with the current vector
+                def replace_vector(match):
+                    field_name = match.group(1)
+                    scan_nprobes = match.group(3)
+                    return f'SPARSE_VECTOR_DISTANCE({field_name}, {vector_str}, {scan_nprobes})'
+                
+                new_query = re.sub(sparse_vector_pattern, replace_vector, orig_query)
+                
+                # Execute the query
+                try:
+                    result = self.run_cbq_query(query=new_query, server=self.n1ql_node)
+                    query_results = result.get('results', [])
+                    
+                    # Check binary recall: is expected_title in results?
+                    found = any(r.get('title') == expected_title for r in query_results)
+                    recall = 1 if found else 0
+                    
+                except Exception as e:
+                    self.log.error(f"Error executing query for {defn.index_name}: {e}")
+                    recall = 0
+                
+                vector_results[defn.index_name] = recall
+                
+                # Initialize index results storage
+                if defn.index_name not in results_by_index:
+                    results_by_index[defn.index_name] = []
+                results_by_index[defn.index_name].append(recall)
+            
+            results_by_vector.append((vec_idx, expected_title, vector_results))
+        
+        # Step 4: Display detailed results table
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 4: DETAILED RESULTS BY QUERY VECTOR")
+        self.log.info("=" * 100)
+        
+        # Create table for per-vector results
+        detail_table = TableView(self.log.info)
+        index_names = [defn.index_name for defn, _ in vector_definitions]
+        headers = ['Vec#', 'Expected Title (truncated)'] + [name[-25:] for name in index_names]  # Truncate index names
+        detail_table.set_headers(headers)
+        
+        for vec_idx, expected_title, vector_results in results_by_vector:
+            row = [
+                str(vec_idx + 1),
+                expected_title[:40] + '...' if len(expected_title) > 40 else expected_title
+            ]
+            for defn, _ in vector_definitions:
+                recall = vector_results.get(defn.index_name, 0)
+                row.append('1 (Found)' if recall == 1 else '0 (Miss)')
+            detail_table.add_row(row)
+        
+        detail_table.display(message="Recall Results by Query Vector")
+        
+        # Step 5: Display summary table by index
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 5: AGGREGATE RECALL BY INDEX")
+        self.log.info("=" * 100)
+        
+        summary_table = TableView(self.log.info)
+        summary_table.set_headers(['Index Name', 'Total Queries', 'Found', 'Missed', 'Recall %'])
+        
+        overall_found = 0
+        overall_total = 0
+        
+        for defn, _ in vector_definitions:
+            recalls = results_by_index.get(defn.index_name, [])
+            total = len(recalls)
+            found = sum(recalls)
+            missed = total - found
+            recall_pct = (found / total * 100) if total > 0 else 0
+            
+            overall_found += found
+            overall_total += total
+            
+            summary_table.add_row([
+                defn.index_name,
+                str(total),
+                str(found),
+                str(missed),
+                f"{recall_pct:.2f}%"
+            ])
+        
+        # Add overall row
+        overall_recall_pct = (overall_found / overall_total * 100) if overall_total > 0 else 0
+        summary_table.add_row([
+            'OVERALL',
+            str(overall_total),
+            str(overall_found),
+            str(overall_total - overall_found),
+            f"{overall_recall_pct:.2f}%"
+        ])
+        
+        summary_table.display(message="Aggregate Recall Summary by Index")
+        
+        # Step 6: Display failed queries (recall=0)
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 6: FAILED QUERIES (Expected document not found)")
+        self.log.info("=" * 100)
+        
+        failed_count = 0
+        for vec_idx, expected_title, vector_results in results_by_vector:
+            for index_name, recall in vector_results.items():
+                if recall == 0:
+                    failed_count += 1
+                    self.log.info(f"  Vec#{vec_idx + 1} [{index_name}]: {expected_title[:60]}...")
+        
+        if failed_count == 0:
+            self.log.info("  No failed queries - all expected documents were found!")
+        else:
+            self.log.info(f"  Total failed queries: {failed_count}")
+        
+        # Final summary
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("FINAL SUMMARY")
+        self.log.info("=" * 100)
+        self.log.info(f"Total query vectors: {len(all_query_vectors)}")
+        self.log.info(f"Index definitions (non-primary): {len(vector_definitions)}")
+        self.log.info(f"Total queries executed: {overall_total}")
+        self.log.info(f"Successful recalls: {overall_found}")
+        self.log.info(f"Failed recalls: {overall_total - overall_found}")
+        self.log.info(f"Overall Recall: {overall_recall_pct:.2f}%")
+        self.log.info("=" * 100)
+        self.sleep(864000)
+        
+        # Cleanup
+        self.log.info("")
+        self.log.info("Dropping indexes...")
+        drop_queries = self.gsi_util_obj.get_drop_index_list(
+            definition_list=definitions,
+            namespace=namespace
+        )
+        for query in drop_queries:
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+        
+        self.rest.delete_bucket(bucket='metadata_bucket')
+        self.drop_index_node_resources_utilization_validations()
+        self.log.info("Cleanup complete.")
 
     def test_bhive_with_system_failures(self):
         try:

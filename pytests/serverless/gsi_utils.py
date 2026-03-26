@@ -9,6 +9,8 @@ __created_on__ = 04/10/22 11:53 am
 
 """
 import datetime
+import json
+import os
 import random
 import string
 import time
@@ -38,6 +40,43 @@ class GSIUtils(object):
 
     def set_encoder(self, encoder):
         self.encoder = encoder
+
+    def get_random_sparse_vectors_from_jsonl(self, count=1):
+        """
+        Read random sparse vectors from the JSONL file for use in sparse vector queries.
+        Returns a tuple: (list of sparse vectors in [indices, values] format, list of corresponding titles)
+        
+        Each query vector has exactly one matching document in the dataset, identified by title.
+        The title is used for binary recall validation: if the document with matching title
+        is found in results, recall = 1, else recall = 0.
+        """
+        jsonl_path = os.path.join(os.path.dirname(__file__), '..', 'gsi',
+                                  'sparse_vector_embeddings',
+                                  'query_vectors_sparse.jsonl')
+        jsonl_path = os.path.abspath(jsonl_path)
+
+        sparse_vectors = []
+        titles = []
+        try:
+            with open(jsonl_path, 'r') as f:
+                lines = f.readlines()
+            if lines:
+                selected_lines = random.sample(lines, min(count, len(lines)))
+                for line in selected_lines:
+                    data = json.loads(line.strip())
+                    embedding = data.get('sparse_embedding', {})
+                    title = data.get('title', '')
+                    indices = embedding.get('indices', [])
+                    values = embedding.get('values', [])
+                    sparse_vectors.append([indices, values])
+                    titles.append(title)
+        except Exception as e:
+            self.log.warning(f"Failed to read sparse vectors from JSONL file: {e}.")
+
+        # Return single title if count=1, otherwise return list
+        if count == 1 and titles:
+            return sparse_vectors, titles[0]
+        return sparse_vectors, titles
 
     def generate_mini_car_vector_index_definition(self, index_name_prefix=None,
                                                   skip_primary=False, array_indexes=True):
@@ -2162,6 +2201,235 @@ class GSIUtils(object):
         self.batch_size = len(definitions_list)
         return definitions_list
 
+    def generate_amazon_sparse_vector_index_definitions_bhive(self, index_name_prefix=None,
+                                                               train_list=None, scan_nprobes=1,
+                                                               skip_primary=False, limit=10,
+                                                               description="IVF1024",
+                                                               xattr_indexes=False):
+        """
+        Generate bhive (CREATE VECTOR INDEX) definitions for AmazonSparse dataset.
+        Sparse vectors have no dimension; similarity is forced to DOT in get_create_index_list().
+        Bhive indexes support INCLUDE clause. Sparse vector is the only index key.
+        Matches car_vector_loader_index_definition_bhive patterns (5 indexes).
+        """
+        definitions_list = []
+        sparse_vecfield = "`sparse`"
+        if xattr_indexes:
+            sparse_vecfield = "meta().xattrs.`sparse`"
+
+        # Load random sparse vector from JSONL file for querying
+        random_sparse_vecs, title = self.get_random_sparse_vectors_from_jsonl(count=1)
+        sample_sparse_vec = random_sparse_vecs[0]
+        self.log.info(f"Sample sparse vector : {sample_sparse_vec}, title is {title}")
+
+        scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE({sparse_vecfield}, {sample_sparse_vec}, {scan_nprobes})"
+
+        if not index_name_prefix:
+            index_name_prefix = "amazon_sparse_bhive_" + str(uuid.uuid4()).replace("-", "")[:8]
+
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT title, store",
+                                                                          "store IS NOT NULL"),
+                                is_primary=True))
+
+        # 1. Single sparse vector field only - WITH train_list (like colorRGBVectorBhive)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'sparseVectorOnlyBhive',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, {scan_sparse_vec}",
+                                scan_sparse_vec)))
+
+        # 2. Single sparse vector field - second variant - NO train_list (like descriptionVectorBhive)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'sparseVectorBhive2',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            include_fields=['store'],
+                            expected_title=title,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, main_category, {scan_sparse_vec}",
+                                scan_sparse_vec)))
+
+        # 3. Sparse vector + partitioned on scalar field + INCLUDE - WITH train_list (like partitionedVectorBhive)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partitionedVectorBhive',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, store, price, {scan_sparse_vec}",
+                                "average_rating > 0",
+                                scan_sparse_vec),
+                            partition_by_fields=['meta().id'],
+                            include_fields=['average_rating', 'main_category', 'title']))
+
+        # 4. Sparse vector + multiple scalar fields with INCLUDE - NO train_list (like includeBhive)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'includeBhive',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, store, price, {scan_sparse_vec}",
+                                "price > 1 OR "
+                                "store = 'Amazon.com'",
+                                scan_sparse_vec),
+                            include_fields=['store', 'price', 'title']))
+
+        # 5. Partial Index - sparse vector with WHERE clause + INCLUDE - WITH train_list (like partialIndexBhive)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'partialIndexBhive',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            index_where_clause='average_rating > 1',
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, average_rating, {scan_sparse_vec}",
+                                "average_rating > 1 AND "
+                                "title LIKE '%%a%%'",
+                                scan_sparse_vec),
+                            include_fields=['title', 'average_rating']))
+
+        self.batch_size = len(definitions_list)
+        return definitions_list
+
+    def generate_amazon_sparse_vector_index_definitions_composite(self, index_name_prefix=None,
+                                                                   train_list=None, scan_nprobes=1,
+                                                                   skip_primary=False, limit=100,
+                                                                   description="IVF1024",
+                                                                   xattr_indexes=False):
+        """
+        Generate composite (CREATE INDEX) definitions for AmazonSparse dataset.
+        Sparse vectors have no dimension; similarity is forced to DOT in get_create_index_list().
+        Composite indexes do not support INCLUDE clause; scalars go in index key.
+        Matches car_vector_loader_index_definition patterns (7 indexes).
+        """
+        #TODO have to visit back for the include clause
+        definitions_list = []
+        sparse_vecfield = "`sparse`"
+        if xattr_indexes:
+            sparse_vecfield = "meta().xattrs.`sparse`"
+
+        # Load random sparse vector from JSONL file for querying
+        random_sparse_vecs, title = self.get_random_sparse_vectors_from_jsonl(count=1)
+        sample_sparse_vec = random_sparse_vecs[0]
+        self.log.info(f"Sample sparse vector : {sample_sparse_vec}, title is {title}")
+
+        scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE({sparse_vecfield}, {sample_sparse_vec}, {scan_nprobes})"
+
+        if not index_name_prefix:
+            index_name_prefix = "amazon_sparse_comp_" + str(uuid.uuid4()).replace("-", "")[:8]
+
+        # Primary Query
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT title, store",
+                                                                          "store IS NOT NULL"),
+                                is_primary=True))
+
+        # 1. Single sparse vector field only - WITH train_list (like colorRGBVector)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'sparseVectorOnly',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, {scan_sparse_vec}",
+                                scan_sparse_vec)))
+
+        # 2. Single scalar leading + sparse vector + partitioned - NO train_list (like oneScalarLeadingOneVector)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVector',
+                            index_fields=['store', f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, store, {scan_sparse_vec}",
+                                scan_sparse_vec),
+                            partition_by_fields=['meta().id']))
+
+        # 3. Sparse vector leading + single scalar - WITH train_list (like oneScalarOneVectorLeading)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'oneScalarOneVectorLeading',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR', 'main_category'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, main_category, {scan_sparse_vec}",
+                                scan_sparse_vec)))
+
+        # 4. Multi scalar + sparse vector in middle - NO train_list (like multiScalarOneVector_1)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_1',
+                            index_fields=['price', f'{sparse_vecfield} SPARSE VECTOR', 'main_category', 'store'],
+                            description=description,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, store, price, {scan_sparse_vec}",
+                                "price > 0",
+                                scan_sparse_vec)))
+
+        # 5. Multi scalar + sparse vector + partitioned - WITH train_list (like multiScalarOneVector_2)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'multiScalarOneVector_2',
+                            index_fields=['average_rating', f'{sparse_vecfield} SPARSE VECTOR', 'main_category'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, main_category, {scan_sparse_vec}",
+                                "average_rating > 0",
+                                scan_sparse_vec),
+                            partition_by_fields=['meta().id']))
+
+        # 6. Missing keys index - NO train_list (like includeMissing)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'includeMissing',
+                            index_fields=['title', 'price', 'store', f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            missing_indexes=True, missing_field_desc=True,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, store, price, {scan_sparse_vec}",
+                                "price > 0 OR "
+                                "store = 'Amazon.com'",
+                                scan_sparse_vec)))
+
+        # 7. Partial Index - sparse vector with WHERE clause - WITH train_list (like PartialIndex)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'PartialIndex',
+                            index_fields=['average_rating', 'title', f'{sparse_vecfield} SPARSE VECTOR'],
+                            index_where_clause='average_rating > 0',
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=title,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"title, average_rating, {scan_sparse_vec}",
+                                "average_rating > 1",
+                                scan_sparse_vec)))
+
+        self.batch_size = len(definitions_list)
+        return definitions_list
+
     def generate_person_data_index_definition(self, index_name_prefix=None, skip_primary=False):
         definitions_list = []
         if not index_name_prefix:
@@ -2224,10 +2492,17 @@ class GSIUtils(object):
                     nodes_list = random.sample(deploy_node_info, k=num_replicas + 1)
             else:
                 num_replicas = num_replica
+
+            # Detect sparse vector indexes: if any field contains "SPARSE VECTOR" (case-insensitive),
+            # force dimension=None and similarity="DOT"
+            is_sparse = any('sparse vector' in str(field).lower() for field in index_gen.index_fields)
+            idx_dimension = None if is_sparse else dimension
+            idx_similarity = "DOT" if is_sparse else similarity
+
             query = index_gen.generate_index_create_query(namespace=namespace, defer_build=defer_build,
                                                           num_replica=num_replicas, deploy_node_info=nodes_list,
-                                                          train_list=trainlist, dimension=dimension,
-                                                          description=description, similarity=similarity,
+                                                          train_list=trainlist, dimension=idx_dimension,
+                                                          description=description, similarity=idx_similarity,
                                                           scan_nprobes=scan_nprobes, bhive_index=bhive_index,
                                                           persist_full_vector=index_gen.persist_full_vector)
             create_index_list.append(query)
@@ -2498,8 +2773,28 @@ class GSIUtils(object):
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)
+        elif dataset == 'AmazonSparse':
+            # Sparse vectors always use IVF1024 description
+            if bhive_index:
+                definition_list = self.generate_amazon_sparse_vector_index_definitions_bhive(
+                    index_name_prefix=prefix,
+                    skip_primary=skip_primary,
+                    train_list=train_list,
+                    scan_nprobes=scan_nprobes,
+                    limit=limit,
+                    description="IVF1024",
+                    xattr_indexes=xattr_indexes)
+            else:
+                definition_list = self.generate_amazon_sparse_vector_index_definitions_composite(
+                    index_name_prefix=prefix,
+                    skip_primary=skip_primary,
+                    train_list=train_list,
+                    scan_nprobes=scan_nprobes,
+                    limit=limit,
+                    xattr_indexes=xattr_indexes,
+                    description="IVF1024")
         else:
-            raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, Car, MiniCar and Hotel")
+            raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, Car, MiniCar, Hotel, and AmazonSparse")
         return definition_list
 
     def get_indexes_name(self, query_definitions):

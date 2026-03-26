@@ -49,6 +49,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.ansi_join = self.input.param("ansi_join", False)
         self.index_lost_during_move_out = []
         self.run_continous_query = False
+        self.isSparse = self.input.param("isSparse", False)
+        self.sparse_query_vectors_file = self.input.param("sparse_query_vectors_file", 'query_vectors_sparse.jsonl')
         self.desired_rr = self.input.param("desired_rr", 10)
         self.verify_using_index_status = self.input.param("verify_using_index_status", False)
         self.use_replica_when_active_down = self.input.param("use_replica_when_active_down", True)
@@ -557,7 +559,72 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(self.namespaces)
 
     def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False,
-                                               variable_limit=False):
+                                               variable_limit=False, expected_title=None):
+        # Check if this is a sparse vector query
+        is_sparse = "SPARSE_VECTOR_DISTANCE" in select_query.upper()
+
+        if is_sparse:
+            return self._validate_sparse_vector_scans(select_query, scan_consitency, variable_limit, expected_title=expected_title)
+        else:
+            return self._validate_dense_vector_scans(select_query, similarity, scan_consitency, variable_limit)
+
+    def _validate_sparse_vector_scans(self, select_query, scan_consitency=False, variable_limit=False, expected_title=None):
+        """
+        Validate sparse vector scans using binary recall.
+        
+        For sparse vectors:
+        - Each query vector has exactly ONE matching document in the dataset, identified by title
+        - Recall is BINARY: 1 if the document with expected_title is found in results, 0 otherwise
+        - There is NO accuracy metric for sparse vectors
+        
+        Args:
+            select_query: The SPARSE_VECTOR_DISTANCE query to validate
+            scan_consitency: Whether to use scan consistency
+            variable_limit: Whether to use variable LIMIT
+            expected_title: The title of the document that should be found in results.
+                           This is the title associated with the query vector from the JSONL file.
+        """
+        if variable_limit:
+            self.scan_limit = random.choice([10, 20, 50, 100])
+            select_query = re.sub(r"LIMIT \d+", f"LIMIT {self.scan_limit}", select_query)
+
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.log.info(f"n1ql node for sparse vector recall validation is {n1ql_node}")
+
+        # Run the GSI query
+        if scan_consitency:
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node,
+                                               scan_consistency=self.scan_consistency)['results']
+        else:
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node)['results']
+
+        if variable_limit:
+            self.assertEqual(len(gsi_query_res), self.scan_limit,
+                             f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
+
+        # Binary recall: 1 if the expected document (by title) is in results, 0 otherwise
+        recall = 0
+        if expected_title:
+            gsi_titles = [doc.get('title') for doc in gsi_query_res]
+            if expected_title in gsi_titles:
+                recall = 1
+                self.log.info(f"[SPARSE] Expected document '{expected_title}' FOUND in results - recall = 1")
+            else:
+                self.log.info(f"[SPARSE] Expected document '{expected_title}' NOT FOUND in results - recall = 0")
+                self.log.info(f"[SPARSE] GSI returned titles: {gsi_titles[:5]}...")  # Log first 5 for debugging
+        else:
+            self.log.warning(f"[SPARSE] No exact match found for query vector in dataset")
+
+        redacted_select_query = self.gen_query_without_entire_qvec(query=select_query)
+        self.log.info(f"[SPARSE] Binary recall for query: {redacted_select_query} is {recall}")
+        return redacted_select_query, recall, None
+
+    def _validate_dense_vector_scans(self, select_query, similarity="L2_SQUARED", scan_consitency=False,
+                                     variable_limit=False):
+        """
+        Validate dense vector scans using FAISS for ground truth comparison.
+        This is the original implementation for ANN_DISTANCE queries.
+        """
         if variable_limit:
             self.scan_limit = random.choice([10, 20, 50, 100])
             select_query = re.sub(r"LIMIT \d+", f"LIMIT {self.scan_limit}", select_query)
@@ -575,15 +642,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                 result = self.decode_base64_to_float(result)
             list_of_vectors_to_be_indexed_on_faiss.append(result)
 
-        # Todo: Add a provision to convert base64 encoded embeddings to float32 embeddings
-
-        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"), similarity=similarity)
+        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"),
+                                             similarity=similarity)
 
         ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
 
         faiss_closest_vectors = []
         for idx in ann:
-            # self.log.info(f'for idx {idx} vector is {list_of_vectors_to_be_indexed_on_faiss[idx]}')
             if self.base64:
                 value = self.encode_floats_to_base64(list_of_vectors_to_be_indexed_on_faiss[idx])
             else:
@@ -591,12 +656,14 @@ class BaseSecondaryIndexingTests(QueryTests):
             faiss_closest_vectors.append(value)
 
         if scan_consitency:
-            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node, scan_consistency=self.scan_consistency)['results']
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node,
+                                               scan_consistency=self.scan_consistency)['results']
         else:
             gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node)['results']
 
         if variable_limit:
-            self.assertEqual(len(gsi_query_res), self.scan_limit, f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
+            self.assertEqual(len(gsi_query_res), self.scan_limit,
+                             f"gsi query results are not equal to scan limit {self.scan_limit} for query {select_query}")
 
         gsi_query_vec_list = []
 
@@ -605,9 +672,6 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         self.log.info(f'len of qv list is {len(gsi_query_vec_list)}')
         self.log.info(f'len of faiss list is {len(faiss_closest_vectors)}')
-
-        #todo will comment this out post the resloving of https://issues.couchbase.com/browse/MB-62783
-        # self.assertNotEqual(len(gsi_query_vec_list), 0, f"vector list is not equal for query {self.gen_query_without_entire_qvec(select_query)} gsi query results are {gsi_query_res}")
 
         recall = accuracy = 0
 
@@ -627,6 +691,26 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(f"accuracy for the query : {select_query} is {accuracy * 100} % ")
         self.log.info(f"recall for the query is : {select_query} is {recall * 100} %")
         return redacted_select_query, recall, accuracy
+
+    def extract_sparse_vector_field_and_query_vector(self, query):
+        """
+        Extract sparse vector field and query vector from SPARSE_VECTOR_DISTANCE query.
+        Format: SPARSE_VECTOR_DISTANCE(field, [[indices], [values]], nprobes)
+        """
+        # Pattern to match SPARSE_VECTOR_DISTANCE(field, [[...], [...]], nprobes)
+        pattern = r"SPARSE_VECTOR_DISTANCE\(\s*([`\w.()]+)\s*,\s*(\[\s*\[[\d,\s]+\]\s*,\s*\[[\d.,\s\-eE]+\]\s*\])"
+        matches = re.search(pattern, query, re.IGNORECASE)
+
+        if matches:
+            vector_field = matches.group(1).strip('`')
+            vector_str = matches.group(2)
+            self.log.info(f"[SPARSE] vector_field: {vector_field}")
+            self.log.info(f"[SPARSE] vector (truncated): {vector_str[:100]}...")
+            sparse_vector = ast.literal_eval(vector_str)
+            return vector_field, sparse_vector
+        else:
+            self.log.info(f"No sparse vector field found in the query: {query}")
+            raise Exception("no sparse vector fields extracted")
 
     def gen_query_without_entire_qvec(self, query):
         # Regex pattern to match the array of numbers

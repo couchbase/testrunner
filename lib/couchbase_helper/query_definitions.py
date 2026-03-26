@@ -42,7 +42,8 @@ class QueryDefinition(object):
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
                  dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
-                 is_base64=False, include_fields=None, bhive_index=False, defer_build=False, num_replica=None, persist_full_vector=True):
+                 is_base64=False, include_fields=None, bhive_index=False, defer_build=False, num_replica=None,
+                 persist_full_vector=True, expected_title=None):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -80,6 +81,8 @@ class QueryDefinition(object):
         self.defer_build = defer_build
         self.num_replica = num_replica
         self.persist_full_vector = persist_full_vector
+        # For sparse vectors: the expected title that should appear in results (binary recall check)
+        self.expected_title = expected_title
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
