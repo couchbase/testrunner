@@ -467,7 +467,7 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
             self.log.info(f"\nCompaction was NOT triggered after {cycle} cycles (max: {max_compaction_cycles})")
         
         # Step 7: Let cluster settle
-        self.sleep(30, "Waiting for cluster to settle after compaction cycles")
+        self.sleep(120, "Waiting for cluster to settle after compaction cycles")
 
         # Step 8: Capture final metadata size and validate
         final_total_size, final_node_sizes = self._get_total_metastore_size(index_nodes)
