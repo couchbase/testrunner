@@ -13,13 +13,221 @@ Suites: sanity, rebalance, failover, recovery, lifecycle, timers, n1ql, analytic
 
 ---
 
-## Inheritance
+## Eventing Upgrade Tests
+
+### Overview
+
+Eventing upgrade tests validate eventing service functionality before, during, and after Couchbase server upgrades. Tests support online and offline upgrades with various rebalance strategies.
+
+### Test Classes
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `EventingUpgrade` | `eventing_upgrade.py` | Eventing upgrade tests |
+| `NewUpgradeBaseTest` | `upgrade/newupgradebasetest.py` | Base upgrade class |
+| `EventingBaseTest` | `eventing_base.py` | Base eventing class |
+
+**Note:** `EventingUpgrade` uses **multiple inheritance**: `eventing_upgrade.EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest)`
+
+### Available Upgrade Tests
+
+```
+eventing_upgrade.py:test_offline_upgrade_with_eventing
+eventing_upgrade.py:test_online_upgrade_with_regular_rebalance_with_eventing
+eventing_upgrade.py:test_online_upgrade_with_swap_rebalance_with_eventing
+eventing_upgrade.py:test_online_upgrade_with_failover_rebalance_with_eventing
+eventing_upgrade.py:test_offline_upgrade_with_eventing_pause_resume
+eventing_upgrade.py:test_online_upgrade_with_regular_rebalance_with_eventing_pause_resume
+eventing_upgrade.py:test_online_upgrade_with_failover_rebalance_with_eventing_base64_xattrs
+```
+
+### Test Call Map: Offline Upgrade with Eventing
+
+```
+test_offline_upgrade_with_eventing()
+  ├─> _install(servers[:nodes_init])  # Install initial version
+  ├─> operations(servers, services="kv,kv,eventing,index,n1ql")  # Initialize cluster
+  ├─> create_buckets()
+  ├─> load(gens_load, buckets=src_bucket)  # Load data in old version
+  ├─> pre_upgrade_handlers()  # Deploy functions before upgrade
+  │   ├─> create_handler("bucket_op", "handler_code/delete_doc_bucket_op.js")
+  │   ├─> create_handler("timers", "handler_code/bucket_op_with_timers_upgrade.js")
+  │   └─> deploy_handler_by_name("timers")
+  ├─> print_eventing_stats_from_all_eventing_nodes()  # Capture pre-upgrade stats
+  ├─> _async_update(upgrade_version, servers)  # Perform upgrade
+  │   └─> _upgrade() on each node (stops server, installs, starts)
+  ├─> wait_for_handler_state("timers", "deployed")
+  ├─> deploy_handler_by_name("bucket_op")
+  ├─> verify_doc_count_collections()  # Validate data integrity
+  ├─> post_upgrade_handlers()  # Create post-upgrade functions
+  │   ├─> create_function_with_collection("sbm", ...)  # Source bucket mutation
+  │   ├─> create_function_with_collection("curl", ...)  # CURL operations
+  │   └─> create_function_with_collection("n1ql", ...)  # N1QL operations
+  ├─> load_data_to_collection() / delete operations
+  ├─> pause_handler_by_name() all handlers
+  ├─> load_data_to_collection() during pause
+  ├─> resume_handler_by_name() all handlers
+  ├─> verify_count()  # Final validation
+  └─> print_eventing_stats_from_all_eventing_nodes()
+```
+
+### Test Call Map: Online Upgrade with Regular Rebalance
+
+```
+test_online_upgrade_with_regular_rebalance_with_eventing()
+  ├─> _install(servers[:nodes_init])  # Install initial version on first nodes
+  ├─> _install(servers[nodes_init:])  # Install upgrade version on swap nodes
+  ├─> operations(servers, services="kv,kv,eventing,index,n1ql")
+  ├─> create_buckets()
+  ├─> load(gens_load, buckets=src_bucket)
+  ├─> pre_upgrade_handlers()
+  ├── print_eventing_stats_from_all_eventing_nodes()
+  ├─> online_upgrade(services=["kv","kv","eventing","index","n1ql"])
+  │   └─> NewUpgradeBaseTest.online_upgrade_swap_rebalance()
+  │        ├── Rebalance out old nodes 1 by 1
+  │        ├── Start upgrade nodes (already has new version)
+  │        └─> Rebalance in new nodes 1 by 1
+  ├─> add_built_in_server_user()
+  ├─> wait_for_handler_state("timers", "deployed")
+  ├─> deploy_handler_by_name("bucket_op")
+  ├─> verify_doc_count_collections()
+  ├─> post_upgrade_handlers()  # Install collection-based handlers
+  ├─> CRUD operations with data validation
+  ├─> pause/resume cycles with validation
+  └─> finalize and cleanup
+```
+
+### Pre-Upgrade Handlers
+
+```
+pre_upgrade_handlers()
+  └─> Non-collection scoped handlers (bucket-level)
+       ├─> create_handler("bucket_op", "handler_code/delete_doc_bucket_op.js")
+       │   └─> Basic bucket operations: src_bucket → dst_bucket
+       └─> create_handler("timers", "handler_code/bucket_op_with_timers_upgrade.js")
+            └─> Timer-based operations with doc timers
+```
+
+### Post-Upgrade Handlers
+
+```
+post_upgrade_handlers()
+  └─> Collection-scoped handlers (post-upgrade feature)
+       ├─> create_function_with_collection("sbm", "handler_code/ABO/insert_sbm.js")
+       │   └─> Source bucket mutation (SBM) mode
+       │   └─> Namespace: source_bucket_mutation.event.coll_0
+       ├─> create_function_with_collection("curl", "handler_code/ABO/curl_get.js")
+       │   └─> CURL HTTP operations
+       │   └─> Namespace: src_bucket.event.coll_0
+       └─> create_function_with_collection("n1ql", "handler_code/collections/n1ql_insert_update.js")
+            └─> N1QL INSERT/UPDATE operations
+            └─> Namespace: src_bucket.event.coll_0
+```
+
+### Key Eventing Upgrade Methods
+
+| Method | Location | Purpose |
+|---------|----------|---------|
+| `pre_upgrade_handlers()` | eventing_upgrade.py | Deploy non-collection handlers before upgrade |
+| `post_upgrade_handlers()` | eventing_upgrade.py | Deploy collection handlers after upgrade |
+| `deploy_handler_by_name(name)` | eventing_base.py | Deploy function by name |
+| `pause_handler_by_name(name)` | eventing_base.py | Pause eventing function |
+| `resume_handler_by_name(name)` | eventing_base.py | Resume paused function |
+| `wait_for_handler_state(name, status)` | eventing_base.py | Poll until handler reaches status |
+| `print_eventing_stats_from_all_eventing_nodes()` | eventing_base.py | Dump stats from all eventing nodes |
+| `refresh_rest_server()` | eventing_base.py | Refresh connection after rebalance |
+
+### Handler State Transitions During Upgrade
+
+```
+Pre-Upgrade State:
+  bucket_op → deployed
+  timers → deployed
+
+During Offline Upgrade:
+  bucket_op → undeployed (server stopped)
+  timers → undeployed (server stopped)
+
+After Upgrade:
+  timers → deployed (auto-resumed or explicitly deployed)
+  bucket_op → deployed (explicitly deployed)
+
+Post-Upgrade (Collection SC):
+  sbm → deployed
+  curl → deployed
+  n1ql → deployed
+
+Pause/Resume Cycles:
+  All handlers → paused
+  [Load data while paused]
+  All handlers → deployed
+  [Verify data after resume]
+```
+
+### Upgrade Parameters
+
+```ini
+# Upgrade-specific
+upgrade_version=7.0.0-5000
+exported_handler_version=6.6.1
+enable_n2n_encryption_and_tls=False
+
+# Services (must include eventing)
+services_init=kv,kv,eventing,index,n1ql
+
+# Buckets
+src_bucket_name=src_bucket
+dst_bucket_name=dst_bucket
+metadata_bucket_name=metadata
+sbm=source_bucket_mutation  # SBM bucket
+n1ql_op_dst=n1ql_op_dst     # N1QL ops destination
+dst_bucket_curl=dst_bucket_curl
+
+# Collections
+use_single_bucket=True
+non_default_collection=True
+global_function_scope=True
+
+# Eventing settings
+eventing_log_level=INFO
+dcp_stream_boundary=everything
+commit_retry_timeout=20
+checkpoint_interval=20000
+```
+
+### Running Eventing Upgrade Tests
+
+```bash
+# Offline upgrade with eventing
+python3 testrunner.py -i b/resources/4-nodes-template.ini \
+  -t pytests.eventing.eventing_upgrade.EventingUpgrade.test_offline_upgrade_with_eventing \
+  ,nodes_init=4,upgrade_version=7.0.0-5000,initial_version=6.6.1-9202 \
+  ,services_init=kv,kv,eventing,index,n1ql,doc-per-day=1
+
+# Online upgrade with regular rebalance
+python3 testrunner.py -i b/resources/4-nodes-template.ini \
+  -t pytests.eventing.eventing_upgrade.EventingUpgrade.test_online_upgrade_with_regular_rebalance_with_eventing \
+  ,nodes_init=4,upgrade_version=7.0.0-5000,initial_version=6.6.1-9202 \
+  ,services_init=kv,kv,eventing,index,n1ql
+
+# Offline upgrade with pause/resume
+python3 testrunner.py -i b/resources/4-nodes-template.ini \
+  -t pytests.eventing.eventing_upgrade.EventingUpgrade.test_offline_upgrade_with_eventing_pause_resume \
+  ,nodes_init=4,upgrade_version=7.0.0-5000,pause_resume=True
+```
+
+### Inheritance
 
 ```
 BaseTestCase (basetestcase.py)
 └── QueryHelperTests (pytests/query_tests_helper.py)
+    ├── NewUpgradeBaseTest (upgrade/newupgradebasetest.py)
+    │   └─> upgrade workflow methods: _upgrade(), _async_update(), online_upgrade(), etc.
     └── EventingBaseTest (pytests/eventing/eventing_base.py)
-        └── Eventing Test Classes (pytests/eventing/*.py)
+         └─> eventing methods: deploy_function(), verify_eventing_results(), etc.
+             └── EventingUpgrade (pytests/eventing/eventing_upgrade.py)
+                  └─> Multiple inheritance: EventingUpgrade(NewUpgradeBaseTest, EventingBaseTest)
+                       └─> Combines upgrade + eventing capabilities
 ```
 
 ---
@@ -29,7 +237,9 @@ BaseTestCase (basetestcase.py)
 | File | Role |
 |------|------|
 | `eventing_base.py` | All shared methods: deploy, verify, load data, debug |
+| `eventing_upgrade.py` | Eventing upgrade tests (offline/online) |
 | `eventing_constants.py` | `HANDLER_CODE*` classes mapping constants to `.js` paths |
+| `upgrade/newupgradebasetest.py` | Base class for upgrade tests |
 | `lib/membase/api/on_prem_rest_client.py` | REST API calls to eventing endpoints |
 | `lib/membase/api/rest_client.py` | `RestConnection` used across all tests |
 | `handler_code/*.js` | JavaScript handler functions (160+ files) |
