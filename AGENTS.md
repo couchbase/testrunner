@@ -96,7 +96,10 @@ Before completing changes:
 - `docs/agent-context/build-test-matrix.md` -- exact validation commands per service
 - `docs/agent-context/domain-glossary.md` -- Couchbase services, test types, terminology
 - `docs/agent-context/troubleshooting.md` -- common cluster_run and test execution failures
-- `doc/tools/AGENTS.md` -- dispatcher SDK tools and installer index (task routing for agents)
+- `docs/tools/AGENTS.md` -- dispatcher SDK tools and installer index (task routing for agents)
+- `docs/elastic_search/AGENTS.md` -- Elasticsearch integration for FTS query validation
+- `pytests/upgrade/AGENTS.md` -- upgrade test framework detailed context
+- `pytests/eventing/AGENTS.md` -- eventing test framework detailed context
 
 ## Submodule Orchestration Logic
 
@@ -137,23 +140,23 @@ import os
 def route_to_repository(task):
     """
     Determine which repository should handle the given task
-    
+
     Args:
         task (str): Description of the code work needed
-    
+
     Returns:
         str: Repository/submodule path where work should be done
     """
     task_lower = task.lower()
-    
+
     # Java SDK Client routing
     if any(keyword in task_lower for keyword in [
-        'java sdk', 'javaclient', 'java_client', 
+        'java sdk', 'javaclient', 'java_client',
         'sdk client java', 'couchbase java sdk',
         'java sdk client', 'multilanguage testing'
     ]):
         return 'java_sdk_client'
-    
+
     # Capella REST API routing
     elif any(keyword in task_lower for keyword in [
         'capella api', 'capellarestapi', 'capella rest',
@@ -161,7 +164,7 @@ def route_to_repository(task):
         'lib/capellaapi', 'capella rest client'
     ]):
         return 'lib/capellaAPI'
-    
+
     # DocLoader routing (Magma storage)
     elif any(keyword in task_lower for keyword in [
         'docloader', 'document loader', 'magma loader',
@@ -170,7 +173,7 @@ def route_to_repository(task):
         'document generation', 'magma doc loader'
     ]):
         return 'magma_loader/DocLoader'
-    
+
     # GSI Utilities routing
     elif any(keyword in task_lower for keyword in [
         'gsi utilities', 'gsi_utils', 'gsi helper',
@@ -178,7 +181,7 @@ def route_to_repository(task):
         'gsi utility functions'
     ]):
         return 'gsi_utils'
-    
+
     # Default to main testrunner repository
     else:
         return 'testrunner'
@@ -189,11 +192,11 @@ if __name__ == "__main__":
         user_task = input("Enter task description (or 'quit' to exit): ")
         if user_task.lower() in ['quit', 'exit']:
             break
-        
+
         repo_path = route_to_repository(user_task)
         print(f"\nNavigate to: {repo_path}/")
         print(f"\nTo initialize submodules if needed:")
-        print(f"  cd /Users/pavan.pb/Workstuff/testrunner")
+        print(f"  cd testrunner")
         print(f"  make init-submodules")
         print(f"  cd {repo_path}")
         print()
@@ -228,7 +231,7 @@ print(f"Work in: {repo}")  # Output: Work in: magma_loader/DocLoader
 
 ```bash
 # Example workflow for Java SDK client work
-cd /Users/pavan.pb/Workstuff/testrunner
+cd testrunner
 git submodule update --init --force --remote
 cd java_sdk_client
 # Make changes to java_sdk_client files
