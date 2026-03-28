@@ -561,11 +561,11 @@ def check_if_version_already_installed(server, install_version, cb_edition,
             "implementationVersion"].split("-")
         if "%s-%s" % (existing_ver, existing_build_num) == install_version \
                 and cb_edition == existing_edition:
-            if float(ver[:3]) >= 7.5:
+            if float(existing_ver[:3]) >= 7.5:
                 if cluster_profile != pools_info["configProfile"]:
                     return False
             return True
-    except (ServerUnavailableException, Exception):
+    except Exception:
         pass
     return False
 

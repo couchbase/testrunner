@@ -25,6 +25,26 @@
 - **tools**: Install required tools
 - **download_build**: Download Couchbase build artifacts
 
+### Default Installation Tasks
+When `install_tasks` parameter is not explicitly provided, the script uses:
+```python
+DEFAULT_INSTALL_TASKS = ["uninstall", "download_build", "install", "init", "cleanup"]
+DEFAULT_INSTALL_COLUMNAR_TASKS = ["uninstall", "download_build", "install", "cleanup"]
+REINIT_NODE_TASKS = ["init", "cleanup"]
+```
+
+## Command-line Example
+Typical execution pattern from test runners:
+```bash
+${py_executable} scripts/new_install.py \
+  -i /tmp/testexec.$$.ini \
+  -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD}, \
+     get-cbcollect-info=True,version=${initial_version},product=cb, \
+     debug_logs=True,ntp=True,url=${url}${extraInstall}
+```
+
+Note: `install_tasks` is often omitted to trigger default installation steps.
+
 ## Columnar Validation
 Special validation for columnar profile installs:
 - Checks enterprise edition status
@@ -66,6 +86,40 @@ The script reads installation parameters via `install_utils.process_user_input()
 - `logging.config` - Logging configuration (uses "scripts.logging.conf")
 - `membase.api.exception.InstallException` - Custom installation exceptions
 - `membase.api.rest_client.RestConnection` - REST API for server communication
+
+## Execution Flow
+```
+main()
+  ├─> install_utils.process_user_input() → Parse params from INI/CLI/env
+  ├─> Create install_tasks dict and node_helpers list
+  ├─> install_utils.pre_install_steps(node_helpers)           ← Pre-installation setup
+  │      ├─> Tools setup (if "tools" in install_tasks)
+  │      │      └─> Set dev_tools_name, admin_tools_name and URLs
+  │      └─> Build URL validation & node.build object creation
+  │             └─> Validate URL is live, set all_nodes_same_os flag
+  │             └─> Determine build_binary (columnar vs regular)
+  │             └─> Create node.build with binary, URL, filepath, version
+  ├─> (if uninstall) do_uninstall(params, node_helpers)
+  │      └─> Parallel uninstallation via worker threads
+  ├─> (if install/download_build) install_utils.download_build(node_helpers)
+  ├─> (if tools) install_utils.install_tools(node_helpers)
+  └─> do_install(params, install_tasks)
+         ├─> Spawn per-node threads with task queues
+         ├─> Execute tasks: uninstall, install, init, cleanup
+         ├─> (if init_clusters) install_utils.init_clusters()
+         └─> validate_install() + validate_columnar_install()
+                  └─> install_utils.print_result_and_exit()
+```
+
+### pre_install_steps() Details
+Located in `install_utils.py`, called before main installation workflow:
+- **Early exit**: Returns immediately if no node_helpers provided
+- **Tools preparation**: Sets up development and admin tools package names/URLs
+- **Build preparation**: 
+  - Validates custom build URLs if provided
+  - Sets `params["all_nodes_same_os"] = True` for URL-based installs
+  - Determinates correct build binary per node (columnar vs regular profile)
+  - Creates `node.build` objects containing download and installation metadata
 
 ## Integration
 Called after VM booking by dispatcher scripts to prepare servers for test execution flow:
