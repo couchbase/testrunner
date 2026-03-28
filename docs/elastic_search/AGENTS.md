@@ -116,21 +116,23 @@ es_password=      # optional, if ES requires authentication
 
 ## How Tests Use Elasticsearch
 
-### Test Workflow
+### Test Workflow (Parallel Job Support)
 
 ```
 1. FTSCallable.__init__(es_validate=True)
    └─> Reads [elastic] from INI file
    └─> HTTP connection test (is_running())
-   └─> DELETE es_index (cleanup)
-   └─> PUT es_index with BLEVE.STD_ANALYZER settings
+   └─> Generate unique ES index name: UUID_short_DDMMMYY_HH_MM_SS
+        └─> Example: "a3f4e2c1_28Mar26_14_59_01"
+   └─> DELETE {index_name} (cleanup)
+   └─> PUT {index_name} with BLEVE.STD_ANALYZER settings
    └─> enable_scroll(max_result_window: 1000000)
 
 2. load_data()  # Called by test
    └─> Generate documents (e.g., "emp" template: name, email, dept, address)
    └─> Parallel load to both Couchbase and ES
-   └─> ES: async_bulk_load_ES(index='es_index')
-        └─> POST /es_index/_bulk (1000-10000 documents)
+   └─> ES: async_bulk_load_ES(index=self.es_index_name)
+        └─> POST /{es_index_name}/_bulk (1000-10000 documents)
 
 3. wait_for_indexing_complete()
    └─> Poll CB index count
@@ -151,8 +153,23 @@ es_password=      # optional, if ES requires authentication
 
 6. Cleanup (delete_all())
    └─> DELETE all CB indices
-   └─> DELETE es_index
+   └─> DELETE self.es_index_name
 ```
+
+### Unique Index Naming
+
+**Index Name Format:** `{UUID_short}_{DDMMMYY_HH_MM_SS}`
+
+**Examples:**
+- `a3f4e2c1_28Mar26_14_59_01`
+- `b8d5f9e3_28Mar26_15_02_23`
+- `c7e4a8d2_28Mar26_16_05_47`
+
+**Components:**
+- `UUID_short`: First 8 chars of UUID4 for uniqueness across jobs
+- `DDMMMYY_HH_MM_SS`: Human-readable timestamp for cleanup tracking (day, 3-char month name, 2-digit year, hour, minute, second)
+
+**Purpose:** Enables multiple test jobs to run in parallel on the same ES cluster without conflicts.
 
 ### ES Index Settings Used
 
@@ -196,37 +213,102 @@ es_password=      # optional, if ES requires authentication
 | Operation | HTTP Method | Endpoint | Purpose |
 |-----------|-------------|----------|---------|
 | **Health Check** | GET | `/{host}:9200/` | Verify ES is running |
-| **Create Index** | PUT | `/{host}:9200/es_index` | Create with custom analyzer |
-| **Delete Index** | DELETE | `/{host}:9200/es_index` | Cleanup before test |
-| **Bulk Load** | POST | `/{host}:9200/es_index/_bulk` | Load 1000-10000+ documents |
-| **Search** | POST | `/{host}:9200/es_index/_search?size=1000000` | Run full-text queries |
-| **Get Count** | GET | `/{host}:9200/es_index/_count` | Verify document count |
-| **Refresh Index** | POST | `/{host}:9200/es_index/_refresh` | Force refresh after updates |
-| **Scroll Settings** | PUT | `/{host}:9200/es_index/_settings` | Increase max_result_window |
+| **Create Index** | PUT | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}` | Create with custom analyzer (unique per job) |
+| **Delete Index** | DELETE | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}` | Cleanup before test |
+| **Bulk Load** | POST | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}/_bulk` | Load 1000-10000+ documents |
+| **Search** | POST | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}/_search?size=1000000` | Run full-text queries |
+| **Get Count** | GET | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}/_count` | Verify document count |
+| **Refresh Index** | POST | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}/_refresh` | Force refresh after updates |
+| **Scroll Settings** | PUT | `/{host}:9200/{uuid_short}_{DDMMMYY_HH_MM_SS}/_settings` | Increase max_result_window |
 
-### Data Flow Example
+### Benefits of Unique Index Naming
+
+### Parallel Job Execution
+
+Multiple test jobs can now run simultaneously on the same ES cluster:
+
+```bash
+# Job 1, Job 2, Job 3 running in parallel on same ES cluster
+Job 1 → Index: a3f4e2c1_28Mar26_14_59_01
+Job 2 → Index: b8d5f9e3_28Mar26_15_02_23
+Job 3 → Index: c7e4a8d2_28Mar26_16_05_47
+
+# No conflicts - each job has its own isolated index
+```
+
+### Failed Job Debugging
+
+If a job fails, you can inspect its specific index:
+
+```bash
+# Check the failed job's index
+curl -X GET "http://<es_ip>:9200/a3f4e2c1_28Mar26_14_59_01/_count?pretty"
+
+# View documents in the failed job's index
+curl -X POST "http://<es_ip>:9200/a3f4e2c1_28Mar26_14_59_01/_search?pretty&size=10"
+```
+
+### Automated Cleanup for Stale Indices
+
+Timestamp in index name enables easy cleanup:
+
+```bash
+# Find indices older than 72 hours
+curl -s "http://<es_ip>:9200/_cat/indices?h=index" | \
+  grep -P '^[a-f0-9]{8}_\d{2}[A-Z][a-z]{2}\d{2}_\d{2}_\d{2}_\d{2}$' > /tmp/indices.txt
+
+while read index_name; do
+  # Extract date part from index name: <uuid>_<date>
+  date_part=$(echo $index_name | cut -d'_' -f2)
+  
+  # Parse the date: DDMMMYY_HH_MM_SS (e.g., 28Mar26_14_59_01)
+  if [[ $date_part =~ ^([0-9]{2})([A-Z][a-z]{2})([0-9]{2})_([0-9]{2})_([0-9]{2})_([0-9]{2})$ ]]; then
+    day=${BASH_REMATCH[1]}
+    month_name=${BASH_REMATCH[2]}
+    year=${BASH_REMATCH[3]}
+    hour=${BASH_REMATCH[4]}
+    minute=${BASH_REMATCH[5]}
+    second=${BASH_REMATCH[6]}
+    
+    # Convert month name to number (Jan=1, Feb=2, ..., Dec=12)
+    declare -A months=(["Jan"]=01 ["Feb"]=02 ["Mar"]=03 ["Apr"]=04 ["May"]=05 ["Jun"]=06 
+                       ["Jul"]=07 ["Aug"]=08 ["Sep"]=09 ["Oct"]=10 ["Nov"]=11 ["Dec"]=12)
+    month=${months[$month_name]}
+    
+    # Create timestamp from parsed date (assume year 2000+ for YY)
+    full_year="20${year}"
+    index_ts=$(date -d "${full_year}-${month}-${day} ${hour}:${minute}:${second}" +%s 2>/dev/null || echo "0")
+    CURRENT_TIME=$(date +%s)
+    age_hours=$(( ($CURRENT_TIME - $index_ts) / 3600 ))
+    
+    if [ $age_hours -gt $MAX_AGE_DAYS ]; then
+      echo "Deleting old index: $index_name (age: ${age_hours}h)"
+      curl -s -X DELETE "http://${ES_HOST}:${ES_PORT}/$index_name"
+    fi
+  fi
+done < /tmp/indices.txt
+```
 
 ```python
 # Test code
 fts_callable = FTSCallable(nodes=servers, es_validate=True)
-fts_callable.load_data(10000)  # Load 10K docs
+# Generates unique index name: f"{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%d%b%y_%H_%M_%S')}"
+# Example: "a3f4e2c1_28Mar26_14_59_01"
+fts_callable.load_data(10000)  # Load 10K docs into both CB and ES
 fts_callable.wait_for_indexing_complete()
 fts_callable.run_query_and_compare(index=ft, num_queries=20)
 
 # What happens:
 # 1. ES connection initialized: http://172.23.219.184:9200/
-# 2. 10K documents loaded in parallel:
+# 2. Unique index generated: "a3f4e2c1_28Mar26_14_59_01"
+# 3. 10K documents loaded in parallel:
 #    - CB: KV operations
-#    - ES: POST /es_index/_bulk (JSON documents)
-# 3. 20 random queries generated:
-#    - Query 1: {"match": {"name": "John"}}
-#    - Query 2: {"bool": {"must": [{"match": {"dept": "Engineering"}}]}}
-#    - ...
-# 4. For each query:
-#    - Run on CB FTS: POST /_fts/api/index/{name}/_search
-#    - Run on ES: POST /es_index/_search
-#    - Compare result doc_id sets
-#    - Report pass/fail
+#    - ES: POST /a3f4e2c1_28Mar26_14_59_01/_bulk (JSON documents)
+# 4. 20 random queries generated and compared
+# 5. Cleanup: DELETE /a3f4e2c1_28Mar26_14_59_01
+```
+# 4. 20 random queries generated and compared
+# 5. Cleanup: DELETE /a3f4e2c1_28Mar26_14_59_01
 ```
 
 ## Test Files Using Elasticsearch
