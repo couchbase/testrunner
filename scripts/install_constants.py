@@ -14,6 +14,7 @@ USAGE = """\
              timeout=600                                    End install after timeout seconds
              storage_mode=plasma                            Sets indexer storage mode
              enable_ipv6=False                              Enable ipv6 mode in ns_server
+             force_reinstall=True                           Force full reinstall (True=default, False=enable optimization for nodes with matching version)
 
             Examples:
              new_install.py -i /tmp/test.ini -p install_tasks=uninstall,debug_logs=true

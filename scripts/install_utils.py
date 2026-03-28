@@ -92,8 +92,12 @@ class NodeHelper:
         # Create local context to ease the installation in per node basis
         self.cb_version = node.cb_version
         self.profile = node.profile
-        # If None, then assume default for that profile basis (Unused for now)
-        self.install_tasks = None
+        # Initialize install_tasks from global params (per-node basis)
+        self.install_tasks = params["install_tasks"].copy()
+        # Store params on node for reference (doesn't drive process, just metadata)
+        self.version = node.cb_version or params["version"]
+        self.url = params["url"]
+        self.force_reinstall = params["force_reinstall"]
 
     def check_node_reachable(self):
         start_time = time.time()
@@ -554,20 +558,90 @@ def check_if_version_already_installed(server, install_version, cb_edition,
                                        cluster_profile):
     if cluster_profile is None:
         cluster_profile = "default"
+
+    # Normalize edition comparison:
+    # Target edition may be "couchbase-server-enterprise" but existing edition from pools is "enterprise"
+    # Extract the core edition name by removing the "couchbase-server-" prefix if present
+    def normalize_edition(edition):
+        if '-' in edition:
+            # For "couchbase-server-enterprise", return the last part
+            # For "enterprise-analytics", return the last part
+            parts = edition.split('-')
+            # The core edition is typically the last part for these formats
+            # e.g., "couchbase-server-enterprise" -> "enterprise"
+            # e.g., "enterprise-analytics" -> "analytics"
+            # But we want to match just the base edition: "enterprise" or "community"
+            if 'enterprise' in edition and 'analytics' not in edition.lower():
+                return 'enterprise'
+            elif 'community' in edition:
+                return 'community'
+            elif 'analytics' in edition.lower():
+                return 'analytics'
+        return edition
+
     try:
-        pools_info = RestConnection(server,
-                                    check_connectivity=False).get_pools_info()
+        pools_info = RestConnection(
+            server, check_connectivity=True,
+            max_retry_count=2, conn_timeout=5).get_pools_info()
         existing_ver, existing_build_num, existing_edition = pools_info[
             "implementationVersion"].split("-")
+
+        log.info("Checking version on {0}".format(server.ip))
+        log.info("  Target version: {0}, edition: {1}, profile: {2}".format(install_version, cb_edition, cluster_profile))
+        log.info("  Existing version: {0}-{1}, edition: {2}, profile: {3}".format(existing_ver, existing_build_num, existing_edition, pools_info.get("configProfile", "N/A")))
+
+        # Normalize edition names for comparison
+        normalized_cb_edition = normalize_edition(cb_edition)
+        normalized_existing_edition = normalize_edition(existing_edition)
+
+        log.info("  Normalized target edition: {0}, existing edition: {1}".format(normalized_cb_edition, normalized_existing_edition))
+
         if "%s-%s" % (existing_ver, existing_build_num) == install_version \
-                and cb_edition == existing_edition:
+                and normalized_cb_edition == normalized_existing_edition:
             if float(existing_ver[:3]) >= 7.5:
                 if cluster_profile != pools_info["configProfile"]:
+                    log.info("  Version/edition match but configProfile mismatch (cluster: {0}, pools: {1})".format(cluster_profile, pools_info["configProfile"]))
                     return False
+            log.info("  Version match! Returning True")
             return True
-    except Exception:
-        pass
+        log.info("  Version/edition mismatch, returning False")
+    except Exception as e:
+        log.warning("Exception during version check on {0}: {1}".format(server.ip, e))
     return False
+
+
+def reset_node_state_to_presetup(node_helper):
+    """
+    Reset node state to pre-init state when version is already installed.
+    This handles cases where nodes are stuck in weird state and need cleanup
+    before running init task.
+
+    Workflow:
+    1. pkill -9 memcached to force kill any stuck memcached processes
+    2. Sleep 5 seconds
+    3. Call reset_node() via REST API to reset node to pre-init state
+    """
+    try:
+        log.info("Resetting node state on {0} to pre-init state...".format(node_helper.ip))
+
+        # Step 1: Force kill memcached processes
+        shell = node_helper.shell
+        log.info("  Force killing memcached processes on {0}".format(node_helper.ip))
+        shell.execute_command("pkill -9 $(pidof memcached) 2>/dev/null || true")
+
+        # Step 2: Sleep for 5 seconds
+        log.info("  Waiting 5 seconds after memcached kill...")
+        time.sleep(5)
+
+        # Step 3: Call reset_node() to reset to pre-init state
+        log.info("  Calling reset_node() REST API on {0}".format(node_helper.ip))
+        rest = RestConnection(node_helper.node)
+        rest.reset_node()
+
+        log.info("Node state reset successfully on {0}".format(node_helper.ip))
+    except Exception as e:
+        log.warning("Exception during node state reset on {0}: {1}".format(node_helper.ip, e))
+        # Continue even if reset fails - init task will handle it
 
 
 def reinit_node(server):
@@ -820,6 +894,10 @@ def pre_install_steps_columnar(node_helpers):
             # Continue if not columnar for this node
             continue
 
+        # Only process this node if it needs download_build or install
+        if "download_build" not in node.install_tasks and "install" not in node.install_tasks:
+            continue
+
         build_binary = __get_columnar_build_binary_name(node, is_release_build)
         debug_binary = __get_columnar_debug_binary_name(node, is_release_build) if \
             install_debug_info else None
@@ -848,30 +926,40 @@ def pre_install_steps(node_helpers):
     if not node_helpers:
         return
 
-    if "tools" in params["install_tasks"]:
+    # Check if ANY node needs tools, and set up tools for those nodes
+    any_node_needs_tools = any("tools" in node.install_tasks for node in node_helpers)
+    if any_node_needs_tools:
         for node in node_helpers:
-            dev_tools_name = __get_dev_tools_package_name(node)
-            admin_tools_name = __get_admin_tools_package_name(node)
-            node.dev_tools_name = dev_tools_name
-            node.admin_tools_name = admin_tools_name
-            dev_tools_name_url = __get_tools_url(node, dev_tools_name)
-            node.dev_tools_name_url = dev_tools_name_url
-            admin_tools_name_url = __get_tools_url(node, admin_tools_name)
-            node.admin_tools_name_url = admin_tools_name_url
+            if "tools" in node.install_tasks:
+                dev_tools_name = __get_dev_tools_package_name(node)
+                admin_tools_name = __get_admin_tools_package_name(node)
+                node.dev_tools_name = dev_tools_name
+                node.admin_tools_name = admin_tools_name
+                dev_tools_name_url = __get_tools_url(node, dev_tools_name)
+                node.dev_tools_name_url = dev_tools_name_url
+                admin_tools_name_url = __get_tools_url(node, admin_tools_name)
+                node.admin_tools_name_url = admin_tools_name_url
 
-    if "download_build" in params["install_tasks"] or "install" in params["install_tasks"]:
+    # Check if ANY node needs download_build or install, and set up builds for those nodes
+    any_node_needs_download_or_install = any(
+        "download_build" in node.install_tasks or "install" in node.install_tasks
+        for node in node_helpers
+    )
+
+    if any_node_needs_download_or_install:
         if params["url"] is not None:
             if node_helpers[0].shell.is_url_live(params["url"]):
                 params["all_nodes_same_os"] = True
                 for node in node_helpers:
-                    if params["columnar"] or node.profile in ["columnar", "analytics"]:
-                        build_binary = __get_columnar_build_binary_name(node)
-                    else:
-                        build_binary = __get_build_binary_name(node)
-                    build_url = params["url"]
-                    filepath = __get_download_dir(node) + build_binary
-                    node.build = build(build_binary, build_url, filepath,
-                                       version=node.cb_version)
+                    if "download_build" in node.install_tasks or "install" in node.install_tasks:
+                        if params["columnar"] or node.profile in ["columnar", "analytics"]:
+                            build_binary = __get_columnar_build_binary_name(node)
+                        else:
+                            build_binary = __get_build_binary_name(node)
+                        build_url = params["url"]
+                        filepath = __get_download_dir(node) + build_binary
+                        node.build = build(build_binary, build_url, filepath,
+                                           version=node.cb_version)
             else:
                 print_result_and_exit(
                     "URL {0} is not live. Exiting.".format(params["url"]))
@@ -879,33 +967,34 @@ def pre_install_steps(node_helpers):
             pre_install_steps_columnar(node_helpers)
             install_debug_info = params["install_debug_info"]
             for node in node_helpers:
-                if params["columnar"] or node.profile in ["columnar", "analytics"]:
-                    # Continue if columnar for this node
-                    continue
-                is_release_build = check_for_release_or_latest_build(node)
-                build_binary = __get_build_binary_name(node, is_release_build)
-                debug_binary = __get_debug_binary_name(node, is_release_build) if \
-                    install_debug_info else None
-                build_url = __get_build_url(node, build_binary)
-                debug_url = __get_build_url(node, debug_binary) if \
-                    install_debug_info else None
-                debug_build_present = install_debug_info
-                if not build_url:
-                    print_result_and_exit(
-                        "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
-                if not debug_url and install_debug_info:
-                    print("Debug info build not present. Debug info "
-                          "build will not be installed for this run.")
-                    debug_build_present = False
-                filepath = __get_download_dir(node) + build_binary
-                filepath_debug = __get_download_dir(node) + \
-                                 debug_binary if debug_binary else None
-                node.build = build(build_binary, build_url, filepath,
-                                   version=node.cb_version,
-                                   debug_build_present=debug_build_present,
-                                   debug_name=debug_binary,
-                                   debug_url=debug_url,
-                                   debug_path=filepath_debug)
+                if "download_build" in node.install_tasks or "install" in node.install_tasks:
+                    if params["columnar"] or node.profile in ["columnar", "analytics"]:
+                        # Continue if columnar for this node (handled by pre_install_steps_columnar)
+                        continue
+                    is_release_build = check_for_release_or_latest_build(node)
+                    build_binary = __get_build_binary_name(node, is_release_build)
+                    debug_binary = __get_debug_binary_name(node, is_release_build) if \
+                        install_debug_info else None
+                    build_url = __get_build_url(node, build_binary)
+                    debug_url = __get_build_url(node, debug_binary) if \
+                        install_debug_info else None
+                    debug_build_present = install_debug_info
+                    if not build_url:
+                        print_result_and_exit(
+                            "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
+                    if not debug_url and install_debug_info:
+                        print("Debug info build not present. Debug info "
+                              "build will not be installed for this run.")
+                        debug_build_present = False
+                    filepath = __get_download_dir(node) + build_binary
+                    filepath_debug = __get_download_dir(node) + \
+                                     debug_binary if debug_binary else None
+                    node.build = build(build_binary, build_url, filepath,
+                                       version=node.cb_version,
+                                       debug_build_present=debug_build_present,
+                                       debug_name=debug_binary,
+                                       debug_url=debug_url,
+                                       debug_path=filepath_debug)
 
 def check_for_release_or_latest_build(node):
     version = node.cb_version or params["version"]
@@ -1025,17 +1114,25 @@ def download_build(node_helpers):
     if not node_helpers:
         return
 
-    log.debug("Downloading the builds now")
+    # Filter out nodes that don't need a build (node.build is None)
+    # This happens when force_reinstall=False and node already has matching version
+    nodes_needing_build = [node for node in node_helpers if node.build is not None]
+
+    if not nodes_needing_build:
+        log.info("No nodes need build download (all nodes have matching version with force_reinstall=False)")
+        return
+
+    log.debug("Downloading the builds now for {0} nodes that need a build".format(len(nodes_needing_build)))
     all_nodes_same_version = len(set([node.build.url
-                                      for node in NodeHelpers])) == 1
+                                      for node in nodes_needing_build])) == 1
     if params["all_nodes_same_os"] and all_nodes_same_version \
             and not params["skip_local_download"]:
-        check_and_retry_download_binary_local(NodeHelpers[0])
-        _copy_to_nodes(node_helpers, debug=False)
-        if NodeHelpers[0].build.debug_build_present:
-            _copy_to_nodes(node_helpers, debug=True)
+        check_and_retry_download_binary_local(nodes_needing_build[0])
+        _copy_to_nodes(nodes_needing_build, debug=False)
+        if nodes_needing_build[0].build.debug_build_present:
+            _copy_to_nodes(nodes_needing_build, debug=True)
         ok = True
-        for node_helper in node_helpers:
+        for node_helper in nodes_needing_build:
             if not check_file_exists(node_helper, node_helper.build.path) \
                     or not check_file_size(node_helper):
                 node_helper.install_success = False
@@ -1044,7 +1141,7 @@ def download_build(node_helpers):
                           .format(node_helper.ip, node_helper.build.path))
         if not ok:
             print_result_and_exit()
-        for node_helper in node_helpers:
+        for node_helper in nodes_needing_build:
             if node_helper.build.debug_build_present:
                 if not check_file_exists(node_helper,
                                          node_helper.build.debug_path) \
@@ -1057,7 +1154,7 @@ def download_build(node_helpers):
         if not ok:
             print_result_and_exit()
     else:
-        for node_helper in node_helpers:
+        for node_helper in nodes_needing_build:
             build_url = node_helper.build.url
             filepath = node_helper.build.path
             debug_url = node_helper.build.debug_url if \

@@ -29,6 +29,27 @@ def node_installer(node, install_tasks):
             install_tasks.task_done()
 
 
+def version_check_worker(node_helper, version_check_params):
+    """Worker function to check version and reset node state for a single node."""
+    try:
+        install_version = node_helper.cb_version or version_check_params["version"]
+        cb_edition = version_check_params["cb_edition"]
+        cluster_profile = version_check_params.get("cluster_profile", None)
+        is_installed = install_utils.check_if_version_already_installed(
+            node_helper.node, install_version, cb_edition, cluster_profile
+        )
+        if is_installed:
+            log.info("Version already installed on {0}. Skipping download, uninstall, install tasks for this node.".format(node_helper.ip))
+            # Reset node state to pre-init before running init task
+            install_utils.reset_node_state_to_presetup(node_helper)
+            # Remove tasks that are not needed when version is already installed on this node
+            for task_to_remove in ["download_build", "uninstall", "install"]:
+                if task_to_remove in node_helper.install_tasks:
+                    node_helper.install_tasks.remove(task_to_remove)
+    except Exception as e:
+        log.error("Error during version check on {0}: {1}".format(node_helper.ip, e))
+
+
 def on_install_error(install_task, node, e):
     node.queue.empty()
     log.error("Error {0}:{1} occurred on {2} during {3}".format(repr(e), e, node.ip, install_task))
@@ -194,32 +215,43 @@ def do_install(params, install_tasks):
             if time.time() >= force_stop:
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(params["timeout"]))
                 break
-    if "init" in params["install_tasks"]:
+
+    # Check if ANY node needs init
+    any_node_needs_init = any("init" in node.install_tasks for node in install_utils.NodeHelpers)
+    if any_node_needs_init:
         if params.get("init_clusters", False) and len(params["clusters"]) > 0:
             timeout = force_stop - time.time()
             install_utils.init_clusters(timeout)
 
     # Common validate for both regular and columnar install (useful in mixed profiles)
     log.info("-" * 100)
-    if "install" in params["install_tasks"] or "init" in params["install_tasks"]:
+    # Check if ANY node needs install or init
+    any_node_needs_install_or_init = any(
+        "install" in node.install_tasks or "init" in node.install_tasks
+        for node in install_utils.NodeHelpers
+    )
+    if any_node_needs_install_or_init:
         validate_install(params)
         validate_columnar_install(params)
     install_utils.print_result_and_exit()
 
 
-def do_uninstall(params, node_helpers):
+def do_uninstall(params, install_tasks):
     # Per node, spawn one thread, which will process a queue of
-    # uninstall tasks
-    for node_helper in node_helpers:
+    # uninstall tasks (same pattern as do_install for consistency)
+    for server, tasks in install_tasks.items():
+        node_helper = install_utils.get_node_helper(server.ip)
         q = queue.Queue()
-        q.put('uninstall')
+        for task_to_add in tasks:
+            if task_to_add == 'uninstall':
+                q.put(task_to_add)
         t = threading.Thread(target=node_installer, args=(node_helper, q))
         t.daemon = True
         t.start()
         node_helper.queue = q
         node_helper.thread = t
     force_stop = start_time + params["timeout"]
-    for node_helper in node_helpers:
+    for node_helper in install_utils.NodeHelpers:
         try:
             while node_helper.queue.unfinished_tasks and time.time() < \
                     force_stop:
@@ -244,20 +276,54 @@ def main():
         node_helpers_to_install.append(
             install_utils.get_node_helper(server.ip))
 
+    # Check if target version is already installed on each node individually
+    # This allows per-node installation customization (some nodes may already have the version)
+    # Only run this check if force_reinstall is False (default: True/full reinstall)
+    if not params["force_reinstall"]:
+        log.info("Checking if version is already installed on each node to optimize installation...")
+        # Spawn threads for parallel version checking and node state reset
+        version_check_threads = []
+        for node_helper in node_helpers_to_install:
+            t = threading.Thread(target=version_check_worker, args=(node_helper, params))
+            t.daemon = True
+            t.start()
+            version_check_threads.append(t)
+        # Wait for all version check threads to complete
+        for t in version_check_threads:
+            t.join()
+    else:
+        log.info("Skipping version check (force_reinstall=True). All nodes will follow the full installation process.")
+
     install_utils.pre_install_steps(node_helpers_to_install)
-    if 'uninstall' in params['install_tasks']:
-        # Do uninstallation of products first before downloading the
-        # builds.
-        do_uninstall(params, node_helpers_to_install)
+
+    # Build install_tasks dict from individual node_helper install_tasks
+    for node_helper in node_helpers_to_install:
+        # Make a copy to avoid modifying node_helper.install_tasks
+        install_tasks[node_helper.node] = list(node_helper.install_tasks)
+
+    # Check if ANY node needs uninstall
+    any_node_needs_uninstall = any("uninstall" in node.install_tasks for node in node_helpers_to_install)
+    if any_node_needs_uninstall:
+        # Do uninstallation of products first before downloading the builds.
+        do_uninstall(params, install_tasks)
 
     for server, install_task in install_tasks.items():
         if 'uninstall' in install_task:
             install_task.remove('uninstall')
 
-    if 'install' in params['install_tasks'] or "download_build" in params['install_tasks']:
+    # Check if ANY node needs install or download_build
+    any_node_needs_install_or_download = any(
+        "install" in node.install_tasks or "download_build" in node.install_tasks
+        for node in node_helpers_to_install
+    )
+    if any_node_needs_install_or_download:
         install_utils.download_build(node_helpers_to_install)
-    if 'tools' in params['install_tasks']:
+
+    # Check if ANY node needs tools
+    any_node_needs_tools = any("tools" in node.install_tasks for node in node_helpers_to_install)
+    if any_node_needs_tools:
         install_utils.install_tools(node_helpers_to_install)
+
     do_install(params, install_tasks)
 
 
