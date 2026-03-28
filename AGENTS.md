@@ -96,6 +96,7 @@ Before completing changes:
 - `docs/agent-context/build-test-matrix.md` -- exact validation commands per service
 - `docs/agent-context/domain-glossary.md` -- Couchbase services, test types, terminology
 - `docs/agent-context/troubleshooting.md` -- common cluster_run and test execution failures
+- `doc/tools/AGENTS.md` -- dispatcher SDK tools and installer index (task routing for agents)
 
 ## Submodule Orchestration Logic
 
