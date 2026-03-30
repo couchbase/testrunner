@@ -116,21 +116,28 @@ es_password=      # optional, if ES requires authentication
 
 ## How Tests Use Elasticsearch
 
-### Test Workflow
+### Test Workflow (Parallel Job Support)
 
 ```
-1. FTSCallable.__init__(es_validate=True)
+1. FTSCallable.__init__(es_validate=True) OR FTSBaseTest.setUp()
    └─> Reads [elastic] from INI file
    └─> HTTP connection test (is_running())
-   └─> DELETE es_index (cleanup)
-   └─> PUT es_index with BLEVE.STD_ANALYZER settings
+   └─> Generate unique ES index name per job (shared across all tests):
+        Format: {uuid_short}_{ddmmmyy_hh_mm_ss}
+        Example: "a3f4e2c1_28mar26_14_59_01"
+        Implementation: class-level FTSBaseTest.es_index_name
+        └─> FTSBaseTest.setUp() checks if cls.es_index_name is None
+        └─> If None: generates and stores as class attribute (lowercased for ES compliance)
+        └─> If exists: reuses (subsequent tests in same job)
+   └─> DELETE {index_name} (cleanup)
+   └─> PUT {index_name} with BLEVE.STD_ANALYZER settings
    └─> enable_scroll(max_result_window: 1000000)
 
 2. load_data()  # Called by test
    └─> Generate documents (e.g., "emp" template: name, email, dept, address)
    └─> Parallel load to both Couchbase and ES
-   └─> ES: async_bulk_load_ES(index='es_index')
-        └─> POST /es_index/_bulk (1000-10000 documents)
+   └─> ES: async_bulk_load_ES(index=FTSBaseTest.es_index_name)
+        └─> POST /{index_name}/_bulk (1000-10000 documents)
 
 3. wait_for_indexing_complete()
    └─> Poll CB index count
@@ -151,12 +158,103 @@ es_password=      # optional, if ES requires authentication
 
 6. Cleanup (delete_all())
    └─> DELETE all CB indices
-   └─> DELETE es_index
+   └─> DELETE FTSBaseTest.es_index_name
+
+Job Execution Model:
+- Job-A, Test-1: FTSBaseTest.es_index_name = "a3f4e2c1_28mar26_10_00_01"
+- Job-A, Test-2: Uses same FTSBaseTest.es_index_name = "a3f4e2c1_28mar26_10_00_01"
+- Job-B (parallel), Test-1: FTSBaseTest.es_index_name = "b8d5f9e3_28mar26_10_01_02"
+- Job-B, Test-2: Uses same FTSBaseTest.es_index_name = "b8d5f9e3_28mar26_10_01_02"
+
+FTSCallable Mode:
+- FTSCallable(nodes, es_validate=True) → generates its own unique es_index_name (lowercased)
+- FTSCallable(nodes, es_validate=True, es_index_name="custom") → uses provided name
+- FTSCallable can share name with FTSBaseTest: FTSCallable(..., es_index_name=FTSBaseTest.es_index_name)
+```
+
+### Unique Index Naming (Job-Level)
+
+**Index Name Format:** `{uuid_short}_{ddmmmyy_hh_mm_ss}`
+
+**Examples:**
+- `a3f4e2c1_28mar26_14_59_01`
+- `b8d5f9e3_28mar26_15_02_23`
+- `c7e4a8d2_28mar26_16_05_47`
+
+**Components:**
+- `uuid_short`: First 8 chars of UUID4 for uniqueness across jobs
+- `ddmmmyy_hh_mm_ss`: Human-readable timestamp for cleanup tracking (day, 3-char lowercase month name, 2-digit year, hour, minute, second)
+- **Note:** Elasticsearch requires all index names to be lowercase. The generation method automatically applies `.lower()` to ensure compliance.
+
+**Purpose:** 
+- **Job-Level Sharing**: Each parallel job generates a unique ES index name
+- **Code-Reuse Isolation**: Tests within the same job share the same index unless explicitly customized
+- **Conflict Prevention**: Different automated jobs running simultaneously on the same ES cluster don't conflict
+
+**Implementation:**
+
+```python
+# In FTSBaseTest (pytests/fts/fts_base.py)
+class FTSBaseTest(unittest.TestCase):
+    es_index_name = None  # Class-level attribute
+    
+    def setUp(self):
+        if self.compare_es:
+            # Generate unique ES index name per job (shared across all tests in job)
+            if FTSBaseTest.es_index_name is None:
+                timestamp = datetime.datetime.now().strftime("%d%b%y_%H_%M_%S")
+                FTSBaseTest.es_index_name = f"{uuid.uuid4().hex[:8]}_{timestamp}".lower()
+                self.log.info(f"Job-level unique ES index generated: {FTSBaseTest.es_index_name}")
+            else:
+                self.log.info(f"Using existing job-level ES index: {FTSBaseTest.es_index_name}")
+```
+
+**Usage Patterns:**
+
+1. **FTSBaseTest-based Tests** (Primary):
+```python
+# Job-A, Test-1 setUp: generates FTSBaseTest.es_index_name = "a3f4e2c1_28mar26_10_00_01"
+# Job-A, Test-2 setUp: reuses FTSBaseTest.es_index_name
+# Job-A, Test-3 setUp: reuses FTSBaseTest.es_index_name
+```
+
+2. **FTSCallable Standalone** (Separate process):
+```python
+# Always generates unique name unless es_index_name is passed
+fts = FTSCallable(nodes, es_validate=True)
+# Generates: "b8d5f9e3_28mar26_10_01_02"
+```
+
+3. **FTSCallable Shared with FTSBaseTest** (Same job):
+```python
+# In a test that uses both FTSBaseTest and FTSCallable:
+# FTSBaseTest.setUp() generates: "a3f4e2c1_28mar26_10_00_01"
+# Pass the same name to FTSCallable:
+fts = FTSCallable(nodes, es_validate=True, es_index_name=FTSBaseTest.es_index_name)
+# Now both use same ES index: "a3f4e2c1_28mar26_10_00_01"
 ```
 
 ### ES Index Settings Used
 
-**Index Name:** Always `es_index` (hardcoded in FTSCallable)
+**Unique Index Naming - All ES Resources:**
+
+All ES resources now use unique names to enable safe concurrent test execution on shared ES clusters. Names are derived from `FTSBaseTest.get_es_index_name()` which generates a job-level unique identifier.
+
+**Primary Index Name:** `{UUID_short}_{DDMMMYY_HH_MM_SS}`
+
+**Additional ES Resources:**
+- Multi-bucket indexes: `{bucket}_es_index_{UUID_short}_{DDMMMYY_HH_MM_SS}`
+- ES aliases: `{name}_es_alias_{UUID_short}_{DDMMMYY_HH_MM_SS}`
+- Ingest pipelines: `polygonize_{UUID_short}_{DDMMMYY_HH_MM_SS}`
+
+**Examples:**
+- Main index: `a3f4e2c1_28mar26_14_59_01`
+- Emp bucket index: `emp_es_index_a3f4e2c1_28mar26_14_59_01`
+- Wiki bucket index: `wiki_es_index_a3f4e2c1_28mar26_14_59_01`
+- Multi-bucket alias: `emp_wiki_es_alias_a3f4e2c1_28apr26_10_30_45`
+- Ingest pipeline: `polygonize_a3f4e2c1_28mar26_14_59_01`
+
+**Directive:** Use unique index names (e.g., with test ID suffix) to avoid conflicts when multiple tests run concurrently on the same ES cluster.
 
 **Analyzer Configuration:** BLEVE.STD_ANALYZER
 
@@ -196,37 +294,112 @@ es_password=      # optional, if ES requires authentication
 | Operation | HTTP Method | Endpoint | Purpose |
 |-----------|-------------|----------|---------|
 | **Health Check** | GET | `/{host}:9200/` | Verify ES is running |
-| **Create Index** | PUT | `/{host}:9200/es_index` | Create with custom analyzer |
-| **Delete Index** | DELETE | `/{host}:9200/es_index` | Cleanup before test |
-| **Bulk Load** | POST | `/{host}:9200/es_index/_bulk` | Load 1000-10000+ documents |
-| **Search** | POST | `/{host}:9200/es_index/_search?size=1000000` | Run full-text queries |
-| **Get Count** | GET | `/{host}:9200/es_index/_count` | Verify document count |
-| **Refresh Index** | POST | `/{host}:9200/es_index/_refresh` | Force refresh after updates |
-| **Scroll Settings** | PUT | `/{host}:9200/es_index/_settings` | Increase max_result_window |
+| **Create Index** | PUT | `/{host}:9200/{uuid_short}_{ddmmmyy_hh_mm_ss}` | Create with custom analyzer (unique per job, lowercased) |
+| **Create Multi-Bucket Index** | PUT | `/{host}:9200/{bucket}_es_index_{uuid_short}_{ddmmmyy_hh_mm_ss}` | For multi-bucket tests |
+| **Delete Index** | DELETE | `/{host}:9200/{name}` | Cleanup any ES resource |
+| **Bulk Load** | POST | `/{host}:9200/{name}/_bulk` | Load 1000-10000+ documents |
+| **Search** | POST | `/{host}:9200/{name}/_search?size=1000000` | Run full-text queries |
+| **Get Count** | GET | `/{host}:9200/{name}/_count` | Verify document count |
+| **Refresh Index** | POST | `/{host}:9200/{name}/_refresh` | Force refresh after updates |
+| **Create Alias** | POST | `/{host}:9200/_alias/{name}_es_alias_{uuid_short}_{ddmmmyy_hh_mm_ss}` | Create ES alias |
+| **Create Ingest Pipeline** | PUT | `/{host}:9200/_ingest/pipeline/polygonize_{uuid_short}_{ddmmmyy_hh_mm_ss}` | Create geo pipeline |
+| **Scroll Settings** | PUT | `/{host}:9200/{name}/_settings` | Increase max_result_window |
 
-### Data Flow Example
+**Note:** `{name}` represents any ES resource name (main index, multi-bucket index, alias).
 
-```python
-# Test code
-fts_callable = FTSCallable(nodes=servers, es_validate=True)
-fts_callable.load_data(10000)  # Load 10K docs
-fts_callable.wait_for_indexing_complete()
-fts_callable.run_query_and_compare(index=ft, num_queries=20)
+### Benefits of Unique Index Naming
 
-# What happens:
-# 1. ES connection initialized: http://172.23.219.184:9200/
-# 2. 10K documents loaded in parallel:
-#    - CB: KV operations
-#    - ES: POST /es_index/_bulk (JSON documents)
-# 3. 20 random queries generated:
-#    - Query 1: {"match": {"name": "John"}}
-#    - Query 2: {"bool": {"must": [{"match": {"dept": "Engineering"}}]}}
-#    - ...
-# 4. For each query:
-#    - Run on CB FTS: POST /_fts/api/index/{name}/_search
-#    - Run on ES: POST /es_index/_search
-#    - Compare result doc_id sets
-#    - Report pass/fail
+### Parallel Job Execution
+
+Multiple test jobs can now run simultaneously on the same ES cluster:
+
+```bash
+# Job 1, Job 2, Job 3 running in parallel on same ES cluster
+Job 1 → Index: a3f4e2c1_28mar26_14_59_01
+Job 2 → Index: b8d5f9e3_28mar26_15_02_23
+Job 3 → Index: c7e4a8d2_28mar26_16_05_47
+
+# No conflicts - each job has its own isolated index
+```
+
+### Failed Job Debugging
+
+If a job fails, you can inspect its specific index:
+
+```bash
+# Check the failed job's index
+curl -X GET "http://<es_ip>:9200/a3f4e2c1_28mar26_14_59_01/_count?pretty"
+
+# View documents in the failed job's index
+curl -X POST "http://<es_ip>:9200/a3f4e2c1_28mar26_14_59_01/_search?pretty&size=10"
+```
+
+### Automated Cleanup for Stale Indices
+
+Timestamp in index name enables easy cleanup:
+
+```bash
+# Find indices older than 72 hours
+curl -s "http://<es_ip>:9200/_cat/indices?h=index" | \
+  grep -P '^[a-f0-9]{8}_\d{2}[a-z]{3}\d{2}_\d{2}_\d{2}_\d{2}$' > /tmp/indices.txt
+
+while read index_name; do
+  # Extract date part from index name: <uuid>_<date>
+  date_part=$(echo $index_name | cut -d'_' -f2)
+  
+  # Parse the date: ddmmmyy_hh_mm_ss (e.g., 28mar26_14_59_01) - lowercase for ES compliance
+  if [[ $date_part =~ ^([0-9]{2})([A-Z][a-z]{2})([0-9]{2})_([0-9]{2})_([0-9]{2})_([0-9]{2})$ ]]; then
+    day=${BASH_REMATCH[1]}
+    month_name=${BASH_REMATCH[2]}
+    year=${BASH_REMATCH[3]}
+    hour=${BASH_REMATCH[4]}
+    minute=${BASH_REMATCH[5]}
+    second=${BASH_REMATCH[6]}
+    
+    # Convert month name to number (Jan=1, Feb=2, ..., Dec=12)
+    declare -A months=(["Jan"]=01 ["Feb"]=02 ["Mar"]=03 ["Apr"]=04 ["May"]=05 ["Jun"]=06 
+                       ["Jul"]=07 ["Aug"]=08 ["Sep"]=09 ["Oct"]=10 ["Nov"]=11 ["Dec"]=12)
+    month=${months[$month_name]}
+
+    # Create timestamp from parsed date (assume year 2000+ for YY)
+    full_year="20${year}"
+    index_ts=$(date -d "${full_year}-${month}-${day} ${hour}:${minute}:${second}" +%s 2>/dev/null || echo "0")
+    CURRENT_TIME=$(date +%s)
+    age_hours=$(( ($CURRENT_TIME - $index_ts) / 3600 ))
+
+    if [ $age_hours -gt $MAX_AGE_DAYS ]; then
+      echo "Deleting old index: $index_name (age: ${age_hours}h)"
+      curl -s -X DELETE "http://${ES_HOST}:${ES_PORT}/$index_name"
+    fi
+  fi
+done < /tmp/indices.txt
+```
+
+**Cleanup Pattern for Multi-Bucket Tests:**
+```bash
+# Find and delete multi-bucket ES resources (indexes and aliases)
+curl -s "http://<es_ip>:9200/_cat/indices?h=index" | \
+  grep -P '^[a-z]+_es_index_[a-f0-9]{8}_\d{2}[a-z]{3}\d{2}_\d{2}_\d{2}_\d{2}$' | \
+  while read index_name; do
+    echo "Deleting multi-bucket ES resource: $index_name"
+    curl -s -X DELETE "http://${ES_HOST}:${ES_PORT}/$index_name"
+  done
+
+# Find and delete ES aliases
+curl -s "http://<es_ip>:9200/_cat/aliases?h=alias,index" | \
+  grep -P '^[a-z_]+_es_alias_[a-f0-9]{8}_\d{2}[a-z]{3}\d{2}_\d{2}_\d{2}_\d{2}' | \
+  while read alias_name; do
+    echo "Deleting ES alias: $alias_name (cleanup only, recreated per job)"
+    # Note: ES aliases don't need explicit deletion if index is deleted
+  done
+
+# Find and delete ingest pipelines
+curl -s "http://<es_ip>:9200/_ingest/pipeline" | \
+  grep -oP '"polygonize_[a-f0-9]{8}_\d{2}[a-z]{3}\d{2}_\d{2}_\d{2}_\d{2}' | \
+  while read pipeline_name; do
+    echo "Deleting ES ingest pipeline: $pipeline_name"
+    curl -s -X DELETE "http://${ES_HOST}:${ES_PORT}/_ingest/pipeline/$pipeline_name"
+  done
 ```
 
 ## Test Files Using Elasticsearch
@@ -378,16 +551,22 @@ port:9200
 
 **Debug steps:**
 ```bash
+# Find the running job's ES index (check test logs for index name)
+# Example index name from logs: "a3f4e2c1_28mar26_14_59_01"
+
 # Check ES index mapping
-curl -X GET "http://<es_ip>:9200/es_index/_mapping?pretty"
+curl -X GET "http://<es_ip>:9200/{es_index_name}/_mapping?pretty"
 
 # Check document count
-curl -X GET "http://<es_ip>:9200/es_index/_count?pretty"
+curl -X GET "http://<es_ip>:9200/{es_index_name}/_count?pretty"
 
 # Run a test query on ES
-curl -X POST "http://<es_ip>:9200/es_index/_search?pretty" \
+curl -X POST "http://<es_ip>:9200/{es_index_name}/_search?pretty" \
   -H 'Content-Type: application/json' \
   -d '{"query": {"match": {"name": "John"}}}'
+
+# For multi-bucket tests, check the specific bucket's index
+curl -X GET "http://<es_ip>:9200/{bucket}_es_index_{UUID}_{timestamp}/_count?pretty"
 ```
 
 ### Issue: Index count never stabilizes
@@ -440,13 +619,17 @@ export ES_JAVA_OPTS="-Xms8g -Xmx8g"
 | Configure cluster settings | ❌ NO | Uses default settings |
 | Add/remove ES nodes | ❌ NO | Assumes static node list |
 | Set up shards/replicas | ❌ NO | Uses ES defaults |
-| Create ES indices | ✅ YES | Within existing cluster (es_index only) |
-| Delete ES indices | ✅ YES | Cleanup operations (es_index only) |
+| Create ES indices | ✅ YES | Within existing cluster (unique per job) |
+| Create ES aliases | ✅ YES | Multi-bucket test support |
+| Create ingest pipelines | ✅ YES | Geo processing support |
+| Delete ES indices | ✅ YES | All ES resources cleanup |
+| Delete ES aliases | ✅ YES | Cleanup operations |
+| Delete ingest pipelines | ✅ YES | Cleanup operations |
 | Restart ES service | ✅ YES | Optional per-node restart (FTSBaseTest) |
 | Load data to ES | ✅ YES | Via HTTP bulk API |
 | Check ES health | ✅ YES | Health check only |
 
-**Bottom Line:** The test runner does **not** provision or manage ES clusters. It only manages **indices** within an existing, pre-configured ES cluster.
+**Bottom Line:** The test runner does **not** provision or manage ES clusters. It only manages **indices, aliases, and pipelines** within an existing, pre-configured ES cluster using unique job-level names for safe concurrent execution.
 
 ## Validation Commands
 
@@ -459,31 +642,48 @@ curl -X GET "http://<es_ip>:9200/_cluster/health?pretty"
 # Node info
 curl -X GET "http://<es_ip>:9200/_cat/nodes?v"
 
-# Index stats
+# List all indices (including test indices)
 curl -X GET "http://<es_ip>:9200/_cat/indices?v"
+
+# List all aliases (including multi-bucket test aliases)
+curl -X GET "http://<es_ip>:9200/_cat/aliases?v"
+
+# List all ingest pipelines (including geo processing pipelines)
+curl -X GET "http://<es_ip>:9200/_ingest/pipeline?pretty"
 ```
 
 ### Verify Test Index
 
 ```bash
-# Check es_index exists
-curl -X GET "http://<es_ip>:9200/es_index?pretty"
+# Check specific index exists (replace {es_index_name} with actual name from logs)
+curl -X GET "http://<es_ip>:9200/{es_index_name}?pretty"
 
 # Get document count
-curl -X GET "http://<es_ip>:9200/es_index/_count?pretty"
+curl -X GET "http://<es_ip>:9200/{es_index_name}/_count?pretty"
 
 # Get index mapping
-curl -X GET "http://<es_ip>:9200/es_index/_mapping?pretty"
+curl -X GET "http://<es_ip>:9200/{es_index_name}/_mapping?pretty"
 
 # Search all docs
-curl -X POST "http://<es_ip>:9200/es_index/_search?pretty&size=10"
+curl -X POST "http://<es_ip>:9200/{es_index_name}/_search?pretty&size=10"
+
+# For multi-bucket tests, check bucket-specific indices
+curl -X GET "http://<es_ip>:9200/{bucket}_es_index_{UUID}_{timestamp}?pretty"
+curl -X GET "http://<es_ip>:9200/{name}_es_alias_{UUID}_{timestamp}?pretty"
 ```
 
 ### Clean ES Index
 
 ```bash
-# Delete es_index
-curl -X DELETE "http://<es_ip>:9200/es_index"
+# Delete specific test index (replace with actual index name from logs)
+curl -X DELETE "http://<es_ip>:9200/{es_index_name}"
+
+# Delete all test indices matching the naming pattern
+curl -X DELETE "http://<es_ip>:9200/{bucket}_es_index_{UUID}_{timestamp}"
+curl -X DELETE "http://<es_ip>:9200/{name}_es_alias_{UUID}_{timestamp}"
+
+# Delete ingest pipeline
+curl -X DELETE "http://<es_ip>:9200/_ingest/pipeline/polygonize_{UUID}_{timestamp}"
 
 # Check if deleted
 curl -X GET "http://<es_ip>:9200/_cat/indices?v"

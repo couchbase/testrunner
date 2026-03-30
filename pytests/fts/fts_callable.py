@@ -1,8 +1,9 @@
 import logger
 import time
 import copy
-import json
-from .fts_base import FTSIndex, CouchbaseCluster
+import uuid
+from datetime import datetime
+from .fts_base import FTSIndex, CouchbaseCluster, FTSBaseTest
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from TestInput import TestInputSingleton
@@ -11,8 +12,6 @@ from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.membase.api.rest_client import RestConnection
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 from lib.Cb_constants.CBServer import CbServer
-from lib.collection.collections_cli_client import CollectionsCLI
-from scripts.java_sdk_setup import JavaSdkSetup
 import json
 from pathlib import Path
 from pytests.fts.vector_dataset_generator.vector_dataset_loader import GoVectorLoader, VectorLoader
@@ -52,6 +51,7 @@ class FTSCallable:
         self.elastic_node = TestInputSingleton.input.elastic
         self.compare_es = es_validate
         self.es = None
+        self.es_index_name = FTSBaseTest.get_es_index_name()
         self.is_elixir = is_elixir
         self._num_items = 10000
         self.query_types = ["match", "bool", "match_phrase",
@@ -65,12 +65,13 @@ class FTSCallable:
         if self.compare_es and not self.elastic_node:
             raise "For ES result validation, pls add elastic search node in the .ini file."
         elif self.compare_es:
+            self.log.info(f"Using ES index name: {self.es_index_name}")
             self.es = ElasticSearchBase(self.elastic_node, self.log)
             if es_reset:
-                self.es.delete_index("es_index")
-                self.es.create_empty_index_with_bleve_equivalent_std_analyzer("es_index")
-                self.log.info("Created empty index \'es_index\' on Elastic Search node with "
-                              "custom standard analyzer(default)")
+                self.log.info(f"Cleaning existing index: {self.es_index_name}")
+                self.es.delete_index(self.es_index_name)
+                self.es.create_empty_index_with_bleve_equivalent_std_analyzer(self.es_index_name)
+                self.log.info(f"Created ES index: {self.es_index_name} with BLEVE.STD_ANALYZER")
 
         self.cli_client = None
         self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
@@ -300,14 +301,14 @@ class FTSCallable:
                         if not complete_wait and bucket_doc_count > 0 and index_doc_count > 0:
                             break
                     else:
-                        self.es.update_index('es_index')
-                        es_index_count = self.es.get_index_count('es_index')
+                        self.es.update_index(self.es_index_name)
+                        es_index_count = self.es.get_index_count(self.es_index_name)
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                     " %s, docs in ES index: %s "
                                     % (bucket_doc_count,
-                                        index.name,
-                                        index_doc_count,
-                                        es_index_count))
+                                       index.name,
+                                       index_doc_count,
+                                       es_index_count))
                     if bucket_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
@@ -394,11 +395,11 @@ class FTSCallable:
                 gen = copy.deepcopy(self.create_gen)
                 if isinstance(gen, list):
                     for generator in gen:
-                        load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                        load_tasks.append(self.es.async_bulk_load_ES(index_name=self.es_index_name,
                                                                      gen=generator,
                                                                      op_type='create'))
                 else:
-                    load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                    load_tasks.append(self.es.async_bulk_load_ES(index_name=self.es_index_name,
                                                                  gen=gen,
                                                                  op_type='create'))
         load_tasks += self.cb_cluster.async_load_all_buckets_from_generator(
@@ -411,7 +412,9 @@ class FTSCallable:
         for task in self.async_load_data():
             task.result()
 
-    def run_query_and_compare(self, index, num_queries=20, es_index_name="es_index"):
+    def run_query_and_compare(self, index, num_queries=20, es_index_name=None):
+        if es_index_name is None and self.es_index_name:
+            es_index_name = self.es_index_name
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -472,12 +475,12 @@ class FTSCallable:
                         if isinstance(gen, list):
                             for generator in gen:
                                 load_tasks.append(self.es.async_bulk_load_ES(
-                                    index_name='es_index',
+                                    index_name=self.es_index_name,
                                     gen=generator,
                                     op_type="update"))
                         else:
                             load_tasks.append(self.es.async_bulk_load_ES(
-                                index_name='es_index',
+                                index_name=self.es_index_name,
                                 gen=gen,
                                 op_type="update"))
                     else:
@@ -485,12 +488,12 @@ class FTSCallable:
                         if isinstance(gen, list):
                             for generator in gen:
                                 load_tasks.append(self.es.async_bulk_load_ES(
-                                    index_name='es_index',
+                                    index_name=self.es_index_name,
                                     gen=generator,
                                     op_type="delete"))
                         else:
                             load_tasks.append(self.es.async_bulk_load_ES(
-                                index_name='es_index',
+                                index_name=self.es_index_name,
                                 gen=gen,
                                 op_type="delete"))
 
@@ -514,12 +517,12 @@ class FTSCallable:
                     if isinstance(del_gen, list):
                         for generator in del_gen:
                             load_tasks.append(self.es.async_bulk_load_ES(
-                                index_name='es_index',
+                                index_name=self.es_index_name,
                                 gen=generator,
                                 op_type="delete"))
                     else:
                         load_tasks.append(self.es.async_bulk_load_ES(
-                            index_name='es_index',
+                            index_name=self.es_index_name,
                             gen=del_gen,
                             op_type="delete"))
             load_tasks += self.cb_cluster.async_load_all_buckets_from_generator(
@@ -628,10 +631,10 @@ class FTSCallable:
 
     def create_es_index_mapping(self, es_mapping, fts_mapping=None):
         if not (self.num_custom_analyzers > 0):
-            self.es.create_index_mapping(index_name="es_index",
+            self.es.create_index_mapping(index_name=self.es_index_name,
                                          es_mapping=es_mapping, fts_mapping=None)
         else:
-            self.es.create_index_mapping(index_name="es_index",
+            self.es.create_index_mapping(index_name=self.es_index_name,
                                          es_mapping=es_mapping, fts_mapping=fts_mapping)
 
     def check_if_index_exists(self, index_name, bucket_name=None, scope_name=None, index_def=False, node_def=False):
@@ -753,7 +756,7 @@ class FTSCallable:
                 "enabled": True,
                 "dynamic": False,
                 "properties": vector_temp}
-        
+
         index_body['planParams']['indexPartitions'] = plans['indexPartitions']
         index_body['planParams']['numReplicas'] = plans['numReplicas']
 
@@ -783,7 +786,7 @@ class FTSCallable:
         index_body_def = RestConnection(self.servers[1]).get_fts_index_definition(name=index_name)[1]['indexDef']
         index_partition = index_body_def['planParams']['indexPartitions']
         num_replicas = index_body_def['planParams']['numReplicas']
-        
+
 
         try:
             index_body = copy.deepcopy(self.vector_index_definition)
@@ -821,10 +824,10 @@ class FTSCallable:
                     "enabled": True,
                     "dynamic": False,
                     "properties": vector_temp}
-            
+
             index_body['planParams']['indexPartitions'] = index_partition
             index_body['planParams']['numReplicas'] = num_replicas
-        
+
         except Exception as ex:
             print(f"error occured while trying to update index . reason : {ex}\n")
 
@@ -846,7 +849,7 @@ class FTSCallable:
         goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
                                          start_index,end_index,base64Flag)
         goloader_object.load_data("upgrade")
-    
+
     def delete_doc_by_key(self,node,start,end,percent,bucket_name = "default",scope_name="_default",collection_name="_default"):
         server = RestConnection(node)
         server.reduce_query_logging = True
@@ -1248,7 +1251,7 @@ class FTSCallable:
         return result
 
     def validate_partition_distribution(self, rest):
-        
+
         _, payload = rest.get_cfg_stats()
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
 
@@ -1300,7 +1303,7 @@ class FTSCallable:
                     curr_active_partitions = v['planParams']['indexPartitions']
                     curr_replica_partitions = curr_active_partitions * num_rep
                     expected_partition_count += curr_active_partitions + curr_replica_partitions
- 
+
             print(f"Expected number of index partitions in cluster: {expected_partition_count}")
             print(f"Indexes: {len(indexes_map)}")
         except Exception as ex:
@@ -1326,7 +1329,7 @@ class FTSCallable:
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
             if current_partition_count != int(pindexes_count[count]):
-                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")         
+                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")
             count+=1
 
             index_distribution.sort(reverse = True)

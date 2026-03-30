@@ -32,6 +32,33 @@ test_upgrade()
 
 Elasticsearch is used **only when `es_validate=True`** is passed to `FTSCallable`. It serves as a reference/baseline system to validate Couchbase FTS query correctness.
 
+### Unique ES Resource Naming for Concurrent Test Execution
+
+**Important:** All ES resources (indexes, aliases, and ingest pipelines) now use unique names derived from `FTSBaseTest.get_es_index_name()` to enable safe concurrent test execution on shared ES clusters.
+
+**Index Name Format:** `{uuid_short}_{ddmmmyy_hh_mm_ss}` (e.g., `a3f4e2c1_28mar26_14_59_01`)
+
+**Note:** Elasticsearch requires all index names to be lowercase. The code automatically applies `.lower()` to the generated index name to ensure compliance.
+
+**ES Resources Generated:**
+- Primary index: `{UUID_short}_{DDMMMYY_HH_MM_SS}`
+- Multi-dataset indexes: `{bucket}_es_index_{UUID_short}_{DDMMMYY_HH_MM_SS}`
+- ES aliases: `{name}_es_alias_{UUID_short}_{DDMMMYY_HH_MM_SS}`
+- Ingest pipelines: `polygonize_{UUID_short}_{DDMMMYY_HH_MM_SS}`
+
+**Example Names:**
+- Main index: `a3f4e2c1_28mar26_14_59_01`
+- Emp bucket index: `emp_es_index_a3f4e2c1_28mar26_14_59_01`
+- Wiki bucket index: `wiki_es_index_a3f4e2c1_28mar26_14_59_01`
+- Multi-bucket alias: `emp_wiki_es_alias_a3f4e2c1_28mar26_14_59_01`
+- Ingest pipeline: `polygonize_a3f4e2c1_28mar26_14_59_01`
+
+**Key Methods:**
+- `FTSBaseTest.get_es_index_name()` - Returns the unique job-level index name (lazy-initialized class attribute)
+- `wait_for_indexing_complete()` - Auto-resolves ES index name when `compare_es=True`
+- `create_index_es()` - Uses dynamic ES index name
+- `add_circle_ingest_pipeline()` - Accepts configurable pipeline name
+
 ### Required INI Configuration
 
 ```ini
@@ -84,20 +111,31 @@ test_upgrade()
 
 ### Elasticsearch Operations (Pure ES Perspective)
 
-#### FTSCallable.__init__() [es_base.py:147-158]
+#### FTSCallable.__init__() [fts_callable.py:44-74]
 
 ```
 FTSCallable.__init__(es_validate=True)
+  └─> self.es_index_name = FTSBaseTest.get_es_index_name()
+       └─> Generates unique job-level index: {uuid_short}_{ddmmmyy_hh_mm_ss}
+            Example: "a3f4e2c1_28mar26_14_59_01"
+       └─> Automatically converts to lowercase for ES compliance
   └─> ElasticSearchBase(self.elastic_node)
-       └─> create_empty_index_with_bleve_equivalent_std_analyzer("es_index")
-            ├─> DELETE es_index (cleanup)
-            ├─> PUT es_index with BLEVE.STD_ANALYZER settings
+       └─> create_empty_index_with_bleve_equivalent_std_analyzer(self.es_index_name)
+            ├─> DELETE {es_index_name} (cleanup)
+            ├─> PUT {es_index_name} with BLEVE.STD_ANALYZER settings
             │   ├── Custom analyzer: "custom_standard_analyzer"
             │   │   ├── tokenizer: "standard"
             │   │   └── filters: ["lowercase", "custom_stop_filter"]
-            │   └── BLEVE.STOPWORDS (stopword filter: 100+ words)
-            └─> enable_scroll(index_name='es_index', max_result_window: 1000000)
+            │   └─> BLEVE.STOPWORDS (stopword filter: 100+ words)
+            └─> enable_scroll(index_name=self.es_index_name, max_result_window: 1000000)
 ```
+
+**Unique Index Naming:**
+- Format: `{uuid_short}_{ddmmmyy_hh_mm_ss}` (e.g., `a3f4e2c1_28mar26_14_59_01`)
+- Automatically lowercased to meet Elasticsearch naming requirements
+- Job-level sharing: Tests within the same job share the same unique index
+- Parallel isolation: Different automated jobs use different indices to avoid conflicts
+- Reduces to `FTSBaseTest.es_index_name` class attribute for reuse across test methods in the same job
 
 #### Data Loading Operations
 
@@ -105,7 +143,7 @@ FTSCallable.__init__(es_validate=True)
 load_data(num_items)
   └─> async_load_data()
        └─> ES operations:
-            ├── es.async_bulk_load_ES(index_name='es_index')
+            ├── es.async_bulk_load_ES(index_name=self.es_index_name)
             │   └─> ElasticSearchBase.async_bulk_load_ES()
             │        └─> ESBulkLoadGeneratorTask (async bulk HTTP POST)
             │             └─> JSON generator: "emp" template
@@ -141,24 +179,24 @@ run_query_and_compare(index, num_queries=20)
 ```
 async_perform_update_delete()
   └─> Update operations:
-        └─> es.async_bulk_load_ES(index_name='es_index', op_type='update')
+        └─> es.async_bulk_load_ES(index_name=self.es_index_name, op_type='update')
   └─> Delete operations:
-        └─> es.async_bulk_load_ES(index_name='es_index', op_type='delete')
+        └─> es.async_bulk_load_ES(index_name=self.es_index_name, op_type='delete')
   └─> Expire operations (CB expiry → ES delete):
-        └─> es.async_bulk_load_ES(index_name='es_index', op_type='delete')
+        └─> es.async_bulk_load_ES(index_name=self.es_index_name, op_type='delete')
 ```
 
 #### Elasticsearch API Operations Summary
 
 | Operation | ES API Call | Description |
 |-----------|-------------|-------------|
-| **Create Index** | `PUT /es_index` | Create with custom analyzer settings |
-| **Delete Index** | `DELETE /es_index` | Cleanup before test |
-| **Bulk Load** | `POST /es_index/_bulk` | Load 1000-10000+ JSON documents |
-| **Search/Query** | `POST /es_index/_search` | Run full-text queries with size=1000000 |
-| **Refresh Index** | `POST /es_index/_refresh` | Force index refresh after updates |
-| **Get Count** | `GET /es_index/_count` | Verify document count |
-| **Enable Scroll** | `PUT /es_index/_settings` | Increase max_result_window for large result sets |
+| **Create Index** | `PUT /{es_index_name}` | Create with custom analyzer settings |
+| **Delete Index** | `DELETE /{es_index_name}` | Cleanup before test |
+| **Bulk Load** | `POST /{es_index_name}/_bulk` | Load 1000-10000+ JSON documents |
+| **Search/Query** | `POST /{es_index_name}/_search` | Run full-text queries with size=1000000 |
+| **Refresh Index** | `POST /{es_index_name}/_refresh` | Force index refresh after updates |
+| **Get Count** | `GET /{es_index_name}/_count` | Verify document count |
+| **Enable Scroll** | `PUT /{es_index_name}/_settings` | Increase max_result_window for large result sets |
 
 #### Elasticsearch Cluster Management
 
@@ -414,10 +452,10 @@ port:9200
   ,upgrade_test=true
 
 # Check ES index
-curl -X GET "http://<es_ip>:9200/es_index/_count?pretty"
+curl -X GET "http://<es_ip>:9200/{es_index_name}/_count?pretty"
 
 # Run query on ES
-curl -X GET "http://<es_ip>:9200/es_index/_search?pretty" \
+curl -X GET "http://<es_ip>:9200/{es_index_name}/_search?pretty" \
   -H 'Content-Type: application/json' \
   -d '{"query": {"match": {"name": "John"}}}'
 ```

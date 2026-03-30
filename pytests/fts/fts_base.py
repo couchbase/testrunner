@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import string
+import uuid
 import subprocess
 import time
 import unittest
@@ -3711,7 +3712,7 @@ class CouchbaseCluster:
                     pause_secs, timeout_secs, compression=self.sdk_compression))
 
             if es:
-                tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
+                tasks.append(es.async_bulk_load_ES(index_name=FTSBaseTest.get_es_index_name(),
                                                    gen=kv_gen,
                                                    op_type='create'))
 
@@ -4402,6 +4403,16 @@ class CouchbaseCluster:
 
 
 class FTSBaseTest(unittest.TestCase):
+    es_index_name = None
+
+    @staticmethod
+    def get_es_index_name():
+        # Get or generate unique ES index name per run
+        if FTSBaseTest.es_index_name is None:
+            timestamp = datetime.datetime.now().strftime("%d%b%y_%H_%M_%S")
+            FTSBaseTest.es_index_name = f"{uuid.uuid4().hex[:8]}_{timestamp}".lower()
+        return FTSBaseTest.es_index_name
+
     def setUp(self):
         unittest.TestCase.setUp(self)
         self._input = TestInputSingleton.input
@@ -5502,12 +5513,12 @@ class FTSBaseTest(unittest.TestCase):
                     if isinstance(gen, list):
                         for generator in gen:
                             load_tasks.append(self.es.async_bulk_load_ES(
-                                index_name='es_index',
+                                index_name=FTSBaseTest.get_es_index_name(),
                                 gen=generator,
                                 op_type=OPS.UPDATE))
                     else:
                         load_tasks.append(self.es.async_bulk_load_ES(
-                            index_name='es_index',
+                            index_name=FTSBaseTest.get_es_index_name(),
                             gen=gen,
                             op_type=OPS.UPDATE))
                 else:
@@ -5515,12 +5526,12 @@ class FTSBaseTest(unittest.TestCase):
                     if isinstance(gen, list):
                         for generator in gen:
                             load_tasks.append(self.es.async_bulk_load_ES(
-                                index_name='es_index',
+                                index_name=FTSBaseTest.get_es_index_name(),
                                 gen=generator,
                                 op_type=OPS.DELETE))
                     else:
                         load_tasks.append(self.es.async_bulk_load_ES(
-                            index_name='es_index',
+                            index_name=FTSBaseTest.get_es_index_name(),
                             gen=gen,
                             op_type=OPS.DELETE))
 
@@ -5544,12 +5555,12 @@ class FTSBaseTest(unittest.TestCase):
                 if isinstance(del_gen, list):
                     for generator in del_gen:
                         load_tasks.append(self.es.async_bulk_load_ES(
-                            index_name='es_index',
+                            index_name=FTSBaseTest.get_es_index_name(),
                             gen=generator,
                             op_type=OPS.DELETE))
                 else:
                     load_tasks.append(self.es.async_bulk_load_ES(
-                        index_name='es_index',
+                        index_name=FTSBaseTest.get_es_index_name(),
                         gen=del_gen,
                         op_type=OPS.DELETE))
             load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
@@ -5612,11 +5623,14 @@ class FTSBaseTest(unittest.TestCase):
                 retry_count -= 1
             time.sleep(6)
 
-    def wait_for_indexing_complete(self, item_count=None, es_index="es_index",extra_collections = None):
+    def wait_for_indexing_complete(self, item_count=None, es_index=None, extra_collections=None):
         """
         Wait for index_count for any index to stabilize or reach the
         index count specified by item_count
         """
+
+        if self.compare_es and es_index is None:
+            es_index = FTSBaseTest.get_es_index_name()
 
         retry = self._input.param("index_retry", 20)
         for index in self._cb_cluster.get_indexes():
@@ -6471,17 +6485,19 @@ class FTSBaseTest(unittest.TestCase):
         if self.es == None:
             pass
         if not (self.num_custom_analyzers > 0):
-            self.es.create_index_mapping(index_name="es_index",
+            self.es.create_index_mapping(index_name=FTSBaseTest.get_es_index_name(),
                                          es_mapping=es_mapping, fts_mapping=None)
         else:
-            self.es.create_index_mapping(index_name="es_index",
+            self.es.create_index_mapping(index_name=FTSBaseTest.get_es_index_name(),
                                          es_mapping=es_mapping, fts_mapping=fts_mapping)
 
     def load_data_es_from_generator(self, generator,
-                                    index_name="es_index"):
+                                    index_name=None):
         """
             Loads json docs into ES from a generator, does a blocking load
         """
+        if index_name is None:
+            index_name = FTSBaseTest.get_es_index_name()
 
         for key, doc in generator:
             doc = json.loads(doc)
@@ -6583,7 +6599,9 @@ class FTSBaseTest(unittest.TestCase):
                 }
             }
             self.create_es_index_mapping(es_mapping=es_mapping)
-            self.es.add_circle_ingest_pipeline(geoshape_field)
+            es_index_name = FTSBaseTest.get_es_index_name()
+            pipeline_name = f"polygonize_{es_index_name}"
+            self.es.add_circle_ingest_pipeline(geoshape_field, pipeline_name)
 
         from .fts_base import FTSIndex
         geo_index = FTSIndex(
@@ -6631,11 +6649,11 @@ class FTSBaseTest(unittest.TestCase):
 
         return geo_index
 
-    def create_index_es(self, index_name="es_index"):
-        self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
+    def create_index_es(self):
+        self.es.create_empty_index_with_bleve_equivalent_std_analyzer(FTSBaseTest.get_es_index_name())
         self.log.info("Created empty index %s on Elastic Search node with "
                       "custom standard analyzer(default)"
-                      % index_name)
+                      % FTSBaseTest.get_es_index_name())
 
     def get_generator(self, dataset, num_items, start=0, encoding="utf-8",
                       lang="EN", data_loader_output=False, filename=None):
@@ -7021,13 +7039,13 @@ class FTSBaseTest(unittest.TestCase):
                 gen = copy.deepcopy(self.create_gen)
                 if isinstance(gen, list):
                     for g in gen:
-                        load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                        load_tasks.append(self.es.async_bulk_load_ES(index_name=FTSBaseTest.get_es_index_name(),
                                                                      gen=g,
                                                                      op_type='create',
                                                                      dataset=dataset))
                 else:
                     gen.reset()
-                    load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
+                    load_tasks.append(self.es.async_bulk_load_ES(index_name=FTSBaseTest.get_es_index_name(),
                                                                  gen=gen,
                                                                  op_type='create',
                                                                  dataset=dataset))
