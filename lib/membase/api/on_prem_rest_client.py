@@ -266,7 +266,8 @@ class RestConnection(object):
     POST = "POST"
     PUT = "PUT"
 
-    def __new__(cls, serverInfo={}, check_connectivity=True):
+    def __new__(cls, serverInfo={}, check_connectivity=True,
+                max_retry_count=5, conn_timeout=120):
         # allow port to determine
         # behavior of restconnection
         port = None
