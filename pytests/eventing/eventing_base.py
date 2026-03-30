@@ -129,7 +129,7 @@ class EventingBaseTest(QueryHelperTests):
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
                                   language_compatibility=None,hostpath=None,validate_ssl=False,src_binding=False,
-                                  username="Administrator", password="password",cursor_aware=False):
+                                  username="Administrator", password="password",cursor_aware=False, jwt_token=None):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -245,7 +245,12 @@ class EventingBaseTest(QueryHelperTests):
         if language_compatibility is not None:
             body['settings']['language_compatibility'] = language_compatibility
         body['function_scope'] = self.function_scope
-        content1 = self.rest.create_function(body['appname'], body, self.function_scope, username, password)
+
+        if jwt_token:
+            content1 = self.rest.create_function_with_jwt(body['appname'], body, jwt_token, function_scope=self.function_scope)
+        else:
+            content1 = self.rest.create_function(body['appname'], body, self.function_scope, username, password)
+
         self.log.info("saving function {}".format(content1))
         self.wait_for_handler_state(body['appname'], "undeployed")
         return body
@@ -416,11 +421,16 @@ class EventingBaseTest(QueryHelperTests):
         log.info("execution stats: {0}".format(content))
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
-                        deployment_status=True, processing_status=True, username="Administrator", password="password"):
+                        deployment_status=True, processing_status=True, username="Administrator", password="password", jwt_token=None):
         if self.print_eventing_handler_code_in_logs:
             log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
             log.info("\n{0}".format(body['appcode']))
-        content1 = self.rest.lifecycle_operation(body['appname'], "deploy", self.function_scope, username, password)
+
+        if jwt_token:
+            content1 = self.rest.lifecycle_operation_with_jwt(body['appname'], "deploy", jwt_token, self.function_scope)
+        else:
+            content1 = self.rest.lifecycle_operation(body['appname'], "deploy", self.function_scope, username, password)
+
         log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
             res = json.loads(content1)
@@ -435,15 +445,18 @@ class EventingBaseTest(QueryHelperTests):
             self.pause_resume_n(body, pause_resume_number)
 
 
-    def undeploy_and_delete_function(self, body):
+    def undeploy_and_delete_function(self, body, jwt_token=None):
         if self.print_app_log:
             self.print_app_logs(body['appname'])
-        self.undeploy_function(body)
-        self.delete_function(body)
+        self.undeploy_function(body, jwt_token=jwt_token)
+        self.delete_function(body, jwt_token=jwt_token)
 
-    def undeploy_function(self, body, username="Administrator", password="password"):
+    def undeploy_function(self, body, username="Administrator", password="password", jwt_token=None):
         self.refresh_rest_server()
-        content = self.rest.lifecycle_operation(body['appname'],"undeploy", self.function_scope, username, password)
+        if jwt_token:
+            content = self.rest.lifecycle_operation_with_jwt(body['appname'], "undeploy", jwt_token, self.function_scope)
+        else:
+            content = self.rest.lifecycle_operation(body['appname'],"undeploy", self.function_scope, username, password)
         log.info("Undeploy Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "undeployed")
         return content
@@ -454,24 +467,54 @@ class EventingBaseTest(QueryHelperTests):
         if wait_for_undeployment:
             self.wait_for_handler_state(name, "undeployed")
 
-    def delete_function(self, body, username="Administrator", password="password"):
-        content1 = self.rest.delete_single_function(body['appname'], self.function_scope, username, password)
+    def delete_function(self, body, username="Administrator", password="password", jwt_token=None):
+        if jwt_token:
+            content1 = self.rest.delete_single_function_with_jwt(body['appname'], jwt_token, function_scope=self.function_scope)
+        else:
+            content1 = self.rest.delete_single_function(body['appname'], self.function_scope, username, password)
         log.info("Delete Application : {0}".format(body['appname']))
         return content1
 
-    def pause_function(self, body,wait_for_pause=True, username="Administrator", password="password"):
+    def pause_function(self, body,wait_for_pause=True, username="Administrator", password="password", jwt_token=None):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(body['appname'], "pause", self.function_scope, username, password)
+        if jwt_token:
+            self.rest.lifecycle_operation_with_jwt(body['appname'], "pause", jwt_token, self.function_scope)
+        else:
+            self.rest.lifecycle_operation(body['appname'], "pause", self.function_scope, username, password)
         log.info("Pause Application : {0}".format(body['appname']))
         if wait_for_pause:
             self.wait_for_handler_state(body['appname'], "paused")
 
-    def resume_function(self, body,wait_for_resume=True, username="Administrator", password="password"):
+    def resume_function(self, body,wait_for_resume=True, username="Administrator", password="password", jwt_token=None):
         self.refresh_rest_server()
-        self.rest.lifecycle_operation(body['appname'], "resume", self.function_scope, username, password)
+        if jwt_token:
+            self.rest.lifecycle_operation_with_jwt(body['appname'], "resume", jwt_token, self.function_scope)
+        else:
+            self.rest.lifecycle_operation(body['appname'], "resume", self.function_scope, username, password)
         log.info("Resume Application : {0}".format(body['appname']))
         if wait_for_resume:
             self.wait_for_handler_state(body['appname'], "deployed")
+
+    def export_eventing_function(self, name, username="Administrator", password="password", jwt_token=None):
+        """Export eventing function with optional JWT authentication"""
+        if jwt_token:
+            return self.rest.export_function_with_jwt(name, jwt_token, function_scope=self.function_scope)
+        else:
+            return self.rest.export_function(name, self.function_scope, username, password)
+
+    def import_eventing_function(self, body, username="Administrator", password="password", jwt_token=None):
+        """Import eventing function with optional JWT authentication"""
+        if jwt_token:
+            return self.rest.import_function_with_jwt(body, jwt_token)
+        else:
+            return self.rest.import_function(body, username, password)
+
+    def get_all_functions(self, username="Administrator", password="password", jwt_token=None):
+        """Get all eventing functions with optional JWT authentication"""
+        if jwt_token:
+            return self.rest.get_all_functions_with_jwt(jwt_token)
+        else:
+            return self.rest.get_all_functions(username, password)
 
     def refresh_rest_server(self):
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)

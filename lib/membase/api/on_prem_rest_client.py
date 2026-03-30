@@ -5914,7 +5914,20 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
-
+    '''
+           Eventing Lifecycle Operations with JWT authentication (Deploy, Undeploy, Pause, Resume)
+    '''
+    def lifecycle_operation_with_jwt(self, name, operation, jwt_token, function_scope=None):
+        url = "api/v1/functions/" + name + "/" + operation
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
+        status, content, header = self._http_request(api, 'POST', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
 
     '''
         Save the Function so that it is visible in UI
@@ -5958,6 +5971,18 @@ class RestConnection(object):
         url = "api/v1/functions"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            GET all the Functions with JWT authentication
+    '''
+    def get_all_functions_with_jwt(self, jwt_token):
+        url = "api/v1/functions"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if not status:
             raise Exception(content)
@@ -6067,6 +6092,21 @@ class RestConnection(object):
         return content
 
     '''
+            Delete single function with JWT authentication
+    '''
+    def delete_single_function_with_jwt(self, name, jwt_token, function_scope=None):
+        url = "api/v1/functions/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
             Delete the Function from UI
     '''
     def delete_function_from_temp_store(self, name, function_scope=None):
@@ -6124,6 +6164,30 @@ class RestConnection(object):
         return export_map
 
     '''
+            Export the Function with JWT authentication
+    '''
+    def export_function_with_jwt(self, name, jwt_token, function_scope=None):
+        export_map = {}
+        url = "api/v1/export/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        if status:
+            json_parsed = json.loads(content)
+            for key in list(json_parsed[0].keys()):  # returns an array
+                tokens = key.split(":")
+                val = json_parsed[0][key]
+                if len(tokens) == 1:
+                    field = tokens[0]
+                    export_map[field] = val
+        return export_map
+
+    '''
          Import the Function
     '''
 
@@ -6132,6 +6196,21 @@ class RestConnection(object):
         url = "api/v1/import"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=body)
+
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+         Import the Function with JWT authentication
+    '''
+
+    def import_function_with_jwt(self, body, jwt_token):
+        url = "api/v1/import"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
         status, content, header = self._http_request(api, 'POST', headers=headers,
                                                      params=body)
 
@@ -6524,6 +6603,21 @@ class RestConnection(object):
                                                   function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+    '''
+            Create function with JWT authentication
+    '''
+    def create_function_with_jwt(self, name, body, jwt_token, function_scope=None):
+        url = "api/v1/functions/" + name
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
         status, content, header = self._http_request(api, 'POST', headers=headers,
                                                      params=json.dumps(body).encode("ascii", "ignore"))
         if not status:
