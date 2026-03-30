@@ -53,6 +53,8 @@ class ECCVMismatchTests(XDCRNewBaseTest):
             self.log.info(f"Setting ECCV={enabled} for bucket {bucket.name} on cluster {cluster.get_name()}")
             result = rest.change_bucket_props(bucket, enableCrossClusterVersioning=str(enabled).lower())
             self.log.info(f"Result: {result}")
+        self.log.info("Waiting 5s for ECCV setting to propagate")
+        time.sleep(5)
 
     def _get_eccv_setting(self, cluster, bucket_name):
         """
@@ -236,11 +238,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         6. Enable ECCV on target to sync settings
         7. Verify warning disappears
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         self.log.info("Verifying ECCV settings before test")
         for bucket in self.src_cluster.get_buckets():
             src_eccv = self._get_eccv_setting(self.src_cluster, bucket.name)
@@ -274,11 +281,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         6. Enable ECCV on source to sync settings
         7. Verify warning disappears
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, False)
         self._set_eccv_on_cluster(self.dest_cluster, True)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         self.log.info("Verifying ECCV settings before test")
         for bucket in self.src_cluster.get_buckets():
             src_eccv = self._get_eccv_setting(self.src_cluster, bucket.name)
@@ -309,11 +321,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         3. Load some data
         4. Verify NO ECCV mismatch warning appears
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, False)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         self.log.info("Verifying ECCV settings")
         for bucket in self.src_cluster.get_buckets():
             src_eccv = self._get_eccv_setting(self.src_cluster, bucket.name)
@@ -339,11 +356,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         3. Load some data
         4. Verify NO ECCV mismatch warning appears
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, True)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         self.log.info("Verifying ECCV settings")
         for bucket in self.src_cluster.get_buckets():
             src_eccv = self._get_eccv_setting(self.src_cluster, bucket.name)
@@ -370,11 +392,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         4. Sync ECCV settings
         5. Verify warnings clear on both clusters
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         self.log.info("Checking for ECCV mismatch warning on source cluster")
         src_warning_found, src_warning_msg = self._wait_for_eccv_warning(self.src_cluster)
         
@@ -409,11 +436,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         4. Fix the mismatch
         5. Verify warning clears
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         warning_found, _ = self._wait_for_eccv_warning(self.src_cluster)
         self.assertTrue(warning_found, "Expected ECCV mismatch warning")
         
@@ -441,11 +473,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         4. Fix mismatch bucket by bucket
         5. Verify warnings clear as each bucket is fixed
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         warning_found, _ = self._wait_for_eccv_warning(self.src_cluster)
         self.assertTrue(warning_found, "Expected ECCV mismatch warning for multiple buckets")
         
@@ -474,11 +511,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         6. Fix mismatch
         7. Verify warning clears
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         warning_found, _ = self._wait_for_eccv_warning(self.src_cluster)
         self.assertTrue(warning_found, "Expected ECCV mismatch warning")
         
@@ -486,12 +528,13 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         for remote_cluster in self.src_cluster.get_remote_clusters():
             remote_cluster.pause_all_replications()
         
-        time.sleep(10)
+        time.sleep(15)
         
         self.log.info("Resuming all replications")
         for remote_cluster in self.src_cluster.get_remote_clusters():
             remote_cluster.resume_all_replications()
         
+        self.log.info("Waiting 30s for replications to fully resume")
         time.sleep(30)
         warning_after_resume, _ = self._check_eccv_mismatch_warning(self.src_cluster)
         self.assertTrue(warning_after_resume, 
@@ -511,11 +554,16 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         WARN: Mismatch between source and target enableCrossClusterVersioning (ECCV)
         settings - It's disabled for bucket <bucket_name> on cluster <cluster_name>.
         """
+        self.setup_xdcr_and_load()
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
         self._set_eccv_on_cluster(self.src_cluster, True)
         self._set_eccv_on_cluster(self.dest_cluster, False)
-        
-        self.setup_xdcr_and_load()
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         warning_found, warning_msg = self._wait_for_eccv_warning(self.src_cluster)
         self.assertTrue(warning_found, "Expected ECCV mismatch warning")
         
@@ -552,14 +600,20 @@ class ECCVMismatchTests(XDCRNewBaseTest):
         5. Verify warning clears
         """
         self.setup_xdcr_and_load()
-        
+        self.log.info("Waiting 10s for replication to stabilize after setup")
+        time.sleep(10)
+
+        self.log.info("Waiting 20s to confirm no warning with matching default settings")
         time.sleep(20)
         warning_found, _ = self._check_eccv_mismatch_warning(self.src_cluster)
         self.assertFalse(warning_found, "No warning expected with matching false settings")
         
         self.log.info("Creating mismatch: enabling ECCV on source only")
         self._set_eccv_on_cluster(self.src_cluster, True)
-        
+
+        self.log.info("Waiting 10s for ECCV settings to take effect")
+        time.sleep(10)
+
         warning_found, _ = self._wait_for_eccv_warning(self.src_cluster)
         self.assertTrue(warning_found, "Warning expected after creating mismatch")
         
