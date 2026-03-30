@@ -2,7 +2,9 @@ import logger
 import time
 import copy
 import json
-from .fts_base import FTSIndex, CouchbaseCluster
+import uuid
+from datetime import datetime
+from .fts_base import FTSIndex, CouchbaseCluster, FTSBaseTest
 from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from TestInput import TestInputSingleton
@@ -11,9 +13,6 @@ from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.membase.api.rest_client import RestConnection
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 from lib.Cb_constants.CBServer import CbServer
-from lib.collection.collections_cli_client import CollectionsCLI
-from scripts.java_sdk_setup import JavaSdkSetup
-import json
 from pathlib import Path
 from pytests.fts.vector_dataset_generator.vector_dataset_loader import GoVectorLoader, VectorLoader
 from pytests.fts.vector_dataset_generator.vector_dataset_generator import VectorDataset
@@ -52,6 +51,7 @@ class FTSCallable:
         self.elastic_node = TestInputSingleton.input.elastic
         self.compare_es = es_validate
         self.es = None
+        self.es_index_name = FTSBaseTest.get_es_index_name()
         self.is_elixir = is_elixir
         self._num_items = 10000
         self.query_types = ["match", "bool", "match_phrase",
@@ -305,9 +305,9 @@ class FTSCallable:
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                     " %s, docs in ES index: %s "
                                     % (bucket_doc_count,
-                                        index.name,
-                                        index_doc_count,
-                                        es_index_count))
+                                       index.name,
+                                       index_doc_count,
+                                       es_index_count))
                     if bucket_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
@@ -753,7 +753,7 @@ class FTSCallable:
                 "enabled": True,
                 "dynamic": False,
                 "properties": vector_temp}
-        
+
         index_body['planParams']['indexPartitions'] = plans['indexPartitions']
         index_body['planParams']['numReplicas'] = plans['numReplicas']
 
@@ -783,7 +783,7 @@ class FTSCallable:
         index_body_def = RestConnection(self.servers[1]).get_fts_index_definition(name=index_name)[1]['indexDef']
         index_partition = index_body_def['planParams']['indexPartitions']
         num_replicas = index_body_def['planParams']['numReplicas']
-        
+
 
         try:
             index_body = copy.deepcopy(self.vector_index_definition)
@@ -821,10 +821,10 @@ class FTSCallable:
                     "enabled": True,
                     "dynamic": False,
                     "properties": vector_temp}
-            
+
             index_body['planParams']['indexPartitions'] = index_partition
             index_body['planParams']['numReplicas'] = num_replicas
-        
+
         except Exception as ex:
             print(f"error occured while trying to update index . reason : {ex}\n")
 
@@ -846,7 +846,7 @@ class FTSCallable:
         goloader_object = GoVectorLoader(node, username,password, bucket,scope,collection,vector_dataset,xattr,prefix,
                                          start_index,end_index,base64Flag)
         goloader_object.load_data("upgrade")
-    
+
     def delete_doc_by_key(self,node,start,end,percent,bucket_name = "default",scope_name="_default",collection_name="_default"):
         server = RestConnection(node)
         server.reduce_query_logging = True
@@ -1248,7 +1248,7 @@ class FTSCallable:
         return result
 
     def validate_partition_distribution(self, rest):
-        
+
         _, payload = rest.get_cfg_stats()
         node_defs_known = {k: v["hostPort"] for k, v in payload["nodeDefsKnown"]["nodeDefs"].items()}
 
@@ -1300,7 +1300,7 @@ class FTSCallable:
                     curr_active_partitions = v['planParams']['indexPartitions']
                     curr_replica_partitions = curr_active_partitions * num_rep
                     expected_partition_count += curr_active_partitions + curr_replica_partitions
- 
+
             print(f"Expected number of index partitions in cluster: {expected_partition_count}")
             print(f"Indexes: {len(indexes_map)}")
         except Exception as ex:
@@ -1326,7 +1326,7 @@ class FTSCallable:
                 index_distribution.append(int(v1))
                 current_partition_count += int(v1)
             if current_partition_count != int(pindexes_count[count]):
-                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")         
+                error.append(f"Total active partitions are different- total:: {current_partition_count} - :: expected{pindexes_count[count]}")
             count+=1
 
             index_distribution.sort(reverse = True)
