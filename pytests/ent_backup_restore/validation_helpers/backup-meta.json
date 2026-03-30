@@ -25,5 +25,7 @@
   "enable_users": false,
   "disable_cluster_analytics": false,
   "disable_analytics_queries": true,
-  "preserve_collection_settings": false
+  "preserve_collection_settings": false,
+  "is_encrypted": false,
+  "version": 1
 }
