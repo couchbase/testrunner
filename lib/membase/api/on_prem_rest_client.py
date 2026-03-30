@@ -292,7 +292,8 @@ class RestConnection(object):
 
         return obj
 
-    def __init__(self, serverInfo, check_connectivity=True):
+    def __init__(self, serverInfo, check_connectivity=True,
+                 max_retry_count=5, conn_timeout=120):
         # serverInfo can be a json object/dictionary
         if isinstance(serverInfo, dict):
             self.ip = serverInfo["ip"]
@@ -414,8 +415,8 @@ class RestConnection(object):
             return
 
         # for Node is unknown to this cluster error
-        for iteration in range(5):
-            http_res, success = self.init_http_request(api=self.baseUrl + "pools/default")
+        for iteration in range(max_retry_count):
+            http_res, success = self.init_http_request(api=self.baseUrl + "pools/default", timeout=conn_timeout)
             if not success and isinstance(http_res, str) and\
                (http_res.find('Node is unknown to this cluster') > -1 or \
                 http_res.find('Unexpected server error, request logged') > -1):
@@ -436,13 +437,13 @@ class RestConnection(object):
             if not http_res or http_res["version"][0:2] == "1." or CbServer.cluster_profile == "serverless":
                 self.capiBaseUrl = self.baseUrl + "couchBase"
             else:
-                for iteration in range(5):
+                for iteration in range(max_retry_count):
                     if "couchApiBase" not in http_res.keys():
                         if self.is_cluster_mixed() or CbServer.capella_run:
                             self.capiBaseUrl = self.baseUrl + "couchBase"
                             return
                         time.sleep(0.2)
-                        http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
+                        http_res, success = self.init_http_request(self.baseUrl + 'pools/default', timeout=conn_timeout)
                         http_res = self.extract_nodes_self_from_pools_default(http_res)
                         return
                     else:
@@ -566,7 +567,7 @@ class RestConnection(object):
         api = "%snode/controller/rename" % self.baseUrl
         status, content, header = self._http_request(api, 'POST', params)
         return status, content
-    
+
     def get_indexer_metastore_stats(self, timeout=120):
         api = self.index_baseUrl + "stats/metadata?debug=1"
         status, content, _ = self._http_request(api, headers=self._create_capi_headers(), timeout=timeout)
