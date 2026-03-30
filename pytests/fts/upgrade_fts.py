@@ -5,8 +5,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from .fts_callable import FTSCallable
 from scripts.java_sdk_setup import JavaSdkSetup
-from .fts_base import CouchbaseCluster
-from .fts_base import FTSIndex
+from .fts_base import CouchbaseCluster, FTSIndex, FTSBaseTest
 from membase.api.rest_client import RestConnection
 from lib.collection.collections_cli_client import CollectionsCLI
 from .fts_backup_restore import FTSIndexBackupClient
@@ -40,7 +39,9 @@ class UpgradeFTS(NewUpgradeBaseTest):
         """
         self.create_index_es()
 
-    def create_index_es(self, index_name="es_index"):
+    def create_index_es(self, index_name=None):
+        if index_name is None:
+            index_name = FTSBaseTest.get_es_index_name()
         self.es.create_empty_index_with_bleve_equivalent_std_analyzer(index_name)
         self.log.info("Created empty index %s on Elastic Search node with "
                       "custom standard analyzer(default)"

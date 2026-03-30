@@ -377,15 +377,18 @@ class StableTopFTS(FTSBaseTest):
             bucket=wiki,
             kv_gen=wiki_gen)
 
+        emp_es_index = f"emp_es_index_{FTSBaseTest.get_es_index_name()}"
+        wiki_es_index = f"wiki_es_index_{FTSBaseTest.get_es_index_name()}"
+        emp_wiki_es_alias = f"emp_wiki_es_alias_{FTSBaseTest.get_es_index_name()}"
         if self.es:
-            # create empty ES indexes
-            self.es.create_empty_index("emp_es_index")
-            self.es.create_empty_index("wiki_es_index")
-            load_tasks.append(self.es.async_bulk_load_ES(index_name='emp_es_index',
+            # create empty ES indexes with unique names to avoid conflicts
+            self.es.create_empty_index(emp_es_index)
+            self.es.create_empty_index(wiki_es_index)
+            load_tasks.append(self.es.async_bulk_load_ES(index_name=emp_es_index,
                                                          gen=emp_gen_copy,
                                                          op_type='create'))
 
-            load_tasks.append(self.es.async_bulk_load_ES(index_name='wiki_es_index',
+            load_tasks.append(self.es.async_bulk_load_ES(index_name=wiki_es_index,
                                                          gen=wiki_gen_copy,
                                                          op_type='create'))
 
@@ -396,19 +399,19 @@ class StableTopFTS(FTSBaseTest):
         emp_index = self.create_index(emp, "emp_index")
         wiki_index = self.create_index(wiki, "wiki_index")
 
-        self.wait_for_indexing_complete(es_index="emp_es_index")
-        self.wait_for_indexing_complete(es_index="wiki_es_index")
+        self.wait_for_indexing_complete(es_index=emp_es_index)
+        self.wait_for_indexing_complete(es_index=wiki_es_index)
 
         # create compound alias
         alias = self.create_alias(target_indexes=[emp_index, wiki_index],
                                   name="emp_wiki_alias")
         if self.es:
-            self.es.create_alias(name="emp_wiki_es_alias",
-                                 indexes=["emp_es_index", "wiki_es_index"])
+            self.es.create_alias(name=emp_wiki_es_alias,
+                                 indexes=[emp_es_index, wiki_es_index])
 
         # run rqg on the alias
         self.generate_random_queries(alias, self.num_queries, self.query_types)
-        self.run_query_and_compare(alias, es_index_name="emp_wiki_es_alias")
+        self.run_query_and_compare(alias, es_index_name=emp_wiki_es_alias)
 
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
@@ -1001,9 +1004,9 @@ class StableTopFTS(FTSBaseTest):
 
         self.create_es_index_mapping(index.es_custom_map, index.index_definition)
         gen = copy.deepcopy(self.create_gen)
-        task = self.es.async_bulk_load_ES(index_name='es_index',
-                                   gen=gen,
-                                   op_type='create')
+        task = self.es.async_bulk_load_ES(
+            index_name=FTSBaseTest.get_es_index_name(), gen=gen,
+            op_type='create')
         task.result()
         self.wait_for_indexing_complete()
         try:
@@ -2238,9 +2241,9 @@ class StableTopFTS(FTSBaseTest):
             es_query["sort"] = sort_fields_es
 
             if self.es:
-                hits2, doc_ids2, _ = self.es.search(index_name="es_index",
-                            query=es_query)
-
+                hits2, doc_ids2, _ = self.es.search(
+                    index_name=FTSBaseTest.get_es_index_name(),
+                    query=es_query)
                 self.log.info("Hits from ES: {0}".format(hits2))
                 self.log.info("First 50 doc_ids: {0}".format(doc_ids2[:50]))
 

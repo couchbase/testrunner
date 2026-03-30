@@ -374,7 +374,7 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
 
-    def add_circle_ingest_pipeline(self,field = "location"):
+    def add_circle_ingest_pipeline(self, field="location", pipeline_name="polygonize_es_index"):
         pipeline_mapping = {
             "description": "translate circle to polygon",
             "processors": [
@@ -388,7 +388,7 @@ class ElasticSearchBase(object):
             ]
         }
         status, content, _ = self._http_request(
-                self.__connection_url + "_ingest/pipeline/polygonize_es_index",
+                self.__connection_url + "_ingest/pipeline/" + pipeline_name,
                 'PUT',
                 json.dumps(pipeline_mapping))
         if status:
@@ -497,15 +497,18 @@ class ElasticSearchBase(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def load_bulk_data(self, filename,index_name):
+    def load_bulk_data(self, filename, index_name):
         """
         Bulk load to ES from a file
         curl -s -XPOST 172.23.105.25:9200/_bulk --data-binary @req
         cat req:
-        { "index" : { "_index" : "default_es_index", "_type" : "aruna", "_id" : "1" } }
+        { "index" : { "_index" : "your_es_index", "_type" : "aruna", "_id" : "1" } }
         { "field1" : "value1" , "field2" : "value2"}
-        { "index" : { "_index" : "default_es_index", "_type" : "aruna", "_id" : "2" } }
+        { "index" : { "_index" : "your_es_index", "_type" : "aruna", "_id" : "2" } }
         { "field1" : "value1" , "field2" : "value2"}
+
+        Note: Use unique index names (e.g., with test ID suffix) to avoid conflicts
+        when multiple tests run concurrently on the same ES cluster.
         """
         try:
             import os
