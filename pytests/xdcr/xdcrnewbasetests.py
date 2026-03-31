@@ -4502,6 +4502,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             "mutationDifferTimeout": 30,
             "debugMode": False,
             "setupTimeout": 10,
+            "excludeDCPExpiryEvents": False
         }
 
         with open(self._xdcr_differ_yaml_conf_path, "w") as f:

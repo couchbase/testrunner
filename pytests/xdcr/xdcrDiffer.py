@@ -82,6 +82,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
             "debugMode": self._input.param("debugMode", False),
             "setupTimeout": self._input.param("setupTimeout", 10),
             "fileContaingXattrKeysForNoComapre": self._input.param("fileContaingXattrKeysForNoComapre", ""),
+            "excludeDCPExpiryEvents": self._input.param("excludeDCPExpiryEvents", False)
         }
 
         self.passphrase_value = self._input.param("encryptionPassphrase", "")
