@@ -5629,7 +5629,7 @@ class FTSBaseTest(unittest.TestCase):
         index count specified by item_count
         """
 
-        if self.compare_es and es_index is None:
+        if es_index is None:
             es_index = FTSBaseTest.get_es_index_name()
 
         retry = self._input.param("index_retry", 20)
@@ -6587,6 +6587,7 @@ class FTSBaseTest(unittest.TestCase):
         return geo_index
 
     def create_index_custom_shapes(self, num_shapes=10):
+        es_index_name = FTSBaseTest.get_es_index_name()
         if self.compare_es:
             self.log.info("Creating a geo-index on Elasticsearch...")
             self.es.delete_indices()
@@ -6599,7 +6600,6 @@ class FTSBaseTest(unittest.TestCase):
                 }
             }
             self.create_es_index_mapping(es_mapping=es_mapping)
-            es_index_name = FTSBaseTest.get_es_index_name()
             pipeline_name = f"polygonize_{es_index_name}"
             self.es.add_circle_ingest_pipeline(geoshape_field, pipeline_name)
 
@@ -6687,6 +6687,7 @@ class FTSBaseTest(unittest.TestCase):
             elastic_port = None
             elastic_username = None
             elastic_password = None
+            elastic_index = FTSBaseTest.get_es_index_name()
             if self.compare_es:
                 elastic_ip = self.elastic_node.ip
                 elastic_port = self.elastic_node.port
@@ -6700,6 +6701,7 @@ class FTSBaseTest(unittest.TestCase):
                                  password=self.master.rest_password,
                                  start=start, end=start + num_items,
                                  es_compare=self.compare_es, es_host=elastic_ip, es_port=elastic_port,
+                                 es_index=elastic_index,
                                  es_login=elastic_username, es_password=elastic_password, key_prefix=dataset + "_",
                                  upd_del_shift=self._num_items, output=data_loader_output
                                  )
@@ -7608,6 +7610,8 @@ class FTSBaseTest(unittest.TestCase):
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
         """
+        if es_index_name is None:
+            es_index_name = FTSBaseTest.get_es_index_name()
         tasks = []
         fail_count = 0
         failed_queries = []
