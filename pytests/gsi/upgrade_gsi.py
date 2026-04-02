@@ -3743,8 +3743,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 node_to_upgrade = None
                 for node in nodes:
                     node_rest = RestConnection(node)
-                    self.log.info(f"node is {node_rest.ip} and version is {node_rest.get_complete_version()} and upgrade version is {self.upgrade_to.split('-')[0][:5]}")
-                    if node_rest.get_complete_version() != self.upgrade_to.split('-')[0][:5]:
+                    self.log.info(f"node is {node_rest.ip} and version is {node_rest.get_complete_version()} and upgrade version is {self.upgrade_to.split('-')[0]}")
+                    if node_rest.get_complete_version() != self.upgrade_to.split('-')[0]:
                         node_to_upgrade = node
                         break
                 self.log.info("before upgrade cluster stats")
