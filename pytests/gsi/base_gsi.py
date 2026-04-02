@@ -566,7 +566,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(f"n1ql node for recall validation is {n1ql_node}")
         vector_field, vector = self.extract_vector_field_and_query_vector(select_query)
         query_res_faiss = self.run_cbq_query(query=faiss_query, server=n1ql_node)['results']
-        self.log.info(f"query_res_faiss is {query_res_faiss} and len of query_res_faiss is {len(query_res_faiss)}")
         list_of_vectors_to_be_indexed_on_faiss = []
         if self.xattr_indexes:
             vector_field = vector_field.split('.')[-1]
