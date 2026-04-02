@@ -723,7 +723,7 @@ class SDKDataLoader(object):
                  scope="_default", collection="_default", json_template="Person", doc_expiry=0, fields_to_update=None,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
-                 es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False,
+                 es_index=None, es_login=None, es_password=None, output=False, upd_del_shift=0, shuffle_docs=False, capella=False,
                  base64=False, model="sentence-transformers/all-MiniLM-L6-v2", mutate=0, dim=128, mutation_timeout=0,
                  create_start=0, create_end=0, update_start=0, update_end=0, delete_start=0, delete_end=0, expiry_start=0, expiry_end=0, read_start=0, read_end=0, percent_expiry=0, percent_read=0):
         self.num_ops = num_ops
@@ -756,6 +756,7 @@ class SDKDataLoader(object):
         self.es_compare = es_compare
         self.es_host = es_host
         self.es_port = es_port
+        self.es_index = es_index
         self.es_login = es_login
         self.es_password = es_password
         self.output = output

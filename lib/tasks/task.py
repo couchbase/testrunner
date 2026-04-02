@@ -6960,6 +6960,8 @@ class SDKLoadDocumentsTask(Task):
         if self.sdk_docloader.es_compare:
             command = command + " -es true -es_host " + str(self.sdk_docloader.es_host) + " -es_port " + str(
                 self.sdk_docloader.es_port)
+            if self.sdk_docloader.es_index:
+                command = command + " -es_index " + str(self.sdk_docloader.es_index)
         if self.sdk_docloader.op_type == "update":
             arr_fields_to_update = self.sdk_docloader.fields_to_update if self.sdk_docloader.fields_to_update else ""
             if len(arr_fields_to_update) > 0:
