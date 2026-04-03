@@ -494,7 +494,8 @@ class NodeHelper:
                 for path in set([_f for _f in [self.node.data_path,
                                                self.node.index_path,
                                                self.node.cbas_path] if _f]):
-                    for cmd in ("rm -rf %s/*" % path,
+                    for cmd in ("mkdir -p %s" % path,
+                                "rm -rf %s/*" % path,
                                 "chown -R couchbase:couchbase %s" % path):
                         self.shell.execute_command(cmd)
                 self.rest.set_data_path(data_path=self.node.data_path,

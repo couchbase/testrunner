@@ -153,25 +153,25 @@ else
 
     echo "Starting server installation"
     if [[ "${slave}" = "bhive_slave_test" ]]; then
-      echo "Starting server installation"
       set -x
       docker run --rm \
         -v /tmp/testexec.$$.ini:/testrunner/testexec.$$.ini \
         testrunner:install python3 scripts/new_install.py \
         -i testexec.$$.ini \
-        -p force_reinstall=True,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
       status=$?
       set +x
     else
       cp /tmp/testexec.$$.ini $WORKSPACE/
       initial_version=$(echo "$parameters" | sed -n 's/.*initial_version=\([^,]*\).*/\1/p')
 	  echo "Initial version: $initial_version"
-      set -x
       if [ -n "$initial_version" ]; then
-        ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${initial_version},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        version_to_use=$initial_version
    	  else
-        ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        version_to_use=$version_number
       fi
+      set -x
+      ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_to_use},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
       status=$?
       set +x
     fi
