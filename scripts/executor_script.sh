@@ -171,21 +171,20 @@ else
         -v /tmp/testexec.$$.ini:/testrunner/testexec.$$.ini \
         testrunner:install python3 scripts/new_install.py \
         -i testexec.$$.ini \
-        -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
       status=$?
       set +x
     else
       cp /tmp/testexec.$$.ini $WORKSPACE/
-      set -x
       initial_version=$(echo "$parameters" | sed -n 's/.*initial_version=\([^,]*\).*/\1/p')
 	  echo "Initial version: $initial_version"
       if [ -n "$initial_version" ]; then
-        echo ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${initial_version},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
-        ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${initial_version},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        version_to_use="$initial_version"
    	  else
-        echo ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
-        ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        version_to_use="$version_number"
       fi
+      set -x
+      ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_to_use},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
       status=$?
       set +x
     fi

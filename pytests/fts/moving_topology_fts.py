@@ -30,12 +30,12 @@ class MovingTopFTS(FTSBaseTest):
         rest.set_disableFileTransferRebalance(self.disable_file_transfer_rebalance)
         if not self.capella_run:
             self.index_path = rest.get_index_path()
-            if self.index_path == "/data":
+            if self.index_path.startswith("/data"):
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
 
     def tearDown(self):
         super(MovingTopFTS, self).tearDown()
-        if not self.capella_run and self.index_path == "/data":
+        if not self.capella_run and self.index_path.startswith("/data"):
             try:
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
             except Exception as err:

@@ -38,7 +38,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         rest.set_disableFileTransferRebalance(self.disable_file_transfer_rebalance)
         if not self.capella_run:
             self.index_path = rest.get_index_path()
-            if self.index_path == "/data":
+            if self.index_path.startswith("/data"):
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
         self.type_of_load = TestInputSingleton.input.param("type_of_load", "separate")
         self.validate_memory_leak = TestInputSingleton.input.param("validate_memory_leak", False)
@@ -59,7 +59,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.stop_memory_collector_and_validator = True
             self.memory_validator_thread.join()
         super(VectorSearchMovingTopFTS, self).tearDown()
-        if not self.capella_run and self.index_path == "/data":
+        if not self.capella_run and self.index_path.startswith("/data"):
             try:
                 self.reset_data_mount_point(self._cb_cluster.get_fts_nodes())
             except Exception as err:
