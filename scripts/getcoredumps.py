@@ -171,7 +171,7 @@ def main():
         remote_thread.daemon = True
         remote_thread.start()
         run_time = 0
-        while remote_thread.isAlive() and run_time < 1200:
+        while remote_thread.is_alive() and run_time < 1200:
             time.sleep(15)
             run_time += 15
             print("Waiting for another 15 seconds (time-out after 20 min)")
@@ -181,7 +181,7 @@ def main():
 
     for remote_thread in remote_threads:
         remote_thread.join(120)
-        if remote_thread.isAlive():
+        if remote_thread.is_alive():
             raise Exception("collect core dumps hung on remote node")
 
 if __name__ == "__main__":

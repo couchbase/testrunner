@@ -11,8 +11,8 @@ from os.path import basename, splitext
 from pprint import pprint
 sys.path = ["lib", "pytests"] + sys.path
 
-if sys.hexversion < 0x30706f0:
-    sys.exit("Testrunner requires version 3.7.6+ of python (found: " + sys.version + ")")
+if sys.version_info < (3, 10, 13):
+    sys.exit("Testrunner requires version 3.10.13+ of python (found: " + sys.version + ")")
 
 import re
 import time

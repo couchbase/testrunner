@@ -2028,7 +2028,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             thread2.start()
             thread2.join()
 
-            if thread1.isAlive():
+            if thread1.is_alive():
                 self.assertTrue(False, "The backfill thread never registered any files")
             else:
                 self.log.info("The backfill directory was being used during the query")

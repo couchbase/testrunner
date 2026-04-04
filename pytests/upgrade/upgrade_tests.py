@@ -394,7 +394,7 @@ class UpgradeTests(NewUpgradeBaseTest):
     def stop_all_events(self, thread_list):
         for t in thread_list:
             try:
-                if t.isAlive():
+                if t.is_alive():
                     t.stop()
             except Exception as ex:
                 self.log.info(ex)

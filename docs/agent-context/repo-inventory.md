@@ -8,7 +8,7 @@ Python-based integration test framework for Couchbase Server. Validates 8+ servi
 
 | Item | Detail |
 |------|--------|
-| Language | Python 3.10.13 |
+| Language | Python 3.10.13 (migrated from Python 3.7.6) |
 | Test framework | Custom runner (`testrunner.py`) based on `unittest` |
 | Package management | `pip3` + `requirements.txt` |
 | Build orchestration | `Makefile` -> `scripts/start_cluster_and_run_tests.sh/.py` -> `testrunner.py` |

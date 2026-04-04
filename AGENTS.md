@@ -46,7 +46,9 @@ make init-submodules   # java_sdk_client, lib/capellaAPI, magma_loader/DocLoader
 
 ## Development Constraints
 
-- **Python:** 3.10.13
+- **Python:** 3.10.13 (migrated from Python 3.7.6)
+- **Python 3.10 Migration Notes:**
+  - Use Python 3.10+ compatible APIs throughout the codebase
 - **All tests are integration tests** requiring a running Couchbase cluster
 - **cluster_run** needs `../ns_server/` sibling directory built via `make`
 - **Working directory** must be project root for imports (`lib/`, `pytests/` on sys.path)

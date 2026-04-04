@@ -322,7 +322,7 @@ class LoadRunner(object):
     def query(self):
         for t in self.threads:
             t.join(0)
-        self.threads = [t for t in self.threads if t.isAlive()]
+        self.threads = [t for t in self.threads if t.is_alive()]
 
         if not len(self.threads):
             self.stopped = True
@@ -353,4 +353,4 @@ class LoadRunner(object):
                     if time.time() - start_time > time_limit:
                         return
                     t.join(1)
-                self.threads = [t for t in self.threads if t.isAlive()]
+                self.threads = [t for t in self.threads if t.is_alive()]

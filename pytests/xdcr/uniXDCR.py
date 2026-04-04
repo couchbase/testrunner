@@ -372,7 +372,7 @@ class unidirectional(XDCRNewBaseTest):
 
         src_remote_shell = RemoteMachineShellConnection(self.src_master)
         machine_type = src_remote_shell.extract_remote_info().type.lower()
-        while (loadDataThread.isAlive() and machine_type == 'linux'):
+        while (loadDataThread.is_alive() and machine_type == 'linux'):
             command = "netstat -lpnta | grep 11210 | grep TIME_WAIT | wc -l"
             output, _ = src_remote_shell.execute_command(command)
             if int(output[0]) > allowed_memcached_conn:

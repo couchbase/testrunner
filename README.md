@@ -3,7 +3,7 @@
 Prerequisites
 -------------
 
-* Python 3.7.6
+* Python 3.10.13
 * pip3 or easy_install
 
 See the setup steps in the Py2 to Py3 porting guide: https://hub.internal.couchbase.com/confluence/display/QA/Python+3.7.6+installation+for+testrunner

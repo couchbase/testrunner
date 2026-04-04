@@ -1552,7 +1552,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
 
             while threads:
                 threads[0].join(1)
-                threads = [t for t in threads if t.isAlive()]
+                threads = [t for t in threads if t.is_alive()]
     except KeyboardInterrupt:
         log.warning("exiting because of KeyboardInterrupt")
         ctl['run_ok'] = False
@@ -1561,7 +1561,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
 
     final_report(cur, store, total_time=t_end - t_start)
 
-    threads = [t for t in threads if t.isAlive()]
+    threads = [t for t in threads if t.is_alive()]
     heartbeat = 0
     while threads:
         threads[0].join(1)
@@ -1569,7 +1569,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
         if heartbeat >= 60:
             heartbeat = 0
             log.info("mcsoda is running with %s threads" % len(threads))
-        threads = [t for t in threads if t.isAlive()]
+        threads = [t for t in threads if t.is_alive()]
 
     ctl['run_ok'] = False
     if ctl.get('shutdown_event') is not None:

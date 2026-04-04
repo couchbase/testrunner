@@ -355,7 +355,7 @@ class CollectinfoTests(CliBaseTest):
         monitor_mem_thread.start()
         self.thred_end = False
         while not self.thred_end:
-            if not col_thread.isAlive():
+            if not col_thread.is_alive():
                 self.thred_end = True
         for t in collect_threads:
             t.join()
