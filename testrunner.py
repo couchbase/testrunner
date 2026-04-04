@@ -1059,11 +1059,11 @@ def reruntests(rerun, names, options, arg_i, arg_p,runtime_test_params):
         return all_results
 
 def main():
+    log.info("TestRunner: start...")
+    # Initialize TestInputSingleton BEFORE parse_args so module imports can access it
+    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
     log.info("TestRunner: parsing args...")
     names, runtime_test_params, arg_i, arg_p, options = parse_args(sys.argv)
-    log.info("TestRunner: start...")
-    # get params from command line
-    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
     # ensure command line params get higher priority
     runtime_test_params.update(TestInputSingleton.input.test_params)
     TestInputSingleton.input.test_params = runtime_test_params

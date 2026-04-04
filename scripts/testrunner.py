@@ -244,9 +244,9 @@ def watcher():
 def main():
     watcher()
 
-    names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
-    # get params from command line
+    # Initialize TestInputSingleton BEFORE parse_args so module imports can access it
     TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
+    names, test_params, arg_i, arg_p, options = parse_args(sys.argv)
     # ensure command line params get higher priority
     test_params.update(TestInputSingleton.input.test_params)
     TestInputSingleton.input.test_params = test_params

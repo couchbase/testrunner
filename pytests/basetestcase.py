@@ -3574,7 +3574,7 @@ class OnPremBaseTestCase(unittest.TestCase):
 
 from capella_basetestcase import BaseTestCase as CapellaBaseTestCase
 
-if TestInputSingleton.input.param("capella_run", False):
+if TestInputSingleton.input is not None and TestInputSingleton.input.param("capella_run", False):
     BaseTestCase = CapellaBaseTestCase
 else:
     BaseTestCase = OnPremBaseTestCase
