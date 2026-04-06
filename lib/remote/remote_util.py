@@ -48,6 +48,9 @@ from membase.api.rest_client import RestConnection, RestHelper
 from cluster_run_manager import KeepRefs
 
 from lib.Cb_constants.CBServer import CbServer
+from lib.testconstants import \
+    LINUX_COUCHBASE_OLD_CONFIG_PATH, \
+    WIN_COUCHBASE_OLD_CONFIG_PATH
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -1901,6 +1904,7 @@ class RemoteMachineShellConnection(KeepRefs):
         self.log_command_output(o, r)
         o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build))
         self.log_command_output(o, r)
+
         self.wait_for_couchbase_started(num_retries=num_retries, poll_interval=poll_interval,
                                         message="wait for cb server start completely after reset vbuckets!")
 
@@ -2437,8 +2441,6 @@ class RemoteMachineShellConnection(KeepRefs):
     def install_server_win(self, build, version, startserver=True,
                            vbuckets=None, fts_query_limit=None,
                            windows_msi=False, cbft_env_options=None, enable_ipv6=False):
-
-
         log.info('******start install_server_win ********')
         if windows_msi:
             self.remove_win_backup_dir()
@@ -3901,13 +3903,13 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command("rm -rf ""{0}""/*".format(data_path))
             self.log_command_output(o, r)
             o, r = self.execute_command("rm -rf ""{0}""/*"\
-                                             .format(data_path.replace("data", "config")))
+                                        .format(WIN_COUCHBASE_OLD_CONFIG_PATH))
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("rm -rf {0}/*".format(data_path))
             self.log_command_output(o, r)
             o, r = self.execute_command("rm -rf {0}/*"\
-                                             .format(data_path.replace("data", "config")))
+                                        .format(LINUX_COUCHBASE_OLD_CONFIG_PATH))
             self.log_command_output(o, r)
 
     def check_if_windows_service_stopped(self, service_name=None):
@@ -4007,7 +4009,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if not running and retry >= 3:
             sys.exit("Server not started even after 3 retries on "+self.info.ip)
 
-    # To be used when a calling a method with killall is used, because it's 
+    # To be used when a calling a method with killall is used, because it's
     # not necessarily installed on the VM.
     def install_psmisc(self):
         if "centos" in self.info.distribution_version.lower():
@@ -4015,8 +4017,8 @@ class RemoteMachineShellConnection(KeepRefs):
         if "debian" in self.info.distribution_version.lower():
             self.execute_command("apt-get -y install psmisc")
 
-    # When editing this function please make sure that it's not slowing it down 
-    # significantly. Some tests rely on this function to complete relatively fast a 
+    # When editing this function please make sure that it's not slowing it down
+    # significantly. Some tests rely on this function to complete relatively fast a
     # they are trying to generate a complicated scenarios. Slowing this function could cause flakiness
     def pause_memcached(self, os="linux", timesleep=30, delay=0):
         log.info("*** pause memcached process ***")
