@@ -48,6 +48,9 @@ from membase.api.rest_client import RestConnection, RestHelper
 from cluster_run_manager import KeepRefs
 
 from lib.Cb_constants.CBServer import CbServer
+from lib.testconstants import \
+    LINUX_COUCHBASE_OLD_CONFIG_PATH, \
+    WIN_COUCHBASE_OLD_CONFIG_PATH
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -1563,31 +1566,31 @@ class RemoteMachineShellConnection(KeepRefs):
     def download_binary_in_win(self, url, version, msi_install=False):
         """
         Download Couchbase Server MSI binary on Windows.
-        
+
         Args:
             url: URL to download the MSI from
             version: Version string (e.g., "8.0.0-3785")
             msi_install: Whether this is an MSI installation (always True for modern versions)
-        
+
         Returns:
             bool: True if download succeeded and file is valid
         """
         log.info('**** Starting download_binary_in_win for {0} on {1} ****'.format(version, self.ip))
-        
+
         # Kill any existing Couchbase processes that might lock files
         self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
         self.terminate_processes(self.info,
                                  [s + "-*" for s in CB_RELEASE_BUILDS.keys()])
         self.disable_firewall()
-        
+
         deliverable_type = "msi"
         file_location = "/cygdrive/c/tmp/"
         msi_filename = "{0}.msi".format(version)
         full_path = "{0}{1}".format(file_location, msi_filename)
-        
+
         # Ensure tmp directory exists
         self.execute_command("mkdir -p {0}".format(file_location))
-        
+
         # Check if file already exists and verify it
         exist = self.file_exists(file_location, version)
         if exist:
@@ -1606,28 +1609,28 @@ class RemoteMachineShellConnection(KeepRefs):
                 except (ValueError, IndexError):
                     log.warning('Could not verify file size, re-downloading...')
                     self.execute_command("rm -f {0}".format(full_path))
-        
+
         # Download the MSI file
         log.info('Downloading MSI from: {0}'.format(url))
-        
+
         # Use wget with better options for reliability
         # -N: timestamping, -c: continue partial downloads, --no-check-certificate: skip SSL verification
         # --progress=dot:mega: show progress for large files
         download_cmd = "cd {0}; wget -c --no-check-certificate --progress=dot:mega -O {1} '{2}'".format(
             file_location, msi_filename, url)
-        
+
         log.info('Download command: {0}'.format(download_cmd))
         output, error = self.execute_command(download_cmd, timeout=1800)  # 30 min timeout for large files
         self.log_command_output(output, error)
-        
+
         # Verify download succeeded
         file_status = self.file_exists(file_location, version, pause_time=10)
-        
+
         if not file_status:
             # Retry download with alternative method
             log.warning('Initial download may have failed, retrying...')
             file_status = self.check_and_retry_download_binary(download_cmd, file_location, version)
-        
+
         if file_status:
             # Final verification: check file size
             output, _ = self.execute_command("stat -c%s {0} 2>/dev/null || stat -f%z {0}".format(full_path))
@@ -1640,11 +1643,11 @@ class RemoteMachineShellConnection(KeepRefs):
                         return False
                 except (ValueError, IndexError):
                     log.warning('Could not verify downloaded file size')
-            
+
             # List the file for confirmation
             output, error = self.execute_command("ls -la {0}".format(full_path))
             self.log_command_output(output, error)
-        
+
         return file_status
 
     def check_and_retry_download_binary(self, command, file_location,
@@ -1998,7 +2001,7 @@ class RemoteMachineShellConnection(KeepRefs):
         log.info("Stopping CB service on Windows node {0}".format(self.ip))
         o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat".format(build))
         self.log_command_output(o, r)
-        
+
         # Check if stop command failed due to missing file
         if r and "No such file or directory" in str(r):
             log.warning("Stop batch file not found on {0}. Skipping service restart.".format(self.ip))
@@ -2008,7 +2011,7 @@ class RemoteMachineShellConnection(KeepRefs):
         log.info("Starting CB service on Windows node {0}".format(self.ip))
         o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build))
         self.log_command_output(o, r)
-        
+
         # Check if start command failed due to missing file
         if r and "No such file or directory" in str(r):
             log.warning("Start batch file not found on {0}. Skipping wait for couchbase.".format(self.ip))
@@ -2084,26 +2087,26 @@ class RemoteMachineShellConnection(KeepRefs):
         log.info("Stopping CB service on Windows node {0}".format(self.ip))
         o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat ".format(build))
         self.log_command_output(o, r)
-        
+
         # Check if stop command failed due to missing file
         if r and "No such file or directory" in str(r):
             log.warning("Stop batch file not found on {0}. Skipping service restart.".format(self.ip))
             self._cleanup_temp_files(local_file, des_file)
             return
-        
+
         log.info("Starting CB service on Windows node {0}".format(self.ip))
         cmd = WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build)
         if ipv6:
             cmd += " true"
         o, r = self.execute_command(cmd)
         self.log_command_output(o, r)
-        
+
         # Check if start command failed due to missing file
         if r and "No such file or directory" in str(r):
             log.warning("Start batch file not found on {0}. Skipping wait for couchbase.".format(self.ip))
             self._cleanup_temp_files(local_file, des_file)
             return
-        
+
         # Give the service some time to initialize before checking process status
         self.sleep(poll_interval, "Waiting for CB service to initialize on Windows")
         self.wait_for_couchbase_started(num_retries=num_retries, poll_interval=poll_interval,
@@ -2603,7 +2606,7 @@ class RemoteMachineShellConnection(KeepRefs):
                            windows_msi=False, cbft_env_options=None, enable_ipv6=False):
         """
         Install Couchbase Server on Windows using MSI installer.
-        
+
         Args:
             build: Build object containing version info
             version: Version string (e.g., "8.0.0-3785")
@@ -2613,44 +2616,44 @@ class RemoteMachineShellConnection(KeepRefs):
             windows_msi: Must be True for MSI installation
             cbft_env_options: CBFT environment options (optional)
             enable_ipv6: Enable IPv6 support (optional)
-        
+
         Returns:
             bool: True if installation succeeded, False otherwise
         """
         log.info('******start install_server_win on {0} ********'.format(self.ip))
-        
+
         if not windows_msi:
             raise Exception("Windows only supports MSI installation method")
-        
+
         msi_file = "{0}.msi".format(version)
         log_file = "install_log_{0}.txt".format(version)
         cygwin_tmp = "/cygdrive/c/tmp"
         win_tmp = "C:\\tmp"
-        
+
         # Step 1: Clean up previous installation artifacts
         log.info("Step 1: Cleaning up previous installation artifacts...")
         self.remove_win_backup_dir()
         self.remove_win_collect_tmp()
-        
+
         # Kill any running Couchbase processes
         self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
-        
+
         # Stop any existing Couchbase service
         self.execute_command("net stop CouchbaseServer 2>/dev/null || true")
         self.sleep(5, "Waiting for service to stop")
-        
+
         # Step 2: Verify MSI file exists and is valid
         log.info("Step 2: Verifying MSI file at {0}/{1}...".format(cygwin_tmp, msi_file))
-        
+
         # Check file exists
         if not self.file_exists(cygwin_tmp + "/", msi_file):
             log.error("MSI file not found: {0}/{1}".format(cygwin_tmp, msi_file))
             return False
-        
+
         # Get file size to verify download was complete
         output, error = self.execute_command("ls -la {0}/{1}".format(cygwin_tmp, msi_file))
         self.log_command_output(output, error)
-        
+
         # Verify file is not empty or corrupt (MSI should be > 100MB typically)
         output, error = self.execute_command("stat -c%s {0}/{1} 2>/dev/null || stat -f%z {0}/{1}".format(
             cygwin_tmp, msi_file))
@@ -2663,26 +2666,26 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.info("MSI file size: {0} bytes".format(file_size))
             except (ValueError, IndexError):
                 log.warning("Could not determine MSI file size")
-        
+
         # Step 3: Remove old install log if exists
         self.execute_command("rm -f {0}/{1}".format(cygwin_tmp, log_file))
-        
+
         # Step 4: Run MSI installer with absolute Windows path
         # CRITICAL: msiexec.exe is a Windows native tool and needs Windows-style paths
         # Using relative path or cygwin path causes "Error 2203: Cannot open database file"
         log.info("Step 3: Running MSI installer...")
-        
+
         # Use cmd.exe to run msiexec with proper Windows paths
         # /qn = quiet, no UI
         # /norestart = don't reboot
         # /L*V = verbose logging
         install_cmd = 'cmd /c "msiexec /i {0}\\{1} /qn /norestart /L*V {0}\\{2}"'.format(
             win_tmp, msi_file, log_file)
-        
+
         log.info("Install command: {0}".format(install_cmd))
         output, error = self.execute_command(install_cmd, timeout=900)
         self.log_command_output(output, error)
-        
+
         # Step 5: Wait for installation to complete
         # MSI installer may run asynchronously, poll for VERSION.txt
         log.info("Step 4: Waiting for installation to complete...")
@@ -2690,43 +2693,43 @@ class RemoteMachineShellConnection(KeepRefs):
         wait_interval = 15
         elapsed = 0
         installation_complete = False
-        
+
         while elapsed < max_wait_time:
             self.sleep(wait_interval, "Waiting for MSI installation... ({0}s/{1}s)".format(elapsed, max_wait_time))
             elapsed += wait_interval
-            
+
             # Check if VERSION.txt exists (indicates successful install)
             if self.file_exists(WIN_CB_PATH, VERSION_FILE):
                 installation_complete = True
                 log.info("VERSION.txt found - installation completed after {0} seconds".format(elapsed))
                 break
-            
+
             # Also check for msiexec process - if it's done and no VERSION.txt, something failed
             output, _ = self.execute_command("tasklist /FI \"IMAGENAME eq msiexec.exe\" 2>/dev/null | grep -i msiexec || true")
             if elapsed > 60 and not output:
                 # msiexec finished but no VERSION.txt - check log for errors
                 log.warning("msiexec process finished but VERSION.txt not found yet, checking logs...")
-        
+
         # Step 6: Verify installation and handle failures
         if not installation_complete:
             log.error("Installation failed - VERSION.txt not found at {0}{1} after {2}s".format(
                 WIN_CB_PATH, VERSION_FILE, max_wait_time))
             self._dump_msi_install_log(cygwin_tmp, log_file)
             return False
-        
+
         log.info("Couchbase Server installation completed successfully")
-        
+
         # Step 7: Wait for Couchbase service to start
         log.info("Step 5: Waiting for Couchbase service to start...")
         self.sleep(15, "Allowing time for Couchbase service to initialize")
-        
+
         # Start service if not already running
         self.execute_command("net start CouchbaseServer 2>/dev/null || true")
-        
+
         # Wait for service to be fully operational
         self.wait_for_couchbase_started(num_retries=30, poll_interval=10,
                                         message="Waiting for Couchbase service to start after installation")
-        
+
         # Step 8: Apply optional configurations
         if fts_query_limit:
             log.info("Step 6: Configuring FTS query limit...")
@@ -2736,32 +2739,32 @@ class RemoteMachineShellConnection(KeepRefs):
                 value="bleveMaxResultWindow={0}".format(int(fts_query_limit)),
                 ipv6=enable_ipv6
             )
-        
+
         log.info("******install_server_win completed successfully on {0}********".format(self.ip))
         return True
-    
+
     def _dump_msi_install_log(self, cygwin_tmp, log_file):
         """Read and dump MSI install log for diagnostics. Handles UTF-16 encoding."""
         try:
             log.info("Attempting to read MSI install log for diagnostics...")
-            
+
             # MSI logs are typically UTF-16LE encoded
             # Try multiple approaches to read the log
-            
+
             # Approach 1: Use iconv to convert UTF-16 to UTF-8
             log_output, _ = self.execute_command(
                 "iconv -f UTF-16LE -t UTF-8 {0}/{1} 2>/dev/null | tail -200".format(cygwin_tmp, log_file))
-            
+
             if not log_output or len(log_output) < 5:
                 # Approach 2: Try UTF-16 (with BOM)
                 log_output, _ = self.execute_command(
                     "iconv -f UTF-16 -t UTF-8 {0}/{1} 2>/dev/null | tail -200".format(cygwin_tmp, log_file))
-            
+
             if not log_output or len(log_output) < 5:
                 # Approach 3: Use strings to extract readable text
                 log_output, _ = self.execute_command(
                     "strings {0}/{1} 2>/dev/null | tail -200".format(cygwin_tmp, log_file))
-            
+
             if log_output:
                 log.info("=== MSI Install Log (last 200 lines) ===")
                 for line in log_output:
@@ -2771,7 +2774,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     else:
                         log.info("MSI LOG: {0}".format(line))
                 log.info("=== End of MSI Install Log ===")
-                
+
                 # Check for common error codes
                 log_text = ' '.join(log_output)
                 if '2203' in log_text:
@@ -2782,7 +2785,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     log.error("Error 1618: Another installation is in progress")
             else:
                 log.warning("Could not read install log - file may not exist or be empty")
-                
+
         except Exception as e:
             log.warning("Exception while reading install log: {0}".format(str(e)))
 
@@ -2991,7 +2994,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def couchbase_uninstall(self, windows_msi=False, product=None, debug_logs=True, force_clean=False):
         """
         Uninstall Couchbase Server.
-        
+
         Args:
             windows_msi: Whether this is an MSI-based Windows installation
             product: Product name (optional)
@@ -3759,13 +3762,13 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.info('command executed successfully with {}'.format(self.username))
         return (output, error, exit_code) if get_exit_code else (output, error)
 
-    def execute_command_with_pty(self, command, prompts_and_responses=None, 
+    def execute_command_with_pty(self, command, prompts_and_responses=None,
                                    env_vars=None, timeout=600, debug=True):
         """
         Execute a command on the remote machine using paramiko with a PTY.
         This method requests a pseudo-TTY which is required for commands that
         use interactive input (like golang.org/x/term for passphrase prompts).
-        
+
         Args:
             command: The command to execute on the remote machine
             prompts_and_responses: List of tuples (prompt_pattern, response) for interactive input.
@@ -3774,7 +3777,7 @@ class RemoteMachineShellConnection(KeepRefs):
                       Example: {"CBAUTH_REVRPC_URL": "http://user:pass@host:8091"}
             timeout: Timeout in seconds for the command (default: 600)
             debug: Whether to log debug information (default: True)
-            
+
         Returns:
             Tuple of (output_lines, error_lines, exit_code)
             - output_lines: List of output lines from the command
@@ -3783,46 +3786,46 @@ class RemoteMachineShellConnection(KeepRefs):
         """
         if debug:
             log.info("Running command with PTY on {0}: {1}".format(self.ip, command))
-        
+
         self.reconnect_if_inactive()
-        
+
         prompts_and_responses = prompts_and_responses or []
         env_vars = env_vars or {}
-        
+
         # Build environment variable exports
         env_exports = ""
         if env_vars:
             env_exports = " && ".join([f"export {k}=\"{v}\"" for k, v in env_vars.items()])
             env_exports += " && "
-        
+
         # Construct the full command
         full_command = f"{env_exports}{command}"
-        
+
         if self.use_sudo:
             full_command = "sudo " + full_command
-        
+
         output_data = ""
         exit_code = -1
-        
+
         try:
             # Open a channel with PTY
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty(term='xterm', width=200, height=50)
             channel.settimeout(timeout)
             channel.exec_command(full_command)
-            
+
             # Track which prompts we've responded to
             prompt_index = 0
-            
+
             # Read output and respond to prompts
             while True:
                 if channel.recv_ready():
                     chunk = channel.recv(4096).decode('utf-8', errors='replace')
                     output_data += chunk
-                    
+
                     if debug and chunk:
                         log.debug(f"Received: {chunk[:200]}...")
-                    
+
                     # Check for prompts to respond to
                     while prompt_index < len(prompts_and_responses):
                         prompt_pattern, response = prompts_and_responses[prompt_index]
@@ -3834,7 +3837,7 @@ class RemoteMachineShellConnection(KeepRefs):
                             time.sleep(0.1)  # Small delay after sending
                         else:
                             break
-                
+
                 # Check if channel is closed
                 if channel.exit_status_ready():
                     # Read any remaining data
@@ -3842,36 +3845,36 @@ class RemoteMachineShellConnection(KeepRefs):
                         chunk = channel.recv(4096).decode('utf-8', errors='replace')
                         output_data += chunk
                     break
-                
+
                 time.sleep(0.1)
-            
+
             exit_code = channel.recv_exit_status()
             channel.close()
-            
+
         except Exception as e:
             log.error(f"Error executing command with PTY on {self.ip}: {str(e)}")
             output_data = str(e)
             exit_code = -1
-        
+
         # Split output into lines
         output_lines = output_data.split('\n') if output_data else []
         # Remove empty trailing lines
         while output_lines and output_lines[-1].strip() == '':
             output_lines.pop()
-        
+
         if debug:
             log.info(f"Command exit code: {exit_code}")
             if output_lines:
                 log.info(f"Output lines count: {len(output_lines)}")
-        
+
         # Return empty list for error since PTY merges stdout/stderr
         return output_lines, [], exit_code
 
     # Keep pexpect method as alias for backward compatibility
-    def execute_command_with_pexpect(self, command, prompts_and_responses=None, 
+    def execute_command_with_pexpect(self, command, prompts_and_responses=None,
                                       env_vars=None, timeout=600, debug=True):
         """Alias for execute_command_with_pty for backward compatibility."""
-        return self.execute_command_with_pty(command, prompts_and_responses, 
+        return self.execute_command_with_pty(command, prompts_and_responses,
                                               env_vars, timeout, debug)
 
     def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):
@@ -4370,13 +4373,13 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command("rm -rf ""{0}""/*".format(data_path))
             self.log_command_output(o, r)
             o, r = self.execute_command("rm -rf ""{0}""/*"\
-                                             .format(data_path.replace("data", "config")))
+                                        .format(WIN_COUCHBASE_OLD_CONFIG_PATH))
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("rm -rf {0}/*".format(data_path))
             self.log_command_output(o, r)
             o, r = self.execute_command("rm -rf {0}/*"\
-                                             .format(data_path.replace("data", "config")))
+                                        .format(LINUX_COUCHBASE_OLD_CONFIG_PATH))
             self.log_command_output(o, r)
 
     def check_if_windows_service_stopped(self, service_name=None):
@@ -4476,7 +4479,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if not running and retry >= 3:
             sys.exit("Server not started even after 3 retries on "+self.info.ip)
 
-    # To be used when a calling a method with killall is used, because it's 
+    # To be used when a calling a method with killall is used, because it's
     # not necessarily installed on the VM.
     def install_psmisc(self):
         if "centos" in self.info.distribution_version.lower():
@@ -4484,8 +4487,8 @@ class RemoteMachineShellConnection(KeepRefs):
         if "debian" in self.info.distribution_version.lower():
             self.execute_command("apt-get -y install psmisc")
 
-    # When editing this function please make sure that it's not slowing it down 
-    # significantly. Some tests rely on this function to complete relatively fast a 
+    # When editing this function please make sure that it's not slowing it down
+    # significantly. Some tests rely on this function to complete relatively fast a
     # they are trying to generate a complicated scenarios. Slowing this function could cause flakiness
     def pause_memcached(self, os="linux", timesleep=30, delay=0):
         log.info("*** pause memcached process ***")
@@ -5379,44 +5382,44 @@ class RemoteMachineShellConnection(KeepRefs):
         Completely clean a Windows machine for fresh Couchbase Server installation.
         This method removes all traces of previous installations, stops services,
         kills processes, and cleans up directories.
-        
+
         Use this before install_server_win for a guaranteed clean state.
-        
+
         Returns:
             bool: True if cleanup completed successfully
         """
         log.info("=== Starting complete Windows cleanup for fresh install on {0} ===".format(self.ip))
-        
+
         try:
             # Step 1: Stop Couchbase service
             log.info("Step 1: Stopping Couchbase service...")
             self.execute_command("net stop CouchbaseServer 2>/dev/null || true")
             self.sleep(5, "Waiting for service to stop")
-            
+
             # Step 2: Kill all Couchbase-related processes
             log.info("Step 2: Killing Couchbase processes...")
             for proc in WIN_PROCESSES_KILLED:
                 self.execute_command("taskkill /F /IM {0} 2>/dev/null || true".format(proc))
-            
+
             # Additional processes that might be running
-            extra_procs = ['erl.exe', 'beam.smp.exe', 'epmd.exe', 'memcached.exe', 
-                          'cbq-engine.exe', 'indexer.exe', 'projector.exe', 
+            extra_procs = ['erl.exe', 'beam.smp.exe', 'epmd.exe', 'memcached.exe',
+                          'cbq-engine.exe', 'indexer.exe', 'projector.exe',
                           'goxdcr.exe', 'cbft.exe', 'eventing-producer.exe']
             for proc in extra_procs:
                 self.execute_command("taskkill /F /IM {0} 2>/dev/null || true".format(proc))
-            
+
             self.sleep(5, "Waiting for processes to terminate")
-            
+
             # Step 3: Uninstall any existing Couchbase Server via MSI
             log.info("Step 3: Checking for existing Couchbase installation...")
-            
+
             # Find any installed Couchbase products
             output, _ = self.execute_command(
                 'cmd /c "wmic product where \\"name like \'%Couchbase%\'\\\" get IdentifyingNumber,Name 2>nul" | grep -i couchbase || true')
-            
+
             if output and any('Couchbase' in line for line in output):
                 log.info("Found existing Couchbase installation, attempting uninstall...")
-                
+
                 # Try to get the product code and uninstall
                 for line in output:
                     if '{' in line and '}' in line:
@@ -5429,9 +5432,9 @@ class RemoteMachineShellConnection(KeepRefs):
                             self.execute_command(
                                 'cmd /c "msiexec /x {0} /qn /norestart"'.format(guid),
                                 timeout=600)
-                
+
                 self.sleep(30, "Waiting for uninstall to complete")
-            
+
             # Step 4: Remove Couchbase installation directory
             log.info("Step 4: Removing Couchbase installation directory...")
             couchbase_paths = [
@@ -5442,7 +5445,7 @@ class RemoteMachineShellConnection(KeepRefs):
             ]
             for path in couchbase_paths:
                 self.execute_command("rm -rf {0} 2>/dev/null || true".format(path))
-            
+
             # Step 5: Remove Couchbase data directories
             log.info("Step 5: Removing Couchbase data directories...")
             data_paths = [
@@ -5451,7 +5454,7 @@ class RemoteMachineShellConnection(KeepRefs):
             ]
             for path in data_paths:
                 self.execute_command("rm -rf {0} 2>/dev/null || true".format(path))
-            
+
             # Step 6: Clean registry entries (optional, may need admin rights)
             log.info("Step 6: Cleaning registry entries...")
             reg_keys = [
@@ -5462,34 +5465,34 @@ class RemoteMachineShellConnection(KeepRefs):
             for key in reg_keys:
                 self.execute_command(
                     'cmd /c "reg delete \\"{0}\\" /f 2>nul" || true'.format(key))
-            
+
             # Step 7: Clean up temp files
             log.info("Step 7: Cleaning up temp files...")
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
-            
+
             # Clean MSI files but keep downloads for efficiency
             self.execute_command("rm -f /cygdrive/c/tmp/install_log_*.txt 2>/dev/null || true")
             self.execute_command("rm -f /cygdrive/c/tmp/install_status_*.txt 2>/dev/null || true")
-            
+
             # Step 8: Verify cleanup
             log.info("Step 8: Verifying cleanup...")
-            
+
             # Check VERSION.txt is gone
             if self.file_exists(WIN_CB_PATH, VERSION_FILE):
                 log.warning("VERSION.txt still exists - cleanup may be incomplete")
                 # Force remove
                 self.execute_command("rm -f '{0}{1}'".format(WIN_CB_PATH, VERSION_FILE))
-            
+
             # Verify no Couchbase processes running
             output, _ = self.execute_command(
                 "tasklist 2>/dev/null | grep -i -E 'erl|beam|memcached|cbq-engine' || true")
             if output and any(proc in str(output).lower() for proc in ['erl', 'beam', 'memcached']):
                 log.warning("Some Couchbase processes may still be running: {0}".format(output))
-            
+
             log.info("=== Windows cleanup completed successfully on {0} ===".format(self.ip))
             return True
-            
+
         except Exception as e:
             log.error("Error during Windows cleanup: {0}".format(str(e)))
             return False
