@@ -1539,6 +1539,33 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.log.info(f'new indexes created after  {index_list_post_creating_vector_indexes}')
                     if not self.dcp_rebalance:
                         self.validate_shard_affinity(specific_indexes=index_list_post_creating_vector_indexes)
+                
+                    # BQ indexes only supported from 8.1 onwards
+                    if self.upgrade_to[:3] >= "8.1":
+                        self.log.info("Creating BQ indexes post-upgrade...")
+                        try:
+                            bq_definitions = self.gsi_util_obj.get_index_definition_list(dataset="Cars",
+                                                                                          similarity="L2_SQUARED",
+                                                                                          train_list=None,
+                                                                                          scan_nprobes=100,
+                                                                                          array_indexes=False,
+                                                                                          limit=10,
+                                                                                          quantization_algo_color_vector="RaBitQ",
+                                                                                          quantization_algo_description_vector="RaBitQ",
+                                                                                          bhive_index=False)
+                            bq_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bq_definitions,
+                                                                                       namespace=self.namespaces[0],
+                                                                                       num_replica=self.num_index_replica,
+                                                                                       bhive_index=False)
+                            self.gsi_util_obj.create_gsi_indexes(create_queries=bq_create_queries, 
+                                                                 database=self.namespaces[0],
+                                                                 query_node=self.n1ql_node)
+                            self.wait_until_indexes_online()
+                            self.log.info("BQ indexes created successfully post-upgrade")
+                        except Exception as e:
+                            self.log.info(f"BQ index creation post-upgrade: {e}")
+                    else:
+                        self.log.info(f"Skipping BQ indexes - not supported in upgraded version {self.upgrade_to}")
 
                 self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 

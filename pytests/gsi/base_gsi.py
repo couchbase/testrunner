@@ -2049,7 +2049,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                           array_indexes=False,
                                                                           limit=self.scan_limit,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          description_dimension=self.dimension)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          num_replica=self.num_index_replica)

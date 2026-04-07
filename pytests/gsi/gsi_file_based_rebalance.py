@@ -99,7 +99,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                                                   limit=self.scan_limit, is_base64=self.base64,
                                                                                   quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                                   quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                                  bhive_index=self.bhive_index)
+                                                                                  bhive_index=self.bhive_index,
+                                                                                  description_dimension=self.dimension)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -189,7 +190,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                                                   limit=self.scan_limit, is_base64=self.base64,
                                                                                   quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                                   quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                                  bhive_index=self.bhive_index)
+                                                                                  bhive_index=self.bhive_index,
+                                                                                  description_dimension=self.dimension)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -291,7 +293,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                                                   limit=self.scan_limit, is_base64=self.base64,
                                                                                   quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                                   quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                                  bhive_index=self.bhive_index)
+                                                                                  bhive_index=self.bhive_index,
+                                                                                  description_dimension=self.dimension)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -382,7 +385,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                                                   limit=self.scan_limit, is_base64=self.base64,
                                                                                   quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                                   quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                                  bhive_index=self.bhive_index)
+                                                                                  bhive_index=self.bhive_index,
+                                                                                  description_dimension=self.dimension)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -470,7 +474,8 @@ class FileBasedRebalance(BaseSecondaryIndexingTests, QueryHelperTests):
                                                                                   limit=self.scan_limit, is_base64=self.base64,
                                                                                   quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                                   quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                                  bhive_index=self.bhive_index)
+                                                                                  bhive_index=self.bhive_index,
+                                                                                  description_dimension=self.dimension)
                         select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                                    namespace=namespace, limit=self.scan_limit))
                         queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,

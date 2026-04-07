@@ -533,7 +533,8 @@ class GSIUtils(object):
                                                           train_list=None, xattr_indexes=False,
                                                           scan_nprobes=1, skip_primary=False, array_indexes=False,
                                                           limit=10, quantization_algo_color_vector=None,
-                                                          quantization_algo_description_vector=None):
+                                                          quantization_algo_description_vector=None,
+                                                          description_dimension=384):
 
         definitions_list = []
         color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
@@ -579,7 +580,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'descriptionVectorBhive',
                             index_fields=[f'{desc_vecfield} VECTOR'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit, persist_full_vector=False,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield},"
@@ -590,7 +591,7 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'partitionedVectorBhive',
                             index_fields=[f'{desc_vecfield} VECTOR'],
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vecfield}",
@@ -618,7 +619,7 @@ class GSIUtils(object):
             QueryDefinition(index_name=index_name_prefix + 'partialIndexBhive',
                             index_fields=[f'{desc_vecfield} VECTOR'],
                             index_where_clause='rating > 3',
-                            dimension=384, description=f"IVF,{quantization_algo_description_vector}",
+                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, scan_nprobes=scan_nprobes,
                             limit=limit,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"description, {desc_vecfield}",
@@ -1568,20 +1569,6 @@ class GSIUtils(object):
                             train_list=train_list, limit=limit, is_base64=is_base64,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"emb, {vec_1}",
                                                                               vec_1)))
-
-        # Single vector + single scalar field + partitioned on vector field
-        definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + 'oneScalarLeadingOneVectorPart2',
-                            index_fields=['country', f'emb VECTOR'],
-                            dimension=description_dimension, description=f"IVF,{quantization_algo_description_vector}",
-                            similarity=similarity, scan_nprobes=scan_nprobes,
-                            train_list=train_list, limit=limit, is_base64=is_base64,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"fuel, emb,"
-                                                                               f" {vec_1}",
-                                                                               'country = "Greece" ',
-                                                                               vec_1
-                                                                               ),
-                            partition_by_fields=['emb']))
 
         # Single vector (leading) + single scalar field
         definitions_list.append(
@@ -2758,7 +2745,8 @@ class GSIUtils(object):
                                                                                          limit=limit,
                                                                                          xattr_indexes=xattr_indexes,
                                                                                          quantization_algo_color_vector=quantization_algo_color_vector,
-                                                                                         quantization_algo_description_vector=quantization_algo_description_vector)
+                                                                                         quantization_algo_description_vector=quantization_algo_description_vector,
+                                                                                         description_dimension=description_dimension)
             else:
                 definition_list = self.generate_car_vector_loader_index_definition(index_name_prefix=prefix,
                                                                                    skip_primary=skip_primary,

@@ -2438,7 +2438,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                           array_indexes=False,
                                                                           limit=self.scan_limit,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                          quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                          description_dimension=self.dimension)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
@@ -2485,6 +2486,7 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                         break
                     else:
                         timeout = timeout + 1
+                        time.sleep(1)
                 if timeout > 360:
                     self.fail("timeout reached for index drop to happen")
                 if self.decrease_node_count > 0:
@@ -2620,7 +2622,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
                                                                                 limit=self.scan_limit,
                                                                                 bhive_index=self.bhive_index,
                                                                                 quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector)
+                                                                                quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                                description_dimension=self.dimension)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=query_definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
                 queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
