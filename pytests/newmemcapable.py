@@ -1,7 +1,8 @@
 import copy
-import random
 import unittest
 import time
+import traceback
+
 from basetestcase import BaseTestCase
 from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -9,8 +10,6 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 
-
-import traceback
 
 class GetrTests(BaseTestCase):
 

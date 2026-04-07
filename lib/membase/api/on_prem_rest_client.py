@@ -3562,15 +3562,15 @@ class RestConnection(object):
 
         params = urllib.parse.urlencode(params_dict)
 
-        log.info("%s with param: %s" % (api, params))
+        log.debug("%s with param: %s" % (api, params))
         status, content, header = self._http_request(api, 'POST', params)
         if timeSynchronization:
             if status:
                 raise Exception("Erroneously able to set bucket settings %s for bucket on time-sync" % (params, bucket_name))
             return status, content
         if not status:
-            raise Exception("Unable to set bucket settings %s for bucket" % (params, bucket_name))
-        log.info("bucket %s updated" % bucket_name)
+            raise Exception("Unable to set bucket settings '%s' for bucket %s"
+                            % (params, bucket_name))
         return status
 
     # return AutoFailoverSettings
