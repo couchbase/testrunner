@@ -4640,6 +4640,8 @@ class FTSBaseTest(unittest.TestCase):
                     else:
                         self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope,
                                                             collection=self.collection, cli_client=self.cli_client)
+        if self.bulk_collections:
+            self.__setup_bulk_collections()
         self._master = self._cb_cluster.get_master_node()
 
     def use_capella_setup(self):
@@ -5033,6 +5035,8 @@ class FTSBaseTest(unittest.TestCase):
                     else:
                         self._cb_cluster._create_collection(bucket=bucket.name, scope=self.scope,
                                                             collection=self.collection, cli_client=self.cli_client)
+        if self.bulk_collections:
+            self.__setup_bulk_collections()
         self._master = self._cb_cluster.get_master_node()
 
         if self.ntonencrypt == 'enable':
@@ -5153,6 +5157,13 @@ class FTSBaseTest(unittest.TestCase):
         self.sample_query = {"match": "Safiya Morgan", "field": "name"}
         # Hierarchical search mode - uses hs_validator instead of ES
         self.hierarchical = self._input.param("hierarchical", False)
+
+        # Bulk collection/scope/bucket creation params
+        self.bulk_collections = self._input.param("bulk_collections", False)
+        self.num_scopes = self._input.param("num_scopes", 0)
+        self.num_collections_per_scope = self._input.param("num_collections_per_scope", 0)
+        self.fts_collections = self._input.param("fts_collections", 0)
+        self.extra_buckets = self._input.param("extra_buckets", None)
 
         self.compare_es = self._input.param("compare_es", False)
 
@@ -5318,6 +5329,72 @@ class FTSBaseTest(unittest.TestCase):
             bucket_type=bucket_type,
             maxttl=maxttl,
             bucket_storage=self.__bucket_storage)
+
+    def __setup_bulk_collections(self):
+        """Bulk create scopes and collections using manifest API.
+        Optionally creates extra buckets of mixed types beforehand."""
+        if self.extra_buckets:
+            self.__create_extra_buckets()
+
+        master = self._cb_cluster.get_master_node()
+        if self.num_scopes > 0 and self.num_collections_per_scope > 0:
+            for bucket in self._cb_cluster.get_buckets():
+                self.log.info(
+                    f"Bulk creating {self.num_scopes} scopes x "
+                    f"{self.num_collections_per_scope} collections "
+                    f"on bucket '{bucket.name}'")
+                BucketOperationHelper.bulk_create_collection_on_bucket(
+                    server_info=master,
+                    bucket_name=bucket.name,
+                    scopes=self.num_scopes,
+                    collections_per_scope=self.num_collections_per_scope,
+                    preserve_og_manifest=True,
+                    scope_prefix="bulk_scope_",
+                    collection_prefix="bulk_coll_"
+                )
+
+        fts_colls = min(self.fts_collections,
+                        self.num_collections_per_scope) \
+            if self.fts_collections > 0 else 0
+        if fts_colls > 0:
+            self.container_type = "collection"
+            self.scope = "bulk_scope_0"
+            self.collection = [f"bulk_coll_0_{i}" for i in range(fts_colls)]
+            self.bulk_collections_expected_docs = self._num_items * fts_colls
+            self.log.info(
+                f"FTS index scope='{self.scope}', "
+                f"collections count={len(self.collection)}, "
+                f"expected total docs={self.bulk_collections_expected_docs}")
+
+    def __create_extra_buckets(self):
+        """Create extra buckets from spec like 'magma:2;ephemeral:1'."""
+        for spec in self.extra_buckets.split(';'):
+            parts = spec.strip().split(':')
+            if len(parts) != 2:
+                continue
+            storage_type = parts[0].strip()
+            count = int(parts[1].strip())
+
+            if storage_type == 'ephemeral':
+                bucket_type = 'ephemeral'
+                bucket_storage = 'couchstore'
+            else:
+                bucket_type = 'membase'
+                bucket_storage = storage_type
+
+            for i in range(count):
+                name = f"extra_{storage_type}_{i}"
+                self._cb_cluster.create_standard_buckets(
+                    bucket_size=256,
+                    name=name,
+                    num_buckets=1,
+                    num_replicas=self._num_replicas,
+                    bucket_type=bucket_type,
+                    bucket_storage=bucket_storage
+                )
+                self.log.info(
+                    f"Created extra bucket '{name}' "
+                    f"(type={bucket_type}, storage={bucket_storage})")
 
     def create_buckets_on_cluster(self):
         # if mixed priority is set by user, set high priority for sasl and
@@ -5632,6 +5709,10 @@ class FTSBaseTest(unittest.TestCase):
         if es_index is None:
             es_index = FTSBaseTest.get_es_index_name()
 
+        if item_count is None and hasattr(self, 'bulk_collections_expected_docs') \
+                and self.bulk_collections_expected_docs:
+            item_count = self.bulk_collections_expected_docs
+
         retry = self._input.param("index_retry", 20)
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
@@ -5644,7 +5725,9 @@ class FTSBaseTest(unittest.TestCase):
                 try:
                     index_doc_count = index.get_indexed_doc_count()
 
-                    if index.collections:
+                    if item_count and self.bulk_collections:
+                        container_doc_count = item_count
+                    elif index.collections:
                         container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
                     else:
                         container_doc_count = index.get_src_bucket_doc_count()
@@ -6417,7 +6500,10 @@ class FTSBaseTest(unittest.TestCase):
         for index in self._cb_cluster.get_indexes():
             docs_indexed = index.get_indexed_doc_count()
 
-            if index.collections:
+            if self.bulk_collections and hasattr(self, 'bulk_collections_expected_docs') \
+                    and self.bulk_collections_expected_docs:
+                container_doc_count = self.bulk_collections_expected_docs
+            elif index.collections:
                 container_doc_count = index.get_src_collections_doc_count()
             else:
                 container_doc_count = index.get_src_bucket_doc_count()

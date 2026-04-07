@@ -13,7 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
-from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
+from .fts_base import FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -4929,3 +4929,67 @@ class StableTopFTS(FTSBaseTest):
             for err in errors:
                 self.log.error(err)
             self.fail()
+
+    def test_exceed_fts_100_collection_limit(self):
+        """Negative test: FTS index with >100 collections should fail."""
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        scope_name = "bulk_scope_0"
+        over_limit = [f"bulk_coll_0_{i}" for i in range(101)]
+        _type = [f"{scope_name}.{c}" for c in over_limit]
+
+        index = FTSIndex(
+            cluster=self._cb_cluster,
+            name="idx_over_100_colls",
+            source_name=bucket.name,
+            type_mapping=_type,
+            collection_index=True,
+            scope=scope_name,
+            collections=over_limit
+        )
+        for typ in _type:
+            index.add_type_mapping_to_index_definition(
+                type=typ, analyzer="standard")
+        index.index_definition['params']['doc_config'] = {
+            'mode': 'scope.collection.type_field',
+            'type_field': 'type'
+        }
+
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        status, content = rest.create_fts_index(
+            index.name, index.index_definition,
+            index._source_name, index.scope, mode="check")
+        self.log.info(f"Create index with 101 collections: "
+                      f"status={status}, content={content}")
+        self.assertFalse(
+            status,
+            "Index creation should fail with >100 collections")
+
+    def test_incremental_index_to_100_collections(self):
+        """Create FTS index with 99 collections, then update to 100."""
+        self.load_data(generator=None, num_items=self._num_items)
+
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        scope_name = "bulk_scope_0"
+        first_99 = [f"bulk_coll_0_{i}" for i in range(99)]
+        _type = [f"{scope_name}.{c}" for c in first_99]
+
+        index = self._cb_cluster.create_fts_index(
+            name="idx_incr_99",
+            source_name=bucket.name,
+            collection_index=True,
+            _type=_type,
+            analyzer="standard",
+            scope=scope_name,
+            collections=first_99
+        )
+        self.log.info(f"Created index '{index.name}' with 99 collections")
+
+        coll_100 = "bulk_coll_0_99"
+        new_type = f"{scope_name}.{coll_100}"
+        index.add_type_mapping_to_index_definition(
+            type=new_type, analyzer="standard")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.log.info(f"Updated index '{index.name}' to 100 collections")
+
+        self.wait_for_indexing_complete()
