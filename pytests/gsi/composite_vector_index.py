@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from requests.auth import HTTPBasicAuth
 import huggingface_hub
+
 if not hasattr(huggingface_hub, "cached_download"):
     huggingface_hub.cached_download = huggingface_hub.hf_hub_download
 from sentence_transformers import SentenceTransformer
@@ -36,7 +37,6 @@ import os
 import re
 import numpy as np
 import faiss
-
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -74,6 +74,33 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def suite_tearDown(self):
         pass
 
+    def _setup_data_for_indexing(self, skip_default_scope=True):
+        """
+        Setup data for indexing tests.
+        If isSparse is True: create bucket, scope, collection and load docs via prepare_collection_for_indexing.
+        Otherwise: restore from backup using restore_couchbase_bucket.
+        """
+        if self.isSparse:
+            self.bucket_params = self._create_bucket_params(
+                server=self.master, size=self.bucket_size,
+                replicas=self.num_replicas, bucket_type=self.bucket_type,
+                enable_replica_index=self.enable_replica_index,
+                eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(
+                name=self.test_bucket, port=11222,
+                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(
+                num_scopes=self.num_scopes,
+                num_collections=self.num_collections,
+                num_of_docs_per_collection=self.num_of_docs_per_collection,
+                json_template=self.json_template,
+                load_default_coll=False)
+        else:
+            self.restore_couchbase_bucket(
+                backup_filename=self.vector_backup_filename,
+                skip_default_scope=skip_default_scope)
+
     def kill_indexer(self, index_node):
         remote = RemoteMachineShellConnection(index_node)
         remote.execute_command(command="pkill indexer")
@@ -84,68 +111,174 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         remote.execute_command(command="pkill memecached")
         remote.disconnect()
 
-    def calculate_mean_reciprocal_rank(self, select_queries, expected_title):
+    def calculate_mean_reciprocal_rank(self, select_queries, expected_title, namespace=None):
         """
-        Calculate Mean Reciprocal Rank (MRR) for a set of queries with a single expected title.
-        
-        For each query, this function:
+        Calculate Mean Reciprocal Rank (MRR) for a set of queries.
+
+        For AmazonSparse (has title field):
         1. Executes the query to get ordered results
         2. Finds the position of the expected title in the results (1-indexed)
         3. Calculates reciprocal rank: 1/position (or 0 if not found)
         4. Returns the mean across all queries
-        
+
+        For MsMARCO (no title field, uses doc_id comparison with brute-force):
+        1. Executes the GSI query to get ordered results (doc_ids)
+        2. Computes brute-force ground truth by fetching all docs and sorting by sparse dot product
+        3. For each GSI result doc_id, finds its position in brute-force results (1-indexed)
+        4. Calculates reciprocal rank: 1/position (or 0 if not found in brute-force)
+        5. Returns the mean across all queries
+
         Args:
             select_queries: List of select queries to execute
-            expected_title: Single expected title to search for in all query results
-            
+            expected_title: Single expected title to search for (AmazonSparse) or query text (MsMARCO)
+            namespace: The namespace (bucket.scope.collection) - required for MsMARCO brute-force
+
         Returns:
             float: Mean Reciprocal Rank (0.0 to 1.0)
         """
         reciprocal_ranks = []
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
-        
-        self.log.info(f"[MRR] Searching for expected title: '{expected_title}' across {len(select_queries)} queries")
-        
+
+        # Determine if this is MsMARCO dataset (no title field, need brute-force comparison)
+        is_msmarco = self.json_template == "MsMARCO"
+
+        if is_msmarco:
+            self.log.info(f"[MRR] MsMARCO mode: Using brute-force doc_id comparison across {len(select_queries)} queries")
+        else:
+            self.log.info(f"[MRR] AmazonSparse mode: Searching for expected title: '{expected_title}' across {len(select_queries)} queries")
+
         for idx, query in enumerate(select_queries, start=1):
             try:
-                # Execute query and get results
-                result = self.run_cbq_query(query=query, server=n1ql_node)
-                query_results = result.get('results', [])
-                
-                # Find position of expected title (1-indexed)
-                position = None
-                for pos, doc in enumerate(query_results, start=1):
-                    if doc.get('title') == expected_title:
-                        position = pos
-                        break
-                
-                # Calculate reciprocal rank
-                if position is not None:
-                    rr = 1.0 / position
-                    self.log.info(f"[MRR] Query {idx}: Expected title found at position {position}, RR = {rr:.4f}")
+                # Skip non-vector queries (primary index, DISTINCT queries)
+                if "SPARSE_VECTOR_DISTANCE" not in query.upper():
+                    continue
+
+                if is_msmarco and namespace:
+                    # MsMARCO: Use brute-force ground truth comparison
+                    rr = self._calculate_mrr_msmarco(query, namespace, n1ql_node, idx)
                 else:
-                    rr = 0.0
-                    self.log.info(f"[MRR] Query {idx}: Expected title NOT FOUND in results, RR = 0")
-                
+                    # AmazonSparse: Use title-based lookup
+                    rr = self._calculate_mrr_amazon_sparse(query, expected_title, n1ql_node, idx)
+
                 reciprocal_ranks.append(rr)
-                
+
             except Exception as e:
-                self.log.error(f"[MRR] Query {idx}: Error executing query: {e}")
+                self.log.error(f"[MRR] Query {idx}: Error calculating MRR: {e}")
                 reciprocal_ranks.append(0.0)
-        
+
         # Calculate mean
         mrr = sum(reciprocal_ranks) / len(reciprocal_ranks) if reciprocal_ranks else 0.0
         self.log.info(f"[MRR] Mean Reciprocal Rank across {len(reciprocal_ranks)} queries: {mrr:.4f}")
-        
+
         return mrr
-    
+
+    def _calculate_mrr_amazon_sparse(self, query, expected_title, n1ql_node, query_idx):
+        """
+        Calculate reciprocal rank for AmazonSparse dataset using title-based lookup.
+        """
+        result = self.run_cbq_query(query=query, server=n1ql_node)
+        query_results = result.get('results', [])
+
+        # Find position of expected title (1-indexed)
+        position = None
+        for pos, doc in enumerate(query_results, start=1):
+            if doc.get('title') == expected_title:
+                position = pos
+                break
+
+        # Calculate reciprocal rank
+        if position is not None:
+            rr = 1.0 / position
+            self.log.info(f"[MRR] Query {query_idx}: Expected title found at position {position}, RR = {rr:.4f}")
+        else:
+            rr = 0.0
+            self.log.info(f"[MRR] Query {query_idx}: Expected title NOT FOUND in results, RR = 0")
+
+        return rr
+
+    def _calculate_mrr_msmarco(self, query, namespace, n1ql_node, query_idx):
+        """
+        Calculate reciprocal rank for MsMARCO dataset using brute-force ground truth comparison.
+        
+        MRR measures: At what position does the brute-force top-1 result appear in GSI results?
+        - If brute-force top-1 is GSI's 1st result: RR = 1.0
+        - If brute-force top-1 is GSI's 2nd result: RR = 0.5
+        - If brute-force top-1 is not in GSI results: RR = 0.0
+        """
+        # Extract sparse vector field and query vector from the query
+        vector_field, query_vector = self.extract_sparse_vector_field_and_query_vector(query)
+        query_indices, query_values = query_vector[0], query_vector[1]
+
+        # Execute GSI query and get results
+        gsi_result = self.run_cbq_query(query=query, server=n1ql_node,
+                                        scan_consistency=self.scan_consistency)
+        gsi_results = gsi_result.get('results', [])
+
+        # Extract doc_ids from GSI results (preserving order)
+        gsi_doc_ids = []
+        for doc in gsi_results:
+            doc_id = doc.get('id') or doc.get('doc_id') or doc.get('$1')
+            if doc_id:
+                gsi_doc_ids.append(doc_id)
+
+        if not gsi_doc_ids:
+            self.log.warning(f"[MRR] Query {query_idx}: No doc_ids in GSI results, RR = 0")
+            return 0.0
+
+        # Compute brute-force ground truth
+        # Fetch all docs with sparse vectors from the namespace
+        brute_force_query = f"SELECT meta().id AS doc_id, `sparse` FROM {namespace}"
+        bf_result = self.run_cbq_query(query=brute_force_query, server=n1ql_node)
+        all_docs = bf_result.get('results', [])
+
+        # Compute sparse dot product for each doc
+        doc_scores = []
+        for doc in all_docs:
+            doc_id = doc.get('doc_id')
+            sparse_vec = doc.get('sparse')
+            if sparse_vec and len(sparse_vec) == 2 and doc_id:
+                doc_indices, doc_values = sparse_vec[0], sparse_vec[1]
+                score = self._compute_sparse_dot_product(query_indices, query_values,
+                                                          doc_indices, doc_values)
+                doc_scores.append((doc_id, score))
+
+        # Sort by score descending (higher dot product = more similar)
+        doc_scores.sort(key=lambda x: x[1], reverse=True)
+
+        if not doc_scores:
+            self.log.warning(f"[MRR] Query {query_idx}: No brute-force results, RR = 0")
+            return 0.0
+
+        # Get brute-force top-1 doc_id (the "correct" answer)
+        bf_top1_doc_id = doc_scores[0][0]
+        bf_top1_score = doc_scores[0][1]
+
+        # Find position of brute-force top-1 in GSI results (1-indexed)
+        position = None
+        for pos, gsi_doc_id in enumerate(gsi_doc_ids, start=1):
+            if gsi_doc_id == bf_top1_doc_id:
+                position = pos
+                break
+
+        # Calculate reciprocal rank
+        if position is not None:
+            rr = 1.0 / position
+            self.log.info(f"[MRR] Query {query_idx}: Brute-force top-1 '{bf_top1_doc_id}' (score={bf_top1_score:.4f}) "
+                         f"found at GSI position {position}, RR = {rr:.4f}")
+        else:
+            rr = 0.0
+            self.log.info(f"[MRR] Query {query_idx}: Brute-force top-1 '{bf_top1_doc_id}' (score={bf_top1_score:.4f}) "
+                         f"NOT FOUND in GSI top-{len(gsi_doc_ids)} results, RR = 0")
+
+        return rr
+
     def gen_table_view(self, query_stats_map, message="query stats"):
         """
         Generate a table view of query statistics (recall and accuracy).
-        
+
         For sparse vector indexes, accuracy is None (not applicable), so we handle
         this case by displaying 'N/A' instead of trying to multiply None by 100.
-        
+
         Args:
             query_stats_map: dict mapping query -> [recall, accuracy]
                            For dense vectors: accuracy is a float (0.0 to 1.0)
@@ -153,13 +286,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             message: Message to display with the table
         """
         table = TableView(self.log.info)
-        
+
         # Check if any query has accuracy (to determine if this is dense or sparse)
         has_accuracy = any(
-            query_stats_map[q][1] is not None 
+            query_stats_map[q][1] is not None
             for q in query_stats_map if len(query_stats_map[q]) > 1
         )
-        
+
         if has_accuracy:
             # Dense vectors - show both recall and accuracy
             table.set_headers(['Query', 'Recall (%)', 'Accuracy (%)'])
@@ -176,7 +309,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 recall = query_stats_map[query][0]
                 recall_pct = recall * 100 if recall is not None else 'N/A'
                 table.add_row([query, recall_pct, 'N/A (sparse)'])
-        
+
         table.display(message=message)
 
     def populate_vectors_in_xattr(self, bucket, scope):
@@ -223,6 +356,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                           log("xattrs", e)
                                       }
                                       log("updated colorVector in " + meta.id + " of length " + doc.colorRGBVector.length);
+                                  } else if("sparse" in doc){
+                                      // Sparse vector support - sparse field contains {indices: [...], values: [...]}
+                                      try {
+                                          couchbase.mutateIn(upsert_xattr, meta, [couchbase.MutateInSpec.insert("sparseVec", doc.sparse, {"xattrs": true})]);
+                                      } catch (e) {
+                                          log("xattrs sparse", e)
+                                      }
+                                      log("updated sparseVec in " + meta.id);
                                   }
                               }
                              """
@@ -272,7 +413,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.single_distance_function = self.input.param("single_distance_function", False)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         self.bhive_composite_comparison = self.input.param("bhive_composite_comparison", False)
-        
+
         # Set BHIVE topNScan setting for better recall
         if self.bhive_index:
             index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -281,8 +422,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.xattr_indexes or 'RaBitQ2' in self.quantization_algo_description_vector or 'RaBitQ4' in self.quantization_algo_description_vector:
                 rest.set_index_settings({"indexer.bhive.topNScan": 500})
             else:
+
                 rest.set_index_settings({"indexer.bhive.topNScan": 500})
-        
+
         query_stats_map = {}
         if self.xattr_indexes:
             for namespace in self.namespaces:
@@ -291,10 +433,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         simlarity_list = ["COSINE", "L2_SQUARED", "L2", "DOT", "EUCLIDEAN_SQUARED", "EUCLIDEAN"]
         query_comparison_list = []
-        
+
         # Track index type for display messages during bhive_composite_comparison
         comparison_index_types = []
-        
+
         if self.bhive_composite_comparison:
             self.bhive_index = True
             similarity = random.choice(simlarity_list)
@@ -308,10 +450,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.bhive_composite_comparison:
                 simlarity_list = ["DOT"] * 2
                 comparison_index_types = ["bhive_sparse", "composite_sparse"]
-        
+
         # Track iteration for bhive_composite_comparison
         comparison_iteration = 0
-        
+
         for similarity in simlarity_list:
             for namespace in self.namespaces:
                 if self.bhive_index:
@@ -332,9 +474,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           limit=self.scan_limit, is_base64=self.base64,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                          bhive_index=self.bhive_index, description_dimension=self.dimension,
-                                                                         )
-                    
+                                                                          bhive_index=self.bhive_index,
+                                                                          description_dimension=self.dimension,
+                                                                          sparsejl_dim=self.sparsejl_dim)
+
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          bhive_index=self.bhive_index)
@@ -342,13 +485,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                       namespace=namespace, limit=self.scan_limit)
                 drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
-                                                                      namespace=namespace)
-                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
+                                                                     namespace=namespace)
+                self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace,
+                                                       query_node=self.n1ql_node)
                 self.wait_until_indexes_online(timeout=3600)
                 self.log.info(f"select queries are {select_queries}")
                 self.item_count_related_validations()
                 self.validate_num_centroids_from_metadata()
-                
+
                 # Get single expected title for MRR calculation (from first sparse vector definition)
                 expected_title_for_mrr = None
                 if self.isSparse:
@@ -356,34 +500,34 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         if defn.expected_title:
                             expected_title_for_mrr = defn.expected_title
                             break
-                
+
                 # Iterate through definitions and select_queries together
                 for defn, query in zip(definitions, select_queries):
                     required_metric = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
                     if "DISTINCT" in query or required_metric not in query:
                         continue
-                    
+
                     # Get expected_title from the definition
                     if self.isSparse:
                         expected_title = defn.expected_title
                     else:
                         expected_title = None
-                    
+
                     query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
                                                                                           similarity=similarity,
-                                                                                          scan_consitency=True, 
+                                                                                          scan_consitency=True,
                                                                                           expected_title=expected_title)
                     query_stats_map[query] = [recall, accuracy]
 
                 self.log.info(f"query_stats_map is {query_stats_map}")
-                
+
                 # Calculate and log MRR for sparse vectors using select_queries
                 if self.isSparse and expected_title_for_mrr:
                     self.log.info("")
                     self.log.info("=" * 100)
                     self.log.info("CALCULATING MEAN RECIPROCAL RANK (MRR)")
                     self.log.info("=" * 100)
-                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr)
+                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
                     self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
                     self.log.info("=" * 100)
                 codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
@@ -392,20 +536,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
                 for query in drop_queries:
                     self.run_cbq_query(query=query, server=self.n1ql_node)
-                    
+
                 if self.bhive_composite_comparison:
                     # Store results and switch index type for next iteration
                     self.bhive_index = False
                     query_stats_map_new = deepcopy(query_stats_map)
                     query_stats_map = {}
                     query_comparison_list.append(query_stats_map_new)
-                    
+
                     # Generate appropriate message for the index type
                     if comparison_index_types:
                         index_type_msg = comparison_index_types[comparison_iteration]
                     else:
                         index_type_msg = "bhive" if comparison_iteration == 0 else "composite"
-                    
+
                     if self.isSparse:
                         self.gen_table_view(query_stats_map=query_stats_map_new,
                                             message=f"Sparse Vector Index Type: {index_type_msg}")
@@ -430,13 +574,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     continue
                 recall = query_stats_map[query][0]
                 accuracy = query_stats_map[query][1]
-                
+
                 # For sparse vectors, recall is binary (0 or 1), so threshold check applies differently
                 if self.isSparse:
                     # For sparse vectors, we expect the expected document to be found (recall = 1)
                     # Allow some tolerance since we're doing approximate search
                     self.assertGreater(recall, 0,
-                                            f"recall for sparse query {query} is {recall * 100}%")
+                                       f"recall for sparse query {query} is {recall * 100}%")
                 else:
                     # For dense vectors, check recall threshold
                     self.assertGreaterEqual(recall * 100, 70,
@@ -446,67 +590,92 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     #     self.assertGreaterEqual(accuracy * 100, 70,
                     #                             f"accuracy for query {query} is less than threshold 70")
 
-       
-
         self.rest.delete_bucket(bucket='metadata_bucket')
         self.drop_index_node_resources_utilization_validations()
 
     def test_sparse_vector_all_queries_experiment(self):
         """
         EXPERIMENTAL TEST: Create indexes, run ALL query vectors from JSONL, and calculate recall.
-        
+
         This test:
         1. Restores the dataset
         2. Creates all sparse vector indexes
         3. For each query vector, runs all select queries and checks binary recall
         4. Displays results table with query and recall
-        
+
         Recall is binary: 1 if expected title is in results, 0 otherwise.
         """
         # Only run for sparse vectors
         if not self.isSparse:
             self.log.info("Skipping test_sparse_vector_all_queries_experiment - only for sparse vectors")
             return
-        
+
         # Step 1: Restore the dataset
         self.log.info("=" * 100)
         self.log.info("STEP 1: RESTORING DATASET")
         self.log.info("=" * 100)
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
-        
+        if self.json_template == "AmazonSparse":
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
+        else:
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            self.prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=self.json_template,
+                                                 load_default_coll=False)
+
         # Load ALL sparse vectors and their titles from the JSONL file
-        jsonl_path = os.path.join(os.path.dirname(__file__), 
-                                  'sparse_vector_embeddings', 
-                                  self.sparse_query_vectors_file)
-        
+        # Different files and formats for AmazonSparse vs MsMARCO
+        if self.json_template == "AmazonSparse":
+            jsonl_path = os.path.join(os.path.dirname(__file__),
+                                      'sparse_vector_embeddings',
+                                      self.sparse_query_vectors_file)
+        else:
+            jsonl_path = os.path.join(os.path.dirname(__file__),
+                                      'sparse_vector_embeddings',
+                                      'msmarco_query_vectors.jsonl')
+
         all_query_vectors = []
         all_titles = []
-        
+
         self.log.info(f"Loading all sparse vectors from: {jsonl_path}")
         with open(jsonl_path, 'r') as f:
             for line in f:
                 if line.strip():
                     entry = json.loads(line)
-                    title = entry['title']
-                    sparse_emb = entry['sparse_embedding']
-                    indices = sparse_emb['indices']
-                    values = sparse_emb['values']
-                    # Sparse vector format is [indices, values] - matching gsi_utils format
+                    if self.json_template == "AmazonSparse":
+                        # AmazonSparse format: {"title": "...", "sparse_embedding": {"indices": [...], "values": [...]}}
+                        title = entry['title']
+                        sparse_emb = entry['sparse_embedding']
+                        indices = sparse_emb['indices']
+                        values = sparse_emb['values']
+                    else:
+                        # MsMARCO format: {"text": "...", "sparse": [[indices], [values]]}
+                        title = entry['text']
+                        sparse_data = entry['sparse']
+                        indices = sparse_data[0]
+                        values = sparse_data[1]
                     sparse_vector = [indices, values]
                     all_query_vectors.append(sparse_vector)
                     all_titles.append(title)
-        
+
         self.log.info(f"Loaded {len(all_query_vectors)} sparse query vectors")
-        
+
         namespace = self.namespaces[0] if self.namespaces else "test_bucket.test_scope_1.test_collection_1"
         prefix = 'test_DOT_sparse_experiment'
-        
+
         # Step 2: Get index definitions and create indexes
         self.log.info("")
         self.log.info("=" * 100)
         self.log.info("STEP 2: CREATING INDEXES")
         self.log.info("=" * 100)
-        
+
         definitions = self.gsi_util_obj.get_index_definition_list(
             dataset=self.json_template,
             prefix=prefix,
@@ -515,184 +684,257 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             scan_nprobes=self.scan_nprobes,
             array_indexes=False,
             xattr_indexes=self.xattr_indexes,
-            limit=self.scan_limit, 
+            limit=self.scan_limit,
             is_base64=self.base64,
             quantization_algo_color_vector=self.quantization_algo_color_vector,
             quantization_algo_description_vector=self.quantization_algo_description_vector,
-            bhive_index=self.bhive_index, 
+            bhive_index=self.bhive_index,
             description_dimension=self.dimension,
+            sparsejl_dim=self.sparsejl_dim,
         )
-        
+
         create_queries = self.gsi_util_obj.get_create_index_list(
             definition_list=definitions,
             namespace=namespace,
             bhive_index=self.bhive_index
         )
-        
+
         self.log.info("Index creation queries:")
         for i, query in enumerate(create_queries):
-            self.log.info(f"  {i+1}. {query[:150]}...")
-        
+            self.log.info(f"  {i + 1}. {query[:150]}...")
+
         # Create indexes
         self.gsi_util_obj.async_create_indexes(
-            create_queries=create_queries, 
-            database=namespace, 
+            create_queries=create_queries,
+            database=namespace,
             query_node=self.n1ql_node
         )
-        
+
         self.log.info("Waiting for indexes to come online...")
         self.wait_until_indexes_online(timeout=3600)
         self.item_count_related_validations()
         self.log.info("All indexes are online!")
-        
+
         # Get the original select queries (these contain one specific sparse vector)
         original_select_queries = self.gsi_util_obj.get_select_queries(
             definition_list=definitions,
             namespace=namespace,
             limit=self.scan_limit
         )
-        
+
         # Pattern to match SPARSE_VECTOR_DISTANCE calls with the embedded vector
         # Format: SPARSE_VECTOR_DISTANCE(`sparse`, [[indices], [values]], nprobes)
         sparse_vector_pattern = r'SPARSE_VECTOR_DISTANCE\s*\(\s*([^,]+)\s*,\s*(\[\[[^\]]+\],\s*\[[^\]]+\]\])\s*,\s*(\d+)\s*\)'
-        
+
         # Step 3: Run all queries and calculate recall
         self.log.info("")
         self.log.info("=" * 100)
         self.log.info("STEP 3: RUNNING QUERIES AND CALCULATING RECALL")
         self.log.info("=" * 100)
-        
-        # Results storage: {index_name: {vec_idx: recall}}
+
+        # Results storage: {index_name: [recall values]}
         results_by_index = {}
-        # Also store per-vector results: [(vec_idx, title, {index_name: recall})]
+        # MRR storage: {index_name: [reciprocal_rank values]}
+        mrr_by_index = {}
+        # Also store per-vector results: [(vec_idx, title, {index_name: recall}, {index_name: rr})]
         results_by_vector = []
-        
+
         # Get non-primary definitions
-        vector_definitions = [(defn, orig_query) for defn, orig_query in zip(definitions, original_select_queries) 
+        vector_definitions = [(defn, orig_query) for defn, orig_query in zip(definitions, original_select_queries)
                               if not defn.is_primary]
-        
+
         for vec_idx, (query_vector, expected_title) in enumerate(zip(all_query_vectors, all_titles)):
             vector_str = json.dumps(query_vector)
-            
+
             self.log.info(f"Processing query vector {vec_idx + 1}/{len(all_query_vectors)}: {expected_title}...")
-            
+
             vector_results = {}
-            
+            vector_rr = {}  # Reciprocal ranks for MRR
+
             for defn, orig_query in vector_definitions:
                 # Replace the sparse vector in the query with the current vector
                 def replace_vector(match):
                     field_name = match.group(1)
                     scan_nprobes = match.group(3)
                     return f'SPARSE_VECTOR_DISTANCE({field_name}, {vector_str}, {scan_nprobes})'
-                
+
                 new_query = re.sub(sparse_vector_pattern, replace_vector, orig_query)
-                
-                # Execute the query
+
+                # Execute the query and calculate recall + reciprocal rank
                 try:
-                    result = self.run_cbq_query(query=new_query, server=self.n1ql_node)
-                    query_results = result.get('results', [])
-                    
-                    # Check binary recall: is expected_title in results?
-                    found = any(r.get('title') == expected_title for r in query_results)
-                    recall = 1 if found else 0
-                    
+                    if self.json_template == "MsMARCO":
+                        # MsMARCO: Use brute-force ground truth comparison (recall@k)
+                        _, recall, _ = self.validate_scans_for_recall_and_accuracy(
+                            select_query=new_query,
+                            use_brute_force=True
+                        )
+                        # For MsMARCO, RR is same as recall since we use brute-force comparison
+                        rr = recall
+                    else:
+                        # AmazonSparse: Use binary recall and find position for MRR
+                        result = self.run_cbq_query(query=new_query, server=self.n1ql_node)
+                        query_results = result.get('results', [])
+                        
+                        # Find position of expected_title in results (1-indexed)
+                        position = 0
+                        for pos, r in enumerate(query_results, start=1):
+                            if r.get('title') == expected_title:
+                                position = pos
+                                break
+                        
+                        recall = 1 if position > 0 else 0
+                        rr = 1.0 / position if position > 0 else 0.0
+
                 except Exception as e:
                     self.log.error(f"Error executing query for {defn.index_name}: {e}")
                     recall = 0
-                
+                    rr = 0.0
+
                 vector_results[defn.index_name] = recall
-                
+                vector_rr[defn.index_name] = rr
+
                 # Initialize index results storage
                 if defn.index_name not in results_by_index:
                     results_by_index[defn.index_name] = []
                 results_by_index[defn.index_name].append(recall)
-            
-            results_by_vector.append((vec_idx, expected_title, vector_results))
-        
+
+                # Initialize MRR storage
+                if defn.index_name not in mrr_by_index:
+                    mrr_by_index[defn.index_name] = []
+                mrr_by_index[defn.index_name].append(rr)
+
+            results_by_vector.append((vec_idx, expected_title, vector_results, vector_rr))
+
         # Step 4: Display detailed results table
         self.log.info("")
         self.log.info("=" * 100)
         self.log.info("STEP 4: DETAILED RESULTS BY QUERY VECTOR")
         self.log.info("=" * 100)
-        
+
         # Create table for per-vector results
         detail_table = TableView(self.log.info)
         index_names = [defn.index_name for defn, _ in vector_definitions]
         headers = ['Vec#', 'Expected Title (truncated)'] + [name[-25:] for name in index_names]  # Truncate index names
         detail_table.set_headers(headers)
-        
-        for vec_idx, expected_title, vector_results in results_by_vector:
+
+        for vec_idx, expected_title, vector_results, vector_rr in results_by_vector:
             row = [
                 str(vec_idx + 1),
                 expected_title[:40] + '...' if len(expected_title) > 40 else expected_title
             ]
             for defn, _ in vector_definitions:
                 recall = vector_results.get(defn.index_name, 0)
-                row.append('1 (Found)' if recall == 1 else '0 (Miss)')
+                rr = vector_rr.get(defn.index_name, 0.0)
+                if self.json_template == "MsMARCO":
+                    # MsMARCO: continuous recall (0.0 to 1.0)
+                    row.append(f'{recall * 100:.1f}%')
+                else:
+                    # AmazonSparse: show recall and RR
+                    if recall == 1:
+                        row.append(f'1 (RR:{rr:.2f})')
+                    else:
+                        row.append('0 (Miss)')
             detail_table.add_row(row)
-        
+
         detail_table.display(message="Recall Results by Query Vector")
-        
-        # Step 5: Display summary table by index
+
+        # Step 5: Display summary table by index (Recall + MRR)
         self.log.info("")
         self.log.info("=" * 100)
-        self.log.info("STEP 5: AGGREGATE RECALL BY INDEX")
+        self.log.info("STEP 5: AGGREGATE RECALL AND MRR BY INDEX")
         self.log.info("=" * 100)
-        
+
         summary_table = TableView(self.log.info)
-        summary_table.set_headers(['Index Name', 'Total Queries', 'Found', 'Missed', 'Recall %'])
-        
-        overall_found = 0
+        if self.json_template == "MsMARCO":
+            # MsMARCO: Show average recall@k (continuous values)
+            summary_table.set_headers(['Index Name', 'Total Queries', 'Avg Recall@K', 'MRR'])
+        else:
+            # AmazonSparse: Show binary recall counts + MRR
+            summary_table.set_headers(['Index Name', 'Total Queries', 'Found', 'Missed', 'Recall %', 'MRR'])
+
+        overall_recall_sum = 0
+        overall_mrr_sum = 0
         overall_total = 0
-        
+
         for defn, _ in vector_definitions:
             recalls = results_by_index.get(defn.index_name, [])
+            rrs = mrr_by_index.get(defn.index_name, [])
             total = len(recalls)
-            found = sum(recalls)
-            missed = total - found
-            recall_pct = (found / total * 100) if total > 0 else 0
-            
-            overall_found += found
-            overall_total += total
-            
-            summary_table.add_row([
-                defn.index_name,
-                str(total),
-                str(found),
-                str(missed),
-                f"{recall_pct:.2f}%"
-            ])
-        
+
+            if self.json_template == "MsMARCO":
+                # MsMARCO: Calculate average recall@k and MRR
+                avg_recall = sum(recalls) / total if total > 0 else 0
+                mrr = sum(rrs) / len(rrs) if rrs else 0
+                overall_recall_sum += sum(recalls)
+                overall_mrr_sum += sum(rrs)
+                overall_total += total
+                summary_table.add_row([
+                    defn.index_name,
+                    str(total),
+                    f"{avg_recall * 100:.2f}%",
+                    f"{mrr:.4f}"
+                ])
+            else:
+                # AmazonSparse: Binary recall counts + MRR
+                found = sum(recalls)
+                missed = total - found
+                recall_pct = (found / total * 100) if total > 0 else 0
+                mrr = sum(rrs) / len(rrs) if rrs else 0
+                overall_recall_sum += found
+                overall_mrr_sum += sum(rrs)
+                overall_total += total
+                summary_table.add_row([
+                    defn.index_name,
+                    str(total),
+                    str(found),
+                    str(missed),
+                    f"{recall_pct:.2f}%",
+                    f"{mrr:.4f}"
+                ])
+
         # Add overall row
-        overall_recall_pct = (overall_found / overall_total * 100) if overall_total > 0 else 0
-        summary_table.add_row([
-            'OVERALL',
-            str(overall_total),
-            str(overall_found),
-            str(overall_total - overall_found),
-            f"{overall_recall_pct:.2f}%"
-        ])
-        
+        if self.json_template == "MsMARCO":
+            overall_avg_recall = overall_recall_sum / overall_total if overall_total > 0 else 0
+            overall_mrr = overall_mrr_sum / overall_total if overall_total > 0 else 0
+            summary_table.add_row([
+                'OVERALL',
+                str(overall_total),
+                f"{overall_avg_recall * 100:.2f}%",
+                f"{overall_mrr:.4f}"
+            ])
+            overall_recall_pct = overall_avg_recall * 100
+        else:
+            overall_recall_pct = (overall_recall_sum / overall_total * 100) if overall_total > 0 else 0
+            overall_mrr = overall_mrr_sum / overall_total if overall_total > 0 else 0
+            summary_table.add_row([
+                'OVERALL',
+                str(overall_total),
+                str(int(overall_recall_sum)),
+                str(overall_total - int(overall_recall_sum)),
+                f"{overall_recall_pct:.2f}%",
+                f"{overall_mrr:.4f}"
+            ])
+
         summary_table.display(message="Aggregate Recall Summary by Index")
-        
+
         # Step 6: Display failed queries (recall=0)
         self.log.info("")
         self.log.info("=" * 100)
         self.log.info("STEP 6: FAILED QUERIES (Expected document not found)")
         self.log.info("=" * 100)
-        
+
         failed_count = 0
-        for vec_idx, expected_title, vector_results in results_by_vector:
+        for vec_idx, expected_title, vector_results, _ in results_by_vector:
             for index_name, recall in vector_results.items():
                 if recall == 0:
                     failed_count += 1
                     self.log.info(f"  Vec#{vec_idx + 1} [{index_name}]: {expected_title[:60]}...")
-        
+
         if failed_count == 0:
             self.log.info("  No failed queries - all expected documents were found!")
         else:
             self.log.info(f"  Total failed queries: {failed_count}")
-        
+
         # Final summary
         self.log.info("")
         self.log.info("=" * 100)
@@ -701,12 +943,199 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.log.info(f"Total query vectors: {len(all_query_vectors)}")
         self.log.info(f"Index definitions (non-primary): {len(vector_definitions)}")
         self.log.info(f"Total queries executed: {overall_total}")
-        self.log.info(f"Successful recalls: {overall_found}")
-        self.log.info(f"Failed recalls: {overall_total - overall_found}")
-        self.log.info(f"Overall Recall: {overall_recall_pct:.2f}%")
+        if self.json_template == "MsMARCO":
+            self.log.info(f"Average Recall@K: {overall_recall_pct:.2f}%")
+            self.log.info(f"Mean Reciprocal Rank (MRR): {overall_mrr:.4f}")
+        else:
+            self.log.info(f"Successful recalls: {int(overall_recall_sum)}")
+            self.log.info(f"Failed recalls: {overall_total - int(overall_recall_sum)}")
+            self.log.info(f"Overall Recall: {overall_recall_pct:.2f}%")
+            self.log.info(f"Mean Reciprocal Rank (MRR): {overall_mrr:.4f}")
         self.log.info("=" * 100)
+
+        # Step 7: Run mutation workload
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 7: RUNNING MUTATION WORKLOAD")
+        self.log.info("=" * 100)
+
+        data_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        key_prefix = "msmarco-" if self.json_template == "MsMARCO" else "doc_"
+
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            bucket = bucket.split(':')[-1]
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=10, scope=scope,
+                                            collection=collection, json_template=self.json_template, timeout=2000,
+                                            op_type="update", mutate=1, dim=384, ops_rate=10000,
+                                            key_prefix=key_prefix,
+                                            update_start=0, update_end=self.num_of_docs_per_collection)
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update,
+                                                    timeout_secs=2000, use_magma_loader=True)
+            task.result()
+            self.log.info(f"Mutation workload completed for {namespace}")
+
+        self.log.info("Mutation workload completed for all namespaces")
+        self.wait_until_indexes_online(timeout=600)
+        self.validate_no_pending_mutations()
+
+        # Step 8: Re-run recall and MRR check after mutations
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("STEP 8: POST-MUTATION RECALL AND MRR CHECK")
+        self.log.info("=" * 100)
+
+        post_mutation_results_by_index = {}
+        post_mutation_mrr_by_index = {}
+        post_mutation_results_by_vector = []
+
+        for vec_idx, (query_vector, expected_title) in enumerate(zip(all_query_vectors, all_titles)):
+            vector_str = json.dumps(query_vector)
+            self.log.info(
+                f"Post-mutation: Processing query vector {vec_idx + 1}/{len(all_query_vectors)}: {expected_title}...")
+
+            vector_results = {}
+            vector_rr = {}
+
+            for defn, orig_query in vector_definitions:
+                def replace_vector(match):
+                    field_name = match.group(1)
+                    scan_nprobes = match.group(3)
+                    return f'SPARSE_VECTOR_DISTANCE({field_name}, {vector_str}, {scan_nprobes})'
+
+                new_query = re.sub(sparse_vector_pattern, replace_vector, orig_query)
+
+                try:
+                    if self.json_template == "MsMARCO":
+                        # MsMARCO: Use brute-force ground truth comparison (recall@k)
+                        _, recall, _ = self.validate_scans_for_recall_and_accuracy(
+                            select_query=new_query,
+                            use_brute_force=True
+                        )
+                        rr = recall
+                    else:
+                        # AmazonSparse: Use binary recall and find position for MRR
+                        result = self.run_cbq_query(query=new_query, server=self.n1ql_node)
+                        query_results = result.get('results', [])
+                        
+                        # Find position of expected_title in results (1-indexed)
+                        position = 0
+                        for pos, r in enumerate(query_results, start=1):
+                            if r.get('title') == expected_title or r.get('text') == expected_title:
+                                position = pos
+                                break
+                        
+                        recall = 1 if position > 0 else 0
+                        rr = 1.0 / position if position > 0 else 0.0
+                except Exception as e:
+                    self.log.error(f"Error executing post-mutation query for {defn.index_name}: {e}")
+                    recall = 0
+                    rr = 0.0
+
+                vector_results[defn.index_name] = recall
+                vector_rr[defn.index_name] = rr
+
+                if defn.index_name not in post_mutation_results_by_index:
+                    post_mutation_results_by_index[defn.index_name] = []
+                post_mutation_results_by_index[defn.index_name].append(recall)
+
+                if defn.index_name not in post_mutation_mrr_by_index:
+                    post_mutation_mrr_by_index[defn.index_name] = []
+                post_mutation_mrr_by_index[defn.index_name].append(rr)
+
+            post_mutation_results_by_vector.append((vec_idx, expected_title, vector_results, vector_rr))
+
+        # Display post-mutation summary (Recall + MRR)
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("POST-MUTATION AGGREGATE RECALL AND MRR BY INDEX")
+        self.log.info("=" * 100)
+
+        post_mutation_summary_table = TableView(self.log.info)
+        if self.json_template == "MsMARCO":
+            post_mutation_summary_table.set_headers(['Index Name', 'Total Queries', 'Avg Recall@K', 'MRR'])
+        else:
+            post_mutation_summary_table.set_headers(['Index Name', 'Total Queries', 'Found', 'Missed', 'Recall %', 'MRR'])
+
+        post_mutation_recall_sum = 0
+        post_mutation_mrr_sum = 0
+        post_mutation_overall_total = 0
+
+        for defn, _ in vector_definitions:
+            recalls = post_mutation_results_by_index.get(defn.index_name, [])
+            rrs = post_mutation_mrr_by_index.get(defn.index_name, [])
+            total = len(recalls)
+
+            if self.json_template == "MsMARCO":
+                avg_recall = sum(recalls) / total if total > 0 else 0
+                mrr = sum(rrs) / len(rrs) if rrs else 0
+                post_mutation_recall_sum += sum(recalls)
+                post_mutation_mrr_sum += sum(rrs)
+                post_mutation_overall_total += total
+                post_mutation_summary_table.add_row([
+                    defn.index_name,
+                    str(total),
+                    f"{avg_recall * 100:.2f}%",
+                    f"{mrr:.4f}"
+                ])
+            else:
+                found = sum(recalls)
+                missed = total - found
+                recall_pct = (found / total * 100) if total > 0 else 0
+                mrr = sum(rrs) / len(rrs) if rrs else 0
+                post_mutation_recall_sum += found
+                post_mutation_mrr_sum += sum(rrs)
+                post_mutation_overall_total += total
+                post_mutation_summary_table.add_row([
+                    defn.index_name,
+                    str(total),
+                    str(found),
+                    str(missed),
+                    f"{recall_pct:.2f}%",
+                    f"{mrr:.4f}"
+                ])
+
+        if self.json_template == "MsMARCO":
+            post_mutation_overall_recall_pct = (
+                post_mutation_recall_sum / post_mutation_overall_total * 100) if post_mutation_overall_total > 0 else 0
+            post_mutation_overall_mrr = post_mutation_mrr_sum / post_mutation_overall_total if post_mutation_overall_total > 0 else 0
+            post_mutation_summary_table.add_row([
+                'OVERALL',
+                str(post_mutation_overall_total),
+                f"{post_mutation_overall_recall_pct:.2f}%",
+                f"{post_mutation_overall_mrr:.4f}"
+            ])
+        else:
+            post_mutation_overall_recall_pct = (
+                post_mutation_recall_sum / post_mutation_overall_total * 100) if post_mutation_overall_total > 0 else 0
+            post_mutation_overall_mrr = post_mutation_mrr_sum / post_mutation_overall_total if post_mutation_overall_total > 0 else 0
+            post_mutation_summary_table.add_row([
+                'OVERALL',
+                str(post_mutation_overall_total),
+                str(int(post_mutation_recall_sum)),
+                str(post_mutation_overall_total - int(post_mutation_recall_sum)),
+                f"{post_mutation_overall_recall_pct:.2f}%",
+                f"{post_mutation_overall_mrr:.4f}"
+            ])
+
+        post_mutation_summary_table.display(message="Post-Mutation Aggregate Recall and MRR Summary by Index")
+
+        # Final comparison summary
+        self.log.info("")
+        self.log.info("=" * 100)
+        self.log.info("RECALL AND MRR COMPARISON: BEFORE vs AFTER MUTATIONS")
+        self.log.info("=" * 100)
+        self.log.info(f"Pre-mutation Overall Recall: {overall_recall_pct:.2f}%")
+        self.log.info(f"Post-mutation Overall Recall: {post_mutation_overall_recall_pct:.2f}%")
+        self.log.info(f"Pre-mutation Overall MRR: {overall_mrr:.4f}")
+        self.log.info(f"Post-mutation Overall MRR: {post_mutation_overall_mrr:.4f}")
+        self.log.info("=" * 100)
+
         self.sleep(864000)
-        
+
         # Cleanup
         self.log.info("")
         self.log.info("Dropping indexes...")
@@ -716,14 +1145,92 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         )
         for query in drop_queries:
             self.run_cbq_query(query=query, server=self.n1ql_node)
-        
+
         self.rest.delete_bucket(bucket='metadata_bucket')
         self.drop_index_node_resources_utilization_validations()
         self.log.info("Cleanup complete.")
 
+    def test_create_sparse_index_negative_scenarios(self):
+        """
+        Test negative scenarios for sparse vector index creation:
+        1. Sparse index on single scalar field (should fail - no SPARSE VECTOR field)
+        2. Sparse index on multiple scalar fields (should fail - no SPARSE VECTOR field)
+        3. Sparse index with defer_build=false on empty collection (should fail - no docs for training)
+        4. Sparse index with defer_build=true on empty collection (should succeed - deferred)
+        """
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+
+        collection_namespace = self.namespaces[0]
+
+        # Scenario 1: Try to create a sparse index on just a single scalar field (no SPARSE VECTOR)
+        # This should fail because sparse indexes require a SPARSE VECTOR field
+        index_gen_1 = QueryDefinition(index_name='sparse_scalar_only_1', is_base64=self.base64,
+                                      index_fields=['title'],
+                                      description="IVF1024", similarity="DOT")
+        try:
+            query = index_gen_1.generate_index_create_query(namespace=collection_namespace, bhive_index=True)
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+        except Exception as err:
+            # Expecting an error since there's no SPARSE VECTOR field
+            err_msg = 'Vector index requires at least one vector index key'
+            self.assertTrue(err_msg in str(err), f"Index without SPARSE VECTOR field should fail: {err}")
+
+        # Scenario 2: Try to create a sparse index on multiple scalar fields (no SPARSE VECTOR)
+        # This should also fail because sparse indexes require a SPARSE VECTOR field
+        index_gen_2 = QueryDefinition(index_name='sparse_multi_scalar_2', is_base64=self.base64,
+                                      index_fields=['title', 'average_rating', 'main_category'],
+                                      description="IVF1024", similarity="DOT")
+        try:
+            query = index_gen_2.generate_index_create_query(namespace=collection_namespace, bhive_index=True)
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+        except Exception as err:
+            # Expecting an error since there's no SPARSE VECTOR field
+            err_msg = 'Vector index requires at least one vector index key'
+            self.assertTrue(err_msg in str(err), f"Index with multiple scalars but no SPARSE VECTOR should fail: {err}")
+
+        # Scenario 3: Sparse index with defer_build=false on empty collection
+        # This should fail because there are no documents for training
+        scope = '_default'
+        collection = 'empty_collection_sparse'
+
+        self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+        empty_collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
+
+        index_gen_3 = QueryDefinition(index_name='sparse_empty_defer_false', is_base64=self.base64,
+                                      index_fields=['`sparse` SPARSE VECTOR'],
+                                      description="IVF1024", similarity="DOT")
+        try:
+            query = index_gen_3.generate_index_create_query(namespace=empty_collection_namespace,
+                                                            defer_build=False, bhive_index=True)
+            self.run_cbq_query(query=query, server=self.n1ql_node)
+        except Exception as err:
+            # Expecting training error due to empty collection
+            err_msg = 'ErrTraining: InvalidTrainListSize: The number of documents: 0 in keyspace:'
+            self.assertTrue(err_msg in str(err),
+                            f"Sparse index on empty collection with defer=false should fail: {err}")
+
+        # Scenario 4: Sparse index with defer_build=true on empty collection
+        # This should succeed because build is deferred - no training needed yet
+        index_gen_4 = QueryDefinition(index_name='sparse_empty_defer_true', is_base64=self.base64,
+                                      index_fields=['`sparse` SPARSE VECTOR'],
+                                      description="IVF1024", similarity="DOT")
+
+        query = index_gen_4.generate_index_create_query(namespace=empty_collection_namespace,
+                                                        defer_build=True, bhive_index=True)
+        self.run_cbq_query(query=query, server=self.n1ql_node)
+
+        # Verify the deferred index was created
+        metadata = self.index_rest.get_indexer_metadata()['status']
+        deferred_indexes = [idx for idx in metadata if idx['name'] == 'sparse_empty_defer_true']
+        self.assertEqual(len(deferred_indexes), 1,
+                         f'Sparse index with defer_build=true on empty collection should be created: {metadata}')
+        self.assertEqual(deferred_indexes[0]['status'], 'Created',
+                         f'Deferred sparse index should have status Created: {deferred_indexes[0]}')
+
     def test_bhive_with_system_failures(self):
         try:
-            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
             self.set_persisted_snapshot_interval(interval=120 * 1000)
             query_stats_map = {}
             if self.xattr_indexes:
@@ -731,23 +1238,27 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     bucket, scope, _ = namespace.split('.')
                     self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
             self.namespaces = ['test_bucket.test_scope_1.test_collection_1']
-            similarity = "COSINE"
+            if self.isSparse:
+                similarity = "DOT"
+            else:
+                similarity = "COSINE"
             namespace = self.namespaces[0]
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                        prefix=f'test_{similarity}',
-                                                                        similarity=similarity, train_list=None,
-                                                                        scan_nprobes=self.scan_nprobes,
-                                                                        array_indexes=False,
-                                                                        xattr_indexes=self.xattr_indexes,
-                                                                        limit=self.scan_limit, is_base64=self.base64,
-                                                                        quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                        quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                        bhive_index=self.bhive_index)
+                                                                      prefix=f'test_{similarity}',
+                                                                      similarity=similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      xattr_indexes=self.xattr_indexes,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index,
+                                                                      sparsejl_dim=self.sparsejl_dim)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                    namespace=namespace,
-                                                                    bhive_index=self.bhive_index)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
-                                                                namespace=namespace, limit=self.scan_limit)
+                                                                  namespace=namespace, limit=self.scan_limit)
             metadata_dict_from_definitions = self.form_vector_index_metadata_dict_from_index_definitions(definitions)
             self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
             self.wait_until_indexes_online(timeout=1800)
@@ -769,19 +1280,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 self.log.info("Waiting for 5 minutes after running chaos action")
                 for i in range(3):
                     definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                        prefix=f'test_{similarity}_system_failure_{i}',
-                                                                        similarity=similarity, train_list=None,
-                                                                        scan_nprobes=self.scan_nprobes,
-                                                                        array_indexes=False,
-                                                                        xattr_indexes=self.xattr_indexes,
-                                                                        limit=self.scan_limit, is_base64=self.base64,
-                                                                        quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                        quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                        bhive_index=self.bhive_index)
+                                                                              prefix=f'test_{similarity}_system_failure_{i}',
+                                                                              similarity=similarity, train_list=None,
+                                                                              scan_nprobes=self.scan_nprobes,
+                                                                              array_indexes=False,
+                                                                              xattr_indexes=self.xattr_indexes,
+                                                                              limit=self.scan_limit,
+                                                                              is_base64=self.base64,
+                                                                              quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                              quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                              bhive_index=self.bhive_index)
                     create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                        namespace=namespace,
-                                                                        bhive_index=self.bhive_index,
-                                                                        num_replica=1)
+                                                                             namespace=namespace,
+                                                                             bhive_index=self.bhive_index,
+                                                                             num_replica=1)
                 try:
                     self.gsi_util_obj.async_create_indexes(create_queries=[create_queries[1]], database=namespace)
                 except Exception as e:
@@ -800,8 +1312,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             except Exception as e:
                 self.log.info(f"Error creating index after cleaning up system failure: {e}")
                 raise e
+            required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
             for query in select_queries:
-                if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+                if "DISTINCT" in query or required_distance_func not in query:
                     continue
                 # TODO uncomment after limit logic is fixed.
                 # query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
@@ -819,8 +1332,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if not self.validate_cpu_normalized():
                 raise AssertionError("CPU not normalized despite dropping all the indexes")
             # self.gen_table_view(query_stats_map=query_stats_map,
-                                # message=f"quantization value is {self.quantization_algo_description_vector}")
-             # TODO uncomment after limit logic is fixed.
+            # message=f"quantization value is {self.quantization_algo_description_vector}")
+            # TODO uncomment after limit logic is fixed.
             # for query in query_stats_map:
             #     self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
             #                             f"recall for query {query} is less than threshold 70")
@@ -832,36 +1345,41 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_bhive_scan_inline_filtering_num_rows_filtered_num_rows_scanned(self):
         try:
-            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+            self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                          skip_default_scope=self.skip_default)
             query_stats_map = {}
             if self.xattr_indexes:
                 for namespace in self.namespaces:
                     bucket, scope, _ = namespace.split('.')
                     self.populate_vectors_in_xattr(bucket=bucket, scope=scope)
             self.namespaces = ['test_bucket.test_scope_1.test_collection_1']
-            similarity = "COSINE"
+            if self.isSparse:
+                similarity = "DOT"
+            else:
+                similarity = "COSINE"
             namespace = self.namespaces[0]
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                        prefix=f'test_{similarity}',
-                                                                        similarity=similarity, train_list=None,
-                                                                        scan_nprobes=self.scan_nprobes,
-                                                                        array_indexes=False,
-                                                                        xattr_indexes=self.xattr_indexes,
-                                                                        limit=self.scan_limit, is_base64=self.base64,
-                                                                        quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                        quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                        bhive_index=self.bhive_index)
+                                                                      prefix=f'test_{similarity}',
+                                                                      similarity=similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False,
+                                                                      xattr_indexes=self.xattr_indexes,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                    namespace=namespace,
-                                                                    bhive_index=self.bhive_index)
+                                                                     namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
-                                                                namespace=namespace, limit=self.scan_limit)
+                                                                  namespace=namespace, limit=self.scan_limit)
             metadata_dict_from_definitions = self.form_vector_index_metadata_dict_from_index_definitions(definitions)
             self.gsi_util_obj.async_create_indexes(create_queries=create_queries, database=namespace)
             self.wait_until_indexes_online(timeout=1800)
             query_index_map = self.get_queries_with_inline_filters(select_queries)
             namespace_colon = namespace.replace(".", ":")
-            query_inline_filter_map = {f"default:{namespace_colon}:{index}": queries for index, queries in query_index_map.items()}
+            query_inline_filter_map = {f"default:{namespace_colon}:{index}": queries for index, queries in
+                                       query_index_map.items()}
             metadata_dict_from_stats = self.get_vector_index_metadata_dict()
             if metadata_dict_from_stats != metadata_dict_from_definitions:
                 raise AssertionError("Metadata dictionary from definitions and stats are not the same")
@@ -897,8 +1415,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if not self.validate_cpu_normalized():
                 raise AssertionError("CPU not normalized despite dropping all the indexes")
             # self.gen_table_view(query_stats_map=query_stats_map,
-                                # message=f"quantization value is {self.quantization_algo_description_vector}")
-             # TODO uncomment after limit logic is fixed.
+            # message=f"quantization value is {self.quantization_algo_description_vector}")
+            # TODO uncomment after limit logic is fixed.
             # for query in query_stats_map:
             #     self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
             #                             f"recall for query {query} is less than threshold 70")
@@ -914,7 +1432,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # indexes with more than one vector field
         index_gen_1 = QueryDefinition(index_name='colorRGBVector_1', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'descriptionVector VECTOR'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
         try:
             query = index_gen_1.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -925,7 +1445,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # indexes with include clause for a vector field
         index_gen_2 = QueryDefinition(index_name='colorRGBVector_2', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR INCLUDE MISSING DESC', 'description'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
         try:
             query = index_gen_2.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -940,7 +1462,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
         index_gen_3 = QueryDefinition(index_name='colorRGBVector_3', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'description'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
         try:
             query = index_gen_3.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -956,7 +1480,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
         index_gen_3 = QueryDefinition(index_name='colorRGBVector_4', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'description'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
 
         query = index_gen_3.generate_index_create_query(namespace=collection_namespace, defer_build=True)
         self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -965,19 +1491,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.log.info(f"DEBUG: Total indexes found: {len(statuses)}")
         for idx in statuses:
             self.log.info(f"DEBUG: FULL index structure: {idx}")
-        
+
         # Check for deferred index - status='Created' and scheduled=False indicates deferred
-        deferred_indexes = [idx for idx in statuses if 
-                           idx.get('name') == 'colorRGBVector_4' 
-                           and idx.get('status') == 'Created' 
-                           and idx.get('scheduled') == False]
+        deferred_indexes = [idx for idx in statuses if
+                            idx.get('name') == 'colorRGBVector_4'
+                            and idx.get('status') == 'Created'
+                            and idx.get('scheduled') == False]
         self.log.info(f"DEBUG: Matched deferred indexes: {deferred_indexes}")
         self.assertTrue(deferred_indexes, 'defer true index not created or not in Deferred state')
 
         # indexes with distinct clause
         index_gen_4 = QueryDefinition(index_name='colorRGBVector_2', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'DISTINCT description'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
         try:
             query = index_gen_4.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -988,7 +1516,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # indexes with all clause vector field
         index_gen_5 = QueryDefinition(index_name='colorRGBVector_2', is_base64=self.base64,
                                       index_fields=['ALL colorRGBVector VECTOR', 'description'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
         try:
             query = index_gen_5.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -999,7 +1529,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # indexes with all clause scalar field
         index_gen_6 = QueryDefinition(index_name='colorRGBVector_2', is_base64=self.base64,
                                       index_fields=['colorRGBVector VECTOR', 'ALL evaluation'],
-                                      dimension=self.dimension, description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+                                      dimension=self.dimension,
+                                      description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity="L2_SQUARED")
         try:
             query = index_gen_6.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -1012,12 +1544,32 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
 
         # build a scalar and vector index sequentially
-        scalar_idx = QueryDefinition(index_name='scalar', index_fields=['color'])
-        vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=self.dimension,
-                                     description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED", is_base64=self.base64)
+        # For sparse vectors, scalar field is 'title'; for dense vectors, it's 'color'
+        if self.isSparse:
+            scalar_idx = QueryDefinition(index_name='scalar', index_fields=['title'])
+        else:
+            scalar_idx = QueryDefinition(index_name='scalar', index_fields=['color'])
+
+        # For sparse vectors, use DOT similarity and `sparse` field (no dimension)
+        # For dense vectors, use L2_SQUARED similarity with colorRGBVector
+        if self.isSparse:
+            # Sparse vectors: field is `sparse`, use SPARSE VECTOR, no dimension, description=IVF1024
+            vector_idx = QueryDefinition(index_name='vector', index_fields=['`sparse` SPARSE VECTOR'],
+                                         description="IVF1024",
+                                         similarity="DOT",
+                                         is_base64=self.base64,
+                                         bhive_index=self.bhive_index)
+        else:
+            # Dense vectors with existing behavior
+            vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'],
+                                         dimension=3,
+                                         description="IVF,PQ3x8",
+                                         similarity="L2_SQUARED",
+                                         is_base64=self.base64)
 
         for idx in [scalar_idx, vector_idx]:
-            query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=True)
+            query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
+                                                    bhive_index=self.bhive_index if idx == vector_idx else False)
             self.run_cbq_query(query=query, server=self.n1ql_node)
 
         for idx in ['scalar', 'vector']:
@@ -1037,9 +1589,26 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         collection_namespace = self.namespaces[0]
 
-        vector_idx = QueryDefinition(index_name='vector', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF204800,PQ3x8", similarity="L2_SQUARED",
-                                     bhive_index=self.bhive_index, is_base64=self.base64)
+        # For sparse vectors, use DOT similarity and `sparse` field with high centroids (no dimension)
+        # For dense vectors, use L2_SQUARED similarity with colorRGBVector
+        if self.isSparse:
+            # Sparse vectors: field is `sparse`, use SPARSE VECTOR, no dimension, description=IVF204800
+            vector_idx = QueryDefinition(index_name='vector',
+                                         index_fields=['`sparse` SPARSE VECTOR'],
+                                         description="IVF204800",
+                                         similarity="DOT",
+                                         bhive_index=self.bhive_index,
+                                         is_base64=self.base64)
+        else:
+            # Dense vectors with existing behavior
+            vector_idx = QueryDefinition(index_name='vector',
+                                         index_fields=['colorRGBVector VECTOR'],
+                                         dimension=3,
+                                         description="IVF204800,PQ3x8",
+                                         similarity="L2_SQUARED",
+                                         bhive_index=self.bhive_index,
+                                         is_base64=self.base64)
+
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
                                                        bhive_index=self.bhive_index)
 
@@ -1079,7 +1648,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         )
         try:
             query = index_gen_invalid_dim.generate_index_create_query(namespace=collection_namespace,
-                                                                       bhive_index=self.bhive_index)
+                                                                      bhive_index=self.bhive_index)
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.fail("Index with invalid dimension should have been rejected")
         except Exception as err:
@@ -1100,7 +1669,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         )
         try:
             query = index_gen_invalid_sim.generate_index_create_query(namespace=collection_namespace,
-                                                                       bhive_index=self.bhive_index)
+                                                                      bhive_index=self.bhive_index)
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.fail("Index with invalid similarity should have been rejected")
         except Exception as err:
@@ -1121,7 +1690,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         )
         try:
             query = index_gen_no_vector.generate_index_create_query(namespace=collection_namespace,
-                                                                     bhive_index=self.bhive_index)
+                                                                    bhive_index=self.bhive_index)
             self.run_cbq_query(query=query, server=self.n1ql_node)
             self.fail("Index with quantization but no vector field should have been rejected")
         except Exception as err:
@@ -1141,14 +1710,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             bhive_index=self.bhive_index
         )
         query = index_gen_dup.generate_index_create_query(namespace=collection_namespace,
-                                                           bhive_index=self.bhive_index)
+                                                          bhive_index=self.bhive_index)
         self.run_cbq_query(query=query, server=self.n1ql_node)
-        
-        self.sleep(60)  
-        
+
+        self.sleep(60)
+
         try:
             query2 = index_gen_dup.generate_index_create_query(namespace=collection_namespace,
-                                                                bhive_index=self.bhive_index)
+                                                               bhive_index=self.bhive_index)
             self.run_cbq_query(query=query2, server=self.n1ql_node)
             self.fail("Duplicate index should have been rejected")
         except Exception as err:
@@ -1194,7 +1763,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
 
-       
         definitions = self.gsi_util_obj.get_index_definition_list(
             dataset=self.json_template,
             prefix='bq_search_neg',
@@ -1207,8 +1775,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             description_dimension=self.dimension
         )
         create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                                   namespace=collection_namespace,
-                                                                   bhive_index=self.bhive_index)
+                                                                 namespace=collection_namespace,
+                                                                 bhive_index=self.bhive_index)
         self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
         self.wait_until_indexes_online()
 
@@ -1216,7 +1784,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.log.info("Test 1: Invalid scan_probes value for BQ search")
         desc = "A BMW or Mercedes car with high safety rating"
         desc_vec = list(self.encoder.encode(desc))
-        
+
         invalid_probes_query = f"SELECT description, ANN_DISTANCE(descriptionVector, {desc_vec}, 'L2_SQUARED', -1) as dist FROM {collection_namespace} ORDER BY dist LIMIT 10"
         try:
             self.run_cbq_query(query=invalid_probes_query, server=query_node)
@@ -1240,7 +1808,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.log.info("Test 3: Dimension mismatch for BQ search")
         # Create a 3D vector (mismatch with 1024D index)
         mismatched_vector = [1.0, 2.0, 3.0]  # Only 3 dimensions
-        
+
         mismatch_query = f"SELECT description, ANN_DISTANCE(descriptionVector, {mismatched_vector}, 'L2_SQUARED', 10) as dist FROM {collection_namespace} ORDER BY dist LIMIT 10"
         try:
             self.run_cbq_query(query=mismatch_query, server=query_node)
@@ -1257,7 +1825,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         Edge cases for Binary Quantization (BQ) indexes:
         - High dimensional vectors (2048, 4096)
         - All-zero vectors
-        - All-maximum vectors  
+        - All-maximum vectors
         - NaN values in vectors
         - INF/-INF values in vectors
         """
@@ -1268,17 +1836,17 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # Test 1: High dimensional vectors (4096)
         self.log.info("Test 1: High dimensional vectors (4096) for BQ")
         high_dim = 4096
-        
+
         # Use 4096 backup if provided
         high_dim_backup = self.input.param("high_dim_backup_filename", None)
-        
+
         if high_dim_backup:
             # Restore 4096 backup from S3
             self.log.info(f"Restoring 4096-dim backup: {high_dim_backup}")
             self.restore_couchbase_bucket(backup_filename=high_dim_backup, skip_default_scope=self.skip_default)
-            
+
             high_dim_namespace = self.namespaces[0]
-            
+
             # Create 4096-dim index
             index_gen_high_dim = QueryDefinition(
                 index_name='bq_high_dim_4096',
@@ -1291,12 +1859,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             )
             try:
                 query = index_gen_high_dim.generate_index_create_query(namespace=high_dim_namespace,
-                                                                         bhive_index=self.bhive_index)
+                                                                       bhive_index=self.bhive_index)
                 self.run_cbq_query(query=query, server=query_node)
                 self.log.info("High dimensional (4096) index created successfully")
-                
+
                 self.wait_until_indexes_online()
-                
+
                 # Run ANN query to validate
                 sample_query = f"SELECT descriptionVector FROM {high_dim_namespace} LIMIT 1"
                 sample_result = self.run_cbq_query(query=sample_query, server=query_node)
@@ -1384,7 +1952,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
 
-       
         definitions = self.gsi_util_obj.get_index_definition_list(
             dataset=self.json_template,
             prefix='rerank',
@@ -1397,10 +1964,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             description_dimension=self.dimension,
             persist_full_vector=True
         )
-        
+
         create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
-                                                               namespace=collection_namespace,
-                                                               bhive_index=self.bhive_index)
+                                                                 namespace=collection_namespace,
+                                                                 bhive_index=self.bhive_index)
         select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                               namespace=collection_namespace,
                                                               limit=self.scan_limit)
@@ -1413,21 +1980,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for query in select_queries:
             result = self.run_cbq_query(query=query, server=query_node)
             self.log.info(f"Scan result count: {len(result.get('results', []))}")
-           
+
             self.assertTrue(len(result.get('results', [])) > 0, "Scan should return results")
 
-        
         codebook_mem = self.get_per_index_codebook_memory_usage()
         self.log.info(f"Codebook memory usage with persist_full_vector: {codebook_mem}")
-        
+
         # Check disk footprint - indexes with full vectors should have larger disk usage
         index_stats = self.index_rest.get_index_status()
         for idx_name, idx_info in index_stats.items():
             for idx_data in idx_info.values():
                 if 'rerank' in idx_data.get('index', ''):
                     self.log.info(f"Index {idx_data.get('index')} - Data size: {idx_data.get('data_size', 'N/A')}, "
-                                f"Items: {idx_data.get('items', 'N/A')}, "
-                                f"Resident ratio: {idx_data.get('resident_percent', 'N/A')}%")
+                                  f"Items: {idx_data.get('items', 'N/A')}, "
+                                  f"Resident ratio: {idx_data.get('resident_percent', 'N/A')}%")
 
         self.drop_index_node_resources_utilization_validations()
 
@@ -1435,9 +2001,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
 
-        vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
-                                     description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64,
-                                     bhive_index=self.bhive_index)
+        # For sparse vectors, use DOT similarity and `sparse` field (no dimension)
+        # For dense vectors, use L2_SQUARED similarity with descriptionVector
+        if self.isSparse:
+            # Sparse vectors: field is `sparse`, use SPARSE VECTOR, no dimension, description=IVF1024
+            vector_idx = QueryDefinition(index_name='vector', index_fields=['`sparse` SPARSE VECTOR'],
+                                         description="IVF1024", similarity="DOT", is_base64=self.base64,
+                                         bhive_index=self.bhive_index)
+        else:
+            # Dense vectors with existing behavior
+            vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
+                                         description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64,
+                                         bhive_index=self.bhive_index)
+
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False,
                                                        bhive_index=self.bhive_index)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -1468,12 +2044,34 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_build_list = []
         for item, namespace in enumerate(self.namespaces):
             idx_name = f'idx_{item}'
-            scalar_idx = QueryDefinition(index_name=idx_name + 'scalar', index_fields=['color'])
-            vector_idx = QueryDefinition(index_name=idx_name + 'vector', index_fields=['colorRGBVector VECTOR'],
-                                         dimension=self.dimension, is_base64=self.base64,
-                                         description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED")
+            # For sparse vectors, scalar field is 'title'; for dense vectors, it's 'color'
+            if self.isSparse:
+                scalar_idx = QueryDefinition(index_name=idx_name + 'scalar', index_fields=['title'])
+            else:
+                scalar_idx = QueryDefinition(index_name=idx_name + 'scalar', index_fields=['color'])
+
+            # For sparse vectors, use DOT similarity and `sparse` field (no dimension)
+            # For dense vectors, use L2_SQUARED similarity with colorRGBVector
+            if self.isSparse:
+                # Sparse vectors: field is `sparse`, use SPARSE VECTOR, no dimension, description=IVF1024
+                vector_idx = QueryDefinition(index_name=idx_name + 'vector',
+                                             index_fields=['`sparse` SPARSE VECTOR'],
+                                             is_base64=self.base64,
+                                             description="IVF1024",
+                                             similarity="DOT",
+                                             bhive_index=self.bhive_index)
+            else:
+                # Dense vectors with existing behavior
+                vector_idx = QueryDefinition(index_name=idx_name + 'vector',
+                                             index_fields=['colorRGBVector VECTOR'],
+                                             dimension=3,
+                                             is_base64=self.base64,
+                                             description="IVF,PQ3x8",
+                                             similarity="L2_SQUARED")
+
             query1 = scalar_idx.generate_index_create_query(namespace=namespace, defer_build=True)
-            query2 = vector_idx.generate_index_create_query(namespace=namespace, defer_build=True)
+            query2 = vector_idx.generate_index_create_query(namespace=namespace, defer_build=True,
+                                                            bhive_index=self.bhive_index if self.isSparse else False)
             self.run_cbq_query(query=query1, server=self.n1ql_node)
             self.run_cbq_query(query=query2, server=self.n1ql_node)
             build_query_1 = scalar_idx.generate_build_query(namespace=namespace)
@@ -1528,8 +2126,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 rest.reload_certificate()
         self.gsi_util_obj.query_event.clear()
         self.log.info(f"The query failed are {self.gsi_util_obj.query_errors}")
-        #Assertions for whether queries have failed or not
-        self.assertEqual(len(self.gsi_util_obj.query_errors), 0, f'There are query failures {self.gsi_util_obj.query_errors}')
+        # Assertions for whether queries have failed or not
+        self.assertEqual(len(self.gsi_util_obj.query_errors), 0,
+                         f'There are query failures {self.gsi_util_obj.query_errors}')
         for node in index_nodes:
             rest = RestConnection(node)
             stats = rest.get_all_index_stats()
@@ -1541,10 +2140,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.index_rest.set_index_settings(redistribute)
         if self.shard_based_rebalance:
             self.enable_shard_based_rebalance()
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -1554,6 +2154,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
@@ -1569,6 +2170,17 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if "DISTINCT" in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            self.log.info(f"Expected title for mrr are {expected_title_for_mrr}")
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         with ThreadPoolExecutor() as executor:
             # todo will uncomment out below post - https://jira.issues.couchbase.com/browse/MB-67778
             # self.gsi_util_obj.query_event.set()
@@ -1603,7 +2215,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if self.cancel_rebalance or self.fail_rebalance:
                     self.sleep(300, "Waiting for cleanup to complete")
                     self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
-                                             to_remove=[], services=[])
+                                                 to_remove=[], services=[])
                 rebalance_status = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
             # self.gsi_util_obj.query_event.clear()
@@ -1615,7 +2227,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for index in index_names:
                     if "primary" in index:
                         continue
-                    self.assertEqual(code_book_memory_map_before_rebalance[index], code_book_memory_map_after_rebalance[index],
+                    self.assertEqual(code_book_memory_map_before_rebalance[index],
+                                     code_book_memory_map_after_rebalance[index],
                                      f"Codebook memory has changed for index {index}")
 
             # Todo: Add metadata validation
@@ -1623,16 +2236,27 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for namespace in self.namespaces:
                     bucket, scope, collection = namespace.split('.')
                     bucket = bucket.split(':')[-1]
-                    self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                                    percent_update=0, percent_delete=0, scope=scope,
-                                                    collection=collection, json_template="Cars",
-                                                    output=True, username=self.username, password=self.password,
-                                                    base64=self.base64,
-                                                    model=self.data_model, workers=10, timeout=1500,
-                                                    key_prefix="doc_77",
-                                                    create_start=self.num_of_docs_per_collection,
-                                                    create_end=self.num_of_docs_per_collection + 10000)
-                    #self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
+                    if self.isSparse:
+                        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                        percent_update=0, percent_delete=0, scope=scope,
+                                                        collection=collection, json_template=self.json_template,
+                                                        output=True, username=self.username, password=self.password,
+                                                        base64=self.base64,
+                                                        workers=10, timeout=1500,
+                                                        key_prefix="doc_77",
+                                                        create_start=self.num_of_docs_per_collection,
+                                                        create_end=self.num_of_docs_per_collection + 10000)
+                    else:
+                        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                        percent_update=0, percent_delete=0, scope=scope,
+                                                        collection=collection, json_template=self.json_template,
+                                                        output=True, username=self.username, password=self.password,
+                                                        base64=self.base64,
+                                                        model=self.data_model, workers=10, timeout=1500,
+                                                        key_prefix="doc_77",
+                                                        create_start=self.num_of_docs_per_collection,
+                                                        create_end=self.num_of_docs_per_collection + 10000)
+                    # self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_create)
                     task = self.cluster.async_load_gen_docs(data_nodes, bucket=bucket,
                                                             generator=self.gen_create,
                                                             timeout_secs=1500, use_magma_loader=True)
@@ -1651,8 +2275,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for index in index_item_count_map:
                     if index in partial_indexes:
                         continue
-                    self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection+10000, f"stats {stats}")
-
+                    self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection + 10000,
+                                     f"stats {stats}")
 
             if self.post_rebalance_action == "mutations":
                 for namespace in self.namespaces:
@@ -1661,8 +2285,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     bucket = bucket.split(':')[-1]
                     self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                                     percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                                    collection=collection, json_template="Cars", timeout=2000,
-                                                    op_type="update", mutate=1, dim=384,
+                                                    collection=collection, json_template=self.json_template, timeout=2000,
+                                                    op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
                                                     update_start=1, update_end=self.num_of_docs_per_collection)
                     # self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_update)
                     task = self.cluster.async_load_gen_docs(data_nodes, bucket=bucket,
@@ -1696,14 +2320,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if "DISTINCT" in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_rebalance(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -1712,6 +2346,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
@@ -1721,10 +2356,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online(timeout=600)
         self.item_count_related_validations()
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
@@ -1756,15 +2402,26 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
                     bucket, scope, collection = keyspace.split(".")
-                    self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                                    percent_update=0, percent_delete=0, scope=scope,
-                                                    collection=collection, json_template="Cars",
-                                                    output=True, username=self.username, password=self.password,
-                                                    base64=self.base64,
-                                                    model=self.data_model, workers=10, timeout=1500,
-                                                    key_prefix="doc_77",
-                                                    create_start=self.num_of_docs_per_collection,
-                                                    create_end=self.num_of_docs_per_collection + 10000)
+                    if self.isSparse:
+                        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                        percent_update=0, percent_delete=0, scope=scope,
+                                                        collection=collection, json_template=self.json_template,
+                                                        output=True, username=self.username, password=self.password,
+                                                        base64=self.base64,
+                                                        workers=10, timeout=1500,
+                                                        key_prefix="doc_77",
+                                                        create_start=self.num_of_docs_per_collection,
+                                                        create_end=self.num_of_docs_per_collection + 10000)
+                    else:
+                        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                        percent_update=0, percent_delete=0, scope=scope,
+                                                        collection=collection, json_template=self.json_template,
+                                                        output=True, username=self.username, password=self.password,
+                                                        base64=self.base64,
+                                                        model=self.data_model, workers=10, timeout=1500,
+                                                        key_prefix="doc_77",
+                                                        create_start=self.num_of_docs_per_collection,
+                                                        create_end=self.num_of_docs_per_collection + 10000)
                     task = self.cluster.async_load_gen_docs(data_nodes, bucket=bucket,
                                                             generator=self.gen_create,
                                                             timeout_secs=300, use_magma_loader=True)
@@ -1775,10 +2432,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     bucket, scope, collection = keyspace.split(".")
                     self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                                     percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                                    collection=collection, json_template="Cars", timeout=2000,
-                                                    op_type="update", mutate=1, dim=384,
-                                                    update_start=1, update_end=self.num_of_docs_per_collection, get_sdk_logs=True)
-                    #self.load_docs_via_magma_server(server=data_nodes, bucket=bucket, gen=self.gen_update)
+                                                    collection=collection, json_template=self.json_template, timeout=2000,
+                                                    op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
+                                                    update_start=1, update_end=self.num_of_docs_per_collection,
+                                                    get_sdk_logs=True)
                     task = self.cluster.async_load_gen_docs(data_nodes, bucket=bucket,
                                                             generator=self.gen_update,
                                                             timeout_secs=2000, use_magma_loader=True)
@@ -1802,10 +2459,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for index in index_item_count_map:
                 if index in partial_indexes:
                     continue
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection+additional_docs, f"stats {stats}")
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection + additional_docs,
+                                 f"stats {stats}")
 
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
         self.drop_index_node_resources_utilization_validations()
@@ -1829,7 +2487,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-
 
         self.item_count_related_validations()
         with ThreadPoolExecutor() as executor:
@@ -1855,7 +2512,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     self.start_server(self.servers[self.nodes_init])
 
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
-                                        to_remove=[], services=[])
+                                                to_remove=[], services=[])
             task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
@@ -1922,7 +2579,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.sleep(40, "Wait for autofailover")
             try:
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                            [], [data_node])
+                                                         [], [data_node])
                 reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
@@ -2014,12 +2671,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_rebalance_operations_with_different_topologies(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -2028,6 +2685,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
@@ -2037,10 +2695,46 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online(timeout=600)
         self.sleep(10)
         self.item_count_related_validations()
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
+
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+
+            if self.isSparse:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="create",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=(self.num_of_docs_per_collection +
+                                                            self.num_of_docs_per_collection // 2))
+            else:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="create", dim=self.dimension, model=self.data_model,
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=(self.num_of_docs_per_collection +
+                                                            self.num_of_docs_per_collection // 2))
+            task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
+                                                    generator=self.gen_create,
+                                                    timeout_secs=2000, use_magma_loader=True)
+            task.result()
 
 
         with ThreadPoolExecutor() as executor:
@@ -2066,6 +2760,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+
+            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
+                                            collection=collection, json_template=self.json_template, timeout=2000,
+                                            op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
+                                            update_start=1,
+                                            update_end=(self.num_of_docs_per_collection +
+                                                        self.num_of_docs_per_collection // 2))
+            task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
+                                                    generator=self.gen_update,
+                                                    timeout_secs=2000, use_magma_loader=True)
+            task.result()
+
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -2101,13 +2811,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         index_item_count_map[index] += stats[node][namespace][index]["items_count"]
         for index in index_item_count_map:
             if index in partial_index_list:
-                    continue
-            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
+                continue
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection +
+                             self.num_of_docs_per_collection // 2, f"stats {stats}")
 
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
 
     def test_kv_and_indexing_failover_and_recovery_sequentially(self):
@@ -2118,6 +2839,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -2126,16 +2848,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -2176,9 +2910,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
     def test_kv_and_indexing_failover_and_rebalance_out_sequentially(self):
         self.recovery_type = self.input.param('recovery_type', 'full')
@@ -2188,6 +2932,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -2196,16 +2941,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -2245,17 +3002,27 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
     def test_kv_and_indexing_rebalance_concurrently(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -2264,16 +3031,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
@@ -2285,10 +3064,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             elif self.rebalance_type == 'rebalance_swap':
                 add_nodes = [self.servers[4], self.servers[5]]
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=add_nodes,
-                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv,n1ql', 'index'])
+                                                    to_remove=[data_nodes[0], index_nodes[0]],
+                                                    services=['kv,n1ql', 'index'])
             elif self.rebalance_type == 'rebalance_out':
                 task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
-                                                    to_remove=[data_nodes[0], index_nodes[0]], services=['kv,n1ql', 'index'])
+                                                    to_remove=[data_nodes[0], index_nodes[0]],
+                                                    services=['kv,n1ql', 'index'])
             task.result()
             rebalance_status = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(rebalance_status, "rebalance failed, stuck or did not complete")
@@ -2302,15 +3083,26 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 for namespace in self.namespaces:
                     keyspace = namespace.split(":")[-1]
                     bucket, scope, collection = keyspace.split(".")
-                    self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                                    percent_update=0, percent_delete=0, scope=scope,
-                                                    collection=collection, json_template="Cars",
-                                                    output=True, username=self.username, password=self.password,
-                                                    base64=self.base64,
-                                                    model=self.data_model, workers=10, timeout=1500,
-                                                    key_prefix="doc_77",
-                                                    create_start=self.num_of_docs_per_collection,
-                                                    create_end=self.num_of_docs_per_collection + 10000)
+                    if self.isSparse:
+                        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                        percent_update=0, percent_delete=0, scope=scope,
+                                                        collection=collection, json_template=self.json_template,
+                                                        output=True, username=self.username, password=self.password,
+                                                        base64=self.base64,
+                                                        workers=10, timeout=1500,
+                                                        key_prefix="doc_77",
+                                                        create_start=self.num_of_docs_per_collection,
+                                                        create_end=self.num_of_docs_per_collection + 10000)
+                    else:
+                        self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                        percent_update=0, percent_delete=0, scope=scope,
+                                                        collection=collection, json_template=self.json_template,
+                                                        output=True, username=self.username, password=self.password,
+                                                        base64=self.base64,
+                                                        model=self.data_model, workers=10, timeout=1500,
+                                                        key_prefix="doc_77",
+                                                        create_start=self.num_of_docs_per_collection,
+                                                        create_end=self.num_of_docs_per_collection + 10000)
                     # self.load_docs_via_magma_server(server=data_nodes[1], bucket=bucket, gen=self.gen_create)
                     task = self.cluster.async_load_gen_docs(data_nodes[1], bucket=bucket,
                                                             generator=self.gen_create,
@@ -2322,12 +3114,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     bucket, scope, collection = keyspace.split(".")
                     self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                                     percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                                    collection=collection, json_template="Cars", timeout=2000,
-                                                    op_type="update", mutate=1, dim=384,
+                                                    collection=collection, json_template=self.json_template, timeout=2000,
+                                                    op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
                                                     update_start=1, update_end=self.num_of_docs_per_collection)
-                    # self.load_docs_via_magma_server(server=data_nodes[1], bucket=bucket, gen=self.gen_create)
                     task = self.cluster.async_load_gen_docs(data_nodes[1], bucket=bucket,
-                                                            generator=self.gen_create,
+                                                            generator=self.gen_update,
                                                             timeout_secs=2000, use_magma_loader=True)
                     task.result()
             self.sleep(60)
@@ -2351,12 +3142,23 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for index in index_item_count_map:
                 if index in partial_index_list:
                     continue
-                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection+additional_docs, f"stats {stats}")
+                self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection + additional_docs,
+                                 f"stats {stats}")
 
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
     def test_kv_and_indexing_failover_and_recovery_concurrently(self):
         self.recovery_type = self.input.param('recovery_type', 'full')
@@ -2366,6 +3168,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -2374,16 +3177,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node[0])
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -2425,26 +3240,62 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
     def test_drop_build_indexes_concurrently(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         query_list = []
         collection_namespace = self.namespaces[0]
-        vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
-                                     description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64,
-                                     bhive_index=self.bhive_index)
+
+        # Support both sparse and dense vectors
+        if self.isSparse:
+            # Sparse vectors: Create two different sparse index definitions
+            # First sparse index with IVF1024
+            vector_idx = QueryDefinition(index_name='vector_sparse_1',
+                                         index_fields=['`sparse` SPARSE VECTOR'],
+                                         is_base64=self.base64,
+                                         description="IVF1024",
+                                         similarity="DOT",
+                                         bhive_index=self.bhive_index)
+        else:
+            # Dense vectors: use colorRGBVector with dimension 3
+            vector_idx = QueryDefinition(index_name='vector_rgb', index_fields=['colorRGBVector VECTOR'], dimension=3,
+                                         description="IVF,PQ3x8", similarity="L2_SQUARED", is_base64=self.base64,
+                                         bhive_index=self.bhive_index)
+
         query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
                                                        bhive_index=self.bhive_index)
         self.run_cbq_query(query=query, server=self.n1ql_node)
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
         query_list.append(build_query)
 
-        vector_idx_2 = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
-                                       dimension=384, is_base64=self.base64,
-                                       description="IVF,PQ32x8", similarity="L2_SQUARED", bhive_index=self.bhive_index)
+        if self.isSparse:
+            # Second sparse index with different IVF configuration (IVF2048)
+            vector_idx_2 = QueryDefinition(index_name='vector_sparse_2',
+                                           index_fields=['`sparse` SPARSE VECTOR'],
+                                           is_base64=self.base64,
+                                           description="IVF2048",
+                                           similarity="DOT",
+                                           bhive_index=self.bhive_index)
+        else:
+            # Dense vectors: use descriptionVector with dimension 384
+            vector_idx_2 = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
+                                           dimension=384, is_base64=self.base64,
+                                           description="IVF,PQ32x8", similarity="L2_SQUARED",
+                                           bhive_index=self.bhive_index)
+
         query = vector_idx_2.generate_index_create_query(namespace=collection_namespace, defer_build=False,
                                                          bhive_index=self.bhive_index)
         self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -2464,9 +3315,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
 
         collection_namespace = self.namespaces[0]
-        vector_idx = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
-                                     dimension=384, is_base64=self.base64,
-                                     description="IVF,PQ32x8", similarity="L2_SQUARED", bhive_index=self.bhive_index)
+        # Support both sparse and dense vectors
+        if self.isSparse:
+            # Sparse vectors: field is `sparse`, use SPARSE VECTOR, no dimension, description=IVF1024
+            vector_idx = QueryDefinition(index_name='vector_description',
+                                         index_fields=['`sparse` SPARSE VECTOR'],
+                                         is_base64=self.base64,
+                                         description="IVF1024",
+                                         similarity="DOT",
+                                         bhive_index=self.bhive_index)
+        else:
+            # Dense vectors: use descriptionVector with dimension 384
+            vector_idx = QueryDefinition(index_name='vector_description', index_fields=['descriptionVector VECTOR'],
+                                         dimension=384, is_base64=self.base64,
+                                         description="IVF,PQ32x8", similarity="L2_SQUARED",
+                                         bhive_index=self.bhive_index)
         defer_build = False
         if self.build_phase == "create":
             defer_build = True
@@ -2510,9 +3373,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_drop_list = []
         for item, namespace in enumerate(self.namespaces):
             idx_name = f'idx_{item}'
-            vector_idx = QueryDefinition(index_name=idx_name + 'vector', index_fields=['colorRGBVector VECTOR'],
-                                         dimension=3, is_base64=self.base64,
-                                         description=f"IVF,{self.quantization_algo_color_vector}", similarity="L2_SQUARED", bhive_index=self.bhive_index)
+
+            # Support both sparse and dense vectors
+            if self.isSparse:
+                # Sparse vectors: field is `sparse`, use SPARSE VECTOR, no dimension, description=IVF1024
+                vector_idx = QueryDefinition(index_name=idx_name + 'vector',
+                                             index_fields=['`sparse` SPARSE VECTOR'],
+                                             is_base64=self.base64,
+                                             description="IVF1024",
+                                             similarity="DOT",
+                                             bhive_index=self.bhive_index)
+            else:
+                # Dense vectors: use colorRGBVector with dimension 3
+                vector_idx = QueryDefinition(index_name=idx_name + 'vector', index_fields=['colorRGBVector VECTOR'],
+                                             dimension=3, is_base64=self.base64,
+                                             description="IVF,PQ3x8", similarity="L2_SQUARED",
+                                             bhive_index=self.bhive_index)
             query1 = vector_idx.generate_index_create_query(namespace=namespace, bhive_index=self.bhive_index)
             self.run_cbq_query(query=query1, server=self.n1ql_node)
             drop_query_1 = vector_idx.generate_index_drop_query(namespace=namespace)
@@ -2534,6 +3410,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       prefix='test',
@@ -2545,8 +3422,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       bhive_index=self.bhive_index,
                                                                       description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replica, bhive_index=self.bhive_index)
+                                                                     num_replica=self.num_index_replica,
+                                                                     bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -2555,9 +3434,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.item_count_related_validations()
 
+        # Get sparse recall parameters based on dataset type
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before reducing num replica count",
-                                               stats_assertion=False, similarity=self.similarity)
+                                               stats_assertion=False, similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Before reducing replica count - Mean Reciprocal Rank: {mrr:.4f}")
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
@@ -2578,7 +3473,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                              "No. of replicas are not matching post alter query")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after reducing num replica count", similarity=self.similarity)
+                                               message="results after reducing num replica count",
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] After reducing replica count - Mean Reciprocal Rank: {mrr:.4f}")
 
         # increasing replica count
 
@@ -2596,7 +3505,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                              "No. of replicas are not matching post alter query")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after increasing num replica count", similarity=self.similarity)
+                                               message="results after increasing num replica count",
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] After increasing replica count - Mean Reciprocal Rank: {mrr:.4f}")
+
         self.drop_index_node_resources_utilization_validations()
 
     def test_alter_replica_restricted_nodes(self):
@@ -2606,6 +3530,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         deploy_nodes = [f"{nodes.ip}:{self.node_port}" for nodes in index_nodes[:2]]
         num_replica = len(deploy_nodes) - 1
         for namespace in self.namespaces:
@@ -2618,9 +3543,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       bhive_index=self.bhive_index)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      deploy_node_info=deploy_nodes,
-                                                                     num_replica=num_replica, bhive_index=self.bhive_index)
+                                                                     num_replica=num_replica,
+                                                                     bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -2629,9 +3556,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.item_count_related_validations()
 
+        # Get sparse recall parameters based on dataset type
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before moving indexes to specifc node",
-                                               stats_assertion=False, similarity=self.similarity)
+                                               stats_assertion=False, similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Before moving indexes to specific node - Mean Reciprocal Rank: {mrr:.4f}")
 
         replica_node = f"{index_nodes[-1].ip}:{self.node_port}"
         deploy_nodes.append(replica_node)
@@ -2659,7 +3602,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.assertEqual(count, len(create_queries), f"index not present in the host metadata {index_metadata}")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after moving indexes to specifc node", similarity=self.similarity)
+                                               message="results after moving indexes to specifc node",
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] After moving indexes to specific node - Mean Reciprocal Rank: {mrr:.4f}")
+
         self.drop_index_node_resources_utilization_validations()
 
     def test_alter_index_alter_replica_id(self):
@@ -2671,6 +3629,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       prefix='test',
@@ -2681,6 +3640,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=self.num_index_replica,
                                                                      bhive_index=self.bhive_index)
@@ -2692,8 +3652,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.item_count_related_validations()
 
+        # Get sparse recall parameters based on dataset type
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before dropping replica id", stats_assertion=False, similarity=self.similarity)
+                                               message="results before dropping replica id", stats_assertion=False,
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Before dropping replica id - Mean Reciprocal Rank: {mrr:.4f}")
 
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
@@ -2710,8 +3687,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(60)
         index_metadata = self.index_rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            self.assertTrue(index['replicaId'] != 1, f"Dropped wrong replica Id for index {index['indexName']} metadata {index_metadata}")
-
+            self.assertTrue(index['replicaId'] != 1,
+                            f"Dropped wrong replica Id for index {index['indexName']} metadata {index_metadata}")
 
         # rebalancing in for replica repair
         index_node_in = self.servers[self.nodes_init]
@@ -2726,7 +3703,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results before after replica id", similarity=self.similarity)
+                                               message="results before after replica id", similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] After dropping replica id - Mean Reciprocal Rank: {mrr:.4f}")
+
         self.drop_index_node_resources_utilization_validations()
 
     def test_alter_move_index(self):
@@ -2734,6 +3725,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         if self.multi_move:
             deploy_nodes = [f"{nodes.ip}:{self.node_port}" for nodes in index_nodes[:2]]
             num_replica = 1
@@ -2750,9 +3742,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       bhive_index=self.bhive_index)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      deploy_node_info=deploy_nodes,
-                                                                     num_replica=num_replica, bhive_index=self.bhive_index)
+                                                                     num_replica=num_replica,
+                                                                     bhive_index=self.bhive_index)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                        namespace=namespace, limit=self.scan_limit))
             namespace_index_map[namespace] = definitions
@@ -2761,9 +3755,25 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.item_count_related_validations()
 
+        # Get sparse recall parameters based on dataset type
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
+
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results before move index via alter query",
-                                               stats_assertion=False, similarity=self.similarity)
+                                               stats_assertion=False, similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Before move index via alter query - Mean Reciprocal Rank: {mrr:.4f}")
 
         if self.multi_move:
             nodes_targetted = [f'{nodes.ip}:{self.node_port}' for nodes in index_nodes[2:]]
@@ -2793,87 +3803,187 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                  f"Replica has not moved into target node meta data : {index_info}")
 
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after move index via alter query", similarity=self.similarity)
+                                               message="results after move index via alter query",
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                namespace = self.namespaces[0] if self.namespaces else None
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] After move index via alter query - Mean Reciprocal Rank: {mrr:.4f}")
+
         self.drop_index_node_resources_utilization_validations()
 
     def test_scan_comparison_between_trained_and_untrained_indexes(self):
+        import os
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
-        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
-        desc_vec2 = list(self.encoder.encode(desc_2))
 
-        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
-
-        scan_color_vec_1 = f"ANN_DISTANCE(colorRGBVector, [43.0, 133.0, 178.0], '{self.similarity}', {self.scan_nprobes})"
         collection_namespace = self.namespaces[0]
-        # indexes with more than one vector field
-        trained_index_color_rgb_vector = QueryDefinition(index_name="trained_rgb",
-                                                         index_fields=['colorRGBVector VECTOR'],
-                                                         dimension=3,
-                                                         description=f"IVF,{self.quantization_algo_color_vector}",
-                                                         similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                         limit=self.scan_limit, is_base64=self.base64,
-                                                         query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
-                                                             f"color, colorRGBVector,"
-                                                             f" {scan_color_vec_1}",
-                                                             scan_color_vec_1))
 
-        untrained_index_color_rgb_vector = QueryDefinition(index_name="untrained_rgb",
-                                                           index_fields=['colorRGBVector VECTOR'],
-                                                           dimension=3,
-                                                           description=f"IVF,{self.quantization_algo_color_vector}",
-                                                           similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                           limit=self.scan_limit, is_base64=self.base64,
-                                                           query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
-                                                               f"color, colorRGBVector,"
-                                                               f" {scan_color_vec_1}",
-                                                               scan_color_vec_1))
+        # Support both sparse and dense vectors
+        if self.isSparse:
+            # Load ONE sparse vector from JSONL for query
+            jsonl_path = os.path.join(os.path.dirname(__file__),
+                                      'sparse_vector_embeddings',
+                                      self.sparse_query_vectors_file)
 
-        trained_index_description_vector = QueryDefinition(index_name="trained_description",
-                                                           index_fields=['descriptionVector VECTOR'],
-                                                           dimension=384,
-                                                           description=f"IVF,{self.quantization_algo_description_vector}",
-                                                           similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                                                           limit=self.scan_limit, is_base64=self.base64,
-                                                           query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
-                                                               f"description, descriptionVector,"
-                                                               f" {scan_desc_vec_2}",
-                                                               scan_desc_vec_2))
+            with open(jsonl_path, 'r') as f:
+                # Read first entry
+                first_line = f.readline()
+                entry = json.loads(first_line)
+                expected_title = entry['title']
+                sparse_emb = entry['sparse_embedding']
+                indices = sparse_emb['indices']
+                values = sparse_emb['values']
+                sparse_vector = [indices, values]  # Format: [indices, values]
 
-        untrained_index_description_vector = QueryDefinition(index_name="untrained_description",
-                                                             index_fields=['descriptionVector VECTOR'],
-                                                             dimension=384,
-                                                             description=f"IVF,{self.quantization_algo_description_vector}",
+            sparse_vector_str = json.dumps(sparse_vector)
+            scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE(`sparse`, {sparse_vector_str}, {self.scan_nprobes})"
+
+            # Only ONE sparse vector index (single field in dataset)
+            trained_index_sparse = QueryDefinition(index_name="trained_sparse",
+                                                   index_fields=['`sparse` SPARSE VECTOR'],
+                                                   description="IVF1024",
+                                                   similarity="DOT",
+                                                   scan_nprobes=self.scan_nprobes,
+                                                   limit=self.scan_limit,
+                                                   is_base64=self.base64,
+                                                   bhive_index=self.bhive_index,
+                                                   expected_title=expected_title,
+                                                   query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                                       f"title, `sparse`, {scan_sparse_vec}",
+                                                       scan_sparse_vec))
+
+            untrained_index_sparse = QueryDefinition(index_name="untrained_sparse",
+                                                     index_fields=['`sparse` SPARSE VECTOR'],
+                                                     description="IVF1024",
+                                                     similarity="DOT",
+                                                     scan_nprobes=self.scan_nprobes,
+                                                     limit=self.scan_limit,
+                                                     is_base64=self.base64,
+                                                     bhive_index=self.bhive_index,
+                                                     expected_title=expected_title,
+                                                     query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                                         f"title, `sparse`, {scan_sparse_vec}",
+                                                         scan_sparse_vec))
+
+            index_list = [trained_index_sparse, untrained_index_sparse]
+            trained_indexes = [trained_index_sparse]
+        else:
+            # Dense vectors: existing behavior
+            desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+            desc_vec2 = list(self.encoder.encode(desc_2))
+
+            scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+            scan_color_vec_1 = f"ANN_DISTANCE(colorRGBVector, [43.0, 133.0, 178.0], '{self.similarity}', {self.scan_nprobes})"
+
+            trained_index_color_rgb_vector = QueryDefinition(index_name="trained_rgb",
+                                                             index_fields=['colorRGBVector VECTOR'],
+                                                             dimension=3,
+                                                             description=f"IVF,{self.quantization_algo_color_vector}",
                                                              similarity=self.similarity, scan_nprobes=self.scan_nprobes,
                                                              limit=self.scan_limit, is_base64=self.base64,
                                                              query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
-                                                                 f"description, descriptionVector,"
-                                                                 f" {scan_desc_vec_2}",
-                                                                 scan_desc_vec_2))
+                                                                 f"color, colorRGBVector, {scan_color_vec_1}",
+                                                                 scan_color_vec_1))
 
-        for idx in [trained_index_color_rgb_vector, untrained_index_color_rgb_vector, trained_index_description_vector,
-                    untrained_index_description_vector]:
+            untrained_index_color_rgb_vector = QueryDefinition(index_name="untrained_rgb",
+                                                               index_fields=['colorRGBVector VECTOR'],
+                                                               dimension=3,
+                                                               description=f"IVF,{self.quantization_algo_color_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                   f"color, colorRGBVector, {scan_color_vec_1}",
+                                                                   scan_color_vec_1))
+
+            trained_index_description_vector = QueryDefinition(index_name="trained_description",
+                                                               index_fields=['descriptionVector VECTOR'],
+                                                               dimension=384,
+                                                               description=f"IVF,{self.quantization_algo_description_vector}",
+                                                               similarity=self.similarity,
+                                                               scan_nprobes=self.scan_nprobes,
+                                                               limit=self.scan_limit, is_base64=self.base64,
+                                                               query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                   f"description, descriptionVector, {scan_desc_vec_2}",
+                                                                   scan_desc_vec_2))
+
+            untrained_index_description_vector = QueryDefinition(index_name="untrained_description",
+                                                                 index_fields=['descriptionVector VECTOR'],
+                                                                 dimension=384,
+                                                                 description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                 similarity=self.similarity,
+                                                                 scan_nprobes=self.scan_nprobes,
+                                                                 limit=self.scan_limit, is_base64=self.base64,
+                                                                 query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                                                     f"description, descriptionVector, {scan_desc_vec_2}",
+                                                                     scan_desc_vec_2))
+
+            index_list = [trained_index_color_rgb_vector, untrained_index_color_rgb_vector,
+                          trained_index_description_vector, untrained_index_description_vector]
+            trained_indexes = [trained_index_color_rgb_vector, trained_index_description_vector]
+
+        # Create indexes
+        for idx in index_list:
             if "untrained" in idx.index_name:
                 defer_build = True
             else:
                 defer_build = False
-            query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build)
+            query = idx.generate_index_create_query(namespace=collection_namespace, defer_build=defer_build,
+                                                    bhive_index=self.bhive_index)
             self.run_cbq_query(query=query, server=self.n1ql_node)
-        self.wait_until_indexes_online(timeout=600)
+
         self.sleep(10)
-        for query in [trained_index_color_rgb_vector, trained_index_description_vector]:
-            select_query_with_explain = f"EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query], namespace=collection_namespace, limit=self.scan_limit)[0]}"
+
+        # Verify trained indexes are used
+        for query_def in trained_indexes:
+            select_query_with_explain = f"EXPLAIN {self.gsi_util_obj.get_select_queries(definition_list=[query_def], namespace=collection_namespace, limit=self.scan_limit)[0]}"
             index_used_select_query = \
                 self.run_cbq_query(query=select_query_with_explain)['results'][0]['plan']['~children'][0]['~children'][
-                    0][
-                    'index']
-            self.assertEqual(index_used_select_query, query.index_name, 'trained index not used for scans')
+                    0]['index']
+            self.assertEqual(index_used_select_query, query_def.index_name, 'trained index not used for scans')
+
         self.drop_index_node_resources_utilization_validations()
 
     def test_compare_results_between_partitioned_and_non_partitioned_indexes(self):
+        import os
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
 
         collection_namespace = self.namespaces[0]
 
+        # Load ONE sparse vector from JSONL (always load for sparse mode)
+        expected_title = None
+        sparse_vector_str = None
+        scan_sparse_vec = None
+
+        if self.isSparse:
+            jsonl_path = os.path.join(os.path.dirname(__file__),
+                                      'sparse_vector_embeddings',
+                                      self.sparse_query_vectors_file)
+
+            with open(jsonl_path, 'r') as f:
+                # Read first entry
+                first_line = f.readline()
+                entry = json.loads(first_line)
+                expected_title = entry['title']
+                sparse_emb = entry['sparse_embedding']
+                indices = sparse_emb['indices']
+                values = sparse_emb['values']
+                sparse_vector = [indices, values]
+
+            sparse_vector_str = json.dumps(sparse_vector)
+            scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE(`sparse`, {sparse_vector_str}, {self.scan_nprobes})"
+            self.log.info(f"[SPARSE] Using query vector for expected title: '{expected_title}'")
+
+        # Dense vector setup (always needed for dense indexes)
         color_vec_2 = [90.0, 33.0, 18.0]
         scan_color_vec_2 = f"ANN_DISTANCE(colorRGBVector, {color_vec_2}, '{self.similarity}', {self.scan_nprobes})"
 
@@ -2885,18 +3995,93 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         primary_idx = "CREATE PRIMARY INDEX `#primary123` ON `default`:`test_bucket`.`test_scope_1`.`test_collection_1`;"
         self.run_cbq_query(query=primary_idx, server=self.n1ql_node)
 
+        # Create index definitions list
+        index_list = []
+
+        # SPARSE INDEXES - Create either bhive or composite sparse indexes based on self.bhive_index
+        if self.isSparse:
+            if self.bhive_index:
+                # SPARSE BHIVE INDEXES
+                # Fields mirror partitionedVectorBhive in gsi_utils.py:
+                # index_fields=['`sparse` SPARSE VECTOR'], include_fields=['average_rating', 'main_category', 'title']
+                partitioned_sparse_bhive = QueryDefinition(
+                    index_name='partitioned_sparse_bhive',
+                    index_fields=['`sparse` SPARSE VECTOR'],
+                    description="IVF1024",
+                    similarity="DOT",
+                    scan_nprobes=self.scan_nprobes,
+                    limit=self.scan_limit,
+                    is_base64=self.base64,
+                    bhive_index=True,
+                    expected_title=expected_title,
+                    query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                        "`sparse`",
+                        "average_rating > 0",
+                        scan_sparse_vec),
+                    partition_by_fields=['meta().id'],
+                    include_fields=['average_rating', 'main_category', 'title'],
+                    train_list=self.trainlist)
+
+                non_partitioned_sparse_bhive = QueryDefinition(
+                    index_name='non_partitioned_sparse_bhive',
+                    index_fields=['`sparse` SPARSE VECTOR'],
+                    description="IVF1024",
+                    similarity="DOT",
+                    scan_nprobes=self.scan_nprobes,
+                    limit=self.scan_limit,
+                    is_base64=self.base64,
+                    bhive_index=True,
+                    expected_title=expected_title,
+                    query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                        "`sparse`",
+                        "average_rating > 0",
+                        scan_sparse_vec),
+                    include_fields=['average_rating', 'main_category', 'title'],
+                    train_list=self.trainlist)
+
+                index_list.extend([partitioned_sparse_bhive, non_partitioned_sparse_bhive])
+            else:
+                # SPARSE COMPOSITE INDEXES
+                # Fields mirror multiScalarOneVector_2 in gsi_utils.py:
+                # index_fields=['average_rating', '`sparse` SPARSE VECTOR', 'main_category'], partition_by_fields=['meta().id']
+                partitioned_sparse_composite = QueryDefinition(
+                    index_name='partitioned_sparse_composite',
+                    index_fields=['average_rating', '`sparse` SPARSE VECTOR', 'main_category'],
+                    description="IVF1024",
+                    similarity="DOT",
+                    scan_nprobes=self.scan_nprobes,
+                    limit=self.scan_limit,
+                    is_base64=self.base64,
+                    bhive_index=False,
+                    expected_title=expected_title,
+                    query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                        "`sparse`",
+                        "average_rating > 0",
+                        scan_sparse_vec),
+                    partition_by_fields=['meta().id'],
+                    train_list=self.trainlist)
+
+                non_partitioned_sparse_composite = QueryDefinition(
+                    index_name='non_partitioned_sparse_composite',
+                    index_fields=['average_rating', '`sparse` SPARSE VECTOR', 'main_category'],
+                    description="IVF1024",
+                    similarity="DOT",
+                    scan_nprobes=self.scan_nprobes,
+                    limit=self.scan_limit,
+                    is_base64=self.base64,
+                    bhive_index=False,
+                    expected_title=expected_title,
+                    query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                        "`sparse`",
+                        "average_rating > 0",
+                        scan_sparse_vec),
+                    train_list=self.trainlist)
+
+                index_list.extend([partitioned_sparse_composite, non_partitioned_sparse_composite])
+
+        # DENSE INDEXES - Create based on bhive_index flag
         if self.bhive_index:
             partitioned_index_color_rgb_vector = QueryDefinition(index_name='partitioned_color_rgb_bhive',
-                                index_fields=['colorRGBVector VECTOR'],
-                                dimension=3, description=f"IVF,{self.quantization_algo_color_vector}", similarity=self.similarity,
-                                scan_nprobes=self.scan_nprobes,
-                                limit=self.scan_limit, persist_full_vector=False,
-                                query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format("colorRGBVector",
-                                                                                   "year > 1980 OR "
-                                                                                   "fuel = 'Diesel' ",
-                                                                                   scan_color_vec_2),
-                                partition_by_fields=['meta().id'], include_fields=['fuel', 'year'],train_list=self.trainlist)
-            non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color_rgb_bhive',
                                                                  index_fields=['colorRGBVector VECTOR'],
                                                                  dimension=3,
                                                                  description=f"IVF,{self.quantization_algo_color_vector}",
@@ -2908,21 +4093,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                      "year > 1980 OR "
                                                                      "fuel = 'Diesel' ",
                                                                      scan_color_vec_2),
-                                                                 include_fields=['fuel', 'year'],train_list=self.trainlist)
+                                                                 partition_by_fields=['meta().id'],
+                                                                 include_fields=['fuel', 'year'],
+                                                                 train_list=self.trainlist)
+            non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color_rgb_bhive',
+                                                                     index_fields=['colorRGBVector VECTOR'],
+                                                                     dimension=3,
+                                                                     description=f"IVF,{self.quantization_algo_color_vector}",
+                                                                     similarity=self.similarity,
+                                                                     scan_nprobes=self.scan_nprobes,
+                                                                     limit=self.scan_limit, persist_full_vector=False,
+                                                                     query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                         "colorRGBVector",
+                                                                         "year > 1980 OR "
+                                                                         "fuel = 'Diesel' ",
+                                                                         scan_color_vec_2),
+                                                                     include_fields=['fuel', 'year'],
+                                                                     train_list=self.trainlist)
             partitioned_index_description_vector = QueryDefinition(index_name='partitioned_description_bhive',
-                            index_fields=['descriptionVector VECTOR'],
-                            dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
-                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                            limit=self.scan_limit,
-                            query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(f"descriptionVector",
-                                                                               "rating = 2 and "
-                                                                               "category in ['Convertible', "
-                                                                               "'Luxury Car', 'Supercar']",
-                                                                               scan_desc_vec_2),
-                            partition_by_fields=['meta().id'], include_fields=['rating', 'category'],train_list=self.trainlist
-                            )
-
-            non_partitioned_index_description_vector = QueryDefinition(index_name='non_partitioned_description_bhive',
                                                                    index_fields=['descriptionVector VECTOR'],
                                                                    dimension=384,
                                                                    description=f"IVF,{self.quantization_algo_description_vector}",
@@ -2935,80 +4123,139 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                        "category in ['Convertible', "
                                                                        "'Luxury Car', 'Supercar']",
                                                                        scan_desc_vec_2),
-                                                                   include_fields=['rating', 'category'],train_list=self.trainlist
+                                                                   partition_by_fields=['meta().id'],
+                                                                   include_fields=['rating', 'category'],
+                                                                   train_list=self.trainlist
                                                                    )
+
+            non_partitioned_index_description_vector = QueryDefinition(index_name='non_partitioned_description_bhive',
+                                                                       index_fields=['descriptionVector VECTOR'],
+                                                                       dimension=384,
+                                                                       description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                       similarity=self.similarity,
+                                                                       scan_nprobes=self.scan_nprobes,
+                                                                       limit=self.scan_limit,
+                                                                       query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                           f"descriptionVector",
+                                                                           "rating = 2 and "
+                                                                           "category in ['Convertible', "
+                                                                           "'Luxury Car', 'Supercar']",
+                                                                           scan_desc_vec_2),
+                                                                       include_fields=['rating', 'category'],
+                                                                       train_list=self.trainlist
+                                                                       )
+
+            # Add bhive dense indexes to list
+            index_list.extend([partitioned_index_color_rgb_vector, non_partitioned_index_color_rgb_vector,
+                               partitioned_index_description_vector, non_partitioned_index_description_vector])
         else:
+            # Dense composite (non-bhive) indexes
             partitioned_index_color_rgb_vector = QueryDefinition(index_name='partitioned_color',
-                            index_fields=['rating', 'colorRGBVector Vector', 'category'],
-                            dimension=3, description=f"IVF,{self.quantization_algo_color_vector}",
-                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                            query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector",
-                                                                               "rating = 2 and "
-                                                                               "category in ['Convertible', "
-                                                                               "'Luxury Car', 'Supercar']",
-                                                                               scan_color_vec_2),
-                            partition_by_fields=['meta().id']
-                            )
+                                                                 index_fields=['rating', 'colorRGBVector Vector',
+                                                                               'category'],
+                                                                 dimension=3,
+                                                                 description=f"IVF,{self.quantization_algo_color_vector}",
+                                                                 similarity=self.similarity,
+                                                                 scan_nprobes=self.scan_nprobes,
+                                                                 query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                     f"color, colorRGBVector",
+                                                                     "rating = 2 and "
+                                                                     "category in ['Convertible', "
+                                                                     "'Luxury Car', 'Supercar']",
+                                                                     scan_color_vec_2),
+                                                                 partition_by_fields=['meta().id']
+                                                                 )
 
             non_partitioned_index_color_rgb_vector = QueryDefinition(index_name='non_partitioned_color',
-                            index_fields=['rating', 'colorRGBVector Vector', 'category'],
-                            dimension=3, description=f"IVF,{self.quantization_algo_color_vector}",
-                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                            query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(f"color, colorRGBVector",
-                                                                               "rating = 2 and "
-                                                                               "category in ['Convertible', "
-                                                                               "'Luxury Car', 'Supercar']",
-                                                                               scan_color_vec_2)
-                            )
+                                                                     index_fields=['rating', 'colorRGBVector Vector',
+                                                                                   'category'],
+                                                                     dimension=3,
+                                                                     description=f"IVF,{self.quantization_algo_color_vector}",
+                                                                     similarity=self.similarity,
+                                                                     scan_nprobes=self.scan_nprobes,
+                                                                     query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                         f"color, colorRGBVector",
+                                                                         "rating = 2 and "
+                                                                         "category in ['Convertible', "
+                                                                         "'Luxury Car', 'Supercar']",
+                                                                         scan_color_vec_2)
+                                                                     )
 
             partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                               index_fields=['rating', 'descriptionVector Vector',
-                                                                             'category'],
-                                                               dimension=384,
-                                                               description=f"IVF,{self.quantization_algo_description_vector}",
-                                                               similarity=self.similarity,
-                                                               scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit, is_base64=self.base64,
-                                                               query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
-                                                                   "descriptionVector",
-                                                                   "rating = 2 and "
-                                                                   "category in ['Convertible', "
-                                                                   "'Luxury Car', 'Supercar']",
-                                                                   scan_desc_vec_2),
-                                                               partition_by_fields=['meta().id'],
-                                                               bhive_index=self.bhive_index
-                                                               )
+                                                                   index_fields=['rating', 'descriptionVector Vector',
+                                                                                 'category'],
+                                                                   dimension=384,
+                                                                   description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                   similarity=self.similarity,
+                                                                   scan_nprobes=self.scan_nprobes,
+                                                                   limit=self.scan_limit, is_base64=self.base64,
+                                                                   query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                       "descriptionVector",
+                                                                       "rating = 2 and "
+                                                                       "category in ['Convertible', "
+                                                                       "'Luxury Car', 'Supercar']",
+                                                                       scan_desc_vec_2),
+                                                                   partition_by_fields=['meta().id'],
+                                                                   bhive_index=self.bhive_index
+                                                                   )
 
             non_partitioned_index_description_vector = QueryDefinition("non_partitioned_descriptionVector",
-                                                               index_fields=['rating', 'descriptionVector Vector',
-                                                                             'category'],
-                                                               dimension=384,
-                                                               description=f"IVF,{self.quantization_algo_description_vector}",
-                                                               similarity=self.similarity,
-                                                               scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit, is_base64=self.base64,
-                                                               query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
-                                                                   "descriptionVector",
-                                                                   "rating = 2 and "
-                                                                   "category in ['Convertible', "
-                                                                   "'Luxury Car', 'Supercar']",
-                                                                   scan_desc_vec_2),
-                                                               bhive_index=self.bhive_index
-                                                               )
+                                                                       index_fields=['rating',
+                                                                                     'descriptionVector Vector',
+                                                                                     'category'],
+                                                                       dimension=384,
+                                                                       description=f"IVF,{self.quantization_algo_description_vector}",
+                                                                       similarity=self.similarity,
+                                                                       scan_nprobes=self.scan_nprobes,
+                                                                       limit=self.scan_limit, is_base64=self.base64,
+                                                                       query_use_index_template=RANGE_SCAN_USE_INDEX_ORDER_BY_TEMPLATE.format(
+                                                                           "descriptionVector",
+                                                                           "rating = 2 and "
+                                                                           "category in ['Convertible', "
+                                                                           "'Luxury Car', 'Supercar']",
+                                                                           scan_desc_vec_2),
+                                                                       bhive_index=self.bhive_index
+                                                                       )
 
-        message = f"quantization value is {self.quantization_algo_description_vector}"
+            # Add composite dense indexes to list
+            index_list.extend([partitioned_index_color_rgb_vector, non_partitioned_index_color_rgb_vector,
+                               partitioned_index_description_vector, non_partitioned_index_description_vector])
+
+        # Create all indexes
+        message = f"Sparse Vector Comparison (Bhive + Composite)" if self.isSparse else f"quantization value is {self.quantization_algo_description_vector}"
         select_queries = []
-        for idx in [partitioned_index_color_rgb_vector, non_partitioned_index_color_rgb_vector,
-                    partitioned_index_description_vector, non_partitioned_index_description_vector]:
-            create_query = idx.generate_index_create_query(namespace=collection_namespace, bhive_index=self.bhive_index)
+
+        for idx in index_list:
+            # Use the bhive_index flag from the index definition itself, not from self
+            create_query = idx.generate_index_create_query(namespace=collection_namespace, bhive_index=idx.bhive_index)
             self.run_cbq_query(query=create_query, server=self.n1ql_node)
             select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
                                                                 namespace=collection_namespace,
                                                                 index_name=idx.index_name)[0]
             select_queries.append(select_query)
+
         self.item_count_related_validations()
 
-        self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message, similarity=self.similarity)
+        # Calculate recall and MRR for sparse vectors
+        if self.isSparse and expected_title:
+            self.log.info("")
+            self.log.info("=" * 100)
+            self.log.info("SPARSE VECTOR PARTITIONED VS NON-PARTITIONED COMPARISON")
+            self.log.info("=" * 100)
+            self.log.info(f"Expected title: '{expected_title}'")
+
+            # Calculate MRR
+            mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title, namespace=namespace)
+            self.log.info(f"[MRR] Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
+            self.log.info("=" * 100)
+
+        # Get sparse recall parameters - for this test we have explicit expected_title from index definitions
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(index_list, select_queries)
+
+        self.display_recall_and_accuracy_stats(select_queries=select_queries, message=message,
+                                               similarity="DOT" if self.isSparse else self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
         self.drop_index_node_resources_utilization_validations()
 
     def test_replica_repair(self):
@@ -3028,7 +4275,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       array_indexes=False,
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector, bhive_index=self.bhive_index,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      bhive_index=self.bhive_index,
                                                                       description_dimension=self.dimension)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=self.num_index_replica,
@@ -3083,6 +4331,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -3093,6 +4342,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       bhive_index=self.bhive_index,
                                                                       description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
@@ -3102,10 +4352,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         self.item_count_related_validations()
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         for bucket in self.buckets:
             try:
@@ -3114,7 +4375,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if "unable to flush bucket" not in str(ex):
                     self.fail("flushing bucket failed with unexpected error message")
         self.sleep(60)
-        #adding validations for item count post flushing of bucket
+        # adding validations for item count post flushing of bucket
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -3152,16 +4413,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if 'partial' not in index:
                 self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
 
     def test_recover_from_disk_snapshot(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
 
         setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
         self.index_rest.set_index_settings(setting)
@@ -3169,6 +4438,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         index_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         data_node = self.get_nodes_from_services_map(service_type="kv")
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -3178,6 +4448,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
@@ -3188,11 +4459,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
 
-
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         doc_count = {}
         for namespace in self.namespaces:
@@ -3214,11 +4495,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
-            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
-                                            create_end=self.num_of_docs_per_collection * 2,
-                                            dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
+            if self.isSparse:
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection * 2,
+                                                timeout=5000, workers=10)
+            else:
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection * 2,
+                                                dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
 
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
@@ -3244,7 +4534,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.drop_index_node_resources_utilization_validations()
 
     def test_partial_rollback(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         self.sleep(30)
         select_queries = set()
         for namespace in self.namespaces:
@@ -3281,14 +4571,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             bucket, scope, collection = namespace.split('.')
             bucket = bucket.split(':')[-1]
 
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars",
-                                            output=True, username=self.username, password=self.password,
-                                            base64=self.base64,
-                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
-                                            create_start=0,
-                                            create_end=10000, dim=self.dimension)
+            if self.isSparse:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                base64=self.base64,
+                                                workers=10, timeout=1500, key_prefix="doc_77",
+                                                create_start=0,
+                                                create_end=10000)
+            else:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                base64=self.base64,
+                                                model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
+                                                create_start=0,
+                                                create_end=10000, dim=self.dimension)
 
             # self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
             task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
@@ -3345,8 +4645,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count()
         self.sleep(60, "Waiting for cluster to stabilize after rollback")
         self.wait_until_indexes_online(timeout=300)
+        # Get sparse recall parameters - use brute-force since this test has mutations
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params()
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message="results after doing a partial roll back from kv side", similarity=self.similarity)
+                                               message="results after doing a partial roll back from kv side",
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
         self.drop_index_node_resources_utilization_validations()
 
     def test_recovery_post_deleting_recovery_files(self):
@@ -3367,12 +4672,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replica, bhive_index=self.bhive_index)
+                                                                     num_replica=self.num_index_replica,
+                                                                     bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-
 
         self.item_count_related_validations()
         # deleting recovery files
@@ -3407,8 +4712,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        #log validation for recovery of bhive indexes
-        is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
+        # log validation for recovery of bhive indexes
+        is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string,
+                                                                   msg="bhive recovery point")
         self.assertTrue(is_log_validation, "bhive recovery point not found in logs")
         self.drop_index_node_resources_utilization_validations()
 
@@ -3432,14 +4738,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                     num_replica=self.num_index_replica, bhive_index=self.bhive_index)
+                                                                     num_replica=self.num_index_replica,
+                                                                     bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
 
         self.item_count_related_validations()
-
 
         if self.kill_parallel:
             with ThreadPoolExecutor() as executor:
@@ -3478,31 +4784,33 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        #log validation for recovery of bhive indexes
-        is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string, msg="bhive recovery point")
+        # log validation for recovery of bhive indexes
+        is_log_validation = self.check_gsi_logs_for_shard_transfer(log_string=self.bhive_recovery_log_string,
+                                                                   msg="bhive recovery point")
         self.assertTrue(is_log_validation, "bhive recovery point not found in logs")
         self.drop_index_node_resources_utilization_validations()
 
     def test_recovery_projector_crash(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                    skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
 
         setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
         self.index_rest.set_index_settings(setting)
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         data_node = self.get_nodes_from_services_map(service_type="kv")
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                    similarity=self.similarity, train_list=None,
-                                                                    scan_nprobes=self.scan_nprobes,
-                                                                    array_indexes=False, bhive_index=self.bhive_index,
-                                                                    limit=self.scan_limit, is_base64=self.base64,
-                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector)
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                    num_replica=1, bhive_index=self.bhive_index)
+                                                                     num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
@@ -3510,10 +4818,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         doc_count = {}
         for namespace in self.namespaces:
@@ -3536,7 +4855,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             bucket, scope, collection = keyspace.split(".")
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
+                                            collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                            create_start=self.num_of_docs_per_collection,
                                             create_end=self.num_of_docs_per_collection * 2)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
@@ -3548,7 +4868,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             remote_client.terminate_process(process_name='projector')
         self.sleep(30)
 
-
         index_stats = self.index_rest.get_index_stats()
         docs_pending = [f"{bucket}.{index}.{key}:{val}" for bucket, indexes in index_stats.items()
                         for index, stats in indexes.items()
@@ -3559,12 +4878,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.log.info(f"Doc count after recovery for namespace {namespace}: {result}")
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
-                            "Index hasn't recovered the docs within the given time")
+                             "Index hasn't recovered the docs within the given time")
         self.drop_index_node_resources_utilization_validations()
 
     def test_recovery_memcached_crash(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                    skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
+
         if self.bhive_index:
             self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
 
@@ -3573,18 +4892,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         data_node = self.get_nodes_from_services_map(service_type="kv")
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                    similarity=self.similarity, train_list=None,
-                                                                    scan_nprobes=self.scan_nprobes,
-                                                                    array_indexes=False, bhive_index=self.bhive_index,
-                                                                    limit=self.scan_limit, is_base64=self.base64,
-                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector,
-                                                                    description_dimension=self.dimension)
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector,
+                                                                      description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                    num_replica=1, bhive_index=self.bhive_index)
+                                                                     num_replica=1, bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
             select_queries.extend(
@@ -3592,10 +4913,21 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.item_count_related_validations()
         index_stats = self.index_rest.get_index_stats()
 
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for select_query in select_queries:
-            if "ANN_DISTANCE" not in select_query:
+            if required_distance_func not in select_query:
                 continue
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         doc_count = {}
         for namespace in self.namespaces:
@@ -3614,6 +4946,32 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         disk_snapshots[bucket][index][key] = val
 
         # Loading new documents so that persisted snapshot wouldn't have these docs
+        for namespace in self.namespaces:
+            if self.isSparse:
+                self.json_template = "MsMARCO"
+            else:
+                self.json_template = "Cars"
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+            if self.isSparse:
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection * 2,
+                                                timeout=5000, workers=10)
+            else:
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection * 2,
+                                                dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update,
+                                                    timeout_secs=5000, use_magma_loader=True)
+            task.result()
+
         if 'RaBitQ' in self.quantization_algo_description_vector:
             num_new_docs = 20
             description_vector = [0.1] * self.dimension
@@ -3628,11 +4986,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             for namespace in self.namespaces:
                 keyspace = namespace.split(":")[-1]
                 bucket, scope, collection = keyspace.split(".")
-                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                                percent_update=0, percent_delete=0, scope=scope,
-                                                collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
-                                                create_end=self.num_of_docs_per_collection * 2,
-                                                dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
+                if self.isSparse:
+                    self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                    percent_update=0, percent_delete=0, scope=scope,
+                                                    collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                                    create_start=self.num_of_docs_per_collection,
+                                                    create_end=self.num_of_docs_per_collection * 2,
+                                                    timeout=5000, workers=10)
+                else:
+                    self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                    percent_update=0, percent_delete=0, scope=scope,
+                                                    collection=collection, json_template=self.json_template, key_prefix="new_doc",
+                                                    create_start=self.num_of_docs_per_collection,
+                                                    create_end=self.num_of_docs_per_collection * 2,
+                                                    dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
                 task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                         generator=self.gen_update,
                                                         timeout_secs=5000, use_magma_loader=True)
@@ -3656,13 +5023,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.log.info(f"Doc count after recovery for namespace {namespace}: {result}")
+
             self.assertEqual(result, doc_count[namespace] + num_new_docs,
                             "Index hasn't recovered the docs within the given time")
         self.drop_index_node_resources_utilization_validations()
 
     def test_crash_and_recovery_scenarios_during_index_building(self):
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                    skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
 
         setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
         self.index_rest.set_index_settings(setting)
@@ -3670,22 +5037,23 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         select_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                    similarity=self.similarity, train_list=None,
-                                                                    scan_nprobes=self.scan_nprobes,
-                                                                    array_indexes=False, bhive_index=self.bhive_index,
-                                                                    limit=self.scan_limit, is_base64=self.base64,
-                                                                    quantization_algo_description_vector=self.quantization_algo_description_vector,
-                                                                    quantization_algo_color_vector=self.quantization_algo_color_vector)
+                                                                      similarity=self.similarity, train_list=None,
+                                                                      scan_nprobes=self.scan_nprobes,
+                                                                      array_indexes=False, bhive_index=self.bhive_index,
+                                                                      limit=self.scan_limit, is_base64=self.base64,
+                                                                      quantization_algo_description_vector=self.quantization_algo_description_vector,
+                                                                      quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
-                                                                    defer_build=True, num_replica=1,
-                                                                    bhive_index=self.bhive_index)
+                                                                     defer_build=True, num_replica=1,
+                                                                     bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
             build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
             select_queries.extend(
                 self.gsi_util_obj.get_select_queries(definition_list=definitions, namespace=namespace))
-
 
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
 
@@ -3718,15 +5086,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.wait_until_indexes_online()
 
         for namespace in self.namespaces:
+            if self.isSparse:
+                self.json_template = "MsMARCO"
+            else:
+                self.json_template = "Cars"
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="create", dim=384,
-                                            create_start=self.num_of_docs_per_collection,
-                                            create_end=(self.num_of_docs_per_collection +
-                                                        self.num_of_docs_per_collection // 10))
+            if self.isSparse:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="create",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=(self.num_of_docs_per_collection +
+                                                            self.num_of_docs_per_collection // 10))
+            else:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="create", dim=384,
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=(self.num_of_docs_per_collection +
+                                                            self.num_of_docs_per_collection // 10))
             # self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
             task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
                                                     generator=self.gen_create,
@@ -3737,13 +5118,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self._verify_bucket_count_with_index_count()
 
         query_stats_map = {}
+        required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
         for query in select_queries:
-            if "ANN_DISTANCE" not in query:
+            if required_distance_func not in query:
                 continue
             query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
             query_stats_map[query] = [recall, accuracy]
         self.gen_table_view(query_stats_map=query_stats_map,
                             message=f"quantization value is {self.quantization_algo_description_vector}")
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
 
     def test_create_index_without_vector_data(self):
@@ -3776,20 +5168,30 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         status = self.wait_until_indexes_online(timeout=60)
         self.assertFalse(status, "Index created successfully")
 
-        #Loading valid docs for vector indexes
+        # Loading valid docs for vector indexes
         for namespace in self.namespaces:
             _, keyspace = namespace.split(':')
             bucket, scope, collection = keyspace.split('.')
             bucket = bucket.split(':')[-1]
 
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars",
-                                            output=True, username=self.username, password=self.password,
-                                            base64=self.base64,
-                                            model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
-                                            create_start=self.num_of_docs_per_collection,
-                                            create_end=self.num_of_docs_per_collection + 10000)
+            if self.isSparse:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                base64=self.base64,
+                                                workers=10, timeout=1500, key_prefix="doc_77",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection + 10000)
+            else:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template=self.json_template,
+                                                output=True, username=self.username, password=self.password,
+                                                base64=self.base64,
+                                                model=self.data_model, workers=10, timeout=1500, key_prefix="doc_77",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection + 10000)
             # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_create,
@@ -3800,7 +5202,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.assertEqual(len(self.index_rest.get_indexer_metadata()['status']), 1,
                          "Index not created successfully")
         self.drop_index_node_resources_utilization_validations()
-
 
     def test_vector_index_trainlist_retry(self):
 
@@ -3827,7 +5228,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     This verifies the fix where index creation no longer fails due to
     insufficient sampled vectors during training.
     """
-        
+
         self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
@@ -3843,7 +5244,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         collection_namespace = self.namespaces[0]
         data_node = self.get_nodes_from_services_map(service_type="kv")
 
-        
         for namespace in self.namespaces:
             _, keyspace = namespace.split(':')
             bucket, scope, collection = keyspace.split('.')
@@ -3851,46 +5251,41 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars",
+                                            collection=collection, json_template=self.json_template,
                                             output=True, username=self.username, password=self.password,
-                                            base64=self.base64,model=self.data_model,dim=384,
+                                            base64=self.base64, model=self.data_model, dim=384,
                                             workers=10, timeout=1500, key_prefix="doc_",
                                             update_start=0,
                                             update_end=10000)
-            
+
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_create,
                                                     timeout_secs=1500, use_magma_loader=True)
-            
+
             task.result()
 
-            
-           
         vector_idx = QueryDefinition(
-        index_name='idx',
-        index_fields=['descriptionVector VECTOR'],
-        dimension=384,
-        description="IVF32,SQ8",
-        similarity="L2_SQUARED",
-        train_list=1000 )
-     
+            index_name='idx',
+            index_fields=['descriptionVector VECTOR'],
+            dimension=384,
+            description="IVF32,SQ8",
+            similarity="L2_SQUARED",
+            train_list=1000)
 
         query = vector_idx.generate_index_create_query(
-        namespace=collection_namespace,
-        defer_build=True
-    )         
+            namespace=collection_namespace,
+            defer_build=True
+        )
         self.run_cbq_query(query=query, server=self.n1ql_node)
 
-        
         build_query = f"BUILD INDEX ON {collection_namespace}(idx) USING GSI"
         self.run_cbq_query(query=build_query, server=self.n1ql_node)
 
-        
         timeout = 600
         interval = 10
         elapsed = 0
         index_ready = False
-        
+
         while elapsed < timeout:
             index_metadata = self.index_rest.get_indexer_metadata()['status']
             for index in index_metadata:
@@ -3903,16 +5298,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 break
             self.sleep(interval, f"Waiting for index to be Ready... ({elapsed}s elapsed)")
             elapsed += interval
-        
-        self.assertTrue(index_ready, 
-            f"Index 'idx' did not become Ready within {timeout}s. Last status: {index.get('status', 'unknown')}")
+
+        self.assertTrue(index_ready,
+                        f"Index 'idx' did not become Ready within {timeout}s. Last status: {index.get('status', 'unknown')}")
 
         self.drop_index_node_resources_utilization_validations()
-
-
-   
-
-
 
     def test_drop_multiple_indexes_in_training_state(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
@@ -3933,9 +5323,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                         num_replica=self.num_index_replica,
                                                         bhive_index=self.bhive_index, defer_build=True))
             drop_queries.update(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
-            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions,namespace=namespace)
+            build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
 
-            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace, query_node=self.n1ql_node)
+            self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                 query_node=self.n1ql_node)
 
         timeout = 0
         with ThreadPoolExecutor() as executor:
@@ -3963,11 +5354,26 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
 
-        vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
-                                     description="IVF,PQ8x8", similarity="L2_SQUARED", is_base64=self.base64,
-                                     bhive_index=self.bhive_index)
-        query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=False,
-                                                       bhive_index=self.bhive_index)
+        # Create either sparse or dense vector index based on isSparse flag
+        if self.isSparse:
+            self.log.info("Creating sparse vector index for memcached kill test...")
+            vector_idx = QueryDefinition(index_name='sparse_vector', 
+                                         index_fields=['`sparse` SPARSE VECTOR'],
+                                         description="IVF1024", 
+                                         similarity="DOT", 
+                                         is_base64=self.base64,
+                                         bhive_index=True)
+            query = vector_idx.generate_index_create_query(namespace=collection_namespace, 
+                                                           defer_build=True,
+                                                           bhive_index=True)
+        else:
+            self.log.info("Creating dense vector index for memcached kill test...")
+            vector_idx = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
+                                         description="IVF,PQ32x8", similarity="L2_SQUARED", is_base64=self.base64,
+                                         bhive_index=self.bhive_index)
+            query = vector_idx.generate_index_create_query(namespace=collection_namespace, defer_build=True,
+                                                           bhive_index=self.bhive_index)
+
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
 
         self.run_cbq_query(query=query, server=self.n1ql_node)
@@ -3975,19 +5381,20 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         remote_machine = RemoteMachineShellConnection(data_node)
 
-        # for the scenario killing memecached during training phase
-        timeout = 0
+        # Kill memcached during index training phase
         with ThreadPoolExecutor() as executor:
             executor.submit(self.run_cbq_query, query=build_query)
             self.sleep(5)
             remote_machine.stop_memcached()
             self.sleep(60)
             remote_machine.start_memcached()
-        meta_data = self.index_rest.get_indexer_metadata()['status']
+
         self.wait_until_indexes_online(timeout=120)
+        meta_data = self.index_rest.get_indexer_metadata()['status']
 
         for data in meta_data:
-            self.assertEqual(data['status'], 'Ready', "state is errored out")
+            self.assertEqual(data['status'], 'Ready', f"Index {data['name']} state is errored out: {data['status']}")
+        
         self.item_count_related_validations()
         self.drop_index_node_resources_utilization_validations()
 
@@ -4071,7 +5478,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                                           namespace=collection_namespace,
                                                                                           limit=self.scan_limit)[0]}"""
             index_used_select_query = \
-                self.run_cbq_query(query=select_query_with_explain, server=self.n1ql_node)['results'][0]['plan']['~children'][0]['~children'][
+                self.run_cbq_query(query=select_query_with_explain, server=self.n1ql_node)['results'][0]['plan'][
+                    '~children'][0]['~children'][
                     0][
                     'index']
             self.log.info(index_used_select_query)
@@ -4117,8 +5525,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_scans_after_vector_field_mutations(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.json_template,
@@ -4132,13 +5540,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 bhive_index=self.bhive_index,
                 description_dimension=self.dimension
             )
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                      namespace=namespace,
                                                                      bhive_index=self.bhive_index)
             select_queries = self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                   namespace=namespace,
                                                                   limit=self.scan_limit)
-
 
             drop_queries = self.gsi_util_obj.get_drop_index_list(definition_list=definitions,
                                                                  namespace=namespace)
@@ -4154,14 +5562,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
-            
+
             # Updating vector fields in existing documents and running scans after that
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
             bucket = bucket.split(':')[-1]
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
+                                            collection=collection, json_template=self.json_template, timeout=2000,
                                             op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
                                             update_start=1, update_end=self.num_of_docs_per_collection)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
@@ -4170,29 +5578,43 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             task.result()
 
             query_stats_map = {}
+            required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
             for query in select_queries:
-                if "ANN_DISTANCE" not in query:
+                if required_distance_func not in query:
                     continue
-               
+
                 if "colorRGBVector" in query:
                     self.log.info("Skipping colorRGBVector validation - dimension mismatch (3D)")
                     continue
+
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            # Calculate MRR for sparse vectors
+            if self.isSparse and all_definitions:
+                expected_title_for_mrr = None
+                for defn in all_definitions:
+                    if hasattr(defn, 'expected_title') and defn.expected_title:
+                        expected_title_for_mrr = defn.expected_title
+                        break
+                if expected_title_for_mrr:
+                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                    self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
             self.drop_index_node_resources_utilization_validations()
-
 
     def test_scans_after_adding_invalid_input_for_vector_fields_and_change_it_back(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
+        all_definitions = []
         for namespace in self.namespaces:
+            # Use appropriate similarity for sparse vs dense
+            similarity = "DOT" if self.isSparse else self.similarity
+            
             definitions = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.json_template,
                 prefix='test',
-                similarity=self.similarity, train_list=None,
+                similarity=similarity, train_list=None,
                 scan_nprobes=self.scan_nprobes,
                 array_indexes=False,
                 limit=self.scan_limit,
@@ -4201,6 +5623,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 bhive_index=self.bhive_index,
                 description_dimension=self.dimension
             )
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                      namespace=namespace,
                                                                      bhive_index=self.bhive_index)
@@ -4214,46 +5637,71 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             # Add invalid/scalar values for vector fields in some of the docs and run scans
             collection_namespace = self.namespaces[0]
-            upsert_query = (f"update {collection_namespace} set colorRGBVector = 12 and "
-                            f"descriptionVector = 'abcd' where rating > 2")
-            self.run_cbq_query(query=upsert_query)
+            
+            if self.isSparse:
+                # For sparse vectors: set sparse field to scalar value where size=5, limit 10000
+                upsert_query = (f"UPDATE {collection_namespace} SET `sparse` = 12345 "
+                                f"WHERE size = 5 LIMIT 10000")
+                self.run_cbq_query(query=upsert_query)
+                
+                # Fetch doc count for validation
+                select_query = f"SELECT COUNT(*) FROM {collection_namespace} WHERE size = 5"
+                result = self.run_cbq_query(query=select_query)
+                total_matching = int(result["results"][0]["$1"])
+                doc_count = min(total_matching, 10000)
+            else:
+                # For dense vectors: original behavior
+                upsert_query = (f"UPDATE {collection_namespace} SET colorRGBVector = 12, "
+                                f"descriptionVector = 'abcd' WHERE rating > 2")
+                self.run_cbq_query(query=upsert_query)
+                
+                # Fetch doc count for validation
+                select_query = f"SELECT COUNT(*) FROM {collection_namespace} WHERE rating > 2 AND colorRGBVector != [0, 0, 0]"
+                result = self.run_cbq_query(query=select_query)
+                doc_count = int(result["results"][0]["$1"])
+            
+            self.log.info(f'doc count {doc_count}')
 
             for query in select_queries:
                 self.run_cbq_query(query=query)
 
-            # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {collection_namespace} where rating > 2 and colorRGBVector != [0, 0, 0]"
-            result = self.run_cbq_query(query=select_query)
-            doc_count = int(result["results"][0]["$1"])
-            self.log.info(f'doc count {doc_count}')
-
-
             self.sleep(10)
 
-            # change back the modified fields to vectors and re-run scans
+            # Change back the modified fields to vectors and re-run scans
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
             bucket = bucket.split(':')[-1]
+            
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
+                                            collection=collection, json_template=self.json_template, timeout=2000,
                                             op_type="update", dim=self.dimension, model=self.data_model, mutate=1,
                                             update_start=1, update_end=self.num_of_docs_per_collection)
-            # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
+            
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
                                                     timeout_secs=2000, use_magma_loader=True)
             task.result()
 
             query_stats_map = {}
+            required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
             for query in select_queries:
-                if "ANN_DISTANCE" not in query:
+                if required_distance_func not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
-
+            # Calculate MRR for sparse vectors
+            if self.isSparse and all_definitions:
+                expected_title_for_mrr = None
+                for defn in all_definitions:
+                    if hasattr(defn, 'expected_title') and defn.expected_title:
+                        expected_title_for_mrr = defn.expected_title
+                        break
+                if expected_title_for_mrr:
+                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                    self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
             error_msg_and_doc_count = (f'"invalid_vec_type":{doc_count}')
             self.log.info(f"error msg count {error_msg_and_doc_count}")
@@ -4344,10 +5792,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             bucket, scope, collection = keyspace.split(".")
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
+                                            collection=collection, json_template=self.json_template, timeout=2000,
                                             op_type="update", mutate=1, dim=128, model=self.data_model,
                                             update_start=1, update_end=10000)
-            # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
                                                     timeout_secs=2000, use_magma_loader=True)
@@ -4361,10 +5808,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             bucket, scope, collection = keyspace.split(".")
             self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                             percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
+                                            collection=collection, json_template=self.json_template, timeout=2000,
                                             op_type="update", mutate=1, dim=self.dimension, model=self.data_model,
                                             update_start=1, update_end=10000)
-            # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_update,
                                                     timeout_secs=2000, use_magma_loader=True)
@@ -4376,8 +5822,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.assertTrue(self.validate_error_msg_and_doc_count_in_cbcollect(self.master, error_msg_and_doc_count))
 
             query_stats_map = {}
+            required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
             for query in select_queries:
-                if "ANN_DISTANCE" not in query:
+                if required_distance_func not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
@@ -4387,8 +5834,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_scans_with_incremental_workload_for_composite_vector_index(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(
                 dataset=self.json_template,
@@ -4402,6 +5849,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 bhive_index=self.bhive_index,
                 description_dimension=self.dimension
             )
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                      namespace=namespace,
                                                                      bhive_index=self.bhive_index)
@@ -4427,13 +5875,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             keyspace = namespace.split(":")[-1]
             bucket, scope, collection = keyspace.split(".")
 
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="create", dim=self.dimension, model=self.data_model,
-                                            create_start=self.num_of_docs_per_collection,
-                                            create_end=(self.num_of_docs_per_collection +
-                                                        self.num_of_docs_per_collection // 2))
+            if self.isSparse:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="create",
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=(self.num_of_docs_per_collection +
+                                                            self.num_of_docs_per_collection // 2))
+            else:
+                self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, workers=16, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="create", dim=self.dimension, model=self.data_model,
+                                                create_start=self.num_of_docs_per_collection,
+                                                create_end=(self.num_of_docs_per_collection +
+                                                            self.num_of_docs_per_collection // 2))
             # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
             task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
                                                     generator=self.gen_create,
@@ -4441,13 +5898,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             task.result()
 
             query_stats_map = {}
+            required_distance_func = "SPARSE_VECTOR_DISTANCE" if self.isSparse else "ANN_DISTANCE"
             for query in select_queries:
-                if "ANN_DISTANCE" not in query:
+                if required_distance_func not in query:
                     continue
                 query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query)
                 query_stats_map[query] = [recall, accuracy]
             self.gen_table_view(query_stats_map=query_stats_map,
                                 message=f"quantization value is {self.quantization_algo_description_vector}")
+            # Calculate MRR for sparse vectors
+            if self.isSparse and all_definitions:
+                expected_title_for_mrr = None
+                for defn in all_definitions:
+                    if hasattr(defn, 'expected_title') and defn.expected_title:
+                        expected_title_for_mrr = defn.expected_title
+                        break
+                if expected_title_for_mrr:
+                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                    self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
             self.item_count_related_validations()
 
@@ -4499,7 +5967,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 bucket = bucket.split(':')[-1]
                 self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
                                                 percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                                collection=collection, json_template="Cars", timeout=5000,
+                                                collection=collection, json_template=self.json_template, timeout=5000,
                                                 op_type="update", dim=self.dimension, model=self.data_model, mutate=1,
                                                 update_start=1, update_end=self.num_of_docs_per_collection)
                 # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_update)
@@ -4511,7 +5979,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             self.drop_index_node_resources_utilization_validations()
 
-   
     def _get_resource_stats(self):
         """Helper function to get current resource stats"""
         stats = {'cpu': 0, 'ram': 0, 'disk': 0}
@@ -4520,7 +5987,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 rest = RestConnection(server)
                 node_stats = rest.get_nodes_self_stats()
                 stats['cpu'] += node_stats.get('cpu_utilization', 0)
-                stats['ram'] += node_stats.get('mem_free', 0) / (1024**3)  # Convert to GB
+                stats['ram'] += node_stats.get('mem_free', 0) / (1024 ** 3)  # Convert to GB
                 stats['disk'] += node_stats.get('disk_usage', 0) if 'disk_usage' in node_stats else 0
         except Exception as e:
             self.log.warning(f"Could not get resource stats: {e}")
@@ -4531,6 +5998,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         if self.bhive_index:
             self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         select_queries = set()
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       prefix='test',
@@ -4541,6 +6009,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       description_dimension=self.dimension)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=self.num_index_replica)
             select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
@@ -4562,45 +6031,106 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.run_continous_query = False
 
         self.index_creation_till_rr(rr=self.desired_rr, timeout=7200)
+        # Get sparse recall parameters - use brute-force since this test may have mutations during dgm
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params()
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message=f"results getting rr less than {self.desired_rr}%", similarity=self.similarity)
+                                               message=f"results getting rr less than {self.desired_rr}%",
+                                               similarity=self.similarity,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
 
     def test_partitioned_index_vector_fields_mutation(self):
+        import os
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
-        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
-        desc_vec2 = list(self.encoder.encode(desc_2))
         collection_namespace = self.namespaces[0]
 
-        scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
-        partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                               index_fields=['rating', 'descriptionVector Vector',
-                                                                             'category'],
-                                                               dimension=384,
-                                                               description=f"IVF,{self.quantization_algo_description_vector}",
-                                                               similarity=self.similarity,
-                                                               scan_nprobes=self.scan_nprobes,
-                                                               limit=self.scan_limit, is_base64=self.base64,
-                                                               query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                                                   "description, descriptionVector",
-                                                                   "rating = 2 and "
-                                                                   "category in ['Convertible', "
-                                                                   "'Luxury Car', 'Supercar']",
-                                                                   scan_desc_vec_2),
-                                                               partition_by_fields=['meta().id']
-                                                               )
+        if self.isSparse:
+            # Load sparse vector from JSONL for query
+            jsonl_path = os.path.join(os.path.dirname(__file__),
+                                      'sparse_vector_embeddings',
+                                      self.sparse_query_vectors_file)
 
-        create_idx_query = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8)
+            with open(jsonl_path, 'r') as f:
+                first_line = f.readline()
+                entry = json.loads(first_line)
+                expected_title = entry['title']
+                sparse_emb = entry['sparse_embedding']
+                indices = sparse_emb['indices']
+                values = sparse_emb['values']
+                sparse_vector = [indices, values]
+
+            sparse_vector_str = json.dumps(sparse_vector)
+            scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE(`sparse`, {sparse_vector_str}, {self.scan_nprobes})"
+
+            partitioned_index = QueryDefinition(
+                index_name='partitioned_sparse_vector',
+                index_fields=['average_rating', '`sparse` SPARSE VECTOR', 'main_category'],
+                description="IVF1024",
+                similarity="DOT",
+                scan_nprobes=self.scan_nprobes,
+                limit=self.scan_limit,
+                is_base64=self.base64,
+                bhive_index=self.bhive_index,
+                expected_title=expected_title,
+                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                    "`sparse`",
+                    "average_rating > 0",
+                    scan_sparse_vec),
+                partition_by_fields=['meta().id'],
+                train_list=self.trainlist
+            )
+
+            # Update query to make sparse field into scalar
+            update_query = f"UPDATE {collection_namespace} SET `sparse` = 12345 WHERE average_rating IS NOT NULL"
+        else:
+            # Dense vector setup
+            desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+            desc_vec2 = list(self.encoder.encode(desc_2))
+
+            scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
+            partitioned_index = QueryDefinition("partitioned_descriptionVector",
+                                                index_fields=['rating', 'descriptionVector Vector',
+                                                              'category'],
+                                                dimension=384,
+                                                description=f"IVF,{self.quantization_algo_description_vector}",
+                                                similarity=self.similarity,
+                                                scan_nprobes=self.scan_nprobes,
+                                                limit=self.scan_limit, is_base64=self.base64,
+                                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                                    "description, descriptionVector",
+                                                    "rating = 2 and "
+                                                    "category in ['Convertible', "
+                                                    "'Luxury Car', 'Supercar']",
+                                                    scan_desc_vec_2),
+                                                partition_by_fields=['meta().id']
+                                                )
+
+            # Update query to make vector field into scalar
+            update_query = f"UPDATE {collection_namespace} SET descriptionVector = 'abcd' WHERE rating IS NOT NULL"
+
+        create_idx_query = partitioned_index.generate_index_create_query(
+            namespace=collection_namespace, num_partition=8, bhive_index=self.bhive_index if self.isSparse else False)
         self.run_cbq_query(query=create_idx_query)
         self.item_count_related_validations()
+
         # The below query is to ensure that all the vector fields are made into scalar fields
-        update_query = f"update {collection_namespace} set descriptionVector = 'abcd' where rating is not null"
         self.run_cbq_query(query=update_query)
 
         # a node is rebalanced out and all the partitions go to another indexer node and the index should not error out because it used code book from the existing instance
         if self.partitioned_index_action == "rebalance_out":
             index_node = self.get_nodes_from_services_map(service_type="index")
-            #rebalancing out the above indexer node
+            # rebalancing out the above indexer node
             task = self.cluster.async_rebalance(servers=self.servers[:self.nodes_init], to_add=[],
                                                 to_remove=[index_node], services=['index'])
             task.result()
@@ -4609,7 +6139,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         # a replica is added so new partitions get built and the index should not error out because it used code book from the existing instance
         elif self.partitioned_index_action == "alter_index":
-            alter_index_query = f'ALTER INDEX `{partitioned_index_description_vector.index_name}` on {collection_namespace} WITH {{"action":"replica_count","num_replica": 1}}'
+            alter_index_query = f'ALTER INDEX `{partitioned_index.index_name}` on {collection_namespace} WITH {{"action":"replica_count","num_replica": 1}}'
             try:
                 self.run_cbq_query(query=alter_index_query)
             except Exception as e:
@@ -4618,7 +6148,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         status = self.wait_until_indexes_online()
         self.assertTrue(status)
 
-        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector],
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index],
                                                             namespace=collection_namespace)[0]
         self.run_cbq_query(query=select_query)
         self.drop_index_node_resources_utilization_validations()
@@ -4631,7 +6161,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         primary_index_query = f"CREATE PRIMARY INDEX `#primary` ON {collection_namespace}"
         self.run_cbq_query(query=primary_index_query)
 
-        #query to ensure only 256 docs have vector fields
+        # query to ensure only 256 docs have vector fields
         if self.is_partial:
             modification_query = f"update {collection_namespace} SET colorRGBVector = \"hello\" WHERE rating > 3 limit {self.num_of_docs_per_collection - self.num_centroids};"
         else:
@@ -4640,7 +6170,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         color_vec_1 = [82.5, 106.700005, 20.9]  # camouflage green
         scan_color_vec_1 = f"ANN_DISTANCE(colorRGBVector, {color_vec_1}, '{self.similarity}', {self.scan_nprobes})"
 
-        #creating index
+        # creating index
         if self.is_partial:
             vector_index = QueryDefinition(index_name='PartialIndex',
                                            index_fields=['rating ', 'color', 'colorRGBVector Vector'],
@@ -4654,9 +6184,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                'color like "%%blue%%" ',
                                                scan_color_vec_1))
         else:
-            vector_index = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'], dimension=384,
-                                         description=f"IVF,{self.quantization_algo_description_vector}", similarity="L2_SQUARED",
-                                         is_base64=self.base64)
+            vector_index = QueryDefinition(index_name='vector', index_fields=['descriptionVector VECTOR'],
+                                           dimension=384,
+                                           description=f"IVF,{self.quantization_algo_description_vector}",
+                                           similarity="L2_SQUARED",
+                                           is_base64=self.base64)
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
@@ -4664,7 +6196,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         status = self.wait_until_indexes_online()
         self.assertTrue(status)
         self.drop_index_node_resources_utilization_validations()
-
 
     def test_rebalance_operation_with_errored_out_indexes(self):
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -4677,7 +6208,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
-        self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes, collection_num=self.num_collections,
+        self.collection_rest.create_scope_collection_count(scope_num=self.num_scopes,
+                                                           collection_num=self.num_collections,
                                                            scope_prefix=self.scope_prefix,
                                                            collection_prefix=self.collection_prefix,
                                                            bucket=self.test_bucket)
@@ -4703,6 +6235,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 task.result()
         select_queries = []
         build_queries = []
+        all_definitions = []
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                       similarity=self.similarity, train_list=None,
@@ -4711,6 +6244,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
+            all_definitions.extend(definitions)
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
                                                                      num_replica=1, bhive_index=self.bhive_index)
             build_query = self.gsi_util_obj.get_build_indexes_query(definition_list=definitions, namespace=namespace)
@@ -4739,7 +6273,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                 percent_update=0, percent_delete=0, scope=scope,
                                                 collection=collection, json_template=self.json_template,
                                                 output=True, username=self.username, password=self.password,
-                                                create_start=0,key_prefix="doc_77",
+                                                create_start=0, key_prefix="doc_77",
                                                 create_end=additional_docs,
                                                 timeout=3000, workers=4, ops_rate=5000)
                 # self.load_docs_via_magma_server(server=data_node, bucket=bucket, gen=self.gen_create)
@@ -4754,11 +6288,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                           similarity=self.similarity, train_list=None,
                                                                           scan_nprobes=self.scan_nprobes,
-                                                                          array_indexes=False, bhive_index=self.bhive_index,
+                                                                          array_indexes=False,
+                                                                          bhive_index=self.bhive_index,
                                                                           limit=self.scan_limit, is_base64=self.base64,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                         namespace=namespace,
                                                                          num_replica=1, bhive_index=self.bhive_index)
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
@@ -4797,7 +6333,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if index in partial_indexes:
                     continue
                 # Expected total: initial docs + additional docs = 2 * num_of_docs_per_collection
-                expected_total = self.num_of_docs_per_collection+num_docs
+                expected_total = self.num_of_docs_per_collection + num_docs
                 self.assertEqual(index_item_count_map[index], expected_total, f"stats {stats}")
 
             self.gsi_util_obj.query_event.clear()
@@ -4808,13 +6344,23 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 if "DISTINCT" in select_query:
                     continue
                 self.validate_scans_for_recall_and_accuracy(select_query=select_query)
+            # Calculate MRR for sparse vectors
+            if self.isSparse and all_definitions:
+                expected_title_for_mrr = None
+                for defn in all_definitions:
+                    if hasattr(defn, 'expected_title') and defn.expected_title:
+                        expected_title_for_mrr = defn.expected_title
+                        break
+                if expected_title_for_mrr:
+                    mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title_for_mrr, namespace=namespace)
+                    self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
 
     def test_random_sampling_across_keyspaces(self):
         self.use_named_namespace = self.input.param("use_named_namespace", True)
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         collection_namespace = self.namespaces[0]
-        #required to get the ground truth data
+        # required to get the ground truth data
         primary_idx = f"CREATE PRIMARY INDEX `#primary_4848` on {self.namespaces[0]};"
         self.run_cbq_query(query=primary_idx)
         desc_2 = "A red color car with 4 or 5 star safety rating"
@@ -4822,26 +6368,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {descVec2}, '{self.similarity}', {self.scan_nprobes})"
 
         vector_index = QueryDefinition('oneScalarOneVectorLeading',
-                        index_fields=['descriptionVector VECTOR', 'category'],
-                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
-                        similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                        train_list=self.trainlist, limit=self.scan_limit, is_base64=self.base64,
-                        query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"category, descriptionVector",
-                                                                           'category in ["Sedan", "Luxury Car"] ',
-                                                                           scan_desc_vec_2))
+                                       index_fields=['descriptionVector VECTOR', 'category'],
+                                       dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                                       similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                                       train_list=self.trainlist, limit=self.scan_limit, is_base64=self.base64,
+                                       query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                           f"category, descriptionVector",
+                                           'category in ["Sedan", "Luxury Car"] ',
+                                           scan_desc_vec_2))
 
         query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False)
         self.run_cbq_query(query=query)
         self.item_count_related_validations()
         select_query = self.gsi_util_obj.get_select_queries(definition_list=[vector_index],
                                                             namespace=collection_namespace)[0]
-        _, recall_before_random_sampling, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query, similarity=self.similarity,
-                                                                              scan_consitency=True)
+        _, recall_before_random_sampling, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query,
+                                                                                          similarity=self.similarity,
+                                                                                          scan_consitency=True)
 
-        #loading docs with  random vector values in another namespace
+        # loading docs with  random vector values in another namespace
         category_field = ["Sedan", "SUV", "Truck", "Coupe", "Convertible", "Hatchback", "Minivan",
-            "Van", "Wagon", "Crossover", "Hybrid", "Sports Car", "Luxury Car", "Compact", "Subcompact",
-            "Pickup", "Roadster", "Supercar", "Muscle Car"]
+                          "Van", "Wagon", "Crossover", "Hybrid", "Sports Car", "Luxury Car", "Compact", "Subcompact",
+                          "Pickup", "Roadster", "Supercar", "Muscle Car"]
 
         queries = []
         if self.use_named_namespace:
@@ -4850,7 +6398,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
             self.n1ql_helper.create_scope(server=n1ql_node, bucket_name=self.buckets[0].name, scope_name="test_scope_2")
             self.sleep(30)
-            self.n1ql_helper.create_collection(server=n1ql_node, bucket_name=self.buckets[0].name, scope_name="test_scope_2", collection_name="test_collection_2")
+            self.n1ql_helper.create_collection(server=n1ql_node, bucket_name=self.buckets[0].name,
+                                               scope_name="test_scope_2", collection_name="test_collection_2")
         else:
             namespace = "test_bucket._default._default"
             self.namespaces.append(namespace)
@@ -4864,10 +6413,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(60)
 
         _, recall_after_random_sampling, _ = self.validate_scans_for_recall_and_accuracy(select_query=select_query,
-                                                                                          similarity=self.similarity,
-                                                                                          scan_consitency=True)
-        self.log.info(f"recall before sampling : {recall_before_random_sampling*100}")
-        self.log.info(f"recall after sampling : {recall_after_random_sampling*100}")
+                                                                                         similarity=self.similarity,
+                                                                                         scan_consitency=True)
+        self.log.info(f"recall before sampling : {recall_before_random_sampling * 100}")
+        self.log.info(f"recall after sampling : {recall_after_random_sampling * 100}")
 
         self.threshold_percentage = self.input.param("threshold_percentage", 10)
         diff = recall_after_random_sampling - recall_before_random_sampling
@@ -4878,7 +6427,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_mixed_dimension_data(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
         collection_namespace = self.namespaces[0]
-        #required to get the ground truth data
+        # required to get the ground truth data
         primary_idx = f"CREATE PRIMARY INDEX `#primary_4848` on {self.namespaces[0]};"
         self.run_cbq_query(query=primary_idx)
         desc_2 = "A red color car with 4 or 5 star safety rating"
@@ -4903,19 +6452,22 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                        query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                            f"category, descriptionVector",
                                            'category in ["Sedan", "Luxury Car"] ',
-                                           scan_desc_vec_2), include_fields=include_fields, bhive_index=self.bhive_index)
+                                           scan_desc_vec_2), include_fields=include_fields,
+                                       bhive_index=self.bhive_index)
 
-        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False, bhive_index=self.bhive_index)
+        query = vector_index.generate_index_create_query(namespace=collection_namespace, defer_build=False,
+                                                         bhive_index=self.bhive_index)
         self.run_cbq_query(query=query)
 
-        #todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
+        # todo stats validation for no of docs skipped - https://jira.issues.couchbase.com/browse/MB-65249
         index_stats = self.index_rest.get_index_stats()
         for namespace in index_stats:
             for index in index_stats[namespace]:
                 if "primary" in index:
                     continue
                 else:
-                    self.assertEqual(index_stats[namespace][index]['items_count'], self.num_centroids, "indexes with docs of other dimensions have been indexed")
+                    self.assertEqual(index_stats[namespace][index]['items_count'], self.num_centroids,
+                                     "indexes with docs of other dimensions have been indexed")
         self.drop_index_node_resources_utilization_validations()
 
     def test_codebook_memory_indexer_restart(self):
@@ -4931,7 +6483,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                       limit=self.scan_limit, is_base64=self.base64,
                                                                       quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                       quantization_algo_color_vector=self.quantization_algo_color_vector)
-            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace, bhive_index=self.bhive_index)
+            create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                                                                     bhive_index=self.bhive_index)
             self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, query_node=query_node)
 
         self.wait_until_indexes_online()
@@ -4942,7 +6495,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for node in index_nodes:
             self._kill_all_processes_index(server=node)
         self.sleep(30)
-        #compare the code book memory stats post indexer restart
+        # compare the code book memory stats post indexer restart
         code_book_memory_map_after_rebalance, aggregated_code_book_memory_after_rebalance = self.get_per_index_codebook_memory_usage()
         index_names = self.get_all_indexes_in_the_cluster()
         for index in index_names:
@@ -4960,7 +6513,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         scan_desc_vec_2 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, '{self.similarity}', {self.scan_nprobes})"
 
-        #creating partitioned index with partition on a single key
+        # creating partitioned index with partition on a single key
         if self.bhive_index:
             partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
                                                                    index_fields=[
@@ -4980,7 +6533,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    )
         else:
             partitioned_index_description_vector = QueryDefinition("partitioned_descriptionVector",
-                                                                   index_fields=['`fuel`,`rating`,`descriptionVector` VECTOR'],
+                                                                   index_fields=[
+                                                                       '`fuel`,`rating`,`descriptionVector` VECTOR'],
                                                                    dimension=384,
                                                                    description=f"IVF,{self.quantization_algo_description_vector}",
                                                                    similarity=self.similarity,
@@ -4993,10 +6547,13 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    partition_by_fields=['fuel'],
                                                                    bhive_index=self.bhive_index
                                                                    )
-        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace, num_partition=8,bhive_index=self.bhive_index)
+        index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
+                                                                                 num_partition=8,
+                                                                                 bhive_index=self.bhive_index)
         self.run_cbq_query(query=index)
         self.item_count_related_validations()
-        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector],
+                                                            namespace=collection_namespace)[0]
         self.run_cbq_query(select_query)
         drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
         stats_map = self.get_index_stats(perNode=True, partition=True)
@@ -5004,7 +6561,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for node in stats_map:
             for keyspace in stats_map[node]:
                 for index in stats_map[node][keyspace]:
-                    self.log.info(f"for index {index} on node {node} num requests is {stats_map[node][keyspace][index]['num_requests']}")
+                    self.log.info(
+                        f"for index {index} on node {node} num requests is {stats_map[node][keyspace][index]['num_requests']}")
                     num_scans_list.append(stats_map[node][keyspace][index]['num_requests'])
         self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
         self.run_cbq_query(query=drop_query)
@@ -5045,10 +6603,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    bhive_index=self.bhive_index
                                                                    )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
-                                                                                 num_partition=8,bhive_index=self.bhive_index)
+                                                                                 num_partition=8,
+                                                                                 bhive_index=self.bhive_index)
         self.run_cbq_query(query=index)
         self.item_count_related_validations()
-        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector],
+                                                            namespace=collection_namespace)[0]
         self.run_cbq_query(select_query)
         drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
         stats_map = self.get_index_stats(perNode=True, partition=True)
@@ -5098,10 +6658,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                    bhive_index=self.bhive_index
                                                                    )
         index = partitioned_index_description_vector.generate_index_create_query(namespace=collection_namespace,
-                                                                                 num_partition=8,bhive_index=self.bhive_index)
+                                                                                 num_partition=8,
+                                                                                 bhive_index=self.bhive_index)
         self.run_cbq_query(query=index)
         self.item_count_related_validations()
-        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector], namespace=collection_namespace)[0]
+        select_query = self.gsi_util_obj.get_select_queries(definition_list=[partitioned_index_description_vector],
+                                                            namespace=collection_namespace)[0]
         self.run_cbq_query(select_query)
         drop_query = partitioned_index_description_vector.generate_index_drop_query(namespace=collection_namespace)
         stats_map = self.get_index_stats(perNode=True, partition=True)
@@ -5115,7 +6677,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.assertNotEqual(num_scans_list[0], num_scans_list[1], "Partition elimination is not working")
         self.run_cbq_query(query=drop_query)
 
-
     def test_coexistence_and_precedence_bhive_composite(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
@@ -5125,22 +6686,23 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         scan_desc_vec_1 = f"ANN_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
         composite_vector_index = QueryDefinition(index_name='composite_index',
-                            index_fields=[f'descriptionVector VECTOR'],
-                            dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
-                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                            train_list=self.trainlist, limit=self.scan_limit,
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vec2},"
-                                                                              f" {scan_desc_vec_1}",
-                                                                              scan_desc_vec_1))
+                                                 index_fields=[f'descriptionVector VECTOR'],
+                                                 dimension=384,
+                                                 description=f"IVF,{self.quantization_algo_description_vector}",
+                                                 similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                                                 train_list=self.trainlist, limit=self.scan_limit,
+                                                 query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vec2},"
+                                                                                                   f" {scan_desc_vec_1}",
+                                                                                                   scan_desc_vec_1))
 
         bhive_index = QueryDefinition(index_name='bhive_index',
-                            index_fields=[f'descriptionVector VECTOR'],
-                            dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
-                            similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                            train_list=self.trainlist, limit=self.scan_limit,
-                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vec2},"
-                                                                              f" {scan_desc_vec_1}",
-                                                                              scan_desc_vec_1))
+                                      index_fields=[f'descriptionVector VECTOR'],
+                                      dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                                      similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                                      train_list=self.trainlist, limit=self.scan_limit,
+                                      query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{desc_vec2},"
+                                                                                        f" {scan_desc_vec_1}",
+                                                                                        scan_desc_vec_1))
 
         select_queries = []
         for idx in [bhive_index, composite_vector_index]:
@@ -5157,11 +6719,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             res = \
                 self.run_cbq_query(query=select_query_with_explain, server=self.n1ql_node)['results']
             index_used_select_query = res[0]['plan']['~children'][0]['~children'][
-                    0][
-                    'index']
+                0][
+                'index']
             self.log.info(f"Result of explain is {res}")
             self.log.info(f"index used is {index_used_select_query}")
-            self.assertEqual(index_used_select_query, bhive_index.index_name, 'bhive index was not the most preferred index')
+            self.assertEqual(index_used_select_query, bhive_index.index_name,
+                             'bhive index was not the most preferred index')
         self.drop_index_node_resources_utilization_validations()
 
     def test_replica_repair_with_less_nodes(self):
@@ -5214,7 +6777,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                  services=['index'], cluster_config=self.cluster_config)
         rebalance.result()
 
-
         indexer_node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(indexer_node)
         index_metadata = rest.get_indexer_metadata()['status']
@@ -5231,7 +6793,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for index in index_metadata:
             self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching")
 
-
         map_after_rebalance, stats_after_rebalance = self._return_maps(perNode=True, map_from_index_nodes=True)
 
         self.n1ql_helper.validate_item_count_data_size(map_before_rebalance=map_before_rebalance,
@@ -5242,17 +6803,39 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                        per_node=True, skip_array_index_item_count=False)
 
     def test_skewed_bhive_composite_co_existence_test(self):
+        import os
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         collection_namespace = self.namespaces[0]
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         self.enable_shard_based_rebalance()
+
+        # Load sparse vector if needed
+        sparse_vector_str = None
+        scan_sparse_vec = None
+        expected_title = None
+        if self.isSparse:
+            jsonl_path = os.path.join(os.path.dirname(__file__),
+                                      'sparse_vector_embeddings',
+                                      self.sparse_query_vectors_file)
+            with open(jsonl_path, 'r') as f:
+                first_line = f.readline()
+                entry = json.loads(first_line)
+                expected_title = entry['title']
+                sparse_emb = entry['sparse_embedding']
+                indices = sparse_emb['indices']
+                values = sparse_emb['values']
+                sparse_vector = [indices, values]
+            sparse_vector_str = json.dumps(sparse_vector)
+            scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE(`sparse`, {sparse_vector_str}, {self.scan_nprobes})"
+
         for batch in range(0, self.num_indexes_batch):
             for namespace in self.namespaces:
                 if self.bhive_index:
-                    prefix = "bhive_"+''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    prefix = "bhive_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
                 else:
-                    prefix = "composite_vector_" +''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    prefix = "composite_vector_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
                 definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                           prefix=prefix,
                                                                           similarity=self.similarity, train_list=None,
@@ -5262,9 +6845,12 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                           bhive_index=self.bhive_index)
-                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions, namespace=namespace,
+                all_definitions.extend(definitions)
+                create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
+                                                                         namespace=namespace,
                                                                          num_replica=self.num_index_replica,
-                                                                         defer_build=False, bhive_index=self.bhive_index)
+                                                                         defer_build=False,
+                                                                         bhive_index=self.bhive_index)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
                 namespace_index_map[namespace] = definitions
@@ -5278,37 +6864,67 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         else:
             prefix = "composite"
 
-        desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
-        desc_vec2 = list(self.encoder.encode(desc_2))
+        if self.isSparse:
+            # Sparse index definitions
+            idx_1 = QueryDefinition(f"{prefix}_rating_sparse_vector",
+                                    index_fields=['average_rating', '`sparse` SPARSE VECTOR', 'main_category'],
+                                    description="IVF1024",
+                                    similarity="DOT",
+                                    scan_nprobes=self.scan_nprobes,
+                                    limit=self.scan_limit, is_base64=self.base64,
+                                    expected_title=expected_title,
+                                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                        "`sparse`",
+                                        "average_rating > 0",
+                                        scan_sparse_vec),
+                                    bhive_index=self.bhive_index,
+                                    train_list=self.trainlist)
 
-        scan_desc_vec_1 = f"APPROX_VECTOR_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
+            idx_2 = QueryDefinition(index_name=f"{prefix}_sparse_vector",
+                                    index_fields=['`sparse` SPARSE VECTOR'],
+                                    description="IVF1024",
+                                    similarity="DOT",
+                                    scan_nprobes=self.scan_nprobes,
+                                    train_list=self.trainlist,
+                                    limit=self.scan_limit,
+                                    expected_title=expected_title,
+                                    query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{scan_sparse_vec},"
+                                                                                      f" {scan_sparse_vec}",
+                                                                                      scan_sparse_vec),
+                                    bhive_index=self.bhive_index)
+        else:
+            # Dense index definitions (original)
+            desc_2 = "A BMW or Mercedes car with high safety rating and fuel efficiency"
+            desc_vec2 = list(self.encoder.encode(desc_2))
+            scan_desc_vec_1 = f"APPROX_VECTOR_DISTANCE(descriptionVector, {desc_vec2}, 'L2_SQUARED', {self.scan_nprobes})"
 
-        idx_1 = QueryDefinition(f"{prefix}_rating_desc_vector",
-                                      index_fields=['rating', 'descriptionVector Vector',
-                                                    'category'],
-                                      dimension=384,
-                                      description=f"IVF,{self.quantization_algo_description_vector}",
-                                      similarity=self.similarity,
-                                      scan_nprobes=self.scan_nprobes,
-                                      limit=self.scan_limit, is_base64=self.base64,
-                                      query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
-                                          "description, descriptionVector",
-                                          "rating = 2 and "
-                                          "category in ['Convertible', "
-                                          "'Luxury Car', 'Supercar']",
-                                          scan_desc_vec_1), bhive_index=self.bhive_index, persist_full_vector=True)
+            idx_1 = QueryDefinition(f"{prefix}_rating_desc_vector",
+                                    index_fields=['rating', 'descriptionVector Vector',
+                                                  'category'],
+                                    dimension=384,
+                                    description=f"IVF,{self.quantization_algo_description_vector}",
+                                    similarity=self.similarity,
+                                    scan_nprobes=self.scan_nprobes,
+                                    limit=self.scan_limit, is_base64=self.base64,
+                                    query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                        "description, descriptionVector",
+                                        "rating = 2 and "
+                                        "category in ['Convertible', "
+                                        "'Luxury Car', 'Supercar']",
+                                        scan_desc_vec_1), bhive_index=self.bhive_index, persist_full_vector=True)
 
-        idx_2 = QueryDefinition(index_name=f"{prefix}_desc_vector",
-                        index_fields=['descriptionVector VECTOR'],
-                        dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
-                        similarity=self.similarity, scan_nprobes=self.scan_nprobes,
-                        train_list=self.trainlist, limit=self.scan_limit, persist_full_vector=True,
-                        query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{scan_desc_vec_1},"
-                                                                          f" {scan_desc_vec_1}",
-                                                                          scan_desc_vec_1), bhive_index=self.bhive_index)
-
+            idx_2 = QueryDefinition(index_name=f"{prefix}_desc_vector",
+                                    index_fields=['descriptionVector VECTOR'],
+                                    dimension=384, description=f"IVF,{self.quantization_algo_description_vector}",
+                                    similarity=self.similarity, scan_nprobes=self.scan_nprobes,
+                                    train_list=self.trainlist, limit=self.scan_limit, persist_full_vector=True,
+                                    query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"{scan_desc_vec_1},"
+                                                                                      f" {scan_desc_vec_1}",
+                                                                                      scan_desc_vec_1),
+                                    bhive_index=self.bhive_index)
 
         for idx in [idx_1, idx_2]:
+            all_definitions.append(idx)
             create_query = idx.generate_index_create_query(namespace=collection_namespace, bhive_index=self.bhive_index)
             self.run_cbq_query(query=create_query, server=self.n1ql_node)
             select_query = self.gsi_util_obj.get_select_queries(definition_list=[idx],
@@ -5323,7 +6939,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         partial_indexes_list = self.get_partial_indexes_name_list()
 
-        #validating item count
+        # validating item count
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
         for node in stats:
@@ -5338,9 +6954,24 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        #validating recall
+        # validating recall
+        similarity = "DOT" if self.isSparse else self.similarity
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
-                                               message=f"results of skewed towards bhive {self.bhive_index}", similarity=self.similarity, stats_assertion=False)
+                                               message=f"results of skewed towards bhive {self.bhive_index}",
+                                               similarity=similarity, stats_assertion=False,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
 
         self.drop_index_node_resources_utilization_validations()
 
@@ -5350,6 +6981,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
         select_queries = set()
         namespace_index_map = {}
+        all_definitions = []
         for index_type in ['composite_vector', 'bhive_vector']:
             namespace_index_map[index_type] = []
             if index_type == 'composite_vector':
@@ -5361,25 +6993,31 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     if self.bhive_index:
                         prefix = "bhive_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
                     else:
-                        prefix = "composite_vector_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                        prefix = "composite_vector_" + ''.join(
+                            random.choices(string.ascii_letters + string.digits, k=5))
                     definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
                                                                               prefix=prefix,
-                                                                              similarity=self.similarity, train_list=None,
+                                                                              similarity=self.similarity,
+                                                                              train_list=None,
                                                                               scan_nprobes=self.scan_nprobes,
                                                                               array_indexes=False,
-                                                                              limit=self.scan_limit, is_base64=self.base64,
+                                                                              limit=self.scan_limit,
+                                                                              is_base64=self.base64,
                                                                               quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                               quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                               bhive_index=self.bhive_index)
+                    all_definitions.extend(definitions)
                     create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                              namespace=namespace,
                                                                              num_replica=self.num_index_replica,
-                                                                             defer_build=False, bhive_index=self.bhive_index)
+                                                                             defer_build=False,
+                                                                             bhive_index=self.bhive_index)
                     select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
-                                                                               namespace=namespace, limit=self.scan_limit))
+                                                                               namespace=namespace,
+                                                                               limit=self.scan_limit))
 
-
-                    namespace_index_map[index_type].append(self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
+                    namespace_index_map[index_type].append(
+                        self.gsi_util_obj.get_drop_index_list(definition_list=definitions, namespace=namespace))
 
                     self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
         self.item_count_related_validations()
@@ -5405,7 +7043,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 continue
             self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
-        #dropping a particular category(bhive/composite) of indexes
+        # dropping a particular category(bhive/composite) of indexes
         for query_list in namespace_index_map[self.index_category_dropped]:
             for drop_query in query_list:
                 self.run_cbq_query(query=drop_query)
@@ -5430,20 +7068,35 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                                                           quantization_algo_color_vector=self.quantization_algo_color_vector,
                                                                           quantization_algo_description_vector=self.quantization_algo_description_vector,
                                                                           bhive_index=self.bhive_index)
+                all_definitions.extend(definitions)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
                                                                          num_replica=self.num_index_replica,
-                                                                         defer_build=False, bhive_index=self.bhive_index)
+                                                                         defer_build=False,
+                                                                         bhive_index=self.bhive_index)
                 select_queries.update(self.gsi_util_obj.get_select_queries(definition_list=definitions,
                                                                            namespace=namespace, limit=self.scan_limit))
-
 
                 self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
 
         self.item_count_related_validations()
 
         # validating recall
+        similarity = "DOT" if self.isSparse else self.similarity
+        query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results of skewed towards bhive {self.bhive_index}",
-                                               similarity=self.similarity, stats_assertion=False)
+                                               similarity=similarity, stats_assertion=False,
+                                               query_expected_title_map=query_expected_title_map,
+                                               use_brute_force=use_brute_force)
+        # Calculate MRR for sparse vectors
+        if self.isSparse and all_definitions:
+            expected_title_for_mrr = None
+            for defn in all_definitions:
+                if hasattr(defn, 'expected_title') and defn.expected_title:
+                    expected_title_for_mrr = defn.expected_title
+                    break
+            if expected_title_for_mrr:
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()

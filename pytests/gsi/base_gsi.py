@@ -51,7 +51,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.index_lost_during_move_out = []
         self.run_continous_query = False
         self.isSparse = self.input.param("isSparse", False)
-        self.sparse_query_vectors_file = self.input.param("sparse_query_vectors_file", 'query_vectors_sparse.jsonl')
+        self.sparse_query_vectors_file = self.input.param("sparse_query_vectors_file", 'amazon_sparse_query_vectors.jsonl')
         self.desired_rr = self.input.param("desired_rr", 10)
         self.verify_using_index_status = self.input.param("verify_using_index_status", False)
         self.use_replica_when_active_down = self.input.param("use_replica_when_active_down", True)
@@ -159,6 +159,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.scan_limit = self.input.param("scan_limit", 10 if self.bhive_index else 100)
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "SQ8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "SQ8")
+        self.quantization_sparse_vector = self.input.param("quantization_sparse_vector", "IVF1024")
+        #TODO this default value will be revisited post resolution of - MB-71192
+        self.sparsejl_dim = self.input.param("sparsejl_dim", 4096)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.encryption_helper = EncryptionAtRestHelper(log)
         self.description = self.input.param("description", None)
@@ -623,12 +626,17 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.log.info(self.namespaces)
 
     def validate_scans_for_recall_and_accuracy(self, select_query, similarity="L2_SQUARED", scan_consitency=False,
-                                               variable_limit=False, expected_title=None):
+                                               variable_limit=False, expected_title=None, use_brute_force=False):
         # Check if this is a sparse vector query
         is_sparse = "SPARSE_VECTOR_DISTANCE" in select_query.upper()
 
         if is_sparse:
-            return self._validate_sparse_vector_scans(select_query, scan_consitency, variable_limit, expected_title=expected_title)
+            if use_brute_force or self.json_template == "MsMARCO":
+                # Use brute-force ground truth comparison for MsMARCO dataset
+                return self._validate_msmarco_sparse_recall(select_query, scan_consitency, variable_limit)
+            else:
+                # Use binary recall for AmazonSparse dataset (has guaranteed 1:1 match)
+                return self._validate_sparse_vector_scans(select_query, scan_consitency, variable_limit, expected_title=expected_title)
         else:
             return self._validate_dense_vector_scans(select_query, similarity, scan_consitency, variable_limit)
 
@@ -682,6 +690,139 @@ class BaseSecondaryIndexingTests(QueryTests):
         redacted_select_query = self.gen_query_without_entire_qvec(query=select_query)
         self.log.info(f"[SPARSE] Binary recall for query: {redacted_select_query} is {recall}")
         return redacted_select_query, recall, None
+
+    def _validate_msmarco_sparse_recall(self, select_query, scan_consitency=False, variable_limit=False):
+        """
+        Validate MsMARCO sparse vector scans using brute-force ground truth comparison.
+        
+        Unlike AmazonSparse (binary recall with guaranteed 1:1 match), MsMARCO queries
+        may match multiple documents or none at all. We compute ground truth by:
+        1. Fetching all sparse vectors from the database
+        2. Computing sparse dot product between query and all documents (brute-force)
+        3. Sorting by score to get top-K ground truth
+        4. Comparing GSI results against brute-force ground truth
+        
+        recall@k = |{GSI results} ∩ {brute-force top-k}| / k
+        """
+        if variable_limit:
+            self.scan_limit = random.choice([10, 20, 50, 100])
+            select_query = re.sub(r"LIMIT \d+", f"LIMIT {self.scan_limit}", select_query)
+
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.log.info(f"[MSMARCO] n1ql node for sparse recall validation: {n1ql_node}")
+
+        # Extract sparse vector field and query vector from the query
+        vector_field, query_vector = self.extract_sparse_vector_field_and_query_vector(select_query)
+        query_indices, query_values = query_vector[0], query_vector[1]
+
+        # Build query to fetch sparse vectors from documents that pass scalar pre-filters
+        # Remove ORDER BY and LIMIT, but keep WHERE clause scalar filters intact
+        brute_force_query = self.convert_to_faiss_queries(select_query=select_query)
+        # Replace SELECT clause to get meta().id and sparse field
+        brute_force_query = re.sub(
+            r'SELECT\s+.*?\s+FROM',
+            f'SELECT meta().id AS doc_id, `sparse` FROM',
+            brute_force_query,
+            flags=re.IGNORECASE
+        )
+        # Remove only the SPARSE_DOT_PRODUCT/vector distance function from WHERE clause, keep scalar filters
+        # Pattern matches SPARSE_DOT_PRODUCT(...) or similar vector functions
+        brute_force_query = re.sub(
+            r'\s+AND\s+SPARSE_DOT_PRODUCT\s*\([^)]*\)\s*(?:>=|<=|>|<|=)\s*[\d.]+',
+            '',
+            brute_force_query,
+            flags=re.IGNORECASE
+        )
+        brute_force_query = re.sub(
+            r'SPARSE_DOT_PRODUCT\s*\([^)]*\)\s*(?:>=|<=|>|<|=)\s*[\d.]+\s*AND\s+',
+            '',
+            brute_force_query,
+            flags=re.IGNORECASE
+        )
+        # Also handle case where SPARSE_DOT_PRODUCT is the only WHERE condition
+        brute_force_query = re.sub(
+            r'WHERE\s+SPARSE_DOT_PRODUCT\s*\([^)]*\)\s*(?:>=|<=|>|<|=)\s*[\d.]+\s*$',
+            '',
+            brute_force_query,
+            flags=re.IGNORECASE
+        )
+
+        self.log.info(f"[MSMARCO] Brute-force query (with scalar pre-filters): {brute_force_query}")
+
+        # Fetch documents that pass scalar pre-filters with their sparse vectors
+        filtered_docs_result = self.run_cbq_query(query=brute_force_query, server=n1ql_node)['results']
+        self.log.info(f"[MSMARCO] Fetched {len(filtered_docs_result)} documents after scalar pre-filtering")
+
+        # Compute sparse dot product for each document that passed scalar pre-filters
+        doc_scores = []
+        for doc in filtered_docs_result:
+            doc_id = doc.get('doc_id')
+            sparse_vec = doc.get('sparse')
+            if sparse_vec and len(sparse_vec) == 2:
+                doc_indices, doc_values = sparse_vec[0], sparse_vec[1]
+                # Compute sparse dot product
+                score = self._compute_sparse_dot_product(query_indices, query_values, doc_indices, doc_values)
+                doc_scores.append((doc_id, score))
+
+        # Sort by score descending (higher dot product = more similar)
+        doc_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Get top-K ground truth doc IDs (limited by available filtered docs)
+        effective_limit = min(self.scan_limit, len(doc_scores))
+        brute_force_top_k = [doc_id for doc_id, _ in doc_scores[:effective_limit]]
+        self.log.info(f"[MSMARCO] Brute-force top-{effective_limit} (from {len(doc_scores)} filtered docs): {brute_force_top_k}...")
+
+        # Run the GSI query
+        if scan_consitency:
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node,
+                                               scan_consistency=self.scan_consistency)['results']
+        else:
+            gsi_query_res = self.run_cbq_query(query=select_query, server=n1ql_node)['results']
+
+        if variable_limit:
+            self.assertEqual(len(gsi_query_res), self.scan_limit,
+                             f"GSI query results count {len(gsi_query_res)} != scan limit {self.scan_limit}")
+
+        # Extract doc IDs from GSI results (need to add meta().id to query if not present)
+        gsi_doc_ids = []
+        for r in gsi_query_res:
+            # Try different possible field names for doc ID
+            doc_id = r.get('doc_id') or r.get('id') or r.get('$1')
+            if doc_id:
+                gsi_doc_ids.append(doc_id)
+        
+        self.log.info(f"[MSMARCO] GSI returned {len(gsi_doc_ids)} doc IDs: {gsi_doc_ids}...")
+
+        # Calculate recall@k based on actual filtered result set size
+        recall = 0
+        brute_force_top_k_set = set(brute_force_top_k)
+        for doc_id in gsi_doc_ids:
+            if doc_id in brute_force_top_k_set:
+                recall += 1
+        
+        # Use effective_limit (actual ground truth size) for recall calculation
+        recall = recall / effective_limit if effective_limit > 0 else 0
+
+        redacted_select_query = self.gen_query_without_entire_qvec(query=select_query)
+        self.log.info(f"[MSMARCO] Recall@{effective_limit} for query: {redacted_select_query} is {recall * 100:.2f}%")
+        return redacted_select_query, recall, None
+
+    def _compute_sparse_dot_product(self, query_indices, query_values, doc_indices, doc_values):
+        """
+        Compute sparse dot product between query vector and document vector.
+        
+        Sparse vectors are represented as [[indices], [values]].
+        Dot product = sum of (query_value * doc_value) for matching indices.
+        """
+        # Create a dict for faster lookup
+        doc_dict = dict(zip(doc_indices, doc_values))
+        
+        dot_product = 0.0
+        for q_idx, q_val in zip(query_indices, query_values):
+            if q_idx in doc_dict:
+                dot_product += q_val * doc_dict[q_idx]
+        
+        return dot_product
 
     def _validate_dense_vector_scans(self, select_query, similarity="L2_SQUARED", scan_consitency=False,
                                      variable_limit=False):
@@ -766,7 +907,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         Format: SPARSE_VECTOR_DISTANCE(field, [[indices], [values]], nprobes)
         """
         # Pattern to match SPARSE_VECTOR_DISTANCE(field, [[...], [...]], nprobes)
-        pattern = r"SPARSE_VECTOR_DISTANCE\(\s*([`\w.()]+)\s*,\s*(\[\s*\[[\d,\s]+\]\s*,\s*\[[\d.,\s\-eE]+\]\s*\])"
+        # Field can be backtick-quoted (`sparse`) or unquoted (sparse)
+        pattern = r'SPARSE_VECTOR_DISTANCE\s*\(\s*(`[^`]+`|\w+)\s*,\s*(\[\[[\d,\s]+\]\s*,\s*\[[\d.,\s\-eE]+\]\])'
         matches = re.search(pattern, query, re.IGNORECASE)
 
         if matches:
@@ -3591,27 +3733,148 @@ class BaseSecondaryIndexingTests(QueryTests):
         table.display(message=message)
 
     def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True,
-                                          similarity="L2_SQUARED"):
+                                          similarity="L2_SQUARED", query_expected_title_map=None,
+                                          use_brute_force=False):
+        """
+        Display and validate recall/accuracy stats for vector queries.
+        
+        Args:
+            select_queries: Set or list of SELECT queries to validate
+            message: Message to display in table header
+            stats_assertion: Whether to assert on recall/accuracy thresholds
+            similarity: Similarity metric for dense vectors (L2_SQUARED, COSINE, DOT)
+            query_expected_title_map: Dict mapping query -> expected_title for AmazonSparse binary recall.
+                                      For sparse queries without mutations, this provides the 1:1 mapping
+                                      between query vectors and their expected documents.
+            use_brute_force: If True, use brute-force ground truth comparison for MsMARCO dataset.
+                            For sparse queries with mutations (MsMARCO), this computes recall by
+                            comparing GSI results against brute-force dot product ranking.
+        """
         query_stats_map = {}
         for query in select_queries:
             # this is to ensure that select queries run primary indexes are not tested for recall and accuracy
-            if "ANN" not in query:
+            # Support both dense (ANN_DISTANCE) and sparse (SPARSE_VECTOR_DISTANCE) vector queries
+            is_vector_query = "ANN" in query or "SPARSE_VECTOR_DISTANCE" in query
+            if not is_vector_query:
                 continue
             if "embVector" in query:
                 query = query.replace("embVector", str(self.bhive_sample_vector))
-            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(select_query=query,
-                                                                                           similarity=similarity)
+            
+            # Determine recall calculation method for sparse queries
+            expected_title = None
+            query_use_brute_force = use_brute_force
+            
+            if "SPARSE_VECTOR_DISTANCE" in query:
+                # For sparse queries, determine which recall method to use
+                if query_expected_title_map and query in query_expected_title_map:
+                    # AmazonSparse: Use binary recall with expected_title
+                    expected_title = query_expected_title_map[query]
+                elif use_brute_force:
+                    # MsMARCO: Use brute-force ground truth comparison
+                    query_use_brute_force = True
+                else:
+                    # Default: Use brute-force if no expected_title provided
+                    # This handles tests that use display_recall_and_accuracy_stats
+                    # without providing query_expected_title_map
+                    query_use_brute_force = True
+            
+            redacted_query, recall, accuracy = self.validate_scans_for_recall_and_accuracy(
+                select_query=query,
+                similarity=similarity,
+                expected_title=expected_title,
+                use_brute_force=query_use_brute_force
+            )
             query_stats_map[redacted_query] = [recall, accuracy]
         self.gen_table_view(query_stats_map=query_stats_map, message=message)
         if stats_assertion:
             for query in query_stats_map:
                 if self.bhive_index and "colorRGBVector" in query:
                     continue
-                self.assertGreaterEqual(query_stats_map[query][0] * 100, 70,
-                                        f"recall for query {query} is less than threshold 70")
-                # uncomment the below code snippet to do assertions for accuracy
-                # self.assertGreaterEqual(query_stats_map[query][1] * 100, 70,
-                #                         f"accuracy for query {query} is less than threshold 70")
+                
+                recall = query_stats_map[query][0]
+                accuracy = query_stats_map[query][1]
+                
+                # For sparse vectors: recall threshold depends on method used
+                # For dense vectors: recall is continuous (0.0 to 1.0)
+                if self.isSparse or "SPARSE_VECTOR_DISTANCE" in query:
+                    if use_brute_force:
+                        # MsMARCO brute-force: recall is continuous (0.0 to 1.0)
+                        self.assertGreaterEqual(recall * 100, 70,
+                                              f"Sparse brute-force recall for query {query} is {recall * 100:.2f}% (expected >= 70%)")
+                    else:
+                        # AmazonSparse binary recall: 1 = good (document found), 0 = bad (document not found)
+                        self.assertEqual(recall, 1,
+                                       f"Sparse vector recall for query {query} is {recall} (expected 1). "
+                                       f"Expected document was not found in top-{self.scan_limit} results.")
+                else:
+                    # Dense vector recall threshold
+                    self.assertGreaterEqual(recall * 100, 70,
+                                          f"recall for query {query} is less than threshold 70")
+                # uncomment the below code snippet to do assertions for accuracy (dense vectors only)
+                # if accuracy is not None:
+                #     self.assertGreaterEqual(accuracy * 100, 70,
+                #                             f"accuracy for query {query} is less than threshold 70")
+
+    def build_query_expected_title_map(self, definitions, select_queries):
+        """
+        Build a mapping of select queries to their expected titles for AmazonSparse recall validation.
+        
+        For AmazonSparse dataset, each query vector has exactly ONE expected document (identified by title).
+        This method creates a dict mapping each select query to its expected_title from the definition.
+        
+        Args:
+            definitions: List of QueryDefinition objects (with expected_title attribute for sparse)
+            select_queries: Set or list of SELECT queries
+            
+        Returns:
+            dict: Mapping of query string -> expected_title (only for queries with expected_title)
+        """
+        query_expected_title_map = {}
+        
+        for defn in definitions:
+            if hasattr(defn, 'expected_title') and defn.expected_title:
+                # Find the matching query for this definition
+                for query in select_queries:
+                    # Match by index name in the query
+                    if defn.index_name in query:
+                        query_expected_title_map[query] = defn.expected_title
+                        break
+        
+        return query_expected_title_map
+
+    def get_sparse_recall_params(self, definitions=None, select_queries=None):
+        """
+        Get the appropriate parameters for sparse recall validation based on dataset type.
+        
+        Args:
+            definitions: List of QueryDefinition objects (optional, needed for AmazonSparse)
+            select_queries: Set or list of SELECT queries (optional, needed for AmazonSparse)
+            
+        Returns:
+            tuple: (query_expected_title_map, use_brute_force)
+                - For AmazonSparse: (dict mapping queries to expected_titles, False)
+                - For MsMARCO: (None, True)
+                - For dense datasets: (None, False)
+        """
+        if not self.isSparse:
+            return None, False
+        
+        if self.json_template == 'MsMARCO':
+            # MsMARCO: Use brute-force ground truth comparison
+            return None, True
+        elif self.json_template == 'AmazonSparse':
+            # AmazonSparse: Use binary recall with expected_title
+            if definitions and select_queries:
+                query_map = self.build_query_expected_title_map(definitions, select_queries)
+                return query_map, False
+            else:
+                # Fallback to brute-force if no definitions provided
+                self.log.warning("AmazonSparse dataset but no definitions provided - falling back to brute-force")
+                return None, True
+        else:
+            # Unknown sparse dataset - default to brute-force
+            return None, True
+
     def validate_error_msg_and_doc_count_in_cbcollect(self, node, error_message):
         shell = RemoteMachineShellConnection(node)
         if shell.extract_remote_info().type.lower() == 'windows':

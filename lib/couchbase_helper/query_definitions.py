@@ -43,7 +43,7 @@ class QueryDefinition(object):
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
                  dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
                  is_base64=False, include_fields=None, bhive_index=False, defer_build=False, num_replica=None,
-                 persist_full_vector=True, expected_title=None):
+                 persist_full_vector=True, expected_title=None, sparsejl_dim=None):
         if partition_by_fields is None:
             partition_by_fields = []
         if groups is None:
@@ -83,6 +83,8 @@ class QueryDefinition(object):
         self.persist_full_vector = persist_full_vector
         # For sparse vectors: the expected title that should appear in results (binary recall check)
         self.expected_title = expected_title
+        # For sparse vectors: the sparsejl_dim parameter for index creation
+        self.sparsejl_dim = sparsejl_dim
 
     def generate_index_create_query(self, namespace="default", use_gsi_for_secondary=True, limit=None,
                                     deploy_node_info=None, defer_build=None, index_where_clause=None, gsi_type=None,
@@ -181,6 +183,8 @@ class QueryDefinition(object):
             deployment_plan["similarity"] = self.similarity
         if self.scan_nprobes:
             deployment_plan["scan_nprobes"] = self.scan_nprobes
+        if self.sparsejl_dim:
+            deployment_plan["sparsejl_dim"] = self.sparsejl_dim
         if self.persist_full_vector is False:
             deployment_plan["persist_full_vector"] = self.persist_full_vector
         if self.partition_by_fields:

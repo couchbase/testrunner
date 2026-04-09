@@ -15,11 +15,11 @@ import random
 import string
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from functools import reduce
 from threading import Event
 
 import logger
-from functools import reduce
-from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPLATE, RANGE_SCAN_ORDER_BY_TEMPLATE, \
     FULL_SCAN_ORDER_BY_TEMPLATE
 
@@ -34,29 +34,46 @@ class GSIUtils(object):
         self.query_event = Event()
         self.encoder = encoder
         self.query_errors = []
-        #Query vectors used for bigSiftANN data set
-        self.bhive_sample_vector = [3.0, 9.0, 17.0, 78.0, 83.0, 15.0, 10.0, 8.0, 101.0, 109.0, 21.0, 8.0, 3.0, 2.0, 9.0, 64.0, 39.0, 31.0, 18.0, 80.0, 55.0, 10.0, 2.0, 12.0, 7.0, 7.0, 26.0, 58.0, 32.0, 6.0, 4.0, 3.0, 14.0, 2.0, 13.0, 28.0, 37.0, 19.0, 47.0, 59.0, 109.0, 22.0, 2.0, 6.0, 18.0, 15.0, 20.0, 109.0, 30.0, 8.0, 11.0, 44.0, 109.0, 54.0, 19.0, 32.0, 17.0, 21.0, 15.0, 22.0, 12.0, 28.0, 101.0, 35.0, 66.0, 11.0, 9.0, 30.0, 68.0, 35.0, 30.0, 75.0, 106.0, 103.0, 26.0, 50.0, 76.0, 20.0, 8.0, 13.0, 51.0, 41.0, 63.0, 109.0, 40.0, 2.0, 3.0, 15.0, 36.0, 49.0, 21.0, 13.0, 12.0, 9.0, 36.0, 37.0, 52.0, 37.0, 24.0, 34.0, 19.0, 3.0, 13.0, 23.0, 21.0, 8.0, 3.0, 20.0, 68.0, 56.0, 79.0, 60.0, 99.0, 36.0, 7.0, 28.0, 78.0, 41.0, 7.0, 21.0, 74.0, 26.0, 3.0, 15.0, 34.0, 15.0, 12.0, 27.0]
-
+        # Query vectors used for bigSiftANN data set
+        self.bhive_sample_vector = [3.0, 9.0, 17.0, 78.0, 83.0, 15.0, 10.0, 8.0, 101.0, 109.0, 21.0, 8.0, 3.0, 2.0, 9.0,
+                                    64.0, 39.0, 31.0, 18.0, 80.0, 55.0, 10.0, 2.0, 12.0, 7.0, 7.0, 26.0, 58.0, 32.0,
+                                    6.0, 4.0, 3.0, 14.0, 2.0, 13.0, 28.0, 37.0, 19.0, 47.0, 59.0, 109.0, 22.0, 2.0, 6.0,
+                                    18.0, 15.0, 20.0, 109.0, 30.0, 8.0, 11.0, 44.0, 109.0, 54.0, 19.0, 32.0, 17.0, 21.0,
+                                    15.0, 22.0, 12.0, 28.0, 101.0, 35.0, 66.0, 11.0, 9.0, 30.0, 68.0, 35.0, 30.0, 75.0,
+                                    106.0, 103.0, 26.0, 50.0, 76.0, 20.0, 8.0, 13.0, 51.0, 41.0, 63.0, 109.0, 40.0, 2.0,
+                                    3.0, 15.0, 36.0, 49.0, 21.0, 13.0, 12.0, 9.0, 36.0, 37.0, 52.0, 37.0, 24.0, 34.0,
+                                    19.0, 3.0, 13.0, 23.0, 21.0, 8.0, 3.0, 20.0, 68.0, 56.0, 79.0, 60.0, 99.0, 36.0,
+                                    7.0, 28.0, 78.0, 41.0, 7.0, 21.0, 74.0, 26.0, 3.0, 15.0, 34.0, 15.0, 12.0, 27.0]
 
     def set_encoder(self, encoder):
         self.encoder = encoder
 
-    def get_random_sparse_vectors_from_jsonl(self, count=1):
+    def get_random_sparse_vectors_from_jsonl(self, count=1, dataset='AmazonSparse'):
         """
-        Read random sparse vectors from the JSONL file for use in sparse vector queries.
-        Returns a tuple: (list of sparse vectors in [indices, values] format, list of corresponding titles)
-        
-        Each query vector has exactly one matching document in the dataset, identified by title.
-        The title is used for binary recall validation: if the document with matching title
-        is found in results, recall = 1, else recall = 0.
+        Read random sparse vectors from a JSONL file for use in sparse vector queries.
+        Returns a tuple: (list of sparse vectors in [indices, values] format, list of corresponding titles/texts)
+
+        Args:
+            count: Number of random vectors to retrieve
+            dataset: 'AmazonSparse' or 'MsMARCO' - determines which JSONL file and format to use
+
+        AmazonSparse format: {"sparse_embedding": {"indices": [...], "values": [...]}, "title": "..."}
+        MsMARCO format: {"text": "query text", "sparse": [[indices], [values]]}
         """
-        jsonl_path = os.path.join(os.path.dirname(__file__), '..', 'gsi',
-                                  'sparse_vector_embeddings',
-                                  'query_vectors_sparse.jsonl')
+
+        if dataset == 'MsMARCO':
+            jsonl_path = os.path.join(os.path.dirname(__file__), '..', 'gsi',
+                                      'sparse_vector_embeddings',
+                                      'msmarco_query_vectors.jsonl')
+        else:
+            jsonl_path = os.path.join(os.path.dirname(__file__), '..', 'gsi',
+                                      'sparse_vector_embeddings',
+                                      'amazon_sparse_query_vectors.jsonl')
+
         jsonl_path = os.path.abspath(jsonl_path)
 
         sparse_vectors = []
-        titles = []
+        labels = []
         try:
             with open(jsonl_path, 'r') as f:
                 lines = f.readlines()
@@ -64,19 +81,24 @@ class GSIUtils(object):
                 selected_lines = random.sample(lines, min(count, len(lines)))
                 for line in selected_lines:
                     data = json.loads(line.strip())
-                    embedding = data.get('sparse_embedding', {})
-                    title = data.get('title', '')
-                    indices = embedding.get('indices', [])
-                    values = embedding.get('values', [])
-                    sparse_vectors.append([indices, values])
-                    titles.append(title)
+                    if dataset == 'MsMARCO':
+                        sparse_data = data.get('sparse', [[], []])
+                        label = data.get('text', '')
+                        sparse_vectors.append(sparse_data)
+                    else:
+                        embedding = data.get('sparse_embedding', {})
+                        label = data.get('title', '')
+                        indices = embedding.get('indices', [])
+                        values = embedding.get('values', [])
+                        sparse_vectors.append([indices, values])
+                    labels.append(label)
         except Exception as e:
-            self.log.warning(f"Failed to read sparse vectors from JSONL file: {e}.")
+            self.log.warning(f"Failed to read sparse vectors from {dataset} JSONL file: {e}.")
 
-        # Return single title if count=1, otherwise return list
-        if count == 1 and titles:
-            return sparse_vectors, titles[0]
-        return sparse_vectors, titles
+        # Return single vector and label if count=1, otherwise return lists
+        if count == 1 and sparse_vectors:
+            return sparse_vectors[0], labels[0]
+        return sparse_vectors, labels
 
     def generate_mini_car_vector_index_definition(self, index_name_prefix=None,
                                                   skip_primary=False, array_indexes=True):
@@ -408,6 +430,7 @@ class GSIUtils(object):
                             query_template=RANGE_SCAN_TEMPLATE.format("brand",
                                                                       'size > 4 AND country like "US%%"')))
         return definitions_list
+
     def generate_shoe_vector_index_defintion_bhive(self, index_name_prefix=None, similarity="L2",
                                                    train_list=None, scan_nprobes=1, skip_primary=False,
                                                    limit=10, quantization_algo_description_vector=None,
@@ -429,7 +452,8 @@ class GSIUtils(object):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'vector_only_bhive',
                             index_fields=['embedding VECTOR'],
-                            dimension=128, description=f"IVF,{quantization_algo_description_vector}", similarity=similarity,
+                            dimension=128, description=f"IVF,{quantization_algo_description_vector}",
+                            similarity=similarity,
                             scan_nprobes=scan_nprobes, persist_full_vector=persist_full_vector,
                             train_list=train_list, limit=limit,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(f"embedding, {query_vec}", query_vec)))
@@ -441,7 +465,8 @@ class GSIUtils(object):
                             dimension=128, description=f"IVF,{quantization_algo_description_vector}",
                             similarity=similarity, persist_full_vector=persist_full_vector,
                             scan_nprobes=scan_nprobes, train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}", f"size = 5",
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}",
+                                                                               f"size = 5",
                                                                                query_vec),
                             include_fields=['size']))
 
@@ -461,8 +486,8 @@ class GSIUtils(object):
         return definitions_list
 
     def generate_shoe_vector_index_definitions_composite(self, index_name_prefix=None, similarity="L2",
-                                                               train_list=None, scan_nprobes=1, skip_primary=False,
-                                                               limit=10, quantization_algo_description_vector=None):
+                                                         train_list=None, scan_nprobes=1, skip_primary=False,
+                                                         limit=10, quantization_algo_description_vector=None):
         definitions_list = []
         query_vec = f"ANN_DISTANCE(embedding, {self.bhive_sample_vector},  '{similarity}', {scan_nprobes})"
         if not index_name_prefix:
@@ -509,9 +534,10 @@ class GSIUtils(object):
                             similarity=similarity,
                             scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id,embedding, {query_vec}, type",
-                                                                               "size > 4 AND size < 6 AND brand = 'Nike'",
-                                                                               query_vec),
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id,embedding, {query_vec}, type",
+                                "size > 4 AND size < 6 AND brand = 'Nike'",
+                                query_vec),
                             partition_by_fields=['type']))
 
         # Composite: vector leading, multiple scalars, partitioned by vector
@@ -522,9 +548,10 @@ class GSIUtils(object):
                             similarity=similarity,
                             scan_nprobes=scan_nprobes,
                             train_list=train_list, limit=limit,
-                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(f"meta().id, embedding, {query_vec}, country",
-                                                                               "size < 6 AND country = 'USA'",
-                                                                               query_vec),
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id, embedding, {query_vec}, country",
+                                "size < 6 AND country = 'USA'",
+                                query_vec),
                             partition_by_fields=['embedding']))
 
         return definitions_list
@@ -820,7 +847,8 @@ class GSIUtils(object):
             prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=10))}'
             definitions_list.append(
                 QueryDefinition(index_name=prim_index_name, index_fields=[],
-                                query_template=RANGE_SCAN_TEMPLATE.format("suffix", "suffix is not NULL order by suffix"),
+                                query_template=RANGE_SCAN_TEMPLATE.format("suffix",
+                                                                          "suffix is not NULL order by suffix"),
                                 is_primary=True))
 
         # GSI index on multiple fields
@@ -1022,10 +1050,11 @@ class GSIUtils(object):
         # GSI Array Index on compound object
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + 'array_index_on_compound_object',
-                            index_fields=['price, All ARRAY [v.ratings.Overall, v.ratings.`Value`] FOR v IN reviews END'],
-                            query_template=RANGE_SCAN_TEMPLATE.format("address", 'ANY v IN reviews SATISFIES [v.ratings.'
+                            index_fields=[
+                                'price, All ARRAY [v.ratings.Overall, v.ratings.`Value`] FOR v IN reviews END'],
+                            query_template=RANGE_SCAN_TEMPLATE.format("address",
+                                                                      'ANY v IN reviews SATISFIES [v.ratings.'
                                                                       '`Overall`, v.ratings.`Value`] = [2, 4] END and price < 1000 ')))
-
 
         # GSI Partial Index on metadata
         definitions_list.append(
@@ -2189,10 +2218,11 @@ class GSIUtils(object):
         return definitions_list
 
     def generate_amazon_sparse_vector_index_definitions_bhive(self, index_name_prefix=None,
-                                                               train_list=None, scan_nprobes=1,
-                                                               skip_primary=False, limit=10,
-                                                               description="IVF1024",
-                                                               xattr_indexes=False):
+                                                              train_list=None, scan_nprobes=1,
+                                                              skip_primary=False, limit=10,
+                                                              description="IVF1024",
+                                                              xattr_indexes=False,
+                                                              sparsejl_dim=None):
         """
         Generate bhive (CREATE VECTOR INDEX) definitions for AmazonSparse dataset.
         Sparse vectors have no dimension; similarity is forced to DOT in get_create_index_list().
@@ -2205,8 +2235,7 @@ class GSIUtils(object):
             sparse_vecfield = "meta().xattrs.`sparse`"
 
         # Load random sparse vector from JSONL file for querying
-        random_sparse_vecs, title = self.get_random_sparse_vectors_from_jsonl(count=1)
-        sample_sparse_vec = random_sparse_vecs[0]
+        sample_sparse_vec, title = self.get_random_sparse_vectors_from_jsonl(count=1)
         self.log.info(f"Sample sparse vector : {sample_sparse_vec}, title is {title}")
 
         scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE({sparse_vecfield}, {sample_sparse_vec}, {scan_nprobes})"
@@ -2229,7 +2258,7 @@ class GSIUtils(object):
                             index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, {scan_sparse_vec}",
                                 scan_sparse_vec)))
@@ -2241,7 +2270,7 @@ class GSIUtils(object):
                             description=description,
                             scan_nprobes=scan_nprobes, limit=limit,
                             include_fields=['store'],
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, main_category, {scan_sparse_vec}",
                                 scan_sparse_vec)))
@@ -2252,7 +2281,7 @@ class GSIUtils(object):
                             index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, store, price, {scan_sparse_vec}",
                                 "average_rating > 0",
@@ -2266,7 +2295,7 @@ class GSIUtils(object):
                             index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
                             description=description,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, store, price, {scan_sparse_vec}",
                                 "price > 1 OR "
@@ -2281,7 +2310,7 @@ class GSIUtils(object):
                             index_where_clause='average_rating > 1',
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, average_rating, {scan_sparse_vec}",
                                 "average_rating > 1 AND "
@@ -2293,25 +2322,25 @@ class GSIUtils(object):
         return definitions_list
 
     def generate_amazon_sparse_vector_index_definitions_composite(self, index_name_prefix=None,
-                                                                   train_list=None, scan_nprobes=1,
-                                                                   skip_primary=False, limit=100,
-                                                                   description="IVF1024",
-                                                                   xattr_indexes=False):
+                                                                  train_list=None, scan_nprobes=1,
+                                                                  skip_primary=False, limit=100,
+                                                                  description="IVF",
+                                                                  xattr_indexes=False,
+                                                                  sparsejl_dim=4096):
         """
         Generate composite (CREATE INDEX) definitions for AmazonSparse dataset.
         Sparse vectors have no dimension; similarity is forced to DOT in get_create_index_list().
         Composite indexes do not support INCLUDE clause; scalars go in index key.
         Matches car_vector_loader_index_definition patterns (7 indexes).
         """
-        #TODO have to visit back for the include clause
+        # TODO have to visit back for the include clause
         definitions_list = []
         sparse_vecfield = "`sparse`"
         if xattr_indexes:
             sparse_vecfield = "meta().xattrs.`sparse`"
 
         # Load random sparse vector from JSONL file for querying
-        random_sparse_vecs, title = self.get_random_sparse_vectors_from_jsonl(count=1)
-        sample_sparse_vec = random_sparse_vecs[0]
+        sample_sparse_vec, title = self.get_random_sparse_vectors_from_jsonl(count=1)
         self.log.info(f"Sample sparse vector : {sample_sparse_vec}, title is {title}")
 
         scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE({sparse_vecfield}, {sample_sparse_vec}, {scan_nprobes})"
@@ -2334,7 +2363,7 @@ class GSIUtils(object):
                             index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, {scan_sparse_vec}",
                                 scan_sparse_vec)))
@@ -2345,7 +2374,7 @@ class GSIUtils(object):
                             index_fields=['store', f'{sparse_vecfield} SPARSE VECTOR'],
                             description=description,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, store, {scan_sparse_vec}",
                                 scan_sparse_vec),
@@ -2357,7 +2386,7 @@ class GSIUtils(object):
                             index_fields=[f'{sparse_vecfield} SPARSE VECTOR', 'main_category'],
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, main_category, {scan_sparse_vec}",
                                 scan_sparse_vec)))
@@ -2368,7 +2397,7 @@ class GSIUtils(object):
                             index_fields=['price', f'{sparse_vecfield} SPARSE VECTOR', 'main_category', 'store'],
                             description=description,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, store, price, {scan_sparse_vec}",
                                 "price > 0",
@@ -2380,7 +2409,7 @@ class GSIUtils(object):
                             index_fields=['average_rating', f'{sparse_vecfield} SPARSE VECTOR', 'main_category'],
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, main_category, {scan_sparse_vec}",
                                 "average_rating > 0",
@@ -2394,7 +2423,7 @@ class GSIUtils(object):
                             description=description,
                             scan_nprobes=scan_nprobes, limit=limit,
                             missing_indexes=True, missing_field_desc=True,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, store, price, {scan_sparse_vec}",
                                 "price > 0 OR "
@@ -2408,11 +2437,171 @@ class GSIUtils(object):
                             index_where_clause='average_rating > 0',
                             description=description, train_list=train_list,
                             scan_nprobes=scan_nprobes, limit=limit,
-                            expected_title=title,
+                            expected_title=title, sparsejl_dim=sparsejl_dim,
                             query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
                                 f"title, average_rating, {scan_sparse_vec}",
                                 "average_rating > 1",
                                 scan_sparse_vec)))
+
+        self.batch_size = len(definitions_list)
+        return definitions_list
+
+    def generate_msmarco_sparse_vector_index_definitions_composite(self, index_name_prefix=None,
+                                                                   train_list=None, scan_nprobes=1,
+                                                                   skip_primary=False, limit=10,
+                                                                   description="IVF1024",
+                                                                   sparsejl_dim=None):
+        """
+        Generate composite (CREATE INDEX) definitions for MsMARCO sparse vector dataset.
+        Matches generate_shoe_vector_index_definitions_composite patterns exactly.
+        Sparse vectors have no dimension; similarity is forced to DOT in get_create_index_list().
+        """
+        definitions_list = []
+        sparse_vecfield = "`sparse`"
+
+        # Load random sparse vector from MsMARCO JSONL file for querying
+        sample_sparse_vec, query_text = self.get_random_sparse_vectors_from_jsonl(count=1, dataset='MsMARCO')
+        self.log.info(f"MsMARCO sample sparse vector for composite, query text: {query_text}")
+        scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE({sparse_vecfield}, {sample_sparse_vec}, {scan_nprobes})"
+
+        if not index_name_prefix:
+            index_name_prefix = "msmarco_comp_idx_" + str(uuid.uuid4()).replace("-", "")[:8]
+
+        # Primary Query (matches shoe: "DISTINCT color", "type = 'Shoes'")
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color",
+                                                                          "type = 'Shoes'"),
+                                is_primary=True))
+
+        # 1. Composite: scalar leading, vector trailing (matches shoe: scalar_leading_vector)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'scalar_leading_vector',
+                            index_fields=['size', f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id, {sparse_vecfield}, {scan_sparse_vec}",
+                                "size = 5",
+                                scan_sparse_vec)))
+
+        # 2. Composite: vector in the middle with multiple scalars (matches shoe: multi_scalar_middle_vec)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
+                            index_fields=['brand', f'{sparse_vecfield} SPARSE VECTOR', 'color'],
+                            description=description,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id, {sparse_vecfield}, {scan_sparse_vec}",
+                                "size = 5 AND color = 'Green'",
+                                scan_sparse_vec)))
+
+        # 3. Composite: multiple scalars leading, partitioned by scalar (matches shoe: multi_scalar_partitioned)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'multi_scalar_partitioned',
+                            index_fields=['type', 'size', f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id, {sparse_vecfield}, {scan_sparse_vec}, type",
+                                "size > 4 AND size < 6 AND brand = 'Nike'",
+                                scan_sparse_vec),
+                            partition_by_fields=['type']))
+
+        # 4. Composite: vector leading, multiple scalars, partitioned by vector (matches shoe: leading_vec_partitioned)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'leading_vec_partitioned',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR', 'brand', 'country'],
+                            description=description,
+                            scan_nprobes=scan_nprobes,
+                            train_list=train_list, limit=limit,
+                            expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id, {sparse_vecfield}, {scan_sparse_vec}, country",
+                                "size < 6 AND country = 'USA'",
+                                scan_sparse_vec),
+                            partition_by_fields=[f'{sparse_vecfield}']))
+
+        self.batch_size = len(definitions_list)
+        return definitions_list
+
+    def generate_msmarco_sparse_vector_index_definitions_bhive(self, index_name_prefix=None,
+                                                               train_list=None, scan_nprobes=1,
+                                                               skip_primary=False, limit=10,
+                                                               description="IVF1024",
+                                                               skip_extra_indexes=True,
+                                                               sparsejl_dim=None):
+        """
+        Generate bhive (CREATE VECTOR INDEX) definitions for MsMARCO sparse vector dataset.
+        Matches generate_shoe_vector_index_defintion_bhive patterns exactly.
+        Sparse vectors have no dimension; similarity is forced to DOT in get_create_index_list().
+        Bhive indexes support INCLUDE clause. Sparse vector is the only index key.
+        """
+        definitions_list = []
+        sparse_vecfield = "`sparse`"
+
+        # Load random sparse vector from MsMARCO JSONL file for querying
+        sample_sparse_vec, query_text = self.get_random_sparse_vectors_from_jsonl(count=1, dataset='MsMARCO')
+        self.log.info(f"MsMARCO sample sparse vector for bhive, query text: {query_text}")
+        scan_sparse_vec = f"SPARSE_VECTOR_DISTANCE({sparse_vecfield}, {sample_sparse_vec}, {scan_nprobes})"
+
+        if not index_name_prefix:
+            index_name_prefix = "msmarco_bhive_" + str(uuid.uuid4()).replace("-", "")[:8]
+
+        # Primary Query (matches shoe: "DISTINCT color", "type = 'Shoes'")
+        if not skip_primary:
+            prim_index_name = f'#primary_{"".join(random.choices(string.ascii_uppercase + string.digits, k=5))}'
+            definitions_list.append(
+                QueryDefinition(index_name=prim_index_name, index_fields=[], limit=limit,
+                                query_template=RANGE_SCAN_TEMPLATE.format("DISTINCT color",
+                                                                          "type = 'Shoes'"),
+                                is_primary=True))
+
+        # 1. Single vector field only (matches shoe: vector_only_bhive)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'vector_only_bhive',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                            query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"{sparse_vecfield}, {scan_sparse_vec}",
+                                scan_sparse_vec)))
+
+        # 2. Single vector field + single scalar INCLUDE (matches shoe: leading_scalar)
+        definitions_list.append(
+            QueryDefinition(index_name=index_name_prefix + 'leading_scalar',
+                            index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                            description=description, train_list=train_list,
+                            scan_nprobes=scan_nprobes, limit=limit,
+                            expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                            query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                f"meta().id, {sparse_vecfield}, {scan_sparse_vec}",
+                                "size = 5",
+                                scan_sparse_vec),
+                            include_fields=['size']))
+
+        if not skip_extra_indexes:
+            # 3. Single vector field + multiple scalars INCLUDE (matches shoe: multi_scalar_middle_vec)
+            definitions_list.append(
+                QueryDefinition(index_name=index_name_prefix + 'multi_scalar_middle_vec',
+                                index_fields=[f'{sparse_vecfield} SPARSE VECTOR'],
+                                description=description, train_list=train_list,
+                                scan_nprobes=scan_nprobes, limit=limit,
+                                expected_title=query_text, sparsejl_dim=sparsejl_dim,
+                                query_template=RANGE_SCAN_ORDER_BY_TEMPLATE.format(
+                                    f"meta().id, {sparse_vecfield}, {scan_sparse_vec}",
+                                    "size = 5 AND color = 'Green'",
+                                    scan_sparse_vec),
+                                include_fields=['size', 'color']))
 
         self.batch_size = len(definitions_list)
         return definitions_list
@@ -2606,7 +2795,6 @@ class GSIUtils(object):
                 self.query_errors.append(str(err))
 
             time.sleep(sleep_timer)
-            
 
     def range_unequal_distribution(self, number=4, factor=1.2, total=100000):
         """
@@ -2683,7 +2871,8 @@ class GSIUtils(object):
     def get_index_definition_list(self, dataset, prefix=None, skip_primary=False, similarity="L2", train_list=None,
                                   scan_nprobes=1, array_indexes=False, limit=None, quantization_algo_color_vector=None,
                                   quantization_algo_description_vector="SQ8", is_base64=False, bhive_index=False,
-                                  xattr_indexes=False, description_dimension=384, persist_full_vector=True, scalar=False, skip_extra_indexes=True):
+                                  xattr_indexes=False, description_dimension=384, persist_full_vector=True,
+                                  scalar=False, skip_extra_indexes=True, sparsejl_dim=4096):
         if dataset == 'Person' or dataset == 'default':
             definition_list = self.generate_person_data_index_definition(index_name_prefix=prefix,
                                                                          skip_primary=skip_primary)
@@ -2694,24 +2883,29 @@ class GSIUtils(object):
             if description_dimension == 4096:
                 if bhive_index:
                     definition_list = self.generate_hotel_data_index_definition_vectors_bhive(index_name_prefix=prefix,
-                        scan_nprobes=scan_nprobes, similarity=similarity, limit=limit,
-                        quantization_algo_description_vector=quantization_algo_description_vector,
-                        description_dimension=description_dimension, skip_primary=skip_primary)
+                                                                                              scan_nprobes=scan_nprobes,
+                                                                                              similarity=similarity,
+                                                                                              limit=limit,
+                                                                                              quantization_algo_description_vector=quantization_algo_description_vector,
+                                                                                              description_dimension=description_dimension,
+                                                                                              skip_primary=skip_primary)
                 else:
                     definition_list = self.generate_hotel_data_index_definition_vectors(index_name_prefix=prefix,
-                        scan_nprobes=scan_nprobes, similarity=similarity, limit=limit,
-                        quantization_algo_description_vector=quantization_algo_description_vector,
-                        description_dimension=description_dimension)
+                                                                                        scan_nprobes=scan_nprobes,
+                                                                                        similarity=similarity,
+                                                                                        limit=limit,
+                                                                                        quantization_algo_description_vector=quantization_algo_description_vector,
+                                                                                        description_dimension=description_dimension)
             else:
                 definition_list = self.generate_hotel_data_index_definition(index_name_prefix=prefix,
-                                                                        skip_primary=skip_primary)
+                                                                            skip_primary=skip_primary)
         elif dataset == 'Magma':
             definition_list = self.generate_magma_doc_loader_index_definition(index_name_prefix=prefix,
                                                                               skip_primary=skip_primary)
         elif dataset == "siftBigANN":
             if scalar:
                 definition_list = self.generate_shoe_scalar_index_definition(index_name_prefix=prefix,
-                                                                                  skip_primary=skip_primary)
+                                                                             skip_primary=skip_primary)
             elif bhive_index:
                 definition_list = self.generate_shoe_vector_index_defintion_bhive(index_name_prefix=prefix,
                                                                                   skip_primary=skip_primary,
@@ -2720,21 +2914,22 @@ class GSIUtils(object):
                                                                                   scan_nprobes=scan_nprobes,
                                                                                   limit=limit,
                                                                                   persist_full_vector=persist_full_vector,
-                                                                                  quantization_algo_description_vector=quantization_algo_description_vector, skip_extra_indexes=skip_extra_indexes)
+                                                                                  quantization_algo_description_vector=quantization_algo_description_vector,
+                                                                                  skip_extra_indexes=skip_extra_indexes)
             else:
                 definition_list = self.generate_shoe_vector_index_definitions_composite(index_name_prefix=prefix,
-                                                                                  skip_primary=skip_primary,
-                                                                                  similarity=similarity,
-                                                                                  train_list=train_list,
-                                                                                  scan_nprobes=scan_nprobes,
-                                                                                  limit=limit,
-                                                                                  quantization_algo_description_vector=quantization_algo_description_vector)
+                                                                                        skip_primary=skip_primary,
+                                                                                        similarity=similarity,
+                                                                                        train_list=train_list,
+                                                                                        scan_nprobes=scan_nprobes,
+                                                                                        limit=limit,
+                                                                                        quantization_algo_description_vector=quantization_algo_description_vector)
 
         elif dataset == 'Cars':
             self.log.info(f"scalar is {scalar}")
             if scalar:
                 definition_list = self.generate_car_data_index_definition_scalar(index_name_prefix=prefix,
-                                                                            skip_primary=skip_primary)
+                                                                                 skip_primary=skip_primary)
             elif bhive_index:
                 definition_list = self.generate_car_vector_loader_index_definition_bhive(index_name_prefix=prefix,
                                                                                          skip_primary=skip_primary,
@@ -2757,7 +2952,8 @@ class GSIUtils(object):
                                                                                    limit=limit, is_base64=is_base64,
                                                                                    xattr_indexes=xattr_indexes,
                                                                                    quantization_algo_color_vector=quantization_algo_color_vector,
-                                                                                   quantization_algo_description_vector=quantization_algo_description_vector, description_dimension=description_dimension)
+                                                                                   quantization_algo_description_vector=quantization_algo_description_vector,
+                                                                                   description_dimension=description_dimension)
         elif dataset == 'MiniCar':
             definition_list = self.generate_mini_car_vector_index_definition(index_name_prefix=prefix,
                                                                              skip_primary=skip_primary)
@@ -2771,7 +2967,8 @@ class GSIUtils(object):
                     scan_nprobes=scan_nprobes,
                     limit=limit,
                     description="IVF1024",
-                    xattr_indexes=xattr_indexes)
+                    xattr_indexes=xattr_indexes,
+                    sparsejl_dim=sparsejl_dim)
             else:
                 definition_list = self.generate_amazon_sparse_vector_index_definitions_composite(
                     index_name_prefix=prefix,
@@ -2780,11 +2977,34 @@ class GSIUtils(object):
                     scan_nprobes=scan_nprobes,
                     limit=limit,
                     xattr_indexes=xattr_indexes,
-                    description="IVF1024")
+                    description="IVF1024",
+                    sparsejl_dim=sparsejl_dim)
+        elif dataset == 'MsMARCO':
+            # MsMARCO sparse vectors - used for mutations and additional load scenarios
+            if bhive_index:
+                definition_list = self.generate_msmarco_sparse_vector_index_definitions_bhive(
+                    index_name_prefix=prefix,
+                    skip_primary=skip_primary,
+                    train_list=train_list,
+                    scan_nprobes=scan_nprobes,
+                    limit=limit,
+                    description="IVF",
+                    sparsejl_dim=sparsejl_dim)
+            else:
+                definition_list = self.generate_msmarco_sparse_vector_index_definitions_composite(
+                    index_name_prefix=prefix,
+                    skip_primary=skip_primary,
+                    train_list=train_list,
+                    scan_nprobes=scan_nprobes,
+                    limit=limit,
+                    description="IVF",
+                    sparsejl_dim=sparsejl_dim)
         else:
-            raise Exception("Provide correct dataset. Valid values are Person, Employee, Magma, Car, MiniCar, Hotel, and AmazonSparse")
+            raise Exception(
+                "Provide correct dataset. Valid values are Person, Employee, Magma, Car, MiniCar, Hotel, AmazonSparse, and MsMARCO")
         return definition_list
 
     def get_indexes_name(self, query_definitions):
         indexes_name = [q_d.index_name for q_d in query_definitions]
         return indexes_name
+
