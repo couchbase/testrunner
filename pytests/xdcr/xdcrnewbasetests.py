@@ -2748,6 +2748,11 @@ class CouchbaseCluster:
                 else:
                     time.sleep(5)
                     end_time = end_time - 5
+            except KeyError:
+                self.__log.info(
+                    "No XDCR DCP stats on %s for %s, treating as drained" %
+                    (self.__name, bucket.name))
+                buckets.remove(bucket)
             except Exception as e:
                 self.__log.error(e)
             if curr_time > end_time:
@@ -2766,10 +2771,13 @@ class CouchbaseCluster:
         while curr_time < end_time:
             found = 0
             for bucket in self.__buckets:
+                mutations = 0
                 try:
                     mutations = int(rest.get_xdc_queue_size(bucket.name))
                 except KeyError:
-                    self.__log.warning("Stat \"replication_changes_left\" not found")
+                    self.__log.info(
+                        "No outbound XDCR replication stats on %s for %s, treating as 0" %
+                        (self.__name, bucket.name))
                 self.__log.info(
                     "Current Outbound mutations on cluster node: %s for bucket %s is %s" %
                     (self.__name, bucket.name, mutations))
@@ -4302,6 +4310,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         mapping = {}
         for repl in replications:
             src_bucket = repl.get_src_bucket()
+            filter_exp = repl.get_filter_exp()
             if repl.get_xdcr_setting('collectionsExplicitMapping'):
                 mapping = repl.get_xdcr_setting('colMappingRules')
             else:
@@ -4315,7 +4324,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             task_info = self.__cluster_op.async_verify_collection_doc_count(
                 repl.get_src_cluster(),
                 repl.get_dest_cluster(),
-                src_bucket, mapping)
+                src_bucket, mapping,
+                filter_exp=filter_exp)
             tasks.append(task_info)
         for task in tasks:
             task.result(timeout)

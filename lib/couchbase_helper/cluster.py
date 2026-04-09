@@ -292,8 +292,10 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_collection_doc_count(self, src_server, dest_server, bucket, mapping):
-        _task = VerifyCollectionDocCountTask(src_server, dest_server, bucket, mapping)
+    def async_verify_collection_doc_count(self, src_server, dest_server, bucket, mapping,
+                                             filter_exp=None):
+        _task = VerifyCollectionDocCountTask(src_server, dest_server, bucket, mapping,
+                                             filter_exp=filter_exp)
         self.task_manager.schedule(_task)
         return _task
 

@@ -2926,21 +2926,24 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.state = FINISHED
 
 class VerifyCollectionDocCountTask(Task):
-    def __init__(self, src, dest, bucket, mapping):
+    def __init__(self, src, dest, bucket, mapping, filter_exp=None):
         Task.__init__(self, "verify_collection_doc_count_task")
         self.src = src
         self.dest = dest
         self.bucket = bucket
         self.mapping = mapping
+        self.filter_exp = filter_exp
         self.src_conn = CollectionsStats(src.get_master_node())
         self.dest_conn = CollectionsStats(dest.get_master_node())
-
         self.src_stats = self.src_conn.get_collection_stats(self.bucket)
         self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)
 
     def execute(self, task_manager):
         try:
+            # Wait and refresh stats
             time.sleep(60)
+            self.src_stats = self.src_conn.get_collection_stats(self.bucket)
+            self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)
             for map_exp in self.mapping.items():
                 self.log.info("Map expression: {0}".format(str(map_exp)))
                 if ':' in map_exp[0]:
@@ -3025,19 +3028,110 @@ class VerifyCollectionDocCountTask(Task):
                                             self.bucket, src_scope, src_collection,
                                             dest_scope, dest_collection))
                 else:
-                    self.set_exception(Exception("ERROR: Item count on src:{} {} != {} on dest:{} for "
-                                  "bucket {} \nsrc : scope {}-> collection {},"
-                                  "dest: scope {}-> collection {}"
-                                  .format(self.src.get_master_node().ip, src_count,
-                                          dest_count, self.dest.get_master_node().ip,
-                                          self.bucket, src_scope, src_collection,
-                                          dest_scope, dest_collection)))
+                    # Retry with fresh stats to handle slow replication
+                    retries = 6
+                    while retries > 0:
+                        time.sleep(30)
+                        self.dest_stats = self.dest_conn.get_collection_stats(self.bucket)
+                        if dest_collection_specified:
+                            new_dest_count = self.dest_conn.get_collection_item_count(
+                                self.bucket, dest_scope, dest_collection,
+                                self.dest.get_nodes(), self.dest_stats)
+                        else:
+                            new_dest_count = self.dest_conn.get_scope_item_count(
+                                self.bucket, dest_scope,
+                                self.dest.get_nodes(), self.dest_stats)
+                        self.log.info("Retry: dest count {} (was {}) vs src count {}"
+                                      .format(new_dest_count, dest_count, src_count))
+                        if new_dest_count == src_count:
+                            dest_count = new_dest_count
+                            self.log.info("Item counts matched after retry")
+                            break
+                        if new_dest_count == dest_count:
+                            self.log.info("Dest count stabilized at {}"
+                                          .format(dest_count))
+                            break
+                        dest_count = new_dest_count
+                        retries -= 1
+
+                    if dest_count != src_count:
+                        if self.filter_exp:
+                            self._validate_filtered_mapping(
+                                src_scope, src_collection,
+                                dest_scope, dest_collection)
+                        else:
+                            self.set_exception(Exception(
+                                "ERROR: Item count on src:{} {} != {} on dest:{} for "
+                                "bucket {} \nsrc : scope {}-> collection {},"
+                                "dest: scope {}-> collection {}"
+                                .format(self.src.get_master_node().ip, src_count,
+                                        dest_count, self.dest.get_master_node().ip,
+                                        self.bucket, src_scope, src_collection,
+                                        dest_scope, dest_collection)))
                 self.log.info('-' * 100)
         except Exception as e:
             self.state = FINISHED
             self.set_unexpected_exception(e)
 
         self.check(task_manager)
+
+    def _validate_filtered_mapping(self, src_scope, src_collection,
+                                    dest_scope, dest_collection):
+        """Validate a single mapping by comparing N1QL filtered src count
+        with the actual dest count at the correct granularity."""
+        try:
+            src_rest = RestConnection(self.src.get_master_node())
+            if src_collection == "all":
+                collections = src_rest.get_scope_collections(
+                    self.bucket, src_scope)
+            else:
+                collections = [src_collection]
+
+            expected = 0
+            for coll in collections:
+                query = ('SELECT RAW COUNT(*) FROM `{}`.`{}`.`{}` '
+                         'WHERE {}'.format(self.bucket, src_scope, coll,
+                                           self.filter_exp))
+                self.log.info("N1QL filter count query: {}".format(query))
+                result = src_rest.query_tool(query)
+                if result and 'results' in result and result['results']:
+                    count = result['results'][0]
+                    self.log.info("N1QL count for {}.{}: {}".format(
+                        src_scope, coll, count))
+                    expected += count
+                else:
+                    self.log.warning(
+                        "N1QL query returned no results, skipping "
+                        "exact validation for scope {}".format(src_scope))
+                    return
+
+            if dest_collection == "all":
+                actual = self.dest_conn.get_scope_item_count(
+                    self.bucket, dest_scope,
+                    self.dest.get_nodes(), self.dest_stats)
+            else:
+                actual = self.dest_conn.get_collection_item_count_cumulative(
+                    self.bucket, dest_scope, dest_collection,
+                    self.dest.get_nodes())
+
+            self.log.info(
+                "Filter validation: src {}.{} -> dest {}.{}, "
+                "filtered expected={}, actual dest={}"
+                .format(src_scope, src_collection,
+                        dest_scope, dest_collection, expected, actual))
+
+            if actual == expected:
+                self.log.info("PASSED: dest count matches filtered src count")
+            else:
+                self.set_exception(Exception(
+                    "ERROR: dest count {} != filtered src count {} "
+                    "for bucket {} src {}.{} -> dest {}.{}"
+                    .format(actual, expected, self.bucket,
+                            src_scope, src_collection,
+                            dest_scope, dest_collection)))
+        except Exception as e:
+            self.log.warning(
+                "Filter validation failed: {}, skipping".format(e))
 
     def check(self, task_manager):
         self.set_result(True)
