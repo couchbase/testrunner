@@ -376,7 +376,7 @@ class LoadVector(object):
             print(e)
 
 class IndexVector(object):
-    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', index_order='tail', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3, use_bhive=False, custom_index_fields=None,custom_name=None,use_partition=False):
+    def create_index(self, cluster, bucket='default', scope='_default', collection='_default', index_order='tail', vector_field='vec', is_xattr=False, is_base64=False, network_byte_order=False, dimension=128, train=10000, description='IVF,PQ32x8', similarity='L2_SQUARED', nprobes=3, use_bhive=False, vector_type='dense', custom_index_fields=None,custom_name=None,use_partition=False):
         cb = cluster.bucket(bucket)
         cb_scope = cb.scope(scope)
         if is_xattr:
@@ -384,11 +384,15 @@ class IndexVector(object):
         if is_base64:
             vector_field = f"DECODE_VECTOR({vector_field}, {network_byte_order})"
         
-        vector_definition = {"dimension": dimension, "train_list": train, "description": description, "similarity": similarity, "scan_nprobes": nprobes}
+        if vector_type == 'dense':
+            vector_definition = {"dimension": dimension, "train_list": train, "description": description, "similarity": similarity, "scan_nprobes": nprobes}
+        elif vector_type == 'sparse':
+            vector_definition = {"similarity": "DOT", "train_list": train, "scan_nprobes": nprobes}
+
         index_queries = {
-            'tail': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, brand, {vector_field} VECTOR) WITH {vector_definition}',
-            'mid': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, {vector_field} VECTOR, brand) WITH {vector_definition}',
-            'lead': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR, size, brand) WITH {vector_definition}',
+            'tail': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, brand, {vector_field} {vector_type} VECTOR) WITH {vector_definition}',
+            'mid': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}(size, {vector_field} {vector_type} VECTOR, brand) WITH {vector_definition}',
+            'lead': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR, size, brand) WITH {vector_definition}',
         }
         if custom_index_fields:
             if custom_name:
@@ -402,17 +406,17 @@ class IndexVector(object):
                 if ",vec VECTOR" in custom_index_fields:
                     custom_index_fields = custom_index_fields.replace(",vec VECTOR", "")
                     if custom_name:
-                        index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+                        index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
                     else:
-                        index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
+                        index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) INCLUDE({custom_index_fields}) WITH {vector_definition}'
                 elif "vec VECTOR" in custom_index_fields:
                     custom_index_fields = custom_index_fields.replace("vec VECTOR", "")
                     if custom_name:
-                        index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
+                        index_query = f'CREATE VECTOR INDEX {custom_name} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) WITH {vector_definition}'
                     else:
-                        index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} VECTOR) WITH {vector_definition}'
+                        index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity}_custom IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) WITH {vector_definition}'
             else:
-                index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} VECTOR) INCLUDE(size, brand) WITH {vector_definition}'
+                index_query = f'CREATE VECTOR INDEX vector_bhive_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR) INCLUDE(size, brand) WITH {vector_definition}'
         if use_partition:
             index_query = index_query.split("WITH")[0] + f" PARTITION BY HASH(meta().id) WITH " + index_query.split("WITH")[1]
         print(index_query)
@@ -505,10 +509,10 @@ class QueryVector(object):
         ]
         if vector_type == 'sparse':
             query = (
-                f"SELECT id, SPARSE_ANN_DISTANCE({vector_field}, $qvec, {nprobes}) as distance "
+                f"SELECT id, SPARSE_VECTOR_DISTANCE({vector_field}, $qvec, {nprobes}) as distance "
                 f"FROM {collection} "
                 f"WHERE {size_predicate[random.randint(0,4)]} AND brand IN $brand "
-                f"ORDER BY SPARSE_ANN_DISTANCE({vector_field}, $qvec, {nprobes}) {direction} LIMIT {k}"
+                f"ORDER BY SPARSE_VECTOR_DISTANCE({vector_field}, $qvec, {nprobes}) {direction} LIMIT {k}"
             )
         else:
             query = (

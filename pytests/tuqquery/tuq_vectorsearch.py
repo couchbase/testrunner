@@ -18,6 +18,7 @@ class VectorSearchTests(QueryTests):
         self.bucket = "default"
         self.recall_knn = 100
         self.recall_ann = 40 # TBD
+        self.recall_sparse_ann = 40 # TBD
         self.accuracy_ann = 2 # TBD
         self.vector = self.input.param("vector", [1,2,3])
         self.use_xattr = self.input.param("use_xattr", False)
@@ -183,27 +184,38 @@ class VectorSearchTests(QueryTests):
         # we use existing SIFT ground truth for verification for L2/EUCLIDEAN
         try:
             self.log.info("Create Vector Index")
-            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, nprobes=self.nprobes, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive)
+            IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, nprobes=self.nprobes, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
 
-            self.log.info("Verify Vector Index Metadata and Stats")
-            self.verify_vector_index_metadata_and_stats(expected_description=self.description,
-                                            expected_dimension=self.dimension,
-                                            expected_train_list=self.train,
-                                            expected_nprobes=self.nprobes,
-                                            expected_similarity=self.distance)
+            if self.vector_type == 'dense':
+                self.log.info("Verify Vector Index Metadata and Stats")
+                self.verify_vector_index_metadata_and_stats(expected_description=self.description,
+                                                expected_dimension=self.dimension,
+                                                expected_train_list=self.train,
+                                                expected_nprobes=self.nprobes,
+                                                expected_similarity=self.distance)
 
-            begin = random.randint(0, len(self.xq) - self.query_count)
+            begin = random.randint(0, self.xq.shape[0] - self.query_count)
             self.log.info(f"Running ANN query for range [{begin}:{begin+self.query_count}]")
-            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, nprobes=self.nprobes)
+            distances, indices = QueryVector().search(self.database, self.xq[begin:begin+self.query_count], search_function=self.distance, type='ANN', is_xattr=self.use_xattr, is_base64=self.use_base64, is_bigendian=self.use_bigendian, vector_type=self.vector_type, nprobes=self.nprobes)
             for i in range(self.query_count):
-                self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
-                recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
-                self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
-                if recall < self.recall_ann:
-                    self.log.warn(f"Expected: {self.gt[begin+i].tolist()}")
-                    self.log.warn(f"Actual: {indices[i].tolist()}")
-                    self.log.warn(f"Distances: {distances[i].tolist()}")
-                    self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
+                if self.vector_type == 'dense':
+                    self.log.info(f"Check recall rate for query {begin+i} compare to SIFT ({self.distance})")
+                    recall, accuracy = UtilVector().compare_result(self.gt[begin+i].tolist(), indices[i].tolist())
+                    self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+                    if recall < self.recall_ann:
+                        self.log.warn(f"Expected: {self.gt[begin+i].tolist()}")
+                        self.log.warn(f"Actual: {indices[i].tolist()}")
+                        self.log.warn(f"Distances: {distances[i].tolist()}")
+                        self.fail(f"Recall rate of {recall} is less than expected {self.recall_ann}")
+                elif self.vector_type == 'sparse':
+                    self.log.info(f"Check recall rate for {self.vector_type} query {begin+i} compare to GT")
+                    recall, accuracy = UtilVector().compare_result(self.gt[0][begin+i].tolist(), indices[i][:10].tolist())
+                    self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
+                    if recall < self.recall_sparse_ann:
+                        self.log.warn(f"Expected: {self.gt[0][begin+i].tolist()}")
+                        self.log.warn(f"Actual: {indices[i][:10].tolist()}")
+                        self.log.warn(f"Distances: {distances[i][:10].tolist()}")
+                        self.fail(f"Recall rate of {recall} is less than expected {self.recall_sparse_ann}")
         finally:
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
