@@ -5989,7 +5989,7 @@ class RestConnection(object):
         return content
 
     '''
-            Undeploy the Function
+           Set Eventing Function Settings
     '''
     def set_settings_for_function(self, name, body, function_scope=None, username="Administrator", password="password"):
         authorization = self.get_authorization(username, password)
@@ -6002,6 +6002,22 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', headers=headers,
                                                      params=json.dumps(body).encode("ascii", "ignore"))
 
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+            Set Eventing Function Settings with JWT authentication
+    '''
+    def set_settings_for_function_with_jwt(self, name, body, jwt_token, function_scope=None):
+        url = "api/v1/functions/" + name + "/settings"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
         if not status:
             raise Exception(content)
         return content
@@ -6514,6 +6530,22 @@ class RestConnection(object):
         return content
 
     '''
+            Update Eventing config function wise using JWT authentication
+    '''
+    def update_eventing_config_per_function_with_jwt(self, body, name, jwt_token, function_scope=None):
+        url = "api/v1/functions/" + name + "/config"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
             GET eventing config for single function
     '''
     def get_eventing_config_per_function(self, name, function_scope=None):
@@ -6524,6 +6556,20 @@ class RestConnection(object):
                                                   function_scope["scope"])
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers, params='')
+        if not status:
+            raise Exception(content)
+        return content
+    '''
+            GET eventing config for single function using JWT authentication
+    '''
+    def get_eventing_config_per_function_with_jwt(self, name, jwt_token, function_scope=None):
+        url = "api/v1/functions/" + name + "/config"
+        if function_scope is not None:
+            url += "?bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
         status, content, header = self._http_request(api, 'GET', headers=headers, params='')
         if not status:
             raise Exception(content)
@@ -6590,6 +6636,26 @@ class RestConnection(object):
 
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            return Exception(content)
+        return content
+    '''
+              Get eventing application logs using JWT authentication
+    '''
+    def get_app_logs_with_jwt(self, handler_name, jwt_token, function_scope=None, aggregate=False, size=None):
+        url = "getAppLog?&name=" + handler_name
+        if function_scope is not None:
+            url += "&bucket={0}&scope={1}".format(function_scope["bucket"],
+                                                  function_scope["scope"])
+
+        if aggregate:
+            url += "&aggregate=true"
+        if size is not None:
+            url += "&size=" + str(size)
+
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Bearer %s' % jwt_token}
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if not status:
             return Exception(content)

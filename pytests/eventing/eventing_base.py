@@ -495,22 +495,37 @@ class EventingBaseTest(QueryHelperTests):
         if wait_for_resume:
             self.wait_for_handler_state(body['appname'], "deployed")
 
+    def set_function_settings(self, name, settings, username="Administrator", password="password", jwt_token=None):
+        if jwt_token:
+            return self.rest.set_settings_for_function_with_jwt(name, settings, jwt_token, function_scope=self.function_scope)
+        else:
+            return self.rest.set_settings_for_function(name, settings, self.function_scope, username, password)
+
+    def update_eventing_config_per_function(self, body, name, username="Administrator", password="password", jwt_token=None):
+        if jwt_token:
+            return self.rest.update_eventing_config_per_function_with_jwt(body, name, jwt_token, function_scope=self.function_scope)
+        else:
+            return self.rest.update_eventing_config_per_function(body, name, self.function_scope)
+
+    def get_eventing_config_per_function(self, name, username="Administrator", password="password", jwt_token=None):
+        if jwt_token:
+            return self.rest.get_eventing_config_per_function_with_jwt(name, jwt_token, function_scope=self.function_scope)
+        else:
+            return self.rest.get_eventing_config_per_function(name, self.function_scope)
+
     def export_eventing_function(self, name, username="Administrator", password="password", jwt_token=None):
-        """Export eventing function with optional JWT authentication"""
         if jwt_token:
             return self.rest.export_function_with_jwt(name, jwt_token, function_scope=self.function_scope)
         else:
             return self.rest.export_function(name, self.function_scope, username, password)
 
     def import_eventing_function(self, body, username="Administrator", password="password", jwt_token=None):
-        """Import eventing function with optional JWT authentication"""
         if jwt_token:
             return self.rest.import_function_with_jwt(body, jwt_token)
         else:
             return self.rest.import_function(body, username, password)
 
     def get_all_functions(self, username="Administrator", password="password", jwt_token=None):
-        """Get all eventing functions with optional JWT authentication"""
         if jwt_token:
             return self.rest.get_all_functions_with_jwt(jwt_token)
         else:
@@ -1006,10 +1021,16 @@ class EventingBaseTest(QueryHelperTests):
         self.log.info(content)
         self.log.info("================== App logs end ===============================================================")
 
-    def get_app_logs(self, name, function_scope=None, size=None, aggregate=False):
+    def get_app_logs(self, name, function_scope=None, size=None, aggregate=False, jwt_token=None):
+        """Get eventing function application logs with optional JWT authentication"""
         if function_scope is None:
             function_scope = self.function_scope
-        applogs = self.rest.get_app_logs(handler_name=name, function_scope=function_scope, aggregate=aggregate, size=size)
+
+        if jwt_token:
+            applogs = self.rest.get_app_logs_with_jwt(handler_name=name, jwt_token=jwt_token, function_scope=function_scope, aggregate=aggregate, size=size)
+        else:
+            applogs = self.rest.get_app_logs(handler_name=name, function_scope=function_scope, aggregate=aggregate, size=size)
+
         self.log.info("================== {} ============================================================".format(name))
         # Decode and split into lines to print first 10 lines
         if isinstance(applogs, bytes):
