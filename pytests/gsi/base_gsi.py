@@ -642,8 +642,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                 result = self.decode_base64_to_float(result)
             list_of_vectors_to_be_indexed_on_faiss.append(result)
 
-        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"),
-                                             similarity=similarity)
+        # Todo: Add a provision to convert base64 encoded embeddings to float32 embeddings
+
+
+        faiss_db = self.load_data_into_faiss(vectors=np.array(list_of_vectors_to_be_indexed_on_faiss, dtype="float32"), similarity=similarity)
+
+
 
         ann = self.search_ann_in_faiss(query=vector, faiss_db=faiss_db, limit=self.scan_limit)
 

@@ -651,18 +651,32 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
                         sstable_files = [line.strip() for line in sstable_output if line.strip()]
 
                     for sstable_file in sstable_files:
-                        # Truncate file to corrupt it - OS-specific command
+                        # Corrupt file by overwriting 16 bytes at the middle with random data
                         if is_windows:
-                            # Windows PowerShell: truncate file
-                            truncate_cmd = f'Set-Content -Path "{sstable_file}" -Value $null -NoNewline'
-                            shell.execute_command(truncate_cmd)
+                            # Windows PowerShell: get file size and overwrite middle with random bytes
+                            corrupt_cmd = (
+                                f'$size = (Get-Item "{sstable_file}").Length; '
+                                f'$mid = [math]::Floor($size / 2); '
+                                f'$bytes = New-Object byte[] 16; '
+                                f'(New-Object Random).NextBytes($bytes); '
+                                f'$fs = [System.IO.File]::Open("{sstable_file}", "Open", "Write"); '
+                                f'$fs.Seek($mid, "Begin") | Out-Null; '
+                                f'$fs.Write($bytes, 0, 16); '
+                                f'$fs.Close()'
+                            )
+                            shell.execute_command(corrupt_cmd)
+                            self.log.info(f"Corrupted: {sstable_file} (overwrote 16 bytes at middle)")
+                            corrupted_files_count += 1
                         else:
-                            # Linux: truncate command
-                            truncate_cmd = f"truncate -s 0 '{sstable_file}'"
-                            shell.execute_command(truncate_cmd)
-
-                        corrupted_files_count += 1
-                        self.log.info(f"Corrupted: {sstable_file}")
+                            # Linux: use dd to overwrite 16 bytes at middle with random data
+                            corrupt_cmd = (
+                                f"size=$(stat -c%s '{sstable_file}'); "
+                                f"mid=$((size / 2)); "
+                                f"dd if=/dev/urandom of='{sstable_file}' bs=1 count=16 seek=$mid conv=notrunc 2>/dev/null"
+                            )
+                            shell.execute_command(corrupt_cmd)
+                            self.log.info(f"Corrupted: {sstable_file} (overwrote 16 bytes at middle)")
+                            corrupted_files_count += 1
 
             shell.disconnect()
 
