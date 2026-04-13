@@ -2605,16 +2605,30 @@ class BaseSecondaryIndexingTests(QueryTests):
     def drop_index_node_resources_utilization_validations(self, skip_disk_cleared_check=False, sleep_time=360):
         self.update_master_node()
         self.drop_all_indexes()
+
         remote_client = RemoteMachineShellConnection(self.master)
         type = remote_client.extract_remote_info().distribution_type.lower()
         if type != "windows":
             if not skip_disk_cleared_check:
                 self.sleep(sleep_time, "sleeping to destroy empty shards")
+                self.trigger_metadata_compaction_on_all_nodes()
                 self.check_storage_directory_cleaned_up()
         if not self.validate_memory_released():
             raise AssertionError("Memory not released despite dropping all the indexes")
         if not self.validate_cpu_normalized():
             raise AssertionError("CPU not normalized despite dropping all the indexes")
+
+    def trigger_metadata_compaction_on_all_nodes(self, num_compactions=4):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        for i in range(num_compactions):
+            self.log.info(f"Triggering compactMetadataStores (iteration {i + 1}/{num_compactions}) on all indexer nodes")
+            for node in index_nodes:
+                try:
+                    RestConnection(node).compact_metadata_stores()
+                    self.log.info(f"compactMetadataStores triggered on {node.ip}")
+                except Exception as e:
+                    self.log.warning(f"compactMetadataStores failed on {node.ip}: {e}")
+            self.sleep(30)
 
     def validate_num_centroids_from_metadata(self):
         self.log.info("Validating num centroids from metadata for vector indexes")
@@ -3850,14 +3864,16 @@ class BaseSecondaryIndexingTests(QueryTests):
             used_space = self.get_storage_directory_used_space(node, storage_dir)
             #this is for checking in general the indexer directory size a warning is logged
             if used_space > threshold_gb:
-                self.log.warning(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+                self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+                raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
             '''
             As a result of https://jira.issues.couchbase.com/browse/MB-70239 the size of the metadata folder is being excluded from the calculation of space left
-            post index dropping
+            post index dropping.
+            Update - now as a result of providing an api from indexing service to trigger compaction on magma stores the below check will be disabled
             '''
-            if used_space-used_space_indexer_metadata > threshold_gb:
-                self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
-                raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space ignoring metadata folder: {used_space-used_space_indexer_metadata} GB (threshold: {threshold_gb} GB)")
+            # if used_space-used_space_indexer_metadata > threshold_gb:
+            #     self.log.error(f"Storage directory {storage_dir} on {node} is not empty. Used space: {used_space} GB (threshold: {threshold_gb} GB)")
+            #     raise Exception(f"Storage directory {storage_dir} on {node} is not empty. Used space ignoring metadata folder: {used_space-used_space_indexer_metadata} GB (threshold: {threshold_gb} GB)")
 
     def get_storage_directory_used_space(self, node, storage_dir):
         """

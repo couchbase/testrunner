@@ -577,6 +577,13 @@ class RestConnection(object):
 
         return json.loads(content)
 
+    def compact_metadata_stores(self, timeout=120):
+        api = self.index_baseUrl + "compactMetadataStores"
+        status, content, _ = self._http_request(api, 'POST', headers=self._create_capi_headers(), timeout=timeout)
+        if not status:
+            raise Exception(content)
+        return status
+
     def active_tasks(self):
         api = self.baseUrl + "pools/default/tasks"
         try:

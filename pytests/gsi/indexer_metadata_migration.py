@@ -340,7 +340,7 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
         self.log.info(f"Total NCompacts after initial index creation: {initial_ncompacts_after_creation}")
         self.log.info(f"Per-node NCompacts: {initial_node_ncompacts_after_creation}")
 
-        self.sleep(10)
+
 
         # Step 3: Let indexes reach steady state
         self.log.info(f"Letting indexes reach steady state for {steady_state_sleep} seconds...")
@@ -458,6 +458,9 @@ class IndexerMetadataMigration(BaseSecondaryIndexingTests):
             self.sleep(10, f"Cycle {cycle}: Brief pause before next cycle")
 
         indexes_post_comapction = self.get_all_indexes_in_the_cluster()
+        self.sleep(90)
+        self.trigger_metadata_compaction_on_all_nodes()
+        self.sleep(10)
         self.log.info(
             f"indexes in the cluster after are{indexes_post_comapction} and no of indexes are {len(indexes_post_comapction)}")
         # Step 6: Log cycle completion status
