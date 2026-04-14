@@ -1,4 +1,4 @@
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ANALYTICS, HANDLER_CODE_ONDEPLOY
 from pytests.security.jwt_utils import JWTUtils
 from lib.membase.api.rest_client import RestConnection
 from security.rbac_base import RbacBase
@@ -36,10 +36,32 @@ class EventingJWTAuth(EventingBaseTest):
         handler_code = self.input.param('handler_code', 'bucket_op')
         if handler_code == 'bucket_op':
             self.handler_code = "handler_code/ABO/insert.js"
-        if handler_code == 'heavy_logger':
+        elif handler_code == 'heavy_logger':
             self.handler_code = 'handler_code/heavy_logger.js'
+        elif handler_code == "subdoc":
+            self.handler_code = "handler_code/ABO/subdoc_array_and_field_op.js"
+        elif handler_code == "bucket_cache":
+            self.handler_code = "handler_code/ABO/cache_compare_values.js"
+        elif handler_code == "xattrs":
+            self.handler_code = "handler_code/xattrs_handler1.js"
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+        elif handler_code == "sbm":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_SBM
+        elif handler_code == "timers":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_TIMERS
+        elif handler_code == "curl":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_CURL
+        elif handler_code == "base64":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_BASE64
+        elif handler_code == "n1ql":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_N1QL
+        elif handler_code == "crc":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_CRC
+        elif handler_code == "analytics_and_counters":
+            self.handler_code = HANDLER_CODE_ANALYTICS.ANALYTICS_BASIC_SELECT
+        elif handler_code == "ondeploy":
+            self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP
 
     def tearDown(self):
         super(EventingJWTAuth, self).tearDown()
@@ -471,3 +493,50 @@ class EventingJWTAuth(EventingBaseTest):
                 log.info(f"Deployment correctly failed for user with insufficient permissions: {e}")
                 assert "ERR_FORBIDDEN" in str(e) and "Forbidden" in str(e), True
                 log.info("Negative test for user with insufficient permissions completed successfully")
+
+    def test_jwt_with_diff_handler_codes(self):
+
+        # Setup JWT configuration
+        self.setup_jwt_config()
+
+        #Import Travel Sample
+        self.load_sample_buckets(self.server, "travel-sample")
+
+        # Create function body with diff handler codes
+        body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=self.jwt_token, src_binding = True)
+
+        log.info("Deploying eventing function with JWT authentication")
+        self.deploy_function(body, jwt_token=self.jwt_token)
+
+        log.info("Loading data to source bucket")
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
+
+        handler_code_name = self.input.param('handler_code', 'bucket_op')
+
+        log.info("Verifying mutations are processed")
+        if handler_code_name == "sbm":
+            self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs * 2)
+        elif handler_code_name == "xattrs":
+            self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs * 2)
+        else:
+            self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
+
+        log.info("Pausing eventing function with JWT authentication")
+        self.pause_function(body, jwt_token=self.jwt_token)
+
+        log.info("Resuming eventing function with JWT authentication")
+        self.resume_function(body, jwt_token=self.jwt_token)
+
+        self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
+        self.sleep(10)  # Wait for deletions to be processed
+
+        if handler_code_name != "sbm":
+            self.verify_doc_count_collections("default.scope0.collection1", 0)
+        else:
+            self.verify_doc_count_collections("default.scope0.collection0", 0)
+
+        log.info("Undeploying eventing function with JWT authentication")
+        self.undeploy_function(body, jwt_token=self.jwt_token)
+
+        log.info("Deleting eventing function with JWT authentication")
+        self.delete_function(body, jwt_token=self.jwt_token)

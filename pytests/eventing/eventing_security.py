@@ -1,4 +1,5 @@
 import copy
+import urllib.parse
 
 from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_helper import N1QLHelper
@@ -11,6 +12,7 @@ from pytests.security.ntonencryptionBase import ntonencryptionBase
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
+from pytests.security.jwt_utils import JWTUtils
 import logging
 import json
 
@@ -50,6 +52,20 @@ class EventingSecurity(EventingBaseTest):
             self.load_sample_buckets(self.server, "travel-sample")
             self._setup_analytics()
 
+        # JWT Configuration (Optional)
+        self.jwt_auth = self.input.param('jwt_auth', False)
+        self.jwt_token = None
+        if self.jwt_auth:
+            self.jwt_algorithm = self.input.param('jwt_algorithm', 'ES256')
+            self.jwt_issuer = self.input.param('jwt_issuer', 'custom-issuer')
+            self.jwt_audience = self.input.param('jwt_audience', 'cb-cluster')
+            self.jwt_user = self.input.param('jwt_user', 'jwt_user')
+            self.jwt_group = self.input.param('jwt_group', 'admin')
+            self.jwt_roles = self.input.param('jwt_roles', 'admin')
+            self.jit_provisioning = self.input.param('jit_provisioning', True)
+            self.jwt_ttl = self.input.param('jwt_ttl', 3600)
+            self.jwt_utils = JWTUtils(log=self.log)
+
     def tearDown(self):
         if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
             try:
@@ -76,6 +92,9 @@ class EventingSecurity(EventingBaseTest):
     5. Pause/undeploy handler, disable n2n encryption, deploy/resume handler, delete docs from src bucket and verify mutations are processed or not.
     '''
     def test_eventing_with_n2n_encryption_enabled(self):
+        # Setup JWT configuration if enabled
+        jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
@@ -88,34 +107,34 @@ class EventingSecurity(EventingBaseTest):
             self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
-        self.deploy_function(body)
+        self.deploy_function(body, jwt_token=jwt_token)
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enabling n2n encryption")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0", is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel="all")
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after changing encryption level to all")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         # Run FTS validation if FTS handler is being used
@@ -127,19 +146,19 @@ class EventingSecurity(EventingBaseTest):
             self._verify_analytics_result_matches_direct_query()
 
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().disable_nton_cluster([self.master])
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after disabling n2n encryption")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body, jwt_token=jwt_token)
 
     '''
     Test steps -
@@ -152,6 +171,9 @@ class EventingSecurity(EventingBaseTest):
     7. Pause/undeploy handler, disable n2n encryption, deploy/resume handler, delete docs from src bucket and verify mutations are processed or not.
     '''
     def test_eventing_with_enforce_tls_feature(self):
+        # Setup JWT configuration if enabled
+        jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
@@ -164,34 +186,34 @@ class EventingSecurity(EventingBaseTest):
             self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
-        self.deploy_function(body)
+        self.deploy_function(body, jwt_token=jwt_token)
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enabling n2n encryption")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster([self.master], clusterEncryptionLevel="strict")
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after enforcing strict TLS")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         # Run FTS validation if FTS handler is being used
@@ -202,32 +224,32 @@ class EventingSecurity(EventingBaseTest):
             self._verify_analytics_result_matches_direct_query()
         assert ClusterOperationHelper.check_if_services_obey_tls(servers=[self.master]), "Port binding after enforcing TLS incorrect"
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after changing encryption level")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         else:
-            self.undeploy_function(body)
+            self.undeploy_function(body, jwt_token=jwt_token)
         ntonencryptionBase().disable_nton_cluster([self.master])
         if getattr(self, 'is_analytics', False) or getattr(self, 'is_fts', False):
             self.sleep(30, "Waiting for services to stabilize after disabling n2n encryption")
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         else:
-            self.deploy_function(body)
+            self.deploy_function(body, jwt_token=jwt_token)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body, jwt_token=jwt_token)
 
     '''
     Test steps -
@@ -481,3 +503,77 @@ class EventingSecurity(EventingBaseTest):
                 "Row %d mismatch:\n  eventing: %s\n  direct:   %s" % (i, ev_row, direct_row))
 
         log.info("Analytics result verification PASSED (%d rows match)" % len(direct_sorted))
+
+    def setup_jwt_config(self):
+        if not self.jwt_auth:
+            return None
+
+        log.info("Setting up JWT configuration")
+
+        # Generate key pair
+        log.info(f"Generating {self.jwt_algorithm} key pair")
+        private_key, public_key = self.jwt_utils.generate_key_pair(self.jwt_algorithm, key_size=2048)
+        self.private_key = private_key
+        self.public_key = public_key
+
+        # Create group with eventing permissions
+        log.info(f"Creating group {self.jwt_group} with eventing permissions")
+        self.create_jwt_group()
+
+        # Create external user
+        log.info(f"Creating external user {self.jwt_user}")
+        self.create_jwt_user()
+
+        # Configure JWT on cluster
+        log.info("Configuring JWT on cluster")
+        self.configure_jwt_on_cluster(public_key)
+
+        # Generate JWT token
+        log.info("Generating JWT token")
+        self.jwt_token = self.jwt_utils.create_token(
+            issuer_name=self.jwt_issuer,
+            user_name=self.jwt_user,
+            algorithm=self.jwt_algorithm,
+            private_key=private_key,
+            token_audience=[self.jwt_audience],
+            user_groups=[self.jwt_group],
+            ttl=self.jwt_ttl
+        )
+        log.info("JWT token generated successfully")
+
+        return self.jwt_token
+
+    def create_jwt_group(self):
+        """Create a group with eventing permissions"""
+        status, content = self.rest.add_group_role(
+            group_name=self.jwt_group,
+            description="Group for testing JWT permissions in recovery tests",
+            roles=self.jwt_roles
+        )
+        if not status:
+            raise Exception(f"Failed to create group {self.jwt_group}: {content}")
+        log.info(f"Group {self.jwt_group} created successfully")
+
+    def create_jwt_user(self):
+        """Create external user and assign to group"""
+        payload = urllib.parse.urlencode({
+            "name": self.jwt_user,
+            "groups": self.jwt_group
+        })
+        _ = self.rest.add_external_user(self.jwt_user, payload)
+        log.info(f"External user {self.jwt_user} created successfully")
+
+    def configure_jwt_on_cluster(self, public_key):
+        """Configure JWT authentication on cluster"""
+        jwt_config = self.jwt_utils.get_jwt_config(
+            issuer_name=self.jwt_issuer,
+            algorithm=self.jwt_algorithm,
+            pub_key=public_key,
+            token_audience=[self.jwt_audience],
+            token_group_matching_rule=[f"^.{self.jwt_user}$ {self.jwt_group}"],
+            jit_provisioning=self.jit_provisioning
+        )
+        status, content, _ = self.rest.create_jwt_with_config(jwt_config)
+        if not status:
+            raise Exception(f"Failed to configure JWT: {content}")
+        log.info("JWT configured successfully")

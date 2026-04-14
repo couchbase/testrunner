@@ -1,5 +1,6 @@
 import copy
 import json
+import urllib.parse
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -9,6 +10,7 @@ from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from membase.helper.cluster_helper import ClusterOperationHelper
+from pytests.security.jwt_utils import JWTUtils
 import logging
 
 log = logging.getLogger()
@@ -100,6 +102,20 @@ class EventingRebalance(EventingBaseTest):
             self.load_data_to_collection(1, "default.scope0.collection0")
             self._setup_analytics()
 
+        # JWT Configuration (Optional)
+        self.jwt_auth = self.input.param('jwt_auth', False)
+        self.jwt_token = None
+        if self.jwt_auth:
+            self.jwt_algorithm = self.input.param('jwt_algorithm', 'ES256')
+            self.jwt_issuer = self.input.param('jwt_issuer', 'custom-issuer')
+            self.jwt_audience = self.input.param('jwt_audience', 'cb-cluster')
+            self.jwt_user = self.input.param('jwt_user', 'jwt_user')
+            self.jwt_group = self.input.param('jwt_group', 'admin')
+            self.jwt_roles = self.input.param('jwt_roles', 'admin')
+            self.jit_provisioning = self.input.param('jit_provisioning', True)
+            self.jwt_ttl = self.input.param('jwt_ttl', 3600)
+            self.jwt_utils = JWTUtils(log=self.log)
+
     def tearDown(self):
         if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
             try:
@@ -118,6 +134,9 @@ class EventingRebalance(EventingBaseTest):
         super(EventingRebalance, self).tearDown()
 
     def test_eventing_rebalance_in_when_existing_eventing_node_is_processing_mutations(self):
+        # Setup JWT configuration if enabled
+        jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.master, "travel-sample")
@@ -134,8 +153,8 @@ class EventingRebalance(EventingBaseTest):
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
-                                              cpp_worker_thread_count=cpp_worker_thread_count)
-        self.deploy_function(body)
+                                              cpp_worker_thread_count=cpp_worker_thread_count, jwt_token=jwt_token)
+        self.deploy_function(body, jwt_token=jwt_token)
         # load data
         if not self.is_expired:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -144,7 +163,7 @@ class EventingRebalance(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size,exp=300)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         # rebalance in a eventing node when eventing is processing mutations
         if getattr(self, 'is_analytics', False):
             services_in = [self.input.param('services_in', 'kv')]
@@ -156,7 +175,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -178,9 +197,9 @@ class EventingRebalance(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
             self.sleep(30)
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         if not self.cancel_timer and not getattr(self, 'is_fts', False):
@@ -191,7 +210,7 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body, jwt_token=jwt_token)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
@@ -201,6 +220,9 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
 
     def test_eventing_rebalance_out_when_existing_eventing_node_is_processing_mutations(self):
+        # Setup JWT configuration if enabled
+        jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.master, "travel-sample")
@@ -218,8 +240,8 @@ class EventingRebalance(EventingBaseTest):
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
-                                              cpp_worker_thread_count=cpp_worker_thread_count)
-        self.deploy_function(body)
+                                              cpp_worker_thread_count=cpp_worker_thread_count, jwt_token=jwt_token)
+        self.deploy_function(body, jwt_token=jwt_token)
         # load data
         if not self.is_expired:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -228,7 +250,7 @@ class EventingRebalance(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, exp=300)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         # rebalance out a eventing node when eventing is processing mutations
         nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
@@ -236,7 +258,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -258,9 +280,9 @@ class EventingRebalance(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
             self.sleep(30)
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         if not self.cancel_timer and not getattr(self, 'is_fts', False):
@@ -271,7 +293,7 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body, jwt_token=jwt_token)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # Fail over all eventing nodes and rebalance them out
@@ -448,6 +470,9 @@ class EventingRebalance(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_kv_swap_rebalance_when_existing_eventing_node_is_processing_mutations(self):
+        # Setup JWT configuration if enabled
+        jwt_token = self.setup_jwt_config() if self.jwt_auth else None
+
         # FTS setup if using FTS handler
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.master, "travel-sample")
@@ -465,8 +490,8 @@ class EventingRebalance(EventingBaseTest):
         cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
-                                              cpp_worker_thread_count=cpp_worker_thread_count)
-        self.deploy_function(body)
+                                              cpp_worker_thread_count=cpp_worker_thread_count, jwt_token=jwt_token)
+        self.deploy_function(body, jwt_token=jwt_token)
         # load data
         if not self.is_expired:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -475,7 +500,7 @@ class EventingRebalance(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, exp=300)
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
         # swap rebalance kv node when eventing is processing mutations
         services_in = ["kv"]
         nodes_out_kv = self.servers[1]
@@ -485,7 +510,7 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
-            self.resume_function(body)
+            self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -494,7 +519,7 @@ class EventingRebalance(EventingBaseTest):
             self.sleep(10, "Waiting for cluster to stabilize after KV swap rebalance")
             self.verify_doc_count_collections("default.scope0.collection1", 1)
             self._verify_analytics_result_matches_direct_query()
-            self.undeploy_and_delete_function(body)
+            self.undeploy_and_delete_function(body, jwt_token=jwt_token)
             return
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if not self.cancel_timer:
@@ -507,9 +532,9 @@ class EventingRebalance(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
-            self.pause_function(body)
+            self.pause_function(body, jwt_token=jwt_token)
             self.sleep(30)
-            self.resume_function(body)
+            self.resume_function(body,jwt_token=jwt_token)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         if not self.cancel_timer and not getattr(self, 'is_fts', False):
@@ -521,7 +546,7 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body, jwt_token=jwt_token)
 
     def test_rebalance_in_with_different_topologies(self):
         gen_load_del = copy.deepcopy(self.gens_load)
@@ -2040,3 +2065,77 @@ class EventingRebalance(EventingBaseTest):
                 "Row %d mismatch:\n  eventing: %s\n  direct:   %s" % (i, ev_row, direct_row))
 
         log.info("Analytics result verification PASSED (%d rows match)" % len(direct_sorted))
+
+
+    def setup_jwt_config(self):
+        if not self.jwt_auth:
+            return None
+
+        log.info("Setting up JWT configuration")
+        # Generate key pair
+        log.info(f"Generating {self.jwt_algorithm} key pair")
+        private_key, public_key = self.jwt_utils.generate_key_pair(self.jwt_algorithm, key_size=2048)
+        self.private_key = private_key
+        self.public_key = public_key
+
+        # Create group with eventing permissions
+        log.info(f"Creating group {self.jwt_group} with eventing permissions")
+        self.create_jwt_group()
+
+        # Create external user
+        log.info(f"Creating external user {self.jwt_user}")
+        self.create_jwt_user()
+
+        # Configure JWT on cluster
+        log.info("Configuring JWT on cluster")
+        self.configure_jwt_on_cluster(public_key)
+
+        # Generate JWT token
+        log.info("Generating JWT token")
+        self.jwt_token = self.jwt_utils.create_token(
+            issuer_name=self.jwt_issuer,
+            user_name=self.jwt_user,
+            algorithm=self.jwt_algorithm,
+            private_key=private_key,
+            token_audience=[self.jwt_audience],
+            user_groups=[self.jwt_group],
+            ttl=self.jwt_ttl
+        )
+        log.info("JWT token generated successfully")
+
+        return self.jwt_token
+
+    def create_jwt_group(self):
+        """Create a group with eventing permissions"""
+        status, content = self.rest.add_group_role(
+            group_name=self.jwt_group,
+            description="Group for testing JWT permissions in recovery tests",
+            roles=self.jwt_roles
+        )
+        if not status:
+            raise Exception(f"Failed to create group {self.jwt_group}: {content}")
+        log.info(f"Group {self.jwt_group} created successfully")
+
+    def create_jwt_user(self):
+        """Create external user and assign to group"""
+        payload = urllib.parse.urlencode({
+            "name": self.jwt_user,
+            "groups": self.jwt_group
+        })
+        _ = self.rest.add_external_user(self.jwt_user, payload)
+        log.info(f"External user {self.jwt_user} created successfully")
+
+    def configure_jwt_on_cluster(self, public_key):
+        """Configure JWT authentication on cluster"""
+        jwt_config = self.jwt_utils.get_jwt_config(
+            issuer_name=self.jwt_issuer,
+            algorithm=self.jwt_algorithm,
+            pub_key=public_key,
+            token_audience=[self.jwt_audience],
+            token_group_matching_rule=[f"^.{self.jwt_user}$ {self.jwt_group}"],
+            jit_provisioning=self.jit_provisioning
+        )
+        status, content, _ = self.rest.create_jwt_with_config(jwt_config)
+        if not status:
+            raise Exception(f"Failed to configure JWT: {content}")
+        log.info("JWT configured successfully")
