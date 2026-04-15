@@ -312,6 +312,15 @@ class XDCRDifferTest(XDCRNewBaseTest):
             if failed_files:
                 self.log.info(f"Files without magic header (may be expected for certain file types): "
                               f"{[f for f, _ in failed_files]}")
+                # Log content of first 5 failed files for debugging
+                for file_path, actual_magic in failed_files[:5]:
+                    self.log.info(f"\n=== Content of failed file: {file_path} ===")
+                    cat_cmd = f"cat {file_path} 2>/dev/null | head -20"
+                    content, _ = self.src_master_shell.execute_command(cat_cmd)
+                    if content:
+                        self.log.info(f"First 20 lines:\n{''.join(content)}")
+                    else:
+                        self.log.info(f"Unable to read file content")
             return True, expected_magic
 
         details = "; ".join([f"{f}: got '{a}'" for f, a in failed_files[:5]])
