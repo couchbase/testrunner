@@ -6790,7 +6790,7 @@ class RestConnection(object):
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json',
                    'Authorization': 'Basic %s' % authorization}
-        body = '{"disable_curl": false}'
+        body = '{"enable_curl": true}'
         status, content, header = self._http_request(api, 'POST',
                                                      headers=headers,
                                                      params=body)
@@ -6807,7 +6807,7 @@ class RestConnection(object):
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json',
                    'Authorization': 'Basic %s' % authorization}
-        body = '{"disable_curl": true}'
+        body = '{"enable_curl": false}'
         status, content, header = self._http_request(api, 'POST',
                                                      headers=headers,
                                                      params=body)
