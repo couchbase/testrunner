@@ -1752,7 +1752,14 @@ class ESRunQueryCompare(Task):
         self.show_results = False
         self.query_index = query_index
         self.passed = True
-        self.es_index_name = es_index_name or "es_index"
+        # Use unique ES index name from FTSBaseTest if not provided
+        if es_index_name is None:
+            # Lazy import to avoid circular dependency at module load time
+            from pytests.fts.fts_base import FTSBaseTest
+            self.es_index_name = FTSBaseTest.get_es_index_name()
+            self.log.info(f"Using unique ES index name from FTSBaseTest: {self.es_index_name}")
+        else:
+            self.es_index_name = es_index_name
         self.n1ql_executor = n1ql_executor
         self.score = TestInputSingleton.input.param("score",'')
         self.llm_model = TestInputSingleton.input.param("llm_model", "all-MiniLM-L6-v2")
