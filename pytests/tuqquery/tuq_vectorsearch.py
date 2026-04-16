@@ -1674,3 +1674,21 @@ class VectorSearchTests(QueryTests):
 
         # Check num_docs_indexed
         self.assertEqual(index_stats['default'][index_name]['num_docs_indexed'], num_docs_indexed)
+
+
+    def test_infer_num_sample_values_zero(self):
+        """
+        MB-68228: INFER with num_sample_values=0 should skip all samples.
+        Adding num_sample_values paramter 
+        """
+        result = self.run_cbq_query('INFER default WITH {"num_sample_values": 0}')
+        schema_variants = result['results'][0]  
+        
+        # Verify no samples in any field across all variants
+        for variant in schema_variants:
+            props = variant.get('properties', {})
+            for field_name, field_info in props.items():
+                self.assertNotIn('samples', field_info, 
+                                f"With num_sample_values=0, field '{field_name}' should not have samples")
+        
+        self.log.info("Verified: All fields have no samples with num_sample_values=0")
