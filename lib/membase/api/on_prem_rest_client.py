@@ -2451,6 +2451,18 @@ class RestConnection(object):
         if status:
             return str(content).split('b')[1].split('\'')[1]
 
+    def get_indexer_in_use_encryption_keys(self):
+        """
+        GET :: :9102/encryption/GetInUseKeys
+        """
+        api = self.index_baseUrl + 'encryption/GetInUseKeys'
+        status, content, header = self._http_request(api)
+        try:
+            json_parsed = json.loads(content)
+        except (TypeError, ValueError):
+            json_parsed = content
+        return status, json_parsed
+
 
     def get_index_aggregate_metadata(self):
         api = self.index_baseUrl + 'getIndexMetadata'
@@ -3265,9 +3277,9 @@ class RestConnection(object):
 
     def trigger_data_reencryption(self, bucket):
         """
-        POST :: /controller/dropEncryptionAtRestKeys/bucket/<bucket>
+        POST :: controller/dropEncryptionAtRestDeks/bucket/<bucket>
         """
-        api = self.baseUrl + '/controller/dropEncryptionAtRestKeys/bucket/' + str(bucket)
+        api = self.baseUrl + 'controller/dropEncryptionAtRestDeks/bucket/' + str(bucket)
         headers = self._create_headers()
         status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
         return status, json_parsed
@@ -3287,9 +3299,8 @@ class RestConnection(object):
         """
         api = self.baseUrl + '/pools/default/buckets/' + str(bucket)
         headers = self._create_headers()
-        params = {'encryptionAtRestKeyId': secret_id}
-        json_params = json.dumps(params)
-        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        params = urllib.parse.urlencode({'encryptionAtRestKeyId': secret_id})
+        status, json_parsed, _ = self._http_request(api, method='POST', params=params, headers=headers)
         return status, json_parsed
 
     def disable_bucket_encryption(self, bucket):
@@ -3298,9 +3309,38 @@ class RestConnection(object):
         """
         api = self.baseUrl + '/pools/default/buckets/' + str(bucket)
         headers = self._create_headers()
-        params = {'encryptionAtRestKeyId': '-1'}
-        json_params = json.dumps(params)
-        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        params = urllib.parse.urlencode({'encryptionAtRestKeyId': '-1'})
+        status, json_parsed, _ = self._http_request(api, method='POST', params=params, headers=headers)
+        return status, json_parsed
+
+    def set_bucket_dek_rotation_interval(self, bucket, interval_seconds):
+        """
+        Set the DEK rotation interval for a bucket.
+        POST :: /pools/default/buckets/<bucket>
+        
+        Args:
+            bucket: Name of the bucket
+            interval_seconds: DEK rotation interval in seconds
+        """
+        api = self.baseUrl + '/pools/default/buckets/' + str(bucket)
+        headers = self._create_headers()
+        params = urllib.parse.urlencode({'encryptionAtRestDekRotationInterval': interval_seconds})
+        status, json_parsed, _ = self._http_request(api, method='POST', params=params, headers=headers)
+        return status, json_parsed
+
+    def set_bucket_dek_lifetime(self, bucket, lifetime_seconds):
+        """
+        Set the DEK lifetime for a bucket.
+        POST :: /pools/default/buckets/<bucket>
+        
+        Args:
+            bucket: Name of the bucket
+            lifetime_seconds: DEK lifetime in seconds
+        """
+        api = self.baseUrl + '/pools/default/buckets/' + str(bucket)
+        headers = self._create_headers()
+        params = urllib.parse.urlencode({'encryptionAtRestDekLifetime': lifetime_seconds})
+        status, json_parsed, _ = self._http_request(api, method='POST', params=params, headers=headers)
         return status, json_parsed
 
     def get_bucket_stats_json(self, bucket='default'):

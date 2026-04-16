@@ -151,8 +151,13 @@ class EncryptionUtil:
             )
             self.log.info("Log Params: {}".format(log_params))
             status, response = rest.create_secret(log_params)
+            if not status:
+                raise Exception("Failed to create encryption at rest secret. Response: {0}".format(response))
             response_dict = json.loads(response)
-            result['encryption_at_rest_id'] = response_dict.get('id')
+            encryption_at_rest_id = response_dict.get('id')
+            if encryption_at_rest_id is None:
+                raise Exception("Encryption at rest secret created but no ID returned. Response: {0}".format(response))
+            result['encryption_at_rest_id'] = encryption_at_rest_id
             self.log.info("Encryption at rest ID: {0}".format(result['encryption_at_rest_id']))
 
         if enable_config_encryption_at_rest:
@@ -164,8 +169,12 @@ class EncryptionUtil:
             )
             self.log.info("Config Log Params: {}".format(log_params))
             status, response = rest.create_secret(log_params)
+            if not status:
+                raise Exception("Failed to create config encryption at rest secret. Response: {0}".format(response))
             response_dict = json.loads(response)
             config_encryption_at_rest_id = response_dict.get('id')
+            if config_encryption_at_rest_id is None and not KMIP_for_config_encryption:
+                raise Exception("Config encryption at rest secret created but no ID returned. Response: {0}".format(response))
             if KMIP_for_config_encryption:
                 config_encryption_at_rest_id = result.get('KMIP_id')
             result['config_encryption_at_rest_id'] = config_encryption_at_rest_id
@@ -192,8 +201,12 @@ class EncryptionUtil:
             )
             self.log.info("Log Log Params: {}".format(log_params))
             status, response = rest.create_secret(log_params)
+            if not status:
+                raise Exception("Failed to create log encryption at rest secret. Response: {0}".format(response))
             response_dict = json.loads(response)
             log_encryption_at_rest_id = response_dict.get('id')
+            if log_encryption_at_rest_id is None and not KMIP_for_log_encryption:
+                raise Exception("Log encryption at rest secret created but no ID returned. Response: {0}".format(response))
             if KMIP_for_log_encryption:
                 log_encryption_at_rest_id = result.get('KMIP_id')
             result['log_encryption_at_rest_id'] = log_encryption_at_rest_id
@@ -220,8 +233,12 @@ class EncryptionUtil:
             )
             self.log.info("Audit Log Log Params: {}".format(log_params))
             status, response = rest.create_secret(log_params)
+            if not status:
+                raise Exception("Failed to create audit encryption at rest secret. Response: {0}".format(response))
             response_dict = json.loads(response)
             audit_encryption_at_rest_id = response_dict.get('id')
+            if audit_encryption_at_rest_id is None and not KMIP_for_audit_encryption:
+                raise Exception("Audit encryption at rest secret created but no ID returned. Response: {0}".format(response))
             if KMIP_for_audit_encryption:
                 audit_encryption_at_rest_id = result.get('KMIP_id')
             result['audit_encryption_at_rest_id'] = audit_encryption_at_rest_id

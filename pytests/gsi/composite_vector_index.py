@@ -812,9 +812,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
             self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
             self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
-            self.drop_all_indexes()
-            self.sleep(120)
-            self.check_storage_directory_cleaned_up()
+            self.drop_index_node_resources_utilization_validations()
             # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
             # if not self.validate_memory_released():
             #     raise AssertionError("Memory not released despite dropping all the indexes")
@@ -892,9 +890,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             codebook_memory_per_index_map, aggregated_codebook_memory_utilization = self.get_per_index_codebook_memory_usage()
             self.log.info(f"codebook_memory_per_index_map : {codebook_memory_per_index_map}")
             self.log.info(f"aggregated_codebook_memory_utilization : {aggregated_codebook_memory_utilization}")
-            self.drop_all_indexes()
-            self.sleep(120)
-            self.check_storage_directory_cleaned_up()
+            self.drop_index_node_resources_utilization_validations()
             # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
             # if not self.validate_memory_released():
             #     raise AssertionError("Memory not released despite dropping all the indexes")
@@ -2047,23 +2043,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.validate_scans_for_recall_and_accuracy(select_query=select_query)
 
 
-        for namespace in self.namespaces:
-            keyspace = namespace.split(":")[-1]
-            bucket, scope, collection = keyspace.split(".")
-
-            self.gen_create = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="create", dim=384,
-                                            create_start=self.num_of_docs_per_collection,
-                                            create_end=(self.num_of_docs_per_collection +
-                                                        self.num_of_docs_per_collection // 2))
-            #self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_create)
-            task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
-                                                    generator=self.gen_create,
-                                                    timeout_secs=2000, use_magma_loader=True)
-            task.result()
-
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
             executor.submit(self.gsi_util_obj.run_continous_query_load,
@@ -2087,22 +2066,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
-        for namespace in self.namespaces:
-            keyspace = namespace.split(":")[-1]
-            bucket, scope, collection = keyspace.split(".")
-
-            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
-                                            percent_update=100, percent_delete=0, workers=16, scope=scope,
-                                            collection=collection, json_template="Cars", timeout=2000,
-                                            op_type="update", mutate=1, dim=384,
-                                            update_start=1,
-                                            update_end=(self.num_of_docs_per_collection +
-                                                        self.num_of_docs_per_collection // 2))
-            # self.load_docs_via_magma_server(server=data_nodes[0], bucket=bucket, gen=self.gen_update)
-            task = self.cluster.async_load_gen_docs(data_nodes[0], bucket=bucket,
-                                                    generator=self.gen_update,
-                                                    timeout_secs=2000, use_magma_loader=True)
-            task.result()
 
         with ThreadPoolExecutor() as executor:
             self.gsi_util_obj.query_event.set()
@@ -2139,8 +2102,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         for index in index_item_count_map:
             if index in partial_index_list:
                     continue
-            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection +
-                                                        self.num_of_docs_per_collection // 2, f"stats {stats}")
+            self.assertEqual(index_item_count_map[index], self.num_of_docs_per_collection, f"stats {stats}")
 
         for select_query in select_queries:
             if "ANN_DISTANCE" not in select_query:
@@ -2195,6 +2157,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.gsi_util_obj.query_event.clear()
 
         self.update_master_node()
+        self.wait_until_indexes_online()
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         partial_index_list = self.get_partial_indexes_name_list()
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
@@ -2369,6 +2332,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     task.result()
             self.sleep(60)
             self.update_master_node()
+            self.wait_until_indexes_online()
             self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
             partial_index_list = self.get_partial_indexes_name_list()
             _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)

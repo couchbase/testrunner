@@ -525,6 +525,15 @@ class OnPremBaseTestCase(unittest.TestCase):
             )
             # Set the returned IDs back to self
             self.encryption_util.set_encryption_ids(self, encryption_result)
+            # Log the encryption IDs that were set
+            if hasattr(self, 'encryption_at_rest_id'):
+                self.log.info("encryption_at_rest_id set to: {0}".format(self.encryption_at_rest_id))
+            if hasattr(self, 'config_encryption_at_rest_id'):
+                self.log.info("config_encryption_at_rest_id set to: {0}".format(self.config_encryption_at_rest_id))
+            if hasattr(self, 'log_encryption_at_rest_id'):
+                self.log.info("log_encryption_at_rest_id set to: {0}".format(self.log_encryption_at_rest_id))
+            if hasattr(self, 'audit_encryption_at_rest_id'):
+                self.log.info("audit_encryption_at_rest_id set to: {0}".format(self.audit_encryption_at_rest_id))
 
             if self.dgm_run:
                 self.quota = 256

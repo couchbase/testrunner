@@ -2343,12 +2343,26 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         # Wait for rebalance to start
         self.log.info("Waiting for rebalance to start")
         time.sleep(3)
+        status = None
+        rebalance_start_wait_timeout = 120
+        rebalance_start_wait_deadline = time.time() + rebalance_start_wait_timeout
         try:
-            status, _ = self.rest._rebalance_status_and_progress()
-            while status != 'running':
-                time.sleep(1)
+            while time.time() < rebalance_start_wait_deadline:
                 status, _ = self.rest._rebalance_status_and_progress()
-            self.log.info("Rebalance has started running")
+                if status == 'running':
+                    self.log.info("Rebalance has started running")
+                    break
+                if rebalance.done():
+                    self.log.info(
+                        f"Rebalance finished before reporting running state. Current status: {status}"
+                    )
+                    break
+                time.sleep(1)
+            else:
+                self.log.warning(
+                    f"Rebalance did not report running within "
+                    f"{rebalance_start_wait_timeout} seconds. Current status: {status}"
+                )
         except Exception as e:
             self.log.error(f"Error checking rebalance status: {e}")
 

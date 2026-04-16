@@ -34,6 +34,7 @@ python3 testrunner.py -i b/resources/7-nodes-index-template.ini -c conf/gsi/gsi_
 | Recovery | `recovery_gsi.py`, `plasma_recovery.py` | Index recovery from node failures, disk flush, rebalance, DGM |
 | Restore | `backup_and_restore.py` | Full backup/restore using cbbackupmgr or REST API |
 | Replicas | `gsi_replica_indexes.py`, `gsi_alter_index_replicas.py` | Index replicas and failover with replicas |
+| Encryption | `gsi_encryption_at_rest.py`, `gsi_n2nencryption.py` | Encryption at rest and node-to-node encryption tests |
 | Vector | `bhive_e2e_tests.py` (120KB), `composite_vector_index.py` (292KB) | BHIVE chaos/e2e, composite vector + scalar indexing |
 
 **Configuration files:** `conf/gsi/` has 104+ test suite conf files (including `bhive-*.conf` for BHIVE chaos tests and `vector-*.conf` for composite vector indexes) |
@@ -50,6 +51,8 @@ python3 testrunner.py -i b/resources/7-nodes-index-template.ini -c conf/gsi/gsi_
 - `scan_consistency=request_plus|at_plus|statement_plus|not_bounded`
 - `defer_build=True`, `build_index_after_create=True`
 - `groups=simple|composite|partitioned|range`
+- `enable_encryption_at_rest=True` (enables encryption at rest setup via basetestcase)
+- `skip_bucket_setup=True` (for tests that manage bucket creation manually)
 
 **Base class utilities (base_gsi.py):**
 - `run_cbq_query` - N1QL execution

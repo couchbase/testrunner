@@ -30,6 +30,7 @@ from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
+from couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
@@ -159,6 +160,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.quantization_algo_color_vector = self.input.param("quantization_algo_color_vector", "SQ8")
         self.quantization_algo_description_vector = self.input.param("quantization_algo_description_vector", "SQ8")
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
+        self.encryption_helper = EncryptionAtRestHelper(log)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.base64 = self.input.param("base64", False)
@@ -225,6 +227,68 @@ class BaseSecondaryIndexingTests(QueryTests):
                 self.fail(f"Disabling sequential scan failed. {response.content}")
             self.log.info(f"{data} set")
             self.log.info(response.text)
+
+    # ========================================================================
+    # File Encryption Validation Methods
+    # ========================================================================
+
+    def validate_file_encryption(self, index_nodes, expected_key_id=None, encrypted_bucket_names=None):
+        """
+        File encryption validation for GSI with encryption at rest.
+        
+        Currently only validates files under the Snapshots folder (@2i/Snapshots/).
+        Other validations are not ready and will be added in future iterations.
+        
+        Args:
+            index_nodes: List of index server objects
+            expected_key_id: Optional encryption key id expected in encrypted file headers
+            encrypted_bucket_names: Optional list of bucket names whose index files should be
+                checked for encryption
+            
+        Returns:
+            dict: Aggregated validation results
+        """
+        self.log.info("=== Starting GSI file encryption validation ===")
+        self.log.info("NOTE: Currently only checking files under the Snapshots folder. Other validations are not ready.")
+        
+        all_results = {}
+        
+        # Only validate files under the Snapshots folder
+        self.log.info("--- Validating GSI Snapshots folder file encryption ---")
+        snapshot_results = self.encryption_helper.verify_gsi_snapshot_files_encrypted(
+            index_nodes,
+            expected_key_id=expected_key_id,
+            encrypted_bucket_names=encrypted_bucket_names
+        )
+        all_results["gsi_snapshot_files"] = snapshot_results
+        
+        # Log summary and errors for failed validations
+        passed = sum(1 for r in snapshot_results.values() if r.get("status") == "passed")
+        failed = sum(1 for r in snapshot_results.values() if r.get("status") == "failed")
+        skipped = sum(1 for r in snapshot_results.values() if r.get("status") == "skipped")
+        self.log.info(f"GSI snapshot files: {passed} passed, {failed} failed, {skipped} skipped")
+        
+        # Log error messages for failed snapshot file validations
+        for node, result in snapshot_results.items():
+            if result.get("status") == "failed":
+                self.log.error(f"GSI snapshot file encryption validation FAILED on {node}: {result}")
+        
+        # TODO validations (to be implemented in future iterations when ready)
+        todo_items = [
+            "GSI storage files (BHIVE/Plasma/MOI) validation - not ready",
+            "GSI indexer_stats.log validation - not ready",
+            "Index metadata (Magma vs ForestDB) validation - not ready",
+            "Index metaKV tokens validation - not ready",
+            "Temp files (scan backfill files) validation - not ready",
+            "Request handler cache persisted data validation - not ready",
+            "Persisted stats files validation - not ready"
+        ]
+        all_results["TODO"] = todo_items
+        for item in todo_items:
+            self.log.info(f"TODO: {item}")
+        
+        self.log.info("=== GSI file encryption validation completed ===")
+        return all_results
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()
