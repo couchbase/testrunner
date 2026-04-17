@@ -103,10 +103,10 @@ class XDCRDifferTest(XDCRNewBaseTest):
         super().tearDown()
 
     def _build_xdcr_differ_cmd(self, passphrase=None, encrypted_log_file=None,
-                                decrypt_mode=False, decrypt_file=None,
-                                yaml_config=True, extra_flags=None):
+                               decrypt_mode=False, decrypt_file=None,
+                               yaml_config=True, extra_flags=None):
         """Build the xdcrDiffer command with appropriate flags.
-        
+
         Stores passphrase internally for use by _run_xdcr_differ with pexpect.
         Returns just the command string for backward compatibility.
         """
@@ -146,24 +146,24 @@ class XDCRDifferTest(XDCRNewBaseTest):
 
     def _run_xdcr_differ(self, cmd, timeout=1000, get_exit_code=False):
         """Execute xdcrDiffer command and return output.
-        
+
         Uses pexpect for TTY-based passphrase input when _current_passphrase is set.
         This is required because xdcrDiffer uses golang.org/x/term which needs a real TTY.
-        
+
         Args:
             cmd: Command to execute
             timeout: Timeout in seconds
             get_exit_code: If True, also return exit code
-            
+
         Returns:
             If get_exit_code is False: (output, err)
             If get_exit_code is True: (output, err, exit_code)
         """
         self.log.info(f"Running XDCR Differ command: {cmd}")
-        
+
         env_vars = self._get_cbauth_env_vars()
         passphrase = getattr(self, '_current_passphrase', None)
-        
+
         if passphrase and "-encryptionPassphrase" in cmd:
             # Use PTY for TTY-based passphrase input
             # xdcrDiffer prompts:
@@ -197,12 +197,12 @@ class XDCRDifferTest(XDCRNewBaseTest):
                             exit_code = -1
                         output.pop(i)
                         break
-        
+
         self.log.info(f"Output: {output}")
         if err:
             self.log.info(f"Stderr: {err}")
         self.log.info(f"Exit code: {exit_code}")
-        
+
         if get_exit_code:
             return output, err, exit_code
         else:
@@ -226,7 +226,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
 
     def _verify_directories_exist(self, fail_on_missing=True):
         """Verify all output directories were created.
-        
+
         Args:
             fail_on_missing: If True, fail the test if directories don't exist.
                            If False, just return True/False.
@@ -261,7 +261,6 @@ class XDCRDifferTest(XDCRNewBaseTest):
 
     def _verify_magic_bytes(self, file_path, expected_magic=None):
         """Verify magic bytes at start of encrypted file.
-        
         Encrypted files have a leading null byte before the magic string
         "Couchbase Encrypted". Uses xxd to safely read binary header as hex,
         then converts to ASCII for comparison. This avoids UTF-8 decode errors.
@@ -284,7 +283,6 @@ class XDCRDifferTest(XDCRNewBaseTest):
 
     def _verify_magic_bytes_any_file(self, directory, expected_magic=None):
         """Verify magic bytes in at least one .enc file in the given directory.
-        
         Checks all .enc files and returns True if at least one contains the
         expected magic bytes. Logs details for files that don't match.
         """
@@ -307,20 +305,20 @@ class XDCRDifferTest(XDCRNewBaseTest):
             else:
                 failed_files.append((f, actual))
 
+        if failed_files:
+            self.log.info(f"Files without magic header (may be expected for certain file types): "
+                          f"{[f for f, _ in failed_files]}")
+            # Log content of first 5 failed files for debugging
+            for file_path, actual_magic in failed_files[:5]:
+                self.log.info(f"\n=== Content of failed file: {file_path} ===")
+                cat_cmd = f"cat {file_path} 2>/dev/null | head -20"
+                content, _ = self.src_master_shell.execute_command(cat_cmd)
+                if content:
+                    self.log.info(f"First 20 lines:\n{''.join(content)}")
+                else:
+                    self.log.info(f"Unable to read file content")
         if passed_files:
             self.log.info(f"Magic bytes verified in {len(passed_files)}/{len(passed_files) + len(failed_files)} files")
-            if failed_files:
-                self.log.info(f"Files without magic header (may be expected for certain file types): "
-                              f"{[f for f, _ in failed_files]}")
-                # Log content of first 5 failed files for debugging
-                for file_path, actual_magic in failed_files[:5]:
-                    self.log.info(f"\n=== Content of failed file: {file_path} ===")
-                    cat_cmd = f"cat {file_path} 2>/dev/null | head -20"
-                    content, _ = self.src_master_shell.execute_command(cat_cmd)
-                    if content:
-                        self.log.info(f"First 20 lines:\n{''.join(content)}")
-                    else:
-                        self.log.info(f"Unable to read file content")
             return True, expected_magic
 
         details = "; ".join([f"{f}: got '{a}'" for f, a in failed_files[:5]])
@@ -982,7 +980,8 @@ class XDCRDifferTest(XDCRNewBaseTest):
             # List directory to aid debugging
             ls_cmd = f"ls -la {checkpoint_dir} 2>/dev/null"
             ls_out, _ = self.src_master_shell.execute_command(ls_cmd)
-            self.fail(f"No checkpoint file found matching '*{checkpoint_name}*' in {checkpoint_dir}. Contents: {ls_out}")
+            self.fail(
+                f"No checkpoint file found matching '*{checkpoint_name}*' in {checkpoint_dir}. Contents: {ls_out}")
 
         actual_ckpt = ckpt_files[0].strip()
         self.log.info(f"Found checkpoint file: {actual_ckpt}")
@@ -1076,7 +1075,8 @@ class XDCRDifferTest(XDCRNewBaseTest):
         if not ckpt_files or not ckpt_files[0].strip():
             ls_cmd = f"ls -la {checkpoint_dir} 2>/dev/null"
             ls_out, _ = self.src_master_shell.execute_command(ls_cmd)
-            self.fail(f"No checkpoint file found matching '*{checkpoint_name}*' in {checkpoint_dir}. Contents: {ls_out}")
+            self.fail(
+                f"No checkpoint file found matching '*{checkpoint_name}*' in {checkpoint_dir}. Contents: {ls_out}")
 
         self.log.info(f"Found checkpoint files: {ckpt_files[0].strip()}")
 
@@ -1189,7 +1189,7 @@ class XDCRDifferTest(XDCRNewBaseTest):
         return 0
 
     def _wait_for_bucket_items(self, server, bucket, expected_items, timeout=1800,
-                              poll_interval=10):
+                               poll_interval=10):
         """
         Wait for bucket to reach expected item count.
 
