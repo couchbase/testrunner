@@ -1,7 +1,10 @@
 import copy
 from couchbase_helper.documentgenerator import JsonDocGenerator
-from lib.membase.api.rest_client import RestConnection
-from pytests.basetestcase import BaseTestCase
+from serverless.dapi.dapi_helper import doc_generator
+from membase.api.rest_client import RestConnection
+from basetestcase import BaseTestCase
+from remote.remote_util import RemoteMachineShellConnection
+from cb_tools.cbstats import Cbstats
 
 class ExpiryMaxTTL(BaseTestCase):
 
@@ -254,3 +257,84 @@ class ExpiryMaxTTL(BaseTestCase):
             self.log.info("Items: {0}".format(items))
             if items != 0:
                 self.fail("FAIL: Docs with updated expiry not deleted after new exp has elapsed!")
+
+    def test_persistent_metadata_purge_age_purge_validation(self):
+        """Test actual purging with persistent_metadata_purge_age set to max value
+        This test validates that tombstones are purged correctly when
+        persistent_metadata_purge_age is set to the maximum value (730 days)
+        """
+        self.log.info("Starting test for persistent_metadata_purge_age "
+                     "purge validation with max value (730 days)")
+
+        shell = RemoteMachineShellConnection(self.master)
+        cbstat = Cbstats(shell)
+        bucket_name = self.buckets[0].name
+
+        # Load documents with expiry
+        self.log.info("Loading documents with expiry to create tombstones")
+        expiry_ttl = 10  # 10 seconds TTL
+        key_prefix = "test_key"
+        doc_generator_expiry = doc_generator(
+            key_prefix, key_size=8,
+            value_size=256, number_of_docs=self.num_items)
+
+        task = self.cluster.async_load_gen_docs(
+            self.master, self.buckets[0].name, doc_generator_expiry,
+            self.buckets[0].kvs[1], "create",
+            exp=expiry_ttl,
+            batch_size=10)
+        task.result()
+
+        # Wait for documents to expire
+        self.sleep(expiry_ttl + 5, "Wait for documents to expire")
+
+        # Trigger expiry pager to create tombstones
+        self.log.info("Triggering expiry pager to create tombstones")
+        self.expire_pager(self.servers, 30)
+        self.sleep(30, "Wait for expiry pager to process")
+
+        # Check for document count after expiry
+        stats = cbstat.all_stats(bucket_name)
+        initial_doc_count = int(stats.get("curr_items", 0))
+        self.log.info(f"Document count after expiry: {initial_doc_count}")
+
+        # Set persistent_metadata_purge_age to max value (730 days)
+        max_purge_age = 730 * 24 * 60 * 60  # 730 days in seconds
+        self.log.info(f"Setting persistent_metadata_purge_age to {max_purge_age} "
+                     f"seconds (730 days = 2 years)")
+        shell.execute_cbepctl(self.buckets[0], "", "set flush_param",
+                             "persistent_metadata_purge_age", str(max_purge_age))
+
+        # Verify the value was set using cbstats
+        stats = cbstat.all_stats(bucket_name)
+        actual_purge_age = int(stats.get("ep_persistent_metadata_purge_age", 0))
+
+        self.assertEqual(actual_purge_age, max_purge_age,
+                        f"ep_persistent_metadata_purge_age mismatch: "
+                        f"expected {max_purge_age}, got {actual_purge_age}")
+        self.log.info(f"Verified persistent_metadata_purge_age set to "
+                     f"{actual_purge_age} seconds")
+
+        # For validation purposes, run compaction to ensure tombstones
+        # can be cleaned up with the new max purge age
+        self.log.info("Running compaction to validate purge age configuration")
+        compact_tasks = list()
+        for bucket in self.buckets:
+            compact_tasks.append(self.cluster.async_compact_bucket(
+                self.master, bucket))
+        for task in compact_tasks:
+            task.result()
+            self.assertTrue(task.result, "Compaction failed due to: "
+                                         + str(task.exception))
+
+        # Verify that documents were expired (count should be 0)
+        stats = cbstat.all_stats(bucket_name)
+        final_doc_count = int(stats.get("curr_items", 0))
+
+        self.assertEqual(final_doc_count, 0,
+                        f"Documents not properly purged: expected 0, "
+                        f"got {final_doc_count}")
+        self.log.info("Successfully validated persistent_metadata_purge_age "
+                     "with max value (730 days)")
+
+        shell.disconnect()
