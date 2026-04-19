@@ -158,7 +158,7 @@ else
         -v /tmp/testexec.$$.ini:/testrunner/testexec.$$.ini \
         testrunner:install python3 scripts/new_install.py \
         -i testexec.$$.ini \
-        -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+        -p force_reinstall=True,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_number},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
       status=$?
       set +x
     else
@@ -171,7 +171,7 @@ else
         version_to_use=$version_number
       fi
       set -x
-      ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=False,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_to_use},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
+      ${py_executable} scripts/new_install.py -i /tmp/testexec.$$.ini -p force_reinstall=True,timeout=${INSTALL_TIMEOUT},skip_local_download=${SKIP_LOCAL_DOWNLOAD},get-cbcollect-info=True,version=${version_to_use},product=cb,debug_logs=True,ntp=True,url=${url}${extraInstall}
       status=$?
       set +x
     fi
