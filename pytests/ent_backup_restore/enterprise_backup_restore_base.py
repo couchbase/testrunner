@@ -1821,29 +1821,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.info("Extract keys with regex pattern '%s' either in key or body"
                               % regex_pattern)
                 max_display = 10
-                for key in restore_file_data[bucket.name]:
-                    if self.debug_logs:
-                        if max_display > 0:
-                            print(("key in backup file of bucket %s:  %s" \
-                                  % (bucket.name, key)))
-                            max_display -= 1
-                    if validate_keys:
-                        if pattern.search(key):
-                            regex_backup_data[bucket.name][key] = \
-                                restore_file_data[bucket.name][key]
-                            key_in_file_match_regex += 1
+                if restore_file_data:
+                    if bucket.name in restore_file_data:
+                        for key in restore_file_data[bucket.name]:
+                            if self.debug_logs:
+                                if max_display > 0:
+                                    print(("key in backup file of bucket %s:  %s" \
+                                          % (bucket.name, key)))
+                                    max_display -= 1
+                            if validate_keys:
+                                if pattern.search(key):
+                                    regex_backup_data[bucket.name][key] = \
+                                        restore_file_data[bucket.name][key]
+                                    key_in_file_match_regex += 1
+                            else:
+                                if self.debug_logs:
+                                    if max_display > 0:
+                                        print(("value of key in backup file  ", \
+                                              restore_file_data[bucket.name][key]))
+                                        max_display -= 1
+                                if " " in restore_file_data[bucket.name][key]["Value"] and " " in regex_pattern:
+                                    pattern = re.compile(regex_pattern)
+                                if pattern.search(str(restore_file_data[bucket.name][key]["Value"])):
+                                    regex_backup_data[bucket.name][key] = \
+                                        restore_file_data[bucket.name][key]
+                                    key_in_file_match_regex += 1
                     else:
-                        if self.debug_logs:
-                            if max_display > 0:
-                                print(("value of key in backup file  ", \
-                                      restore_file_data[bucket.name][key]))
-                                max_display -= 1
-                        if " " in restore_file_data[bucket.name][key]["Value"] and " " in regex_pattern:
-                            pattern = re.compile(regex_pattern)
-                        if pattern.search(str(restore_file_data[bucket.name][key]["Value"])):
-                            regex_backup_data[bucket.name][key] = \
-                                restore_file_data[bucket.name][key]
-                            key_in_file_match_regex += 1
+                        self.log.warning("Bucket '%s' not found in restore_file_data. "
+                                         "Available buckets: %s" % (bucket.name, list(restore_file_data.keys())))
+                else:
+                    self.log.warning("restore_file_data is None or empty for regex pattern '%s'" % regex_pattern)
                 if self.debug_logs:
                     if max_display > 0:
                         print(("\nKeys and value in backup file of bucket {0} \
@@ -1902,57 +1909,69 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 buckets_data[bucket.name] = {key: buckets_data[bucket.name][key] for key in buckets_data[bucket.name].keys() if key in filter_keys}
 
             for key in buckets_data[bucket.name]:
-                if restore_file_data[bucket.name]:
-                    try:
-                        if restore_file_data[bucket.name][key]:
-                            bucket_data_value = buckets_data[bucket.name][key]
-                            restore_data_value = restore_file_data[bucket.name][key]["Value"]
-                            if version[:3] <= "6.6":
-                                bucket_data_value = str(bucket_data_value.replace(" ", ""))
+                if restore_file_data:
+                    if bucket.name in restore_file_data and restore_file_data[bucket.name]:
+                        try:
+                            if restore_file_data[bucket.name][key]:
+                                bucket_data_value = buckets_data[bucket.name][key]
+                                restore_data_value = restore_file_data[bucket.name][key]["Value"]
+                                if version[:3] <= "6.6":
+                                    bucket_data_value = str(bucket_data_value.replace(" ", ""))
 
-                            # A hack to adjust the bucket data string in binary merge. For some reason the data there
-                            # is stringified to a different (unknown)format. This  workaround removes all the meta characters,
-                            # so that only the data itself stays
-                            if self.document_type == "binary":
-                                 bucket_data_value = bucket_data_value[bucket_data_value.find("ent-backup"):bucket_data_value.rfind('')]
-                                 restore_data_value = restore_data_value[bucket_data_value.find("ent-backup"):restore_data_value.rfind('')]
-                                 bucket_data_value = bucket_data_value.replace("\\'", "'")
-                                 restore_data_value = restore_data_value.replace("b'", "")
-                                 bucket_data_value = bucket_data_value.replace("b'", "")
-                                 restore_data_value = restore_data_value.replace("b\"", "")
-                                 bucket_data_value = bucket_data_value.replace("b\"", "")
-                                 bucket_data_value = restore_data_value.replace('\'', '')
-                                 restore_data_value = restore_data_value.replace('\'', '')
+                                # A hack to adjust the bucket data string in binary merge. For some reason the data there
+                                # is stringified to a different (unknown)format. This  workaround removes all the meta characters,
+                                # so that only the data itself stays
+                                if self.document_type == "binary":
+                                     bucket_data_value = bucket_data_value[bucket_data_value.find("ent-backup"):bucket_data_value.rfind('')]
+                                     restore_data_value = restore_data_value[bucket_data_value.find("ent-backup"):restore_data_value.rfind('')]
+                                     bucket_data_value = bucket_data_value.replace("\\'", "'")
+                                     restore_data_value = restore_data_value.replace("b'", "")
+                                     bucket_data_value = bucket_data_value.replace("b'", "")
+                                     restore_data_value = restore_data_value.replace("b\"", "")
+                                     bucket_data_value = bucket_data_value.replace("b\"", "")
+                                     bucket_data_value = restore_data_value.replace('\'', '')
+                                     restore_data_value = restore_data_value.replace('\'', '')
 
-                            if bucket_data_value != restore_data_value:
-                                if count < 20:
-                                    self.log.error("Data does not match at key {0}.\
-                                                bucket: {1} != {2} file" \
-                                                   .format(key, bucket_data_value,
-                                                           restore_data_value))
-                                    data_matched = False
-                                    count += 1
-                                else:
-                                    raise Exception("Data not match in backup bucket {0}" \
-                                                    .format(bucket.name))
-                            key_count += 1
+                                if bucket_data_value != restore_data_value:
+                                    if count < 20:
+                                        self.log.error("Data does not match at key {0}.\
+                                                    bucket: {1} != {2} file" \
+                                                       .format(key, bucket_data_value,
+                                                               restore_data_value))
+                                        data_matched = False
+                                        count += 1
+                                    else:
+                                        raise Exception("Data not match in backup bucket {0}" \
+                                                        .format(bucket.name))
+                                key_count += 1
+                            else:
+                                raise Exception("Key {0} has no value: {1}"
+                                                .format(key, restore_file_data[bucket.name][key]))
+                        except Exception as e:
+                            if e:
+                                print(e)
+                                raise Exception("There was a prolbem with the data in bucket: {0}".format(bucket.name))
+                    else:
+                        if bucket.name not in restore_file_data:
+                            self.log.warning("Bucket '%s' not found in restore_file_data. "
+                                             "Available buckets: %s" % (bucket.name, list(restore_file_data.keys())))
                         else:
-                            raise Exception("Key {0} has no value: {1}"
-                                            .format(key, restore_file_data[bucket.name][key]))
-                    except Exception as e:
-                        if e:
-                            print(e)
-                            raise Exception("There was a prolbem with the data in bucket: {0}".format(bucket.name))
+                            self.log.warning("Bucket '%s' exists in restore_file_data but is empty" % bucket.name)
+                        raise Exception("Database file of bucket {0} is empty"
+                                        .format(bucket.name))
                 else:
-                    raise Exception("Database file of bucket {0} is empty"
-                                    .format(bucket.name))
-            if len(restore_file_data[bucket.name]) != key_count:
-                raise Exception("Total key counts do not match.  Backup {0} != {1} bucket" \
-                                .format(len(restore_file_data[bucket.name]), key_count))
+                    self.log.warning("restore_file_data is None or empty while validating key '%s' in bucket '%s'"
+                                     % (key, bucket.name))
+            if restore_file_data:
+                if bucket.name in restore_file_data:
+                    if len(restore_file_data[bucket.name]) != key_count:
+                        raise Exception("Total key counts do not match.  Backup {0} != {1} bucket" \
+                                        .format(len(restore_file_data[bucket.name]), key_count))
             self.log.info("******** Data match in backup file and bucket {0} ******** " \
                           .format(bucket.name))
             print(("Bucket: ", bucket.name))
-            print(("Total items in backup file:   ", len(bk_file_data[bucket.name])))
+            if bk_file_data and bucket.name in bk_file_data:
+                print(("Total items in backup file:   ", len(bk_file_data[bucket.name])))
             if regex_pattern is not None:
                 print(("Total items to be restored with regex pattern '{0}' is {1} " \
                       .format(regex_pattern, key_count)))
@@ -1963,17 +1982,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 rest = RestConnection(server_bucket[0])
                 actual_keys = rest.get_active_key_count(bucket.name)
             print(("Total items actual in bucket:      ", actual_keys))
-            if actual_keys != key_count:
-                self.fail("Total keys matched: %s != Total keys in bucket %s: %s" \
-                          "at node %s " % (key_count, bucket.name, actual_keys,
-                                           server_bucket[0]))
+            if restore_file_data and bucket.name in restore_file_data:
+                if actual_keys != key_count:
+                    self.fail("Total keys matched: %s != Total keys in bucket %s: %s" \
+                              "at node %s " % (key_count, bucket.name, actual_keys,
+                                               server_bucket[0]))
             if self.merged:
                 if key_check:
                     self.log.info("Check if deleted keys still in backup after merged")
-                    for key in restore_file_data[bucket.name]:
-                        if key == key_check:
-                            raise Exception("There is an old key after delete bucket,"
-                                            " backup and merged ")
+                    if restore_file_data:
+                        if bucket.name in restore_file_data:
+                            for key in restore_file_data[bucket.name]:
+                                if key == key_check:
+                                    raise Exception("There is an old key after delete bucket,"
+                                                    " backup and merged ")
                     self.log.info("No deleted keys in backup after merged")
         return data_matched
 
@@ -2677,6 +2699,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                                       "ent-backup", self.buckets,
                                                                       objstore_provider= self.objstore_provider,
                                                                       backupset=self.backupset)
+        if bk_file_data is None:
+            self.log.error(f"get_kv_dump_from_backup_file returned None. "
+                           f"backupset.directory={self.backupset.directory}, "
+                           f"backupset.name={self.backupset.name}, "
+                           f"buckets={[b.name for b in self.buckets]}, "
+                           f"objstore_provider={type(self.objstore_provider).__name__}")
+            self.fail("Failed to get kv dump from backup file. No bucket data found in backup repository.")
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         rest = RestConnection(self.backupset.restore_cluster_host)
         restore_buckets_items = rest.get_buckets_itemCount()

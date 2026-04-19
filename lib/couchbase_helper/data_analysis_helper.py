@@ -920,6 +920,8 @@ class DataCollector(object):
             bucket_name = None
             if objstore_provider:
                 bucket_name = objstore_provider.list_buckets(backupset.directory, repository, backup_name[0])
+                if not bucket_name:
+                    return None, status
             else:
                 for item in conn.list_files(f"{backupset.directory}/{repository}/{backup_name[0]}"):
                     if bucket.name == "-".join(item["file"].split("-")[:-1]):

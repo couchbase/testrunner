@@ -3518,6 +3518,8 @@ class RestConnection(object):
                 log.info("The bucket still exists, sleep 1 sec and retry")
                 time.sleep(1)
             else:
+                log.error("Failed to create bucket {0} on {1}. Status: {2}, Content: {3}".format(
+                    bucket, self.ip, header['status'], content))
                 raise BucketCreationException(ip=self.ip, bucket_name=bucket)
 
         if (numsleep + 1) == maxwait:
