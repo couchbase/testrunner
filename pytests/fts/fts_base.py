@@ -5725,7 +5725,9 @@ class FTSBaseTest(unittest.TestCase):
                 try:
                     index_doc_count = index.get_indexed_doc_count()
 
-                    if item_count and self.bulk_collections:
+                    if self.bulk_collections and index.collections:
+                        container_doc_count = self._num_items * len(index.collections)
+                    elif item_count and self.bulk_collections:
                         container_doc_count = item_count
                     elif index.collections:
                         container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
@@ -6500,7 +6502,9 @@ class FTSBaseTest(unittest.TestCase):
         for index in self._cb_cluster.get_indexes():
             docs_indexed = index.get_indexed_doc_count()
 
-            if self.bulk_collections and hasattr(self, 'bulk_collections_expected_docs') \
+            if self.bulk_collections and index.collections:
+                container_doc_count = self._num_items * len(index.collections)
+            elif self.bulk_collections and hasattr(self, 'bulk_collections_expected_docs') \
                     and self.bulk_collections_expected_docs:
                 container_doc_count = self.bulk_collections_expected_docs
             elif index.collections:

@@ -4993,3 +4993,70 @@ class StableTopFTS(FTSBaseTest):
         self.log.info(f"Updated index '{index.name}' to 100 collections")
 
         self.wait_for_indexing_complete()
+
+    def test_multi_index_query_10k_collections(self):
+        """Create multiple FTS indexes across random subsets of collections,
+        load data, then query all indexes in parallel."""
+        num_indexes = self._input.param("num_fts_indexes", 20)
+        colls_per_index = self._input.param("colls_per_index", 50)
+
+        self.load_data(generator=None, num_items=self._num_items)
+
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        scope_name = "bulk_scope_0"
+        total_colls = self.fts_collections
+        all_coll_names = [f"bulk_coll_0_{i}" for i in range(total_colls)]
+
+        indexes = []
+        for idx_num in range(num_indexes):
+            subset = random.sample(
+                all_coll_names, min(colls_per_index, len(all_coll_names)))
+            _type = [f"{scope_name}.{c}" for c in subset]
+            index = self._cb_cluster.create_fts_index(
+                name=f"multi_idx_{idx_num}",
+                source_name=bucket.name,
+                collection_index=True,
+                _type=_type,
+                analyzer="standard",
+                scope=scope_name,
+                collections=subset
+            )
+            self.log.info(
+                f"Created index '{index.name}' spanning "
+                f"{len(subset)} collections")
+            indexes.append((index, len(subset)))
+
+        self.wait_for_indexing_complete()
+
+        query = {"match": "emp", "field": "type"}
+        errors = []
+
+        def _query_index(index, expected_docs):
+            try:
+                hits, _, _, _ = index.execute_query(
+                    query=query, expected_hits=expected_docs)
+                self.log.info(
+                    f"Query on '{index.name}': hits={hits}, "
+                    f"expected={expected_docs}")
+            except Exception as e:
+                errors.append(f"Index '{index.name}': {e}")
+
+        threads = []
+        for index, num_colls in indexes:
+            expected = self._num_items * num_colls
+            t = threading.Thread(target=_query_index,
+                                 args=(index, expected))
+            threads.append(t)
+            t.start()
+            self.log.info(
+                f"Started query thread for '{index.name}' "
+                f"(expected hits={expected})")
+
+        for t in threads:
+            t.join()
+
+        if errors:
+            for err in errors:
+                self.log.error(err)
+            self.fail(f"{len(errors)} out of {num_indexes} index queries "
+                      f"failed: {errors}")
