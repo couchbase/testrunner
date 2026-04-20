@@ -154,21 +154,22 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
 
         self.set_internal_xdcr_settings(self.src_master, "SrcHeartbeatMinInterval", 10)
         self.set_internal_xdcr_settings(self.dest_master, "SrcHeartbeatMinInterval", 10)
+        self.wait_interval(60, "Waiting for goxdcr to restart after internal settings change")
         self.src_master_rest.remove_all_replications()
         self.src_master_rest.remove_all_remote_clusters()
         self.wait_interval(90, "Waiting for replications to be deleted from source cluster")
-        retries = 5 
+        retries = 5
         count = 1
         dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-        while count<=retries:
+        while count <= retries:
             dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-            if dest_incoming_repls is None:
+            if not dest_incoming_repls:
                 break
             self.wait_interval(10, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
             count += 1
 
-        if dest_incoming_repls is not None:
-            self.fail("Incoming replications not deleted from dest cluster")
+        if dest_incoming_repls:
+            self.fail(f"Incoming replications not deleted from dest cluster: {dest_incoming_repls}")
 
     def test_node_crash(self):
         self.setup_xdcr_and_load()
