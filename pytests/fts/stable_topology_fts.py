@@ -4437,6 +4437,268 @@ class StableTopFTS(FTSBaseTest):
                     '})'
             self._cb_cluster.run_n1ql_query(query=query)
 
+    _deep_pagination_index_mapping = {
+        "default_analyzer": "standard",
+        "default_datetime_parser": "dateTimeOptional",
+        "default_field": "_all",
+        "default_mapping": {
+            "dynamic": False,
+            "enabled": True,
+            "properties": {
+                "salary": {
+                    "enabled": True,
+                    "dynamic": False,
+                    "fields": [
+                        {
+                            "docvalues": True,
+                            "include_term_vectors": True,
+                            "index": True,
+                            "name": "salary",
+                            "type": "number"
+                        }
+                    ]
+                },
+                "join_date": {
+                    "enabled": True,
+                    "dynamic": False,
+                    "fields": [
+                        {
+                            "docvalues": True,
+                            "include_term_vectors": True,
+                            "index": True,
+                            "name": "join_date",
+                            "type": "datetime"
+                        }
+                    ]
+                },
+                "location": {
+                    "enabled": True,
+                    "dynamic": False,
+                    "fields": [
+                        {
+                            "docvalues": True,
+                            "include_term_vectors": True,
+                            "index": True,
+                            "name": "location",
+                            "type": "geopoint"
+                        }
+                    ]
+                },
+                "dept": {
+                    "enabled": True,
+                    "dynamic": False,
+                    "fields": [
+                        {
+                            "docvalues": True,
+                            "include_term_vectors": True,
+                            "index": True,
+                            "name": "dept",
+                            "type": "text"
+                        }
+                    ]
+                }
+            }
+        },
+        "default_type": "_default",
+        "docvalues_dynamic": True,
+        "index_dynamic": True,
+        "store_dynamic": False,
+        "type_field": "_type"
+    }
+
+    def _create_deep_pagination_nontextual_index(self, bucket):
+        index = self.create_index(bucket, "dp_nontextual_idx")
+        index.index_definition['params']['mapping'] = copy.deepcopy(self._deep_pagination_index_mapping)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        return index
+
+    def _get_nontextual_sort_mode(self, sort_type):
+        if sort_type == "numeric":
+            return [{"by": "field", "field": "salary", "type": "number"}, "_id"]
+        elif sort_type == "datetime":
+            return [{"by": "field", "field": "join_date", "type": "date"}, "_id"]
+        elif sort_type == "geo":
+            return [{"by": "geo_distance", "field": "location", "unit": "mi",
+                      "location": {"lat": 40.7128, "lon": -74.0060}}, "_id"]
+        elif sort_type == "numeric_geo":
+            return [{"by": "field", "field": "salary", "type": "number"},
+                    {"by": "geo_distance", "field": "location", "unit": "mi",
+                     "location": {"lat": 40.7128, "lon": -74.0060}}, "_id"]
+        elif sort_type == "datetime_numeric":
+            return [{"by": "field", "field": "join_date", "type": "date"},
+                    {"by": "field", "field": "salary", "type": "number"}, "_id"]
+        else:
+            self.fail("Unknown sort_type: {}".format(sort_type))
+
+    def test_deep_pagination_search_after_nontextual(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self.load_employee_dataset(self._num_items)
+        index = self._create_deep_pagination_nontextual_index(bucket)
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+
+        num_items = self._num_items
+        partial_size = TestInputSingleton.input.param("partial_size", 2)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_type = TestInputSingleton.input.param("sort_type", "numeric")
+        sort_mode = self._get_nontextual_sort_mode(sort_type)
+
+        cluster = index.get_cluster()
+
+        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                         "query": {"match_all": {}},
+                         "size": num_items, "sort": sort_mode}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query)
+
+        search_after_param = all_matches[partial_start_index].get(
+            'decoded_sort', all_matches[partial_start_index]['sort'])
+
+        search_after_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                                  "query": {"match_all": {}},
+                                  "size": partial_size, "sort": sort_mode,
+                                  "search_after": search_after_param}
+        _, search_after_matches, _, _ = cluster.run_fts_query(index.name, search_after_fts_query)
+
+        all_results_ids = [match['id'] for match in all_matches]
+        search_after_results_ids = [match['id'] for match in search_after_matches]
+
+        for i in range(len(search_after_results_ids)):
+            expected_idx = partial_start_index + 1 + i
+            if expected_idx < len(all_results_ids):
+                self.assertEqual(search_after_results_ids[i], all_results_ids[expected_idx],
+                    "Deep pagination search_after mismatch at position {}: got {} expected {}".format(
+                        i, search_after_results_ids[i], all_results_ids[expected_idx]))
+
+    def test_deep_pagination_search_before_nontextual(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self.load_employee_dataset(self._num_items)
+        index = self._create_deep_pagination_nontextual_index(bucket)
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+
+        num_items = self._num_items
+        partial_size = TestInputSingleton.input.param("partial_size", 2)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_type = TestInputSingleton.input.param("sort_type", "numeric")
+        sort_mode = self._get_nontextual_sort_mode(sort_type)
+
+        cluster = index.get_cluster()
+
+        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                         "query": {"match_all": {}},
+                         "size": num_items, "sort": sort_mode}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query)
+
+        search_before_param = all_matches[partial_start_index].get(
+            'decoded_sort', all_matches[partial_start_index]['sort'])
+
+        search_before_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                                   "query": {"match_all": {}},
+                                   "size": partial_size, "sort": sort_mode,
+                                   "search_before": search_before_param}
+        _, search_before_matches, _, _ = cluster.run_fts_query(index.name, search_before_fts_query)
+
+        all_results_ids = [match['id'] for match in all_matches]
+        search_before_results_ids = [match['id'] for match in search_before_matches]
+
+        for i in range(len(search_before_results_ids)):
+            expected_idx = partial_start_index - partial_size + i
+            if 0 <= expected_idx < len(all_results_ids):
+                self.assertEqual(search_before_results_ids[i], all_results_ids[expected_idx],
+                    "Deep pagination search_before mismatch at position {}: got {} expected {}".format(
+                        i, search_before_results_ids[i], all_results_ids[expected_idx]))
+
+    def test_deep_pagination_full_walk_nontextual(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self.load_employee_dataset(self._num_items)
+        index = self._create_deep_pagination_nontextual_index(bucket)
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+
+        num_items = self._num_items
+        page_size = TestInputSingleton.input.param("page_size", 3)
+        sort_type = TestInputSingleton.input.param("sort_type", "numeric")
+        sort_mode = self._get_nontextual_sort_mode(sort_type)
+
+        cluster = index.get_cluster()
+
+        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                         "query": {"match_all": {}},
+                         "size": num_items, "sort": sort_mode}
+        _, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query)
+        all_results_ids = [match['id'] for match in all_matches]
+
+        paginated_ids = []
+        search_after_param = None
+        pages_fetched = 0
+
+        while True:
+            page_query = {"explain": False, "fields": ["*"], "highlight": {},
+                          "query": {"match_all": {}},
+                          "size": page_size, "sort": sort_mode}
+            if search_after_param:
+                page_query["search_after"] = search_after_param
+
+            _, page_matches, _, _ = cluster.run_fts_query(index.name, page_query)
+            if not page_matches:
+                break
+
+            for match in page_matches:
+                paginated_ids.append(match['id'])
+
+            search_after_param = page_matches[-1].get(
+                'decoded_sort', page_matches[-1]['sort'])
+            pages_fetched += 1
+
+            if len(page_matches) < page_size:
+                break
+
+        self.assertEqual(len(paginated_ids), len(all_results_ids),
+            "Full walk collected {} docs but expected {}".format(
+                len(paginated_ids), len(all_results_ids)))
+        self.assertEqual(paginated_ids, all_results_ids,
+            "Full walk result order does not match full query result order")
+
+    def test_deep_pagination_multi_sort_nontextual(self):
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        self.load_employee_dataset(self._num_items)
+        index = self._create_deep_pagination_nontextual_index(bucket)
+        self.wait_for_indexing_complete()
+        self.sleep(5)
+
+        num_items = self._num_items
+        partial_size = TestInputSingleton.input.param("partial_size", 2)
+        partial_start_index = TestInputSingleton.input.param("partial_start_index", 3)
+        sort_type = TestInputSingleton.input.param("sort_type", "numeric_geo")
+        sort_mode = self._get_nontextual_sort_mode(sort_type)
+
+        cluster = index.get_cluster()
+
+        all_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                         "query": {"match_all": {}},
+                         "size": num_items, "sort": sort_mode}
+        all_hits, all_matches, _, _ = cluster.run_fts_query(index.name, all_fts_query)
+
+        search_after_param = all_matches[partial_start_index].get(
+            'decoded_sort', all_matches[partial_start_index]['sort'])
+
+        search_after_fts_query = {"explain": False, "fields": ["*"], "highlight": {},
+                                  "query": {"match_all": {}},
+                                  "size": partial_size, "sort": sort_mode,
+                                  "search_after": search_after_param}
+        _, search_after_matches, _, _ = cluster.run_fts_query(index.name, search_after_fts_query)
+
+        all_results_ids = [match['id'] for match in all_matches]
+        search_after_results_ids = [match['id'] for match in search_after_matches]
+
+        for i in range(len(search_after_results_ids)):
+            expected_idx = partial_start_index + 1 + i
+            if expected_idx < len(all_results_ids):
+                self.assertEqual(search_after_results_ids[i], all_results_ids[expected_idx],
+                    "Deep pagination multi-sort search_after mismatch at position {}: got {} expected {}".format(
+                        i, search_after_results_ids[i], all_results_ids[expected_idx]))
+
     def _create_oso_containers(self, bucket=None, num_scopes=1, collections_per_scope=1, docs_per_collection=10000):
         load_tasks = []
         for i in range(1, num_scopes+1):

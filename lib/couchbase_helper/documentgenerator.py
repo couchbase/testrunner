@@ -359,6 +359,7 @@ class JsonDocGenerator(KVGenerator):
                     'languages_known': self.generate_lang_known(),
                     'is_manager': bool(random.getrandbits(1)),
                     'mutated': 0,
+                    'location': self.generate_location(),
                     'type': 'emp'
                 }
                 if self.vector_search:
@@ -461,6 +462,10 @@ class JsonDocGenerator(KVGenerator):
             lang.append(LANGUAGES[random.randint(0, len(LANGUAGES) - 1)])
             count += 1
         return lang
+
+    def generate_location(self):
+        return {"lat": round(random.uniform(-90, 90), 6),
+                "lon": round(random.uniform(-180, 180), 6)}
 
 
 class WikiJSONGenerator(KVGenerator):

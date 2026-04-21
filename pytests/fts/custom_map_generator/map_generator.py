@@ -9,10 +9,11 @@ EMP_FIELDS = {
     'number': ["mutated", "salary"],
     'boolean': ["is_manager"],
     'datetime': ["join_date"],
+    'geopoint': ["location"],
     'object': ["manages"]  # denote nested fields
 }
 
-TOTAL_EMP_FIELDS = 9
+TOTAL_EMP_FIELDS = 10
 
 EMP_NESTED_FIELDS = {
     'manages': {
@@ -416,6 +417,10 @@ class CustomMapGenerator:
         # Update date type
         if field_type == "datetime":
             es_field_map['type'] = "date"
+
+        # Update geopoint type
+        if field_type == "geopoint":
+            es_field_map['type'] = "geo_point"
 
         # Boolean fields should use keyword for exact matching
         if field_type == "boolean":
