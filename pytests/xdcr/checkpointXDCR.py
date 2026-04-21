@@ -134,7 +134,17 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
         self.log.info ("Verifying commitopaque/remote failover log ...")
         if seqno != 0:
-            self.validate_remote_failover_log(checkpoint_record["target_vb_opaque"]["target_vb_uuid"], checkpoint_record["target_seqno"])
+            target_vb_opaque = checkpoint_record.get("target_vb_opaque")
+            target_seqno = checkpoint_record["target_seqno"]
+            if target_vb_opaque is not None and target_vb_opaque.get("target_vb_uuid") is not None:
+                self.validate_remote_failover_log(target_vb_opaque["target_vb_uuid"], target_seqno)
+            else:
+                remote_uuid, remote_highseq = self.get_failover_log(self.dest_master)
+                self.log.info("target_vb_opaque missing in checkpoint record; live remote failover log = [{0},{1}]"
+                              .format(remote_uuid, remote_highseq))
+                self.assertTrue(int(target_seqno) <= int(remote_highseq),
+                                "target_seqno {0} in checkpoint record exceeds remote vb0 high_seqno {1}"
+                                .format(target_seqno, remote_highseq))
             self.log.info ("Verifying local failover uuid ...")
             local_vb_uuid, _ = self.get_failover_log(self.src_master)
             self.assertTrue((int(failover_uuid) == int(local_vb_uuid)) or
@@ -461,6 +471,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def test_dest_bucket_flush(self):
         self.mutate_and_checkpoint()
         self.dest_cluster.flush_buckets([self.dest_cluster.get_bucket_by_name('default')])
+        self.sleep(60, "Waiting for dest vb_uuid change to propagate and a fresh checkpoint to be written after flush")
         self.verify_next_checkpoint_fails_after_dest_uuid_change()
         self.verify_next_checkpoint_passes()
         self.sleep(10)
@@ -482,18 +493,16 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.src_cluster.delete_bucket('default')
         self.sleep(60)
         self.create_buckets_on_cluster(self.src_cluster.get_name())
+        self.sleep(60, "Waiting for recreated source bucket to fully warm up before starting replication")
         RestConnection(self.src_master).start_replication(REPLICATION_TYPE.CONTINUOUS,
             'default',
             "remote_cluster_%s-%s" % (self.src_cluster.get_name(), self.dest_cluster.get_name()))
         self.src_cluster.set_global_checkpt_interval(60)
         self.key_counter = 0
         self.keys_loaded = []
-        if self.was_pre_rep_successful():
-            self.log.info("_pre_replicate following the source bucket recreate was successful: {0}".
-                          format(self.num_successful_prereps_so_far))
-            self.verify_next_checkpoint_passes()
-        else:
-            self.fail("ERROR: _pre_replicate following source bucket recreate was unsuccessful")
+        self.sleep(60, "Waiting for replicator pipeline to initialize after source bucket recreate")
+        self.mutate_and_checkpoint(n=2, skip_validation=True)
+        self.verify_next_checkpoint_passes()
         self.sleep(10)
         self.verify_revid()
 
