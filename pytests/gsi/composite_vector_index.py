@@ -3165,7 +3165,9 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # restoring and running queries again to validate recall percentage
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        self.sleep(300)
+        self.wait_until_indexes_online()
+        self.validate_no_pending_mutations()
+        self.sleep(120)
         # adding validations for item count post recovery of bucket
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
@@ -3667,6 +3669,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # check if any rollback has happened
         num_rollback = self.index_rest.get_num_rollback_stat(bucket=self.buckets[0].name)
         self.assertGreaterEqual(num_rollback, 0, "No rollback has happened")
+
+        self.wait_until_indexes_online()
+        self.validate_no_pending_mutations()
+        self.sleep(120)
+
         for namespace in self.namespaces:
             count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
