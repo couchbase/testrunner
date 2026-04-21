@@ -3650,10 +3650,19 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=self.num_of_docs_per_collection * 2,
                                             dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
-            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
-                                                    generator=self.gen_update,
-                                                    timeout_secs=5000, use_magma_loader=True)
-            task.result()
+            retry_count = 3
+            for attempt in range(retry_count):
+                try:
+                    task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                            generator=self.gen_update,
+                                                            timeout_secs=5000, use_magma_loader=True)
+                    task.result()
+                    break
+                except Exception as e:
+                    self.log.warning(f"DocLoader attempt {attempt + 1}/{retry_count} failed: {e}")
+                    if attempt == retry_count - 1:
+                        raise
+                    self.sleep(30)
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         for data_node in data_nodes:
             remote_client = RemoteMachineShellConnection(data_node)
