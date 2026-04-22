@@ -7,7 +7,10 @@ from pytests.eventing.eventing_base import EventingBaseTest
 import logging
 import json
 import base64
+import os
 import urllib.parse
+
+import requests
 
 log = logging.getLogger()
 
@@ -15,7 +18,6 @@ log = logging.getLogger()
 class EventingJWTAuth(EventingBaseTest):
     def setUp(self):
         super(EventingJWTAuth, self).setUp()
-
         # JWT Configuration
         self.jwt_algorithm = self.input.param('jwt_algorithm', 'ES256')
         self.jwt_issuer = self.input.param('jwt_issuer', 'custom-issuer')
@@ -27,7 +29,17 @@ class EventingJWTAuth(EventingBaseTest):
         self.jwt_ttl = self.input.param('jwt_ttl', 3600)
         self.logsize = self.input.param("size", None)
         self.aggregate= self.input.param("aggregate", False)
-
+        # Keycloak IDP Config
+        self.keycloak_ip = os.environ.get('KEYCLOAK_IDP_IP', '')
+        self.keycloak_port = self.input.param('keycloak_port', 8444)
+        self.keycloak_realm = self.input.param('keycloak_realm', 'cb')
+        self.keycloak_client_id = self.input.param('keycloak_client_id', 'test-client')
+        self.keycloak_client_secret = os.environ.get('KEYCLOAK_IDP_CLIENT_SECRET', '')
+        self.keycloak_username = self.input.param('keycloak_username', 'admin@localhost.com')
+        self.keycloak_password = self.input.param('keycloak_password', 'password')
+        self.keycloak_algorithm = self.input.param('keycloak_algorithm', 'RS384')
+        self.roles_claim = self.input.param('roles_claim', 'resource_access.test-client.roles')
+        self.jwks_uri_tls_verify = self.input.param('jwks_uri_tls_verify', False)
 
         # Initialize JWT utilities
         self.jwt_utils = JWTUtils(log=self.log)
@@ -148,6 +160,67 @@ class EventingJWTAuth(EventingBaseTest):
         if not status:
             raise Exception(f"Failed to configure JWT: {content}")
         log.info("JWT configured successfully")
+
+    def configure_jwt_with_jwks_uri(self):
+        """
+        Configure JWT on the cluster using an external IDP JWKS URI
+        """
+        issuer_name = f"https://{self.keycloak_ip}:{self.keycloak_port}/realms/{self.keycloak_realm}"
+        jwks_uri = f"https://{self.keycloak_ip}:{self.keycloak_port}/realms/{self.keycloak_realm}/protocol/openid-connect/certs"
+        jwt_config = {
+            "enabled": True,
+            "issuers": [
+                {
+                    "name": issuer_name,
+                    "signingAlgorithm": self.keycloak_algorithm,
+                    "audClaim": "azp",
+                    "audienceHandling": "any",
+                    "audiences": [self.keycloak_client_id],
+                    "subClaim": "preferred_username",
+                    "publicKeySource": "jwks_uri",
+                    "jwksUri": jwks_uri,
+                    "jwksUriTlsVerifyPeer": self.jwks_uri_tls_verify,
+                    "jitProvisioning": True,
+                    "rolesClaim": self.roles_claim
+                }
+            ]
+        }
+        log.info(f"Configuring JWT with issuer '{issuer_name}', JWKS URI '{jwks_uri}'")
+        status, content, _ = self.rest.create_jwt_with_config(jwt_config)
+        if not status:
+            raise Exception(f"Failed to configure JWT with JWKS URI: {content}")
+        log.info("JWT configured with JWKS URI successfully")
+
+    def get_jwt_token_from_idp(self):
+        """
+        Obtain a JWT access token from Keycloak via OAuth2 password grant
+        """
+        token_endpoint = f"https://{self.keycloak_ip}:{self.keycloak_port}/realms/{self.keycloak_realm}/protocol/openid-connect/token"
+        log.info(f"Requesting JWT token from Keycloak: {token_endpoint}")
+        data = {
+            "grant_type": "password",
+            "scope": "openid",
+            "client_id": self.keycloak_client_id,
+            "client_secret": self.keycloak_client_secret,
+            "username": self.keycloak_username,
+            "password": self.keycloak_password
+        }
+        response = requests.post(
+            token_endpoint,
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=30,
+            verify=self.jwks_uri_tls_verify
+        )
+        if response.status_code != 200:
+            raise Exception(
+                f"Failed to obtain JWT token from IDP: {response.status_code} {response.text}"
+            )
+        access_token = response.json().get("access_token")
+        if not access_token:
+            raise Exception(f"No access_token in IDP response: {response.text}")
+        log.info("JWT token obtained from IDP successfully")
+        return access_token
 
     def test_eventing_jwt_auth_sanity(self):
         '''
@@ -540,3 +613,88 @@ class EventingJWTAuth(EventingBaseTest):
 
         log.info("Deleting eventing function with JWT authentication")
         self.delete_function(body, jwt_token=self.jwt_token)
+
+
+    def test_eventing_jwt_auth_with_jwks_uri_keycloak_block_create(self):
+        log.info(f"Creating JWT group '{self.jwt_group}' with roles '{self.jwt_roles}'")
+        self.create_jwt_group()
+        log.info("Configuring JWT with JWKS URI (JIT provisioning enabled)")
+        self.configure_jwt_with_jwks_uri()
+        log.info("Obtaining JWT token from Keycloak IDP")
+        jwt_token = self.get_jwt_token_from_idp()
+
+        # Create and deploy eventing function with IDP JWT
+        log.info("Try creating eventing function with IDP JWT authentication")
+        try:
+            log.info("Try creating eventing function with IDP JWT authentication")
+            _ = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
+        except Exception as e:
+            log.info(f"Creation correctly failed due to Eventing Guardrail for JWT: {e}")
+            assert "ERR_JWT_JIT_NOT_SUPPORTED" in str(e) and "JWT authentication with JIT provisioning is not supported in Eventing" in str(e), True
+        log.info("JWT Function Creation Guardrail Tested Successfully")
+
+
+    def test_eventing_jwt_auth_with_jwks_uri_keycloak_block_delete(self):
+        log.info(f"Creating JWT group '{self.jwt_group}' with roles '{self.jwt_roles}'")
+        self.create_jwt_group()
+        log.info("Configuring JWT with JWKS URI (JIT provisioning enabled)")
+        self.configure_jwt_with_jwks_uri()
+        log.info("Obtaining JWT token from Keycloak IDP")
+        self.jwt_token = self.get_jwt_token_from_idp()
+
+        # Create and deploy eventing function using Basic Auth
+        log.info("Creating an eventing function with Basic Auth as Creation is blocked")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+
+        try:
+            log.info("Try deleting eventing function with IDP JWT authentication")
+            self.delete_function(body, jwt_token=self.jwt_token)
+        except Exception as e:
+            log.info(f"Deletion correctly failed due to Eventing Guardrail for JWT: {e}")
+            assert "ERR_JWT_JIT_NOT_SUPPORTED" in str(
+                e) and "JWT authentication with JIT provisioning is not supported in Eventing" in str(e), True
+        log.info("JWT Function Deletion Guardrail Tested Successfully")
+
+    def test_eventing_jwt_auth_with_jwks_uri_keycloak_permit_lifecycle_ops(self):
+        log.info(f"Creating JWT group '{self.jwt_group}' with roles '{self.jwt_roles}'")
+        self.create_jwt_group()
+
+        log.info("Configuring JWT with JWKS URI (JIT provisioning enabled)")
+        self.configure_jwt_with_jwks_uri()
+
+        log.info("Obtaining JWT token from Keycloak IDP")
+        jwt_token = self.get_jwt_token_from_idp()
+
+        # Create and deploy eventing function using Basic Auth
+        log.info("Creating an eventing function with Basic Auth as Creation is blocked")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+
+        try:
+            log.info("Deploying eventing function with IDP JWT authentication")
+            self.deploy_function(body, jwt_token=jwt_token)
+
+            log.info("Loading data to source bucket")
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default")
+
+            log.info("Verifying mutations are processed")
+            self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
+
+            log.info("Pausing eventing function with IDP JWT authentication")
+            self.pause_function(body, jwt_token=jwt_token)
+
+            log.info("Resuming eventing function with IDP JWT authentication")
+            self.resume_function(body, jwt_token=jwt_token)
+
+            self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default", is_delete=True)
+            self.sleep(10)
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+
+            log.info("Undeploying eventing function with IDP JWT authentication")
+            self.undeploy_function(body, jwt_token=jwt_token)
+        except Exception as e:
+            log.info(f"Lifecycle operations correctly failed with forbidden error: {e}")
+            assert "ERR_FORBIDDEN" in str(e) and "Forbidden" in str(e), True
+            log.info("Forbidden error test for IDP JWT lifecycle operations completed successfully")
+
+        log.info("Deleting eventing function with Basic Auth as Deletion is blocked")
+        self.delete_function(body)
