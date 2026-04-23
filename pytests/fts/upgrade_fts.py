@@ -1,11 +1,12 @@
 import logging
 import json
+import uuid
 
 from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from .fts_callable import FTSCallable
 from scripts.java_sdk_setup import JavaSdkSetup
-from .fts_base import CouchbaseCluster, FTSIndex, FTSBaseTest
+from .fts_base import CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap
 from membase.api.rest_client import RestConnection
 from lib.collection.collections_cli_client import CollectionsCLI
 from .fts_backup_restore import FTSIndexBackupClient
@@ -76,6 +77,11 @@ class UpgradeFTS(NewUpgradeBaseTest):
         bucket_params['compressionMode'] = "passive"
         bucket_params['bucket_storage'] = _bucket_storage
 
+        rest = RestConnection(bucket_params['server'])
+        existing = [b.name for b in rest.get_buckets()]
+        if 'default' in existing:
+            self.log.info("Default bucket already exists (created by base setup) — skipping.")
+            return
         self.cluster.create_default_bucket(bucket_params)
 
 
@@ -1575,6 +1581,272 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_callable.delete_fts_index("idx1")
         fts_callable.flush_buckets(["default"])
         return errors
+
+    # ======================================================================
+    # scan_plus / request_plus upgrade tests
+    # ======================================================================
+
+    def _scan_plus_setup_sdk(self):
+        """Return (cluster, default_collection) via Couchbase Python SDK v4."""
+        from couchbase.cluster import Cluster
+        from couchbase.auth import PasswordAuthenticator
+        from couchbase.options import ClusterOptions
+        auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
+        cluster = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
+        collection = cluster.bucket('default').default_collection()
+        return cluster, collection
+
+    def _test_scan_plus_pre_upgrade(self, fts_idx):
+        """
+        Stage 0 — all nodes pre-8.1.
+        scan_plus query must fail: feature does not exist on the old version.
+        """
+        log.info("=" * 20 + " _test_scan_plus_pre_upgrade")
+        errors = []
+        hits, matches, _, status = fts_idx.execute_query(
+            {"match_all": {}},
+            zero_results_ok=True,
+            return_raw_hits=True,
+            consistency_level="scan_plus",
+            consistency_vectors=None,
+            fields=["val"],
+        )
+        if hits != -1 and status != 'fail':
+            errors.append(
+                f"scan_plus query unexpectedly succeeded on pre-8.1 cluster "
+                f"(hits={hits}, status={status})"
+            )
+        else:
+            log.info(f"[pre-upgrade] Got expected failure — status={status}, error={matches}")
+        return errors
+
+    def _test_scan_plus_mixed_v2(self, fts_idx, upgraded_node):
+        """
+        V-2 — coordinating FTS node is 8.1, others may be pre-8.1.
+        scan_plus routed to the upgraded coordinator must succeed.
+        """
+        log.info("=" * 20 + " _test_scan_plus_mixed_v2")
+        errors = []
+        hits, matches, _, status = fts_idx.execute_query(
+            {"match_all": {}},
+            zero_results_ok=True,
+            return_raw_hits=True,
+            consistency_level="scan_plus",
+            consistency_vectors=None,
+            fields=["val"],
+            node=upgraded_node,
+        )
+        if status == 'fail' or hits == -1:
+            errors.append(
+                f"[V-2] scan_plus via upgraded coordinator failed unexpectedly "
+                f"(hits={hits}, status={status}, error={matches})"
+            )
+        return errors
+
+    def _test_scan_plus_mixed_v3(self, fts_idx, old_node):
+        """
+        V-3 — coordinating FTS node is pre-8.1.
+        scan_plus routed to the old coordinator must fail with a version error.
+        """
+        log.info("=" * 20 + " _test_scan_plus_mixed_v3")
+        errors = []
+        expected_err_fragment = "unsupported consistencyLevel: scan_plus"
+        hits, matches, _, status = fts_idx.execute_query(
+            {"match_all": {}},
+            zero_results_ok=True,
+            return_raw_hits=True,
+            consistency_level="scan_plus",
+            consistency_vectors=None,
+            fields=["val"],
+            node=old_node,
+        )
+        if hits != -1 and status != 'fail':
+            errors.append(
+                f"[V-3] scan_plus via pre-8.1 coordinator unexpectedly succeeded "
+                f"(hits={hits}, status={status})"
+            )
+        else:
+            err_str = str(matches)
+            log.info(f"[V-3] Got expected failure — error={err_str}")
+            if expected_err_fragment not in err_str:
+                log.warning(
+                    f"[V-3] Error did not contain expected fragment "
+                    f"'{expected_err_fragment}' — update placeholder. "
+                    f"Actual: {err_str}"
+                )
+        return errors
+
+    def _test_scan_plus_post_upgrade(self, fts_idx, hashmap):
+        """
+        V-1 — all nodes at 8.1.
+        scan_plus must return results that exactly match the HashMap snapshot
+        (count + val).
+        """
+        log.info("=" * 20 + " _test_scan_plus_post_upgrade")
+        errors = []
+        snapshot = hashmap.snapshot()
+
+        hits, matches, _, status = fts_idx.execute_query(
+            {"match_all": {}},
+            zero_results_ok=True,
+            return_raw_hits=True,
+            consistency_level="scan_plus",
+            consistency_vectors=None,
+            fields=["val"],
+        )
+
+        if hits == -1 or status == 'fail':
+            return [f"[V-1] scan_plus query failed: status={status}, error={matches}"]
+
+        log.info(f"[V-1] hits={hits}, snapshot_size={len(snapshot)}")
+
+        if hits != len(snapshot):
+            errors.append(
+                f"[V-1] Doc count mismatch: FTS={hits}, snapshot={len(snapshot)}"
+            )
+
+        result_map = {}
+        for match in (matches or []):
+            doc_id = match.get('id')
+            raw_val = match.get('fields', {}).get('val')
+            if doc_id is not None and raw_val is not None:
+                result_map[doc_id] = int(raw_val)
+
+        for doc_id, expected_val in snapshot.items():
+            if doc_id not in result_map:
+                errors.append(
+                    f"[V-1] Missing in FTS: '{doc_id}' (snapshot.val={expected_val})"
+                )
+            elif result_map[doc_id] != expected_val:
+                errors.append(
+                    f"[V-1] Val mismatch: '{doc_id}' "
+                    f"result={result_map[doc_id]}, snapshot={expected_val}"
+                )
+
+        for doc_id in result_map:
+            if doc_id not in snapshot:
+                errors.append(f"[V-1] Extra doc in FTS: '{doc_id}'")
+
+        return errors
+
+    def test_scan_plus_online_upgrade(self):
+        """
+        Online upgrade test for the scan_plus (request_plus) consistency level.
+
+        Validates version-gated behavior at three stages:
+          Stage 0 — all nodes pre-8.1 : scan_plus must fail
+          Stage 2 — one FTS node at 8.1 (mixed cluster):
+              V-2: query routed to upgraded coordinator → must succeed
+              V-3: query routed to old coordinator    → must fail (version error)
+          Stage 4 — all FTS nodes at 8.1:
+              V-1: scan_plus must return exact consistent results
+
+        Requires ≥ 2 FTS nodes in the cluster.
+        """
+        mixed_upgrade_errors = {}
+        post_upgrade_errors = {}
+
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if len(fts_nodes) < 2:
+            log.error("test_scan_plus_online_upgrade requires ≥ 2 FTS nodes")
+            self.fail()
+
+        # --- Setup: load seed docs, create index with stored val field ---
+        _, collection = self._scan_plus_setup_sdk()
+        hashmap = _ScanPlusHashMap()
+        for _ in range(10):
+            doc_id = f"scan_plus_upg_{uuid.uuid4().hex}"
+            collection.upsert(doc_id, {'val': 1})
+            hashmap.insert(doc_id, 1)
+
+        fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
+        fts_idx = fts_callable.create_fts_index(
+            "scan_plus_upgrade_idx",
+            source_type='couchbase', source_name="default",
+            index_type='fulltext-index', index_params=None, plan_params=None,
+            source_params=None, source_uuid=None, collection_index=False,
+            _type=None, analyzer="standard", no_check=False,
+            cluster=self.cb_cluster,
+        )
+        fts_idx.add_child_field_to_default_mapping("val", "number")
+        fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
+        fts_idx.update()
+        fts_callable.wait_for_indexing_complete(10)
+
+        # --- Stage 0: Pre-upgrade ---
+        log.info("=" * 20 + " Stage 0: pre-upgrade scan_plus check")
+        errors = self._test_scan_plus_pre_upgrade(fts_idx)
+        if errors:
+            mixed_upgrade_errors['pre_upgrade'] = errors
+
+        # --- Stage 1: Upgrade one FTS node ---
+        nodes_out = [fts_nodes[0]]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+        rebalance.result()
+        upgrade_th = self._async_update(self.upgrade_to, nodes_out)
+        for th in upgrade_th:
+            th.join()
+        log.info("==== First FTS node upgraded ====")
+        self.sleep(120)
+
+        services_in = []
+        for service in list(self.services_map.keys()):
+            for node in nodes_out:
+                node_str = "{0}:{1}".format(node.ip, node.port)
+                if node_str in self.services_map[service]:
+                    services_in.append(service)
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], nodes_out, [], services=services_in
+        )
+        rebalance.result()
+
+        upgraded_node = fts_nodes[0]
+        old_node = fts_nodes[1]
+
+        # --- Stage 2: Mixed cluster — V-2 and V-3 ---
+        log.info("=" * 20 + " Stage 2: mixed cluster checks")
+        errors = self._test_scan_plus_mixed_v2(fts_idx, upgraded_node)
+        if errors:
+            mixed_upgrade_errors['v2_upgraded_coordinator'] = errors
+
+        errors = self._test_scan_plus_mixed_v3(fts_idx, old_node)
+        if errors:
+            mixed_upgrade_errors['v3_old_coordinator'] = errors
+
+        # --- Stage 3: Upgrade remaining FTS nodes ---
+        nodes_out = fts_nodes[1:]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+        rebalance.result()
+        upgrade_th = self._async_update(self.upgrade_to, nodes_out)
+        for th in upgrade_th:
+            th.join()
+        log.info("==== Remaining FTS nodes upgraded ====")
+        self.sleep(120)
+
+        services_in = []
+        for service in list(self.services_map.keys()):
+            for node in nodes_out:
+                node_str = "{0}:{1}".format(node.ip, node.port)
+                if node_str in self.services_map[service]:
+                    services_in.append(service)
+        rebalance = self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], nodes_out, [], services=services_in
+        )
+        rebalance.result()
+
+        # --- Stage 4: Post-upgrade — V-1 exact validation ---
+        log.info("=" * 20 + " Stage 4: post-upgrade scan_plus validation")
+        errors = self._test_scan_plus_post_upgrade(fts_idx, hashmap)
+        if errors:
+            post_upgrade_errors['v1_post_upgrade'] = errors
+
+        fts_callable.delete_fts_index("scan_plus_upgrade_idx")
+        fts_callable.flush_buckets(["default"])
+
+        self.assertEquals(len(mixed_upgrade_errors.keys()), 0,
+                          f"Mixed cluster scan_plus tests failed: {mixed_upgrade_errors}")
+        self.assertEquals(len(post_upgrade_errors.keys()), 0,
+                          f"Post-upgrade scan_plus tests failed: {post_upgrade_errors}")
 
     def get_nodes_in_cluster_after_upgrade(self, master_node=None):
         if master_node is None:

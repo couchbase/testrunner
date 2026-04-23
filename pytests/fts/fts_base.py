@@ -4,6 +4,7 @@ Base class for FTS/CBFT/Couchbase Full Text Search
 import ast
 import copy
 import datetime
+import hashlib
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import random
 import string
 import uuid
 import subprocess
+import threading
 import time
 import unittest
 from statistics import mean
@@ -73,6 +75,29 @@ from lib.SystemEventLogLib.Events import EventHelper
 from lib import global_vars
 from lib.capella.utils import CapellaAPI, CapellaCredentials
 import lib.capella.utils as capella_utils
+
+try:
+    from couchbase.auth import PasswordAuthenticator as _CbPasswordAuthenticator
+    from couchbase.cluster import Cluster as _CbCluster
+    from couchbase.durability import DurabilityLevel as _CbDurabilityLevel
+    from couchbase.durability import ServerDurability as _CbServerDurability
+    from couchbase.exceptions import CouchbaseException as _CbException
+    from couchbase.exceptions import DocumentNotFoundException as _CbDocNotFound
+    from couchbase.options import ClusterOptions as _CbClusterOptions
+    from couchbase.options import InsertOptions as _CbInsertOptions
+    from couchbase.options import RemoveOptions as _CbRemoveOptions
+    from couchbase.options import ReplaceOptions as _CbReplaceOptions
+except ImportError:
+    _CbPasswordAuthenticator = None
+    _CbCluster = None
+    _CbDurabilityLevel = None
+    _CbServerDurability = None
+    _CbException = None
+    _CbDocNotFound = None
+    _CbClusterOptions = None
+    _CbInsertOptions = None
+    _CbRemoveOptions = None
+    _CbReplaceOptions = None
 
 from .vector_dataset_generator.vector_dataset_generator import VectorDataset
 from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVectorLoader
@@ -4431,6 +4456,109 @@ class CouchbaseCluster:
             task.result(timeout)
 
 
+def _make_vec(doc_id, dims):
+    """Deterministic unit vector derived from doc_id. Reconstructed on every
+    update so the CRUD worker never needs to store vec separately."""
+    seed = int.from_bytes(hashlib.sha256(doc_id.encode()).digest(), 'big')
+    rng = random.Random(seed)
+    vec = [rng.gauss(0, 1) for _ in range(dims)]
+    mag = sum(x * x for x in vec) ** 0.5 or 1.0
+    return [x / mag for x in vec]
+
+
+class _ScanPlusHashMap:
+    """Thread-safe document state tracker for scan_plus tests.
+
+    Maps doc_id -> val (monotonically increasing integer version number).
+    Insertion order is tracked so update sampling can bias toward older docs.
+    All mutations to KV must be confirmed before calling insert/update/delete
+    here, ensuring the map never overstates what is durably in the DB.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._map = {}
+        self._insertion_order = []
+        self._inflight_inserts = set()
+
+    def insert(self, doc_id, val=1):
+        with self._lock:
+            self._map[doc_id] = val
+            self._insertion_order.append(doc_id)
+
+    def update(self, doc_id, new_val):
+        with self._lock:
+            if doc_id in self._map:
+                self._map[doc_id] = new_val
+                return True
+            return False
+
+    def delete(self, doc_id):
+        with self._lock:
+            if doc_id not in self._map:
+                return False
+            del self._map[doc_id]
+            try:
+                self._insertion_order.remove(doc_id)
+            except ValueError:
+                pass
+            return True
+
+    def pick_for_update(self):
+        """Random doc ID biased toward older insertions (bottom 70% of order)."""
+        with self._lock:
+            if not self._insertion_order:
+                return None
+            pool_end = max(1, int(len(self._insertion_order) * 0.7))
+            return random.choice(self._insertion_order[:pool_end])
+
+    def pick_for_delete(self):
+        with self._lock:
+            if not self._map:
+                return None
+            return random.choice(list(self._map.keys()))
+
+    def get(self, doc_id):
+        with self._lock:
+            return self._map.get(doc_id)
+
+    def mark_inflight(self, doc_id):
+        with self._lock:
+            self._inflight_inserts.add(doc_id)
+
+    def unmark_inflight(self, doc_id):
+        with self._lock:
+            self._inflight_inserts.discard(doc_id)
+
+    def reserve_inflight(self, doc_id, max_docs):
+        """Atomically check capacity and mark inflight under the same lock.
+
+        Returns True and marks doc_id inflight if the live corpus (committed +
+        pending inserts) is below max_docs.  Returns False without modifying
+        state if the cap would be exceeded.  Pass max_docs=None to skip the
+        cap check (always reserves).
+        """
+        with self._lock:
+            if max_docs is not None and (len(self._map) + len(self._inflight_inserts)) >= max_docs:
+                return False
+            self._inflight_inserts.add(doc_id)
+            return True
+
+    def snapshot(self):
+        """Return a shallow copy of the current map state (thread-safe)."""
+        with self._lock:
+            return dict(self._map)
+
+    def snapshot_with_inflight(self):
+        """Atomically return (snapshot, pending_inserts) under the same lock."""
+        with self._lock:
+            return dict(self._map), set(self._inflight_inserts)
+
+    def size(self):
+        with self._lock:
+            return len(self._map)
+
+
 class FTSBaseTest(unittest.TestCase):
     es_index_name = None
 
@@ -8685,3 +8813,444 @@ class FTSBaseTest(unittest.TestCase):
         if len(error) != 0:
             self.log.info(payload)
         return error
+
+    # ======================================================================
+    # scan_plus shared helpers
+    # ======================================================================
+
+    def _scan_plus_setup_sdk(self):
+        """Return (cluster, default_collection) via Couchbase Python SDK v4."""
+        master = self._cb_cluster.get_master_node()
+        auth = _CbPasswordAuthenticator(master.rest_username, master.rest_password)
+        cluster = _CbCluster(f'couchbase://{master.ip}', _CbClusterOptions(auth))
+        collection = cluster.bucket('default').default_collection()
+        return cluster, collection
+
+    _SCAN_PLUS_MANAGER_DEFAULTS = {
+        "getseqnos_retries": "30",
+        "use_bucket_seqnos": "false",
+        "num_workers": "10",
+    }
+
+    def _scan_plus_set_manager_options(self, options):
+        """PUT scan_plus options to api/managerOptions on every FTS node."""
+        for node in self._cb_cluster.get_fts_nodes():
+            rest = RestConnection(node)
+            for key, value in options.items():
+                rest.set_node_setting(key, str(value))
+        self.log.info(f"[scan_plus] managerOptions set: {options}")
+
+    def _scan_plus_restore_manager_defaults(self):
+        """Restore scan_plus manager options to defaults on every FTS node."""
+        self._scan_plus_set_manager_options(self._SCAN_PLUS_MANAGER_DEFAULTS)
+        self.log.info("[scan_plus] managerOptions restored to defaults")
+
+    def _scan_plus_crud_worker(self, collection, hashmap, stop_event,
+                                drain_cond=None, inflight_count=None,
+                                thread_idx=None):
+        """
+        Unified CRUD worker for scan_plus tests. Ratio: 4 inserts : 5 updates : 1 delete.
+        KV op is performed first; HashMap is updated only on success.
+
+        thread_idx=None  (moving topology): shared hashmap, random doc IDs, no
+                         per-doc inflight tracking.
+        thread_idx=<int> (stable topology): per-thread hashmap, prefixed doc IDs,
+                         mark_inflight/unmark_inflight used so stress snapshots can
+                         distinguish in-flight inserts from true violations.
+
+        drain_cond / inflight_count: used by functional tests to drain all in-flight
+        ops before snapshotting and querying. Pass None for the stress path.
+
+        PERSIST_TO_MAJORITY: KV ack only after durable majority write, making
+        hashmap state authoritative on success.
+        """
+        durability = _CbServerDurability(_CbDurabilityLevel.PERSIST_TO_MAJORITY)
+        prefix = f"scan_plus_t{thread_idx}_" if thread_idx is not None else "scan_plus_"
+        track_inflight = thread_idx is not None
+        ops = ['insert'] * 4 + ['update'] * 5 + ['delete'] * 1
+
+        while True:
+            if drain_cond is not None:
+                with drain_cond:
+                    if stop_event.is_set():
+                        return
+                    inflight_count[0] += 1
+            elif stop_event.is_set():
+                return
+
+            op = random.choice(ops)
+            try:
+                if op == 'insert':
+                    doc_id = f"{prefix}{uuid.uuid4().hex}"
+                    if track_inflight:
+                        hashmap.mark_inflight(doc_id)
+                    try:
+                        collection.insert(doc_id, {'val': 1},
+                                          _CbInsertOptions(durability=durability))
+                        hashmap.insert(doc_id, 1)
+                    except _CbException:
+                        pass
+                    finally:
+                        if track_inflight:
+                            hashmap.unmark_inflight(doc_id)
+
+                elif op == 'update':
+                    doc_id = hashmap.pick_for_update()
+                    if doc_id is None:
+                        continue
+                    current_val = hashmap.get(doc_id)
+                    if current_val is None:
+                        continue
+                    try:
+                        collection.replace(doc_id, {'val': current_val + 1},
+                                           _CbReplaceOptions(durability=durability))
+                        hashmap.update(doc_id, current_val + 1)
+                    except (_CbDocNotFound, _CbException):
+                        pass
+
+                elif op == 'delete':
+                    doc_id = hashmap.pick_for_delete()
+                    if doc_id is None:
+                        continue
+                    try:
+                        collection.remove(doc_id, _CbRemoveOptions(durability=durability))
+                        hashmap.delete(doc_id)
+                    except _CbDocNotFound:
+                        hashmap.delete(doc_id)
+                    except _CbException:
+                        pass  # durability/timeout failure — KV state uncertain
+
+            finally:
+                if drain_cond is not None:
+                    with drain_cond:
+                        inflight_count[0] -= 1
+                        if inflight_count[0] == 0:
+                            drain_cond.notify_all()
+
+    def _scan_plus_vec_crud_worker(self, collection, hashmap, thread_idx, stop_event,
+                                    dims, drain_cond=None, inflight_count=None,
+                                    max_docs=None):
+        """
+        Like _scan_plus_crud_worker (stable/thread_idx path) but includes the `vec`
+        field in every insert/replace so the vector index stays valid. Vec is
+        reconstructed deterministically from doc_id via _make_vec.
+
+        max_docs: if set, inserts are converted to updates once the hashmap reaches
+        this size, preventing the live corpus from exceeding the KNN_K limit and
+        causing false validation failures.
+        """
+        durability = _CbServerDurability(_CbDurabilityLevel.PERSIST_TO_MAJORITY)
+        prefix = f"sp_vec_t{thread_idx}_"
+        ops = ['insert'] * 4 + ['update'] * 5 + ['delete'] * 1
+
+        while True:
+            if drain_cond is not None:
+                with drain_cond:
+                    if stop_event.is_set():
+                        return
+                    inflight_count[0] += 1
+            elif stop_event.is_set():
+                return
+
+            op = random.choice(ops)
+            insert_doc_id = None
+            if op == 'insert':
+                candidate = f"{prefix}{uuid.uuid4().hex}"
+                if hashmap.reserve_inflight(candidate, max_docs):
+                    insert_doc_id = candidate
+                else:
+                    op = 'update'
+            try:
+                if op == 'insert':
+                    try:
+                        collection.insert(insert_doc_id,
+                                          {'val': 1, 'vec': _make_vec(insert_doc_id, dims)},
+                                          _CbInsertOptions(durability=durability))
+                        hashmap.insert(insert_doc_id, 1)
+                    except _CbException:
+                        pass
+                    finally:
+                        hashmap.unmark_inflight(insert_doc_id)
+
+                elif op == 'update':
+                    doc_id = hashmap.pick_for_update()
+                    if doc_id is None:
+                        continue
+                    current_val = hashmap.get(doc_id)
+                    if current_val is None:
+                        continue
+                    try:
+                        collection.replace(doc_id,
+                                           {'val': current_val + 1,
+                                            'vec': _make_vec(doc_id, dims)},
+                                           _CbReplaceOptions(durability=durability))
+                        hashmap.update(doc_id, current_val + 1)
+                    except (_CbDocNotFound, _CbException):
+                        pass
+
+                elif op == 'delete':
+                    doc_id = hashmap.pick_for_delete()
+                    if doc_id is None:
+                        continue
+                    try:
+                        collection.remove(doc_id, _CbRemoveOptions(durability=durability))
+                        hashmap.delete(doc_id)
+                    except _CbDocNotFound:
+                        hashmap.delete(doc_id)
+                    except _CbException:
+                        pass
+
+            finally:
+                if drain_cond is not None:
+                    with drain_cond:
+                        inflight_count[0] -= 1
+                        if inflight_count[0] == 0:
+                            drain_cond.notify_all()
+
+    def _scan_plus_fire_and_validate_stress(self, index, hashmaps, violations):
+        """
+        Snapshot hashmap(s), fire a scan_plus match_all query, validate unidirectional
+        consistency: result.val >= snapshot.val, no deleted docs in results.
+
+        hashmaps: a single _ScanPlusHashMap or a list — both are accepted.
+        Pre- and post-query snapshots bracket the query window so docs inserted
+        during the query are not falsely flagged.
+        """
+        if isinstance(hashmaps, _ScanPlusHashMap):
+            hashmaps = [hashmaps]
+        pre_snapshot, pre_pending = {}, set()
+        for hm in hashmaps:
+            s, p = hm.snapshot_with_inflight()
+            pre_snapshot.update(s)
+            pre_pending.update(p)
+        try:
+            hits, matches, _, status = index.execute_query(
+                {"match_all": {}},
+                zero_results_ok=True,
+                return_raw_hits=True,
+                consistency_level="scan_plus",
+                consistency_vectors=None,
+                fields=["val"],
+            )
+        except Exception as e:
+            self.log.warning(f"[scan_plus] query exception (tolerated): {e}")
+            return
+        if hits == -1 or status == 'fail' or not isinstance(matches, list):
+            self.log.warning(f"[scan_plus] query returned error (tolerated): status={status}")
+            return
+        post_snapshot, post_pending = {}, set()
+        for hm in hashmaps:
+            s, p = hm.snapshot_with_inflight()
+            post_snapshot.update(s)
+            post_pending.update(p)
+        self.log.info(f"[scan_plus] hits={hits}, snapshot_size={len(pre_snapshot)}")
+        if not matches:
+            return
+        for match in matches:
+            doc_id = match.get('id')
+            result_val = int(match.get('fields', {}).get('val', -1))
+            if result_val == -1:
+                continue
+            if doc_id not in pre_snapshot:
+                if doc_id not in pre_pending:
+                    if doc_id not in post_snapshot and doc_id not in post_pending:
+                        violations.append(
+                            f"Deleted doc '{doc_id}' (absent from snapshot) "
+                            f"returned by scan_plus — stale index entry"
+                        )
+                continue
+            if result_val < pre_snapshot[doc_id]:
+                violations.append(
+                    f"Stale read: doc '{doc_id}' result.val={result_val} "
+                    f"< snapshot.val={pre_snapshot[doc_id]}"
+                )
+
+    def _scan_plus_fire_and_validate_functional(self, index, hashmaps,
+                                                 collection=None, knn=None):
+        """
+        Drain CRUD first, then snapshot hashmap(s), fire a scan_plus query, and
+        validate exact consistency: count match + val match, no extra docs.
+
+        hashmaps: a single _ScanPlusHashMap or a list — both are accepted.
+        collection: if provided, ambiguous cases are verified via KV get.
+        knn: if provided, fires a KNN vector query (size=1000) instead of match_all.
+        """
+        if isinstance(hashmaps, _ScanPlusHashMap):
+            hashmaps = [hashmaps]
+        snapshot = {}
+        for hm in hashmaps:
+            snapshot.update(hm.snapshot())
+        errors = []
+        base_query = {"match_none": {}} if knn else {"match_all": {}}
+        try:
+            hits, matches, _, status = index.execute_query(
+                base_query,
+                zero_results_ok=True,
+                return_raw_hits=True,
+                consistency_level="scan_plus",
+                consistency_vectors=None,
+                fields=["val"],
+                knn=knn,
+            )
+        except Exception as e:
+            return [f"Query failed: {e}"]
+        if hits == -1 or status == 'fail':
+            return [f"Query failed: status={status}, error={matches}"]
+        match_count = len(matches) if matches else 0
+        self.log.info(
+            f"[scan_plus_functional] hits={hits}, matches={match_count}, "
+            f"snapshot_size={len(snapshot)}"
+        )
+        if knn and match_count > 0:
+            self.log.info(f"[scan_plus_functional] knn sample hit[0]: {matches[0]}")
+
+        result_map = {}
+        for match in (matches or []):
+            doc_id = match.get('id')
+            raw_val = match.get('fields', {}).get('val')
+            if doc_id is not None and raw_val is not None:
+                result_map[doc_id] = int(raw_val)
+
+        for doc_id, expected_val in snapshot.items():
+            if doc_id not in result_map:
+                if collection is not None:
+                    try:
+                        collection.get(doc_id)
+                        errors.append(
+                            f"Missing in FTS: '{doc_id}' confirmed present in KV "
+                            f"(snapshot.val={expected_val}) — scan_plus consistency violation"
+                        )
+                    except _CbDocNotFound:
+                        self.log.warning(
+                            f"[scan_plus_functional] '{doc_id}' absent from FTS and KV "
+                            f"— hashmap FP (silent delete), not an FTS bug"
+                        )
+                    except _CbException as e:
+                        self.log.warning(
+                            f"[scan_plus_functional] KV get for '{doc_id}' failed: {e} "
+                            f"— treating as ambiguous"
+                        )
+                else:
+                    errors.append(
+                        f"Missing in FTS: '{doc_id}' (snapshot.val={expected_val})"
+                    )
+            elif result_map[doc_id] != expected_val:
+                errors.append(
+                    f"Val mismatch: '{doc_id}' "
+                    f"result.val={result_map[doc_id]}, snapshot.val={expected_val}"
+                )
+
+        for doc_id, result_val in result_map.items():
+            if doc_id not in snapshot:
+                if collection is not None:
+                    try:
+                        collection.get(doc_id)
+                        self.log.warning(
+                            f"[scan_plus_functional] Extra doc '{doc_id}' confirmed in KV "
+                            f"— ambiguous insert missed by hashmap (not an FTS bug)"
+                        )
+                    except _CbDocNotFound:
+                        errors.append(
+                            f"Extra doc in FTS: '{doc_id}' (val={result_val}) confirmed "
+                            f"absent from KV — stale FTS entry (real violation)"
+                        )
+                    except _CbException as e:
+                        self.log.warning(
+                            f"[scan_plus_functional] KV get for extra doc '{doc_id}' "
+                            f"failed: {e} — treating as ambiguous, not flagging"
+                        )
+                else:
+                    errors.append(
+                        f"Extra doc in FTS: '{doc_id}' (val={result_val}), not in snapshot"
+                    )
+
+        confirmed_errors = [e for e in errors if "confirmed" in e or "Val mismatch" in e]
+        self.log.info(
+            f"[scan_plus_functional] result_map={len(result_map)}, "
+            f"snapshot={len(snapshot)}, confirmed_errors={len(confirmed_errors)}"
+        )
+        return errors
+
+    def _scan_plus_bg_query_worker(self, index, hashmap, violations, stop_event,
+                                    interval=5):
+        while not stop_event.is_set():
+            self._scan_plus_fire_and_validate_stress(index, hashmap, violations)
+            stop_event.wait(timeout=interval)
+
+    def _scan_plus_rf_setup(self, index_name, initial_docs=10):
+        cluster, collection = self._scan_plus_setup_sdk()
+        hashmap = _ScanPlusHashMap()
+        for _ in range(initial_docs):
+            doc_id = f"scan_plus_{uuid.uuid4().hex}"
+            collection.upsert(doc_id, {'val': 1})
+            hashmap.insert(doc_id, 1)
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        index = self.create_index(bucket, index_name)
+        index.add_child_field_to_default_mapping("val", "number")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.wait_for_indexing_complete(item_count=initial_docs)
+        mgr_options = {}
+        getseqnos_retries = TestInputSingleton.input.param("getseqnos_retries", None)
+        use_bucket_seqnos = TestInputSingleton.input.param("use_bucket_seqnos", None)
+        num_workers       = TestInputSingleton.input.param("num_workers", None)
+        if getseqnos_retries is not None:
+            mgr_options["getseqnos_retries"] = str(getseqnos_retries)
+        if use_bucket_seqnos is not None:
+            mgr_options["use_bucket_seqnos"] = str(use_bucket_seqnos).lower()
+        if num_workers is not None:
+            mgr_options["num_workers"] = str(num_workers)
+        if mgr_options:
+            self._scan_plus_set_manager_options(mgr_options)
+        return cluster, collection, hashmap, index
+
+    def _scan_plus_rf_start_background(self, collection, hashmap, index, violations,
+                                        num_crud_threads=4, query_interval=5):
+        stop_event = threading.Event()
+        drain_cond = threading.Condition()
+        inflight_count = [0]
+        crud_threads = []
+        for _ in range(num_crud_threads):
+            t = threading.Thread(
+                target=self._scan_plus_crud_worker,
+                args=(collection, hashmap, stop_event, drain_cond, inflight_count),
+                daemon=True,
+            )
+            t.start()
+            crud_threads.append(t)
+        query_thread = threading.Thread(
+            target=self._scan_plus_bg_query_worker,
+            args=(index, hashmap, violations, stop_event, query_interval),
+            daemon=True,
+        )
+        query_thread.start()
+        return stop_event, crud_threads, query_thread, drain_cond, inflight_count
+
+    def _scan_plus_rf_stop_and_validate(self, index, hashmap, stop_event,
+                                         crud_threads, query_thread,
+                                         drain_cond, inflight_count,
+                                         collection=None):
+        """Stop all background threads, drain CRUD, fire final exact validation."""
+        stop_event.set()
+        query_thread.join(timeout=10)
+        with drain_cond:
+            while inflight_count[0] > 0:
+                drain_cond.wait(timeout=30)
+        for t in crud_threads:
+            t.join(timeout=30)
+        try:
+            return self._scan_plus_fire_and_validate_functional(index, hashmap, collection)
+        finally:
+            self._scan_plus_restore_manager_defaults()
+
+    def _scan_plus_rf_report(self, tag, violations, final_errors):
+        for v in violations:
+            self.log.warning(
+                f"[{tag}] during-change violation (logged, not failing): {v}")
+        if violations:
+            self.log.info(
+                f"[{tag}] {len(violations)} during-change violation(s) — see warnings above")
+        if final_errors:
+            self.fail(f"[{tag}] Final exact validation failed: {final_errors}")
+        else:
+            self.log.info(f"[{tag}] PASSED")

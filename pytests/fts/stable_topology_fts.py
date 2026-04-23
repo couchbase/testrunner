@@ -4,6 +4,7 @@ import copy
 import json
 import random
 import time
+import threading
 from threading import Thread
 
 import Geohash
@@ -13,11 +14,11 @@ from remote.remote_util import RemoteMachineShellConnection
 from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
-from .fts_base import FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY, download_from_s3
+from .fts_base import (FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY,
+                       download_from_s3, _ScanPlusHashMap, _make_vec)
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 from couchbase_helper.documentgenerator import SDKDataLoader
-import threading
 
 
 class StableTopFTS(FTSBaseTest):
@@ -5343,3 +5344,526 @@ class StableTopFTS(FTSBaseTest):
                 self.log.error(err)
             self.fail(f"{len(errors)} out of {num_indexes} index queries "
                       f"failed: {errors}")
+
+    # ======================================================================
+    # scan_plus / scan_plus tests
+    # ======================================================================
+
+    def test_scan_plus_stress(self):
+        """
+        Stress/performance test for scan_plus consistency.
+
+        Runs continuous CRUD (4 insert : 5 update : 1 delete) for `duration`
+        seconds across `num_crud_threads` threads.  FTS queries are fired at
+        random intervals (5–30 s).  For each query the HashMap is snapshotted
+        at fire-time and used as ground truth.
+
+        Validation (unidirectional, stress-friendly):
+          • For every FTS hit: result.val >= snapshot.val
+          • Docs absent from the snapshot (deleted before query time) must not
+            appear in results — violations are collected and reported at the end.
+
+        Params (via TestInput):
+          duration         : total run time in seconds (default 600)
+          num_crud_threads : parallel CRUD goroutines (default 4)
+          initial_docs     : seed doc count (default 5)
+          index_partitions : FTS index partition count (default 1)
+          num_replicas     : FTS index replica count (default 0)
+        """
+        duration         = TestInputSingleton.input.param("duration", 600)
+        num_crud_threads = TestInputSingleton.input.param("num_crud_threads", 4)
+        initial_docs     = TestInputSingleton.input.param("initial_docs", 5)
+        index_partitions = TestInputSingleton.input.param("index_partitions", 1)
+        num_replicas     = TestInputSingleton.input.param("num_replicas", 0)
+        getseqnos_retries = TestInputSingleton.input.param("getseqnos_retries", None)
+        use_bucket_seqnos = TestInputSingleton.input.param("use_bucket_seqnos", None)
+        num_workers       = TestInputSingleton.input.param("num_workers", None)
+
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        _, collection = self._scan_plus_setup_sdk()
+
+        # One HashMap per thread; distribute initial_docs so total seeded == initial_docs
+        base = initial_docs // num_crud_threads
+        extra_docs = initial_docs % num_crud_threads
+        hashmaps = []
+        for t_idx in range(num_crud_threads):
+            docs_for_thread = base + (1 if t_idx < extra_docs else 0)
+            hm = _ScanPlusHashMap()
+            for i in range(docs_for_thread):
+                doc_id = f"scan_plus_t{t_idx}_init_{i}"
+                collection.upsert(doc_id, {'val': 1})
+                hm.insert(doc_id, 1)
+            hashmaps.append(hm)
+
+        total_initial_docs = initial_docs
+        index = self.create_index(bucket, "scan_plus_stress_idx")
+        index.add_child_field_to_default_mapping("val", "number")
+        if index_partitions > 1:
+            # update_index_partitions GETs the server definition (overwriting the
+            # local one), so push the val mapping first so the GET picks it up.
+            index.index_definition['uuid'] = index.get_uuid()
+            index.update()
+            index.update_index_partitions(index_partitions)
+        if num_replicas > 0:
+            index.update_num_replicas(num_replicas)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.wait_for_indexing_complete(item_count=total_initial_docs)
+
+        mgr_options = {}
+        if getseqnos_retries is not None:
+            mgr_options["getseqnos_retries"] = str(getseqnos_retries)
+        if use_bucket_seqnos is not None:
+            mgr_options["use_bucket_seqnos"] = str(use_bucket_seqnos).lower()
+        if num_workers is not None:
+            mgr_options["num_workers"] = str(num_workers)
+        if mgr_options:
+            self._scan_plus_set_manager_options(mgr_options)
+
+        stop_event = threading.Event()
+        violations = []
+
+        crud_threads = []
+        for t_idx in range(num_crud_threads):
+            t = threading.Thread(
+                target=self._scan_plus_crud_worker,
+                args=(collection, hashmaps[t_idx], stop_event),
+                kwargs={'thread_idx': t_idx},
+                daemon=True,
+            )
+            t.start()
+            crud_threads.append(t)
+
+        start_time = time.time()
+        try:
+            while time.time() - start_time < duration:
+                remaining = duration - (time.time() - start_time)
+                wait = min(random.uniform(5, 30), remaining)
+                if wait > 0:
+                    time.sleep(wait)
+                if time.time() - start_time < duration:
+                    self._scan_plus_fire_and_validate_stress(index, hashmaps, violations)
+        finally:
+            stop_event.set()
+            for t in crud_threads:
+                t.join(timeout=30)
+            if mgr_options:
+                self._scan_plus_restore_manager_defaults()
+
+        self._scan_plus_fire_and_validate_stress(index, hashmaps, violations)
+
+        if violations:
+            for v in violations:
+                self.log.error(f"[scan_plus_stress] {v}")
+            self.fail(
+                f"scan_plus stress: {len(violations)} violation(s) detected"
+            )
+        else:
+            self.log.info("[scan_plus_stress] PASSED — no violations detected")
+
+    def test_scan_plus_functional(self):
+        """
+        Functional test for scan_plus consistency.
+
+        CRUD runs in `num_batches` batches of `batch_duration` seconds each.
+        After each batch all in-flight ops are drained before the HashMap is
+        snapshotted and a scan_plus query is fired.
+
+        Validation (exact, functional):
+          • FTS doc count == snapshot doc count
+          • For every doc in snapshot: FTS result.val == snapshot.val
+          • No extra docs in FTS results that are absent from snapshot
+
+        Params (via TestInput):
+          batch_duration   : seconds of CRUD per batch (default 60)
+          num_batches      : number of CRUD-pause-query cycles (default 3)
+          num_crud_threads : parallel CRUD goroutines (default 4)
+          initial_docs     : seed doc count (default 5)
+          index_partitions     : FTS index partition count (default 1)
+          num_replicas         : FTS index replica count (default 0)
+          getseqnos_retries    : override scan_plus getseqnos_retries (default: server default 30)
+          use_bucket_seqnos    : override scan_plus use_bucket_seqnos (default: server default false)
+          num_workers          : override scan_plus num_workers (default: server default 10)
+        """
+        batch_duration = TestInputSingleton.input.param("batch_duration", 60)
+        num_batches = TestInputSingleton.input.param("num_batches", 3)
+        num_crud_threads = TestInputSingleton.input.param("num_crud_threads", 4)
+        initial_docs = TestInputSingleton.input.param("initial_docs", 5)
+        index_partitions = TestInputSingleton.input.param("index_partitions", 1)
+        num_replicas = TestInputSingleton.input.param("num_replicas", 0)
+        getseqnos_retries = TestInputSingleton.input.param("getseqnos_retries", None)
+        use_bucket_seqnos = TestInputSingleton.input.param("use_bucket_seqnos", None)
+        num_workers = TestInputSingleton.input.param("num_workers", None)
+
+        mgr_options = {}
+        if getseqnos_retries is not None:
+            mgr_options["getseqnos_retries"] = str(getseqnos_retries)
+        if use_bucket_seqnos is not None:
+            mgr_options["use_bucket_seqnos"] = str(use_bucket_seqnos).lower()
+        if num_workers is not None:
+            mgr_options["num_workers"] = str(num_workers)
+        if mgr_options:
+            self._scan_plus_set_manager_options(mgr_options)
+
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        _, collection = self._scan_plus_setup_sdk()
+
+        # One HashMap per thread; distribute initial_docs so total seeded == initial_docs
+        base = initial_docs // num_crud_threads
+        extra_docs = initial_docs % num_crud_threads
+        hashmaps = []
+        for t_idx in range(num_crud_threads):
+            docs_for_thread = base + (1 if t_idx < extra_docs else 0)
+            hm = _ScanPlusHashMap()
+            for i in range(docs_for_thread):
+                doc_id = f"scan_plus_t{t_idx}_init_{i}"
+                collection.upsert(doc_id, {'val': 1})
+                hm.insert(doc_id, 1)
+            hashmaps.append(hm)
+
+        total_initial_docs = initial_docs
+        index = self.create_index(bucket, "scan_plus_functional_idx")
+        index.add_child_field_to_default_mapping("val", "number")
+        if index_partitions > 1:
+            # update_index_partitions GETs the server definition (overwriting the
+            # local one), so push the val mapping first so the GET picks it up.
+            index.index_definition['uuid'] = index.get_uuid()
+            index.update()
+            index.update_index_partitions(index_partitions)
+        if num_replicas > 0:
+            index.update_num_replicas(num_replicas)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        # Pass item_count so wait_for_indexing_complete doesn't return early
+        # when the bucket stat briefly reads 0 (0==0 fast-exit path).
+        self.wait_for_indexing_complete(item_count=total_initial_docs)
+
+        drain_cond = threading.Condition()
+        inflight_count = [0]
+        all_errors = []
+
+        for batch_num in range(1, num_batches + 1):
+            self.log.info(
+                f"[scan_plus_functional] Batch {batch_num}/{num_batches}: "
+                f"starting CRUD ({batch_duration}s)"
+            )
+            stop_event = threading.Event()
+
+            crud_threads = []
+            for t_idx in range(num_crud_threads):
+                t = threading.Thread(
+                    target=self._scan_plus_crud_worker,
+                    args=(collection, hashmaps[t_idx], stop_event,
+                          drain_cond, inflight_count),
+                    kwargs={'thread_idx': t_idx},
+                    daemon=True,
+                )
+                t.start()
+                crud_threads.append(t)
+
+            time.sleep(batch_duration)
+
+            stop_event.set()
+            with drain_cond:
+                while inflight_count[0] > 0:
+                    drain_cond.wait(timeout=30)
+
+            for t in crud_threads:
+                t.join(timeout=30)
+
+            total_size = sum(hm.size() for hm in hashmaps)
+            self.log.info(
+                f"[scan_plus_functional] Batch {batch_num}: CRUD drained, "
+                f"total hashmap size={total_size}. Firing query…"
+            )
+
+            errors = self._scan_plus_fire_and_validate_functional(index, hashmaps, collection=collection)
+            if errors:
+                all_errors.extend(
+                    [f"Batch {batch_num}: {e}" for e in errors]
+                )
+                for e in errors:
+                    self.log.error(f"[scan_plus_functional] Batch {batch_num}: {e}")
+            else:
+                self.log.info(
+                    f"[scan_plus_functional] Batch {batch_num}: PASSED"
+                )
+
+        if all_errors:
+            for e in all_errors:
+                self.log.error(f"[scan_plus_functional] {e}")
+            if mgr_options:
+                self._scan_plus_restore_manager_defaults()
+            self.fail(
+                f"scan_plus functional: {len(all_errors)} error(s) across "
+                f"{num_batches} batch(es)"
+            )
+        else:
+            self.log.info(
+                "[scan_plus_functional] PASSED — all batches validated"
+            )
+        if mgr_options:
+            self._scan_plus_restore_manager_defaults()
+
+    def test_scan_plus_multi_collection(self):
+        """
+        scan_plus consistency across 3 collections covered by one FTS index.
+
+        Creates a custom scope ('sp_scope') with 3 collections ('col_a', 'col_b',
+        'col_c'), builds a single collection-aware FTS index spanning all three,
+        then runs continuous CRUD against every collection simultaneously.
+
+        Validates that scan_plus match_all queries return consistent results
+        across the entire multi-collection index — no stale deletes, no stale
+        val reads — with the same unidirectional stress check used by
+        test_scan_plus_stress.
+
+        Params (via TestInput):
+          duration         : total run time in seconds (default 600)
+          num_crud_threads : total CRUD threads, distributed across collections (default 6)
+          initial_docs     : seed docs per collection (default 30)
+          index_partitions : FTS index partition count (default 1)
+          num_replicas     : FTS index replica count (default 0)
+        """
+        duration = TestInputSingleton.input.param("duration", 600)
+        num_crud_threads = TestInputSingleton.input.param("num_crud_threads", 6)
+        initial_docs = TestInputSingleton.input.param("initial_docs", 30)
+        index_partitions = TestInputSingleton.input.param("index_partitions", 1)
+        num_replicas = TestInputSingleton.input.param("num_replicas", 0)
+
+        SCOPE = "sp_scope"
+        COLLECTIONS = ["col_a", "col_b", "col_c"]
+
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+
+        # Create scope + collections
+        self._cb_cluster.create_scope_using_rest('default', SCOPE)
+        for col in COLLECTIONS:
+            self._cb_cluster.create_collection_using_rest('default', SCOPE, col)
+        self.sleep(5, "Wait for collections to initialise")
+
+        # SDK connections: one per collection
+        cluster, _ = self._scan_plus_setup_sdk()
+        cb_scope = cluster.bucket('default').scope(SCOPE)
+        cb_cols = {col: cb_scope.collection(col) for col in COLLECTIONS}
+
+        # Distribute CRUD threads across collections; spread remainder so total == num_crud_threads
+        threads_per_col = num_crud_threads // len(COLLECTIONS)
+        extra = num_crud_threads % len(COLLECTIONS)
+        # Seed docs and build per-thread HashMaps; distribute initial_docs within each collection
+        col_hashmaps = {}
+        total_seeded = 0
+        for col_idx, col in enumerate(COLLECTIONS):
+            threads_for_col = threads_per_col + (1 if col_idx < extra else 0)
+            col_hashmaps[col] = []
+            seed_threads = max(1, threads_for_col)
+            per_thread = initial_docs // seed_threads
+            extra_docs = initial_docs % seed_threads
+            for t_idx in range(seed_threads):
+                docs_for_thread = per_thread + (1 if t_idx < extra_docs else 0)
+                hm = _ScanPlusHashMap()
+                for i in range(docs_for_thread):
+                    doc_id = f"sp_{col}_{t_idx}_init_{i}"
+                    cb_cols[col].upsert(doc_id, {'val': 1})
+                    hm.insert(doc_id, 1)
+                    total_seeded += 1
+                col_hashmaps[col].append(hm)
+
+        self.log.info(f"[scan_plus_multicol] Seeded {total_seeded} docs across {len(COLLECTIONS)} collections")
+
+        _types = [f"{SCOPE}.{col}" for col in COLLECTIONS]
+        index = self._cb_cluster.create_fts_index(
+            "scan_plus_multicol_idx", source_name='default',
+            scope=SCOPE, collection_index=True,
+            _type=_types, collections=COLLECTIONS,
+            plan_params={"numReplicas": num_replicas, "indexPartitions": index_partitions},
+            source_params={"scopeParams": {"name": SCOPE,
+                                           "collections": [{"name": col} for col in COLLECTIONS]}})
+        # add_type_mapping_to_index_definition defaults dynamic=True; override to False
+        # so only explicitly mapped fields (val) are indexed per collection
+        for typ in _types:
+            index.index_definition['params']['mapping']['types'][typ]['dynamic'] = False
+        for col in COLLECTIONS:
+            index.add_child_field_to_default_collection_mapping(
+                "val", "number", scope=SCOPE, collection=col)
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        total_initial_docs = total_seeded
+        self.wait_for_indexing_complete(item_count=total_initial_docs)
+
+        # Flatten all hashmaps into one list for combined snapshot in validate
+        all_hashmaps = [hm for col in COLLECTIONS for hm in col_hashmaps[col]]
+
+        # Launch CRUD threads; global_t_idx is a running counter across all collections
+        stop_event = threading.Event()
+        violations = []
+        crud_threads = []
+        global_t_idx = 0
+        for col_idx, col in enumerate(COLLECTIONS):
+            threads_for_col = threads_per_col + (1 if col_idx < extra else 0)
+            for t_idx in range(threads_for_col):
+                t = threading.Thread(
+                    target=self._scan_plus_crud_worker,
+                    args=(cb_cols[col], col_hashmaps[col][t_idx], stop_event),
+                    kwargs={'thread_idx': global_t_idx},
+                    daemon=True,
+                )
+                t.start()
+                crud_threads.append(t)
+                global_t_idx += 1
+
+        self.log.info(
+            f"[scan_plus_multicol] Running {duration}s | "
+            f"{len(crud_threads)} CRUD threads across {len(COLLECTIONS)} collections"
+        )
+
+        start_time = time.time()
+        try:
+            while time.time() - start_time < duration:
+                remaining = duration - (time.time() - start_time)
+                wait = min(random.uniform(5, 30), remaining)
+                if wait > 0:
+                    time.sleep(wait)
+                if time.time() - start_time < duration:
+                    self._scan_plus_fire_and_validate_stress(index, all_hashmaps, violations)
+        finally:
+            stop_event.set()
+            for t in crud_threads:
+                t.join(timeout=30)
+
+        # Final query after CRUD fully stopped
+        self._scan_plus_fire_and_validate_stress(index, all_hashmaps, violations)
+
+        if violations:
+            for v in violations:
+                self.log.error(f"[scan_plus_multicol] {v}")
+            self.fail(
+                f"scan_plus multi-collection: {len(violations)} violation(s) detected"
+            )
+        else:
+            self.log.info("[scan_plus_multicol] PASSED — no violations detected")
+
+    def test_scan_plus_vector(self):
+        """
+        Verifies that scan_plus consistency is not broken when the FTS index
+        contains a vector field and queries are KNN-based.
+
+        Uses the same functional batch approach as test_scan_plus_functional:
+        CRUD runs for batch_duration seconds, drains, then a KNN scan_plus
+        query is fired with K=1000 (the FTS maximum).  Because the live corpus
+        stays well under 1000 docs, every live doc is returned by the KNN query
+        and the same exact val-consistency validation applies.
+
+        Docs carry a `vec` field (1536-dim unit vector, deterministic per
+        doc_id) alongside the usual `val` counter.  CRUD only increments val;
+        vec is reconstructed from doc_id on every upsert so it never drifts.
+
+        Params (via TestInput):
+          batch_duration   : seconds of CRUD per batch (default 60)
+          num_batches      : CRUD-drain-query cycles (default 3)
+          num_crud_threads : parallel CRUD threads (default 4)
+          initial_docs     : seed doc count, keep << 1000 (default 10)
+          vec_dims         : vector dimensions (default 1536)
+          num_replicas     : FTS index replica count (default 0)
+        """
+        batch_duration   = TestInputSingleton.input.param("batch_duration", 60)
+        num_batches      = TestInputSingleton.input.param("num_batches", 3)
+        num_crud_threads = TestInputSingleton.input.param("num_crud_threads", 4)
+        initial_docs     = TestInputSingleton.input.param("initial_docs", 10)
+        vec_dims         = TestInputSingleton.input.param("vec_dims", 1536)
+        num_replicas     = TestInputSingleton.input.param("num_replicas", 0)
+
+        KNN_K = 1000  # FTS max; k covers the whole corpus only if total docs < 1000
+        knn_base = KNN_K // num_crud_threads
+        knn_extra = KNN_K % num_crud_threads
+        per_thread_caps = [knn_base + (1 if i < knn_extra else 0) for i in range(num_crud_threads)]
+
+        _, collection = self._scan_plus_setup_sdk()
+
+        base = initial_docs // num_crud_threads
+        extra_docs = initial_docs % num_crud_threads
+        hashmaps = []
+        for t_idx in range(num_crud_threads):
+            docs_for_thread = base + (1 if t_idx < extra_docs else 0)
+            hm = _ScanPlusHashMap()
+            for i in range(docs_for_thread):
+                doc_id = f"sp_vec_t{t_idx}_init_{i}"
+                collection.upsert(doc_id, {'val': 1, 'vec': _make_vec(doc_id, vec_dims)})
+                hm.insert(doc_id, 1)
+            hashmaps.append(hm)
+
+        total_initial_docs = initial_docs
+
+        index = self._cb_cluster.create_fts_index(
+            "scan_plus_vec_idx", source_name='default',
+            plan_params={"numReplicas": num_replicas})
+        index.add_child_field_to_default_mapping("val", "number")
+        # vec is a vector field; add_child_field_to_default_mapping doesn't support
+        # dims/similarity, so set it directly on the already-established default_mapping
+        index.index_definition['params']['mapping']['default_mapping']['properties']['vec'] = {
+            "dynamic": False, "enabled": True,
+            "fields": [{"name": "vec", "type": "vector", "dims": vec_dims,
+                        "similarity": "l2_norm", "index": True}],
+        }
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.wait_for_indexing_complete(item_count=total_initial_docs)
+
+        # Fixed query vector — same for every batch.  With K=1000 >= corpus
+        # size, all live docs are returned regardless of distance ordering.
+        query_vec = [0.0] * vec_dims
+        query_vec[0] = 1.0  # non-zero so l2_norm has a defined nearest neighbour
+        knn_param = [{"field": "vec", "vector": query_vec, "k": KNN_K}]
+
+        drain_cond = threading.Condition()
+        inflight_count = [0]
+        all_errors = []
+
+        for batch_num in range(1, num_batches + 1):
+            self.log.info(
+                f"[scan_plus_vector] Batch {batch_num}/{num_batches}: "
+                f"starting CRUD ({batch_duration}s)"
+            )
+            stop_event = threading.Event()
+            crud_threads = []
+            for t_idx in range(num_crud_threads):
+                t = threading.Thread(
+                    target=self._scan_plus_vec_crud_worker,
+                    args=(collection, hashmaps[t_idx], t_idx, stop_event,
+                          vec_dims, drain_cond, inflight_count),
+                    kwargs={'max_docs': per_thread_caps[t_idx]},
+                    daemon=True,
+                )
+                t.start()
+                crud_threads.append(t)
+
+            time.sleep(batch_duration)
+            stop_event.set()
+            with drain_cond:
+                while inflight_count[0] > 0:
+                    drain_cond.wait(timeout=30)
+            for t in crud_threads:
+                t.join(timeout=30)
+
+            total_size = sum(hm.size() for hm in hashmaps)
+            self.log.info(
+                f"[scan_plus_vector] Batch {batch_num}: CRUD drained, "
+                f"hashmap size={total_size}. Firing KNN query…"
+            )
+            errors = self._scan_plus_fire_and_validate_functional(
+                index, hashmaps, collection=collection, knn=knn_param)
+            if errors:
+                all_errors.extend([f"Batch {batch_num}: {e}" for e in errors])
+                for e in errors:
+                    self.log.error(f"[scan_plus_vector] Batch {batch_num}: {e}")
+            else:
+                self.log.info(f"[scan_plus_vector] Batch {batch_num}: PASSED")
+
+        if all_errors:
+            for e in all_errors:
+                self.log.error(f"[scan_plus_vector] {e}")
+            self.fail(
+                f"scan_plus vector: {len(all_errors)} error(s) across {num_batches} batch(es)"
+            )
+        else:
+            self.log.info("[scan_plus_vector] PASSED — all batches validated")

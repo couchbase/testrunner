@@ -1,17 +1,18 @@
+import json
+import os
+import random
 import threading
+import time
+from threading import Thread
+
 from lib import global_vars
 from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
 from .fts_base import FTSBaseTest, FTSException
 from .fts_base import NodeHelper, FloatingServers
 from TestInput import TestInputSingleton
-from threading import Thread
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
-import json
-import time
-import random
-import os
 
 class MovingTopFTS(FTSBaseTest):
 
@@ -3052,3 +3053,190 @@ class MovingTopFTS(FTSBaseTest):
             self.sleep(10)
 
         self.log.info("Hierarchical rebalance sequence test completed successfully")
+
+    # ======================================================================
+    # scan_plus / request_plus — rebalance & failover tests (RF-1 to RF-8)
+    # ======================================================================
+    #
+    # Common structure for every test:
+    #   1. Setup SDK + HashMap + FTS index with stored val field
+    #   2. Start background CRUD (4:5:1) + background query (scan_plus every 5s)
+    #   3. Trigger topology change
+    #   4. Wait for cluster to stabilise
+    #   5. Stop CRUD, drain all in-flight ops
+    #   6. Final exact validation (scan_plus with frozen world)
+    #
+    # During-change query violations are logged but do NOT fail the test.
+    # Only the final exact validation is a hard failure.
+    # ======================================================================
+
+    # --- helpers -----------------------------------------------------------
+
+    # --- RF-1: KV node rebalance -------------------------------------------
+
+    def test_scan_plus_kv_rebalance(self):
+        """RF-1: scan_plus consistency during KV node rebalance in/out."""
+        tag = "RF-1 kv_rebalance"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf1_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before rebalance")
+        self._cb_cluster.rebalance_out(num_nodes=1)
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["kv"])
+        # No wait_for_indexing_complete: CRUD is still running so bucket count
+        # is a moving target. The final scan_plus query handles consistency.
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-2: FTS node rebalance ------------------------------------------
+
+    def test_scan_plus_fts_rebalance(self):
+        """RF-2: scan_plus consistency during FTS node rebalance in/out."""
+        tag = "RF-2 fts_rebalance"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf2_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before rebalance")
+        self._cb_cluster.rebalance_out(num_nodes=1)
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-3: KV graceful failover ----------------------------------------
+
+    def test_scan_plus_kv_graceful_failover(self):
+        """RF-3: scan_plus consistency during graceful KV failover + full recovery."""
+        tag = "RF-3 kv_graceful_failover"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf3_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before failover")
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
+        self._cb_cluster.async_failover(graceful=True, node=kv_node).result()
+        self.sleep(30)
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-4: KV hard failover (memcached kill) ----------------------------
+
+    def test_scan_plus_kv_hard_failover(self):
+        """RF-4: scan_plus consistency when memcached is killed then KV node is hard-failed over."""
+        tag = "RF-4 kv_hard_failover"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf4_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before kill")
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
+        NodeHelper.kill_memcached(kv_node)
+        self.sleep(10, "Let memcached crash propagate")
+        self._cb_cluster.async_failover(graceful=False, node=kv_node).result()
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-5: FTS node failover -------------------------------------------
+
+    def test_scan_plus_fts_failover(self):
+        """RF-5: scan_plus consistency during FTS node failover + full recovery."""
+        tag = "RF-5 fts_failover"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf5_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before failover")
+        fts_node = self._cb_cluster.get_fts_nodes()[0]
+        self._cb_cluster.async_failover(graceful=False, node=fts_node).result()
+        self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-6: Sequential KV then FTS failover -----------------------------
+
+    def test_scan_plus_sequential_kv_fts_failover(self):
+        """RF-6: scan_plus across sequential KV failover followed by FTS failover."""
+        tag = "RF-6 sequential_kv_fts_failover"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf6_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before first failover")
+
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
+        self._cb_cluster.async_failover(graceful=False, node=kv_node).result()
+        self._cb_cluster.add_back_node(recovery_type='full', services=["kv"])
+
+        self.sleep(10, "Pause between KV and FTS failovers")
+
+        fts_node = self._cb_cluster.get_fts_nodes()[0]
+        self._cb_cluster.async_failover(graceful=False, node=fts_node).result()
+        self._cb_cluster.add_back_node(recovery_type='full', services=["fts"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-7: Multi-node swap rebalance -----------------------------------
+
+    def test_scan_plus_swap_rebalance(self):
+        """RF-7: scan_plus consistency during multi-node simultaneous swap rebalance."""
+        tag = "RF-7 swap_rebalance"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf7_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before swap rebalance")
+        self._cb_cluster.rebalance_out(num_nodes=2)
+        self._cb_cluster.rebalance_in(num_nodes=2, services=["fts", "fts"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
+
+    # --- RF-8: Delta recovery after failover -------------------------------
+
+    def test_scan_plus_delta_recovery(self):
+        """RF-8: scan_plus consistency after KV failover with delta recovery."""
+        tag = "RF-8 delta_recovery"
+        _, collection, hashmap, index = self._scan_plus_rf_setup("scan_plus_rf8_idx")
+        violations = []
+        stop_event, crud_threads, query_thread, drain_cond, inflight_count = \
+            self._scan_plus_rf_start_background(collection, hashmap, index, violations)
+
+        self.sleep(10, "Let CRUD warm up before failover")
+        kv_node = self._cb_cluster.get_kv_nodes()[1]
+        self._cb_cluster.async_failover(graceful=False, node=kv_node).result()
+        self._cb_cluster.add_back_node(recovery_type='delta', services=["kv"])
+
+        final_errors = self._scan_plus_rf_stop_and_validate(
+            index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
+            collection=collection)
+        self._scan_plus_rf_report(tag, violations, final_errors)
