@@ -966,8 +966,8 @@ class SDKClient(object):
         if data == None:
             return map
         for key, result in list(data.items()):
-            result = result._original
-            map[key] = [result.flags, result.cas, result.value]
+            flags = getattr(result, 'flags', 0)
+            map[key] = [flags, result.cas, result.value]
         return map
 
     def __translate_get_multi_results(self, data):
@@ -976,21 +976,13 @@ class SDKClient(object):
         if data is None:
             return success, fail
         for key, result in list(data.items()):
-            result = result._original
-            if result.status:
-                success[key] = dict()
-                success[key]['value'] = result.value
-                success[key]['cas'] = result.cas
-            else:
-                fail[key] = dict()
-                fail[key]['cas'] = result.cas
-                fail[key]['error'] = result.error
-                fail[key]['value'] = dict()
+            success[key] = dict()
+            success[key]['value'] = result.value
+            success[key]['cas'] = result.cas
         return success, fail
 
     def __translate_get(self, data):
-        data = data._original
-        return data.flags, data.cas, data.value
+        return data
 
     def __translate_delete(self, data):
         return data
