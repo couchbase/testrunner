@@ -313,6 +313,8 @@ class ElasticSearchBase(object):
             if status:
                 self.__indices.append(index_name)
                 self.enable_scroll(index_name=index_name)
+            else:
+                raise Exception("HTTP request failed: %s" % content)
         except Exception as e:
             raise Exception("Could not create ES index : %s" % e)
 
@@ -330,6 +332,8 @@ class ElasticSearchBase(object):
             if status:
                 self.__indices.append(index_name)
                 self.enable_scroll(index_name=index_name)
+            else:
+                raise Exception("HTTP request failed: %s" % content)
         except Exception as e:
             raise Exception("Could not create index with ES std analyzer : %s"
                             % e)
@@ -575,6 +579,8 @@ class ElasticSearchBase(object):
                             continue
                     doc_ids.append(doc['_id'])
                 return len(doc_ids), doc_ids, content['took']
+            else:
+                raise Exception("ES search on index '%s' failed: %s" % (index_name, content))
         except Exception as e:
             self.__log.error("Couldn't run query on ES: %s, reason : %s"
                              % (json.dumps(query), e))
@@ -590,6 +596,8 @@ class ElasticSearchBase(object):
                 'POST')
             if status:
                 return json.loads(content)['count']
+            else:
+                raise Exception("ES get_index_count on '%s' failed: %s" % (index_name, content))
         except Exception as e:
             raise e
 
