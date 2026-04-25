@@ -3875,6 +3875,12 @@ class CouchbaseCluster:
         if hierarchical is None:
             hierarchical = self.hierarchical
 
+        # Resolve es_index_name here (correct module context) so task.py never
+        # needs to import FTSBaseTest, which would create a second class object
+        # via a different import path and produce a mismatched es_index_name.
+        if es_index_name is None and es is not None:
+            es_index_name = FTSBaseTest.get_es_index_name()
+
         task = self.__clusterop.async_run_fts_query_compare(fts_index=fts_index,
                                                             es_instance=es,
                                                             query_index=query_index,
