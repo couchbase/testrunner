@@ -3067,7 +3067,8 @@ class StableTopFTS(FTSBaseTest):
             for task_manager in self.task_managers:
                 task_manager.schedule(ESRunQueryCompare(self.fts_index,
                                                         self.es,
-                                                        query_index=0))
+                                                        query_index=0,
+                                                        es_index_name=FTSBaseTest.get_es_index_name()))
         self.sleep(600)
 
         self.shutdown_task_managers()
