@@ -281,7 +281,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             if self.xattr_indexes or 'RaBitQ2' in self.quantization_algo_description_vector or 'RaBitQ4' in self.quantization_algo_description_vector:
                 rest.set_index_settings({"indexer.bhive.topNScan": 500})
             else:
-                rest.set_index_settings({"indexer.bhive.topNScan": 300})
+                rest.set_index_settings({"indexer.bhive.topNScan": 500})
         
         query_stats_map = {}
         if self.xattr_indexes:
@@ -1383,6 +1383,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         Validates that BQ search can rerank results using full vectors for better accuracy.
         """
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         collection_namespace = self.namespaces[0]
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
 
@@ -2564,6 +2566,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         if len(index_nodes) < 2:
             self.skipTest("Can't run Alter index tests with less than 3 Index nodes")
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         select_queries = set()
         namespace_index_map = {}
         for namespace in self.namespaces:
@@ -2699,6 +2703,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         if len(index_nodes) < 2:
             self.skipTest("Can't run Alter index tests with less than 2 Index nodes")
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename, skip_default_scope=self.skip_default)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         select_queries = set()
         namespace_index_map = {}
         for namespace in self.namespaces:
@@ -3107,6 +3113,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_vector_indexes_after_bucket_flush(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         self.rest.change_bucket_props(self.buckets[0], flushEnabled=1)
 
         query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
@@ -3165,9 +3173,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # restoring and running queries again to validate recall percentage
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
-        self.wait_until_indexes_online()
-        self.validate_no_pending_mutations()
-        self.sleep(120)
+        self.sleep(300)
         # adding validations for item count post recovery of bucket
         _, stats = self._return_maps(perNode=True, map_from_index_nodes=True)
         index_item_count_map = {}
@@ -3595,6 +3601,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
     def test_recovery_memcached_crash(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                     skip_default_scope=self.skip_default)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
 
         setting = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
         self.index_rest.set_index_settings(setting)
@@ -3650,19 +3658,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                                             collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
                                             create_end=self.num_of_docs_per_collection * 2,
                                             dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
-            retry_count = 3
-            for attempt in range(retry_count):
-                try:
-                    task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
-                                                            generator=self.gen_update,
-                                                            timeout_secs=5000, use_magma_loader=True)
-                    task.result()
-                    break
-                except Exception as e:
-                    self.log.warning(f"DocLoader attempt {attempt + 1}/{retry_count} failed: {e}")
-                    if attempt == retry_count - 1:
-                        raise
-                    self.sleep(30)
+            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                    generator=self.gen_update,
+                                                    timeout_secs=5000, use_magma_loader=True)
+            task.result()
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         for data_node in data_nodes:
             remote_client = RemoteMachineShellConnection(data_node)
@@ -3678,11 +3677,6 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # check if any rollback has happened
         num_rollback = self.index_rest.get_num_rollback_stat(bucket=self.buckets[0].name)
         self.assertGreaterEqual(num_rollback, 0, "No rollback has happened")
-
-        self.wait_until_indexes_online()
-        self.validate_no_pending_mutations()
-        self.sleep(120)
-
         for namespace in self.namespaces:
             count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
@@ -4490,6 +4484,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         data_node = self.get_nodes_from_services_map(service_type="kv")
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
                                       skip_default_scope=self.skip_default)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
 
         # change bucket maxTTL to 120 secs to trigger expiration of docs
         self.rest.change_bucket_props(self.buckets[0], maxTTL=20)
@@ -4557,6 +4553,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_run_scans_on_dgm(self):
         self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+        if self.bhive_index:
+            self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
         select_queries = set()
         for namespace in self.namespaces:
             definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,

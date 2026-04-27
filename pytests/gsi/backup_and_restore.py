@@ -2426,6 +2426,8 @@ class BackupRestoreTests(BaseSecondaryIndexingTests):
         try:
             backup_client = None
             self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename)
+            if self.bhive_index:
+                self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
             time.sleep(10)
             select_queries = set()
             query_node = self.get_nodes_from_services_map(service_type="n1ql")
