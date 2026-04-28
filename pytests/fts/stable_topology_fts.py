@@ -1023,7 +1023,7 @@ class StableTopFTS(FTSBaseTest):
         """ individual filter tests """
         #only term filter
         index_ = self.construct_docfilter_index([("term_filter",term_filter)],"default","s1",collection_list[0],"i1")
-        index = self._cb_cluster.create_fts_index(name="i1",source_name="default",scope="s1",payload=index_)
+        index = self._cb_cluster.create_fts_index(name="i1",source_name="default",scope="s1",collections=[collection_list[0]],payload=index_)
         index.index_definition['uuid'] = index.get_uuid()
 
         time.sleep(self.index_wait_time)

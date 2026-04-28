@@ -33,6 +33,7 @@
                                 {
                                     "dims": 200,
                                     "index": true,
+                                    "gpu": true,
                                     "name": "vector_data",
                                     "similarity": "l2_norm",
                                     "type": "vector",

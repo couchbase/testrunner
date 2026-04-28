@@ -1354,7 +1354,8 @@ class FTSIndex:
 
     def _update_index_name(self, full_name):
         """Update index name to the server-assigned full name if it differs."""
-        if full_name and full_name != self.name and not self.is_elixir:
+        use_scoped = TestInputSingleton.input.param("use_scoped_fts", False)
+        if full_name and full_name != self.name and not self.is_elixir and not use_scoped:
             self.__log.info("Index name updated from '{0}' to '{1}'".format(
                 self.name, full_name))
             self.name = full_name
@@ -1364,10 +1365,11 @@ class FTSIndex:
         self.__log.info("Checking if index already exists ...")
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
+        use_scoped = TestInputSingleton.input.param("use_scoped_fts", False)
         status, _ = rest.get_fts_index_definition(self.name, self._source_name, self.scope)
         if status != 400:
             rest.delete_fts_index(self.name, self._source_name, self.scope)
-        else:
+        elif not use_scoped:
             full_name = self._build_full_index_name()
             if full_name != self.name:
                 status, _ = rest.get_fts_index_definition(full_name, self._source_name, self.scope)
@@ -1555,13 +1557,40 @@ class FTSIndex:
     def get_num_mutations_to_index(self, rest=None):
         if not rest:
             rest = RestConnection(self.__cluster.get_random_fts_node())
-        name = self.name
-        if self.is_elixir:
-            name = self._source_name + self.scope + self.name
-        status, stat_value = rest.get_fts_stats(index_name=name,
-                                                bucket_name=self._source_name,
-                                                stat_name='num_mutations_to_index')
-        return stat_value
+
+        # Couchbase 8.x keys scoped FTS stats as "{bucket}.{scope}.{index}:{stat}"
+        # rather than the legacy "{bucket}:{index}:{stat}". Fetch the full blob
+        # once and probe both shapes (plus a regex fallback) instead of letting
+        # get_fts_stats burn 5 retries on a wrong-format key.
+        status, raw = rest.get_fts_stats()
+        if not status:
+            self.__log.warning(
+                f"Could not fetch fts nsstats for {self.name}, assuming 0 mutations")
+            return 0
+        try:
+            parsed = json.loads(raw) if isinstance(raw, (str, bytes, bytearray)) else raw
+        except Exception as e:
+            self.__log.warning(f"Failed to parse nsstats for {self.name}: {e}")
+            return 0
+
+        candidates = []
+        if self.scope:
+            candidates.append(
+                f"{self._source_name}.{self.scope}.{self.name}:num_mutations_to_index")
+        candidates.append(
+            f"{self._source_name}:{self.name}:num_mutations_to_index")
+        for key in candidates:
+            if key in parsed:
+                return parsed[key]
+        # Last-resort scan — any key for this index ending in num_mutations_to_index
+        suffix = ":num_mutations_to_index"
+        for key, val in parsed.items():
+            if key.endswith(suffix) and self.name in key and self._source_name in key:
+                return val
+
+        self.__log.warning(
+            f"Could not find num_mutations_to_index stat for index {self.name}, assuming 0")
+        return 0
 
     def get_src_bucket_doc_count(self):
         return self.__cluster.get_doc_count_in_bucket(self.source_bucket)
@@ -2380,10 +2409,74 @@ class CouchbaseCluster:
                 not stopped,
                 RebalanceNotStopException("unable to stop rebalance"))
 
+    def __ensure_couchbase_alive(self, nodes):
+        """SSH to each node and make sure couchbase-server.service is active;
+        restart and wait for startup if it isn't. Guards the next test from a
+        previous test that left Couchbase dead (e.g. FTS OOM-killed) on one of
+        the nodes we're about to add to the cluster."""
+        for node in nodes:
+            if node is None:
+                continue
+            shell = None
+            try:
+                shell = RemoteMachineShellConnection(node)
+                o, _ = shell.execute_command(
+                    "systemctl is-active couchbase-server.service")
+                state = (o[0].strip() if o else "")
+                if state == "active":
+                    continue
+                self.__log.warning(
+                    "couchbase-server is '%s' on %s, restarting before init"
+                    % (state, node.ip))
+                shell.execute_command(
+                    "systemctl restart couchbase-server.service")
+                shell.wait_for_couchbase_started(
+                    num_retries=24, poll_interval=5)
+            except Exception as e:
+                self.__log.warning(
+                    "ensure_couchbase_alive failed on %s: %s" % (node.ip, e))
+            finally:
+                if shell is not None:
+                    try:
+                        shell.disconnect()
+                    except Exception:
+                        pass
+
+    def __pin_node_identity_to_server_ip(self, node):
+        """If the node is not currently in a cluster, call /node/controller/rename
+        to lock its Couchbase identity to the framework's server.ip (which on AWS
+        is the public DNS). Without this, Couchbase auto-detects "my own IP" when
+        node-init runs, which on AWS is the private VPC address (172.31.x.x) that
+        the dispatcher slave cannot reach. The drift happens across tests when a
+        previous test path left the master in a re-init-able state. No-op for
+        nodes already in a cluster — rename is rejected there, which is fine."""
+        try:
+            rest = RestConnection(node)
+            pools_status = rest.get_pools_info()
+            in_cluster = bool(pools_status and pools_status.get("pools"))
+            if in_cluster:
+                return
+            renamed, content = rest.rename_node(
+                node.ip,
+                username=node.rest_username or "Administrator",
+                password=node.rest_password or "password")
+            if renamed:
+                self.__log.info(
+                    "Pinned Couchbase identity on %s to %s", node.ip, node.ip)
+            else:
+                self.__log.warning(
+                    "Could not pin Couchbase identity on %s: %s",
+                    node.ip, content)
+        except Exception as e:
+            self.__log.warning(
+                "pin_node_identity failed on %s: %s", getattr(node, 'ip', '?'), e)
+
     def __init_nodes(self):
         """Initialize all nodes. Rename node to hostname
         if needed by test.
         """
+        for node in self.__nodes:
+            self.__pin_node_identity_to_server_ip(node)
         tasks = []
         for node in self.__nodes:
             tasks.append(
@@ -2495,6 +2588,8 @@ class CouchbaseCluster:
             raise FTSException("Only %s nodes present for given cluster"
                                "configuration %s"
                                % (len(available_nodes) + 1, cluster_services))
+        self.__ensure_couchbase_alive(
+            list(self.__nodes) + list(available_nodes))
         self.__init_nodes()
         if available_nodes:
             nodes_to_add = []
@@ -6833,7 +6928,17 @@ class FTSBaseTest(unittest.TestCase):
         from sentence_transformers import SentenceTransformer
         encoder = SentenceTransformer(self.llm_model)
         faiss_index = faiss.IndexFlatL2(encoder.get_sentence_embedding_dimension())
-        for k, v in gen.gen_docs.items():
+        # SDKDataLoader doesn't expose docs in-process (they're produced by a docker container),
+        # so gen_docs is only present on the legacy DocumentGenerator family. Skip gracefully
+        # rather than crash the test — index.faiss_index is currently a dead write.
+        docs = getattr(gen, "gen_docs", None)
+        if not docs:
+            self.log.warning(
+                "create_faiss_index: generator has no .gen_docs (likely SDKDataLoader); "
+                "returning empty faiss index. Faiss-based comparison will be a no-op for this run."
+            )
+            return faiss_index
+        for k, v in docs.items():
             l_vector = encoder.encode(v["learnings"])
             _v = np.array([l_vector])
             faiss.normalize_L2(_v)

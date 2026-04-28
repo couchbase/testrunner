@@ -21,6 +21,8 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.index_per_vect_bucket = TestInputSingleton.input.param("index_per_vector_bucket", 1)
         self.vector_dataset = TestInputSingleton.input.param("vector_dataset", "siftsmall")
         self.dimension = TestInputSingleton.input.param("dimension", 128)
+        self.gpu_index = TestInputSingleton.input.param("gpu_index", False)
+        self.vector_index_optimized_for = TestInputSingleton.input.param("vector_index_optimized_for", None)
         self.k = TestInputSingleton.input.param("k", 100)
         self.num_vector_queries = TestInputSingleton.input.param("num_vect_queries", 100)
         self.num_rebalance = TestInputSingleton.input.param("num_rebalance", 1)
@@ -94,6 +96,18 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         fts_node = self._cb_cluster.get_random_fts_node()
         self.sleep(timeout)
         NodeHelper.kill_erlang(fts_node)
+
+    def _build_vector_fields(self, dims, similarity):
+        """Construct the vector field dict used by _create_fts_index_parameterized.
+        Honors gpu_index and vector_index_optimized_for conf params so GPU and
+        recall/perf knobs actually land in the index definition (the base
+        constructor previously dropped them on the floor)."""
+        vf = {"dims": dims, "similarity": similarity}
+        if self.gpu_index:
+            vf["gpu"] = True
+        if self.vector_index_optimized_for:
+            vf["vector_index_optimized_for"] = self.vector_index_optimized_for
+        return vf
 
     def _find_expected_indexed_items_number(self):
         if self.container_type == 'bucket':
@@ -169,7 +183,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
         # create vector indexes in vector buckets
         similarity = random.choice(["l2_norm", "dot_product"])
-        vector_fields = {"dims": self.dimension, "similarity": similarity}
+        vector_fields = self._build_vector_fields(self.dimension, similarity)
         self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
                                              test_indexes=vect_index_containers,
                                              vector_fields=vector_fields,
@@ -200,7 +214,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for i in range(5):
             similarity = random.choice(["l2_norm", "dot_product"])
             idx = [(f"i{i}", "standard_bucket_2._default._default")]
-            vector_fields = {"dims": dimension, "similarity": similarity}
+            vector_fields = self._build_vector_fields(dimension, similarity)
             self._create_fts_index_parameterized(field_name="l_vector", field_type="vector", test_indexes=idx,
                                                  vector_fields=vector_fields,
                                                  create_vector_index=True)
@@ -208,7 +222,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         for i in range(5):
             similarity = random.choice(["l2_norm", "dot_product"])
             idx = [(f"i{i}", "standard_bucket_3._default._default")]
-            vector_fields = {"dims": dimension, "similarity": similarity}
+            vector_fields = self._build_vector_fields(dimension, similarity)
             self._create_fts_index_parameterized(field_name="l_vector", field_type="vector", test_indexes=idx,
                                                  vector_fields=vector_fields,
                                                  create_vector_index=True)
@@ -387,7 +401,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -414,7 +428,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -441,7 +455,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           % (index.name, index.get_indexed_doc_count()))
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -825,7 +839,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -907,7 +921,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -954,7 +968,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                 hits, _, _, _ = index.execute_query(query=self.query,
                                                     expected_hits=self._find_expected_indexed_items_number())
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -1789,7 +1803,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         else:
             services = ['fts']
 
-        failover_node = self._cb_cluster.get_nodes()[-1:]
+        failover_node = self._cb_cluster.get_nodes()[-1]
         for node in self._cb_cluster.get_nodes():
             if node.ip == self._cb_cluster.get_master_node().ip:
                 continue
@@ -2352,7 +2366,7 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
 
         self.create_fts_indexes_some_buckets(exempt_bucket_prefix="vector-bucket")
         similarity = random.choice(["l2_norm", "dot_product"])
-        vector_fields = {"dims": self.dimension, "similarity": similarity}
+        vector_fields = self._build_vector_fields(self.dimension, similarity)
         self._create_fts_index_parameterized(field_name="vector_data", field_type="vector",
                                              test_indexes=vect_index_containers,
                                              vector_fields=vector_fields,

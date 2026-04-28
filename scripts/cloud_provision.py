@@ -952,7 +952,42 @@ AWS_OS_USERNAME_MAP = {
     "debian13": "admin"
 }
 
-def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
+# GPU-enabled instances for tests that need NVIDIA hardware (e.g. FTS GPU vector
+# indexing). The AMI is the Amazon-published "Deep Learning Base OSS Nvidia
+# Driver GPU AMI (Ubuntu 22.04)" — NVIDIA driver + CUDA pre-installed, Ubuntu
+# 22.04 underneath, so post_provisioner / install_zip_unzip work unchanged.
+AWS_GPU_AMI_MAP = {
+    "ubuntu22": {
+        "x86_64": "ami-024dd2172acc1577e"
+    }
+}
+AWS_GPU_INSTANCE_TYPE = "g5.2xlarge"
+AWS_GPU_OS_USERNAME_MAP = {
+    "ubuntu22": "ubuntu"
+}
+
+def _describe_ips_ordered(ec2_client, instance_ids):
+    """Return PublicDnsName for each id in the same order as `instance_ids`."""
+    if not instance_ids:
+        return []
+    resp = ec2_client.describe_instances(InstanceIds=instance_ids)
+    by_id = {inst['InstanceId']: inst['PublicDnsName']
+             for reservation in resp['Reservations']
+             for inst in reservation['Instances']}
+    return [by_id[i] for i in instance_ids]
+
+
+def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None, gpu_count=0):
+    # Returned IPs are CPU nodes first, GPU nodes last. The dispatcher writes
+    # them into the .ini in that order, so this lines up with confs that put
+    # GPU-requiring services (e.g. FTS) at the end of cluster=D,D,D,D,F.
+    if gpu_count < 0 or gpu_count > count:
+        raise ValueError(f"gpu_count ({gpu_count}) must be between 0 and count ({count})")
+    if gpu_count > 0 and type != "couchbase":
+        raise ValueError("gpu_count is only supported for type='couchbase'")
+
+    cpu_count = count - gpu_count
+
     instance_type = "t3.xlarge"
     ssh_username = AWS_OS_USERNAME_MAP[os]
 
@@ -984,41 +1019,62 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     ec2_resource = boto3.resource('ec2', region_name='us-east-1')
     ec2_client = boto3.client('ec2', region_name='us-east-1')
 
-    instances = ec2_resource.create_instances(
-        ImageId=image_id,
-        MinCount=count,
-        MaxCount=count,
-        InstanceType=instance_type,
+    base_tags = [
+        {'Key': 'Name', 'Value': name},
+        {'Key': 'Owner', 'Value': 'ServerRegression'},
+    ]
+    # GPU instances get an extra Workload=GPU tag so AWS Cost Explorer can
+    # break out GPU spend from the rest of the test fleet.
+    gpu_tags = base_tags + [{'Key': 'Workload', 'Value': 'GPU'}]
+
+    common_kwargs = dict(
         LaunchTemplate={
             'LaunchTemplateName': 'qe-al-template',
             'Version': '1'
         },
-        TagSpecifications=[
-            {
-                'ResourceType': 'instance',
-                'Tags': [
-                    {
-                        'Key': 'Name',
-                        'Value': name
-                    },
-                    {
-                        'Key': 'Owner',
-                        'Value': 'ServerRegression'
-                    }
-                ]
-            },
-        ],
         InstanceInitiatedShutdownBehavior='terminate'
     )
 
-    instance_ids = [instance.id for instance in instances]
+    cpu_instance_ids = []
+    if cpu_count > 0:
+        cpu_instances = ec2_resource.create_instances(
+            ImageId=image_id,
+            MinCount=cpu_count,
+            MaxCount=cpu_count,
+            InstanceType=instance_type,
+            TagSpecifications=[{'ResourceType': 'instance', 'Tags': base_tags}],
+            **common_kwargs
+        )
+        cpu_instance_ids = [instance.id for instance in cpu_instances]
+
+    gpu_instance_ids = []
+    gpu_ssh_username = None
+    if gpu_count > 0:
+        gpu_arch = architecture or "x86_64"
+        if os not in AWS_GPU_AMI_MAP or gpu_arch not in AWS_GPU_AMI_MAP[os]:
+            raise ValueError(f"No GPU AMI registered for os={os}, arch={gpu_arch}")
+        gpu_image_id = AWS_GPU_AMI_MAP[os][gpu_arch]
+        gpu_ssh_username = AWS_GPU_OS_USERNAME_MAP.get(os, AWS_OS_USERNAME_MAP[os])
+        gpu_instances = ec2_resource.create_instances(
+            ImageId=gpu_image_id,
+            MinCount=gpu_count,
+            MaxCount=gpu_count,
+            InstanceType=AWS_GPU_INSTANCE_TYPE,
+            TagSpecifications=[{'ResourceType': 'instance', 'Tags': gpu_tags}],
+            **common_kwargs
+        )
+        gpu_instance_ids = [instance.id for instance in gpu_instances]
+
+    instance_ids = cpu_instance_ids + gpu_instance_ids
     log.info("Waiting for instances: " + str(instance_ids))
     ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
 
-    instances = ec2_client.describe_instances(InstanceIds=instance_ids)
-    ips = [instance['PublicDnsName'] for instance in instances['Reservations'][0]['Instances']]
-    log.info("EC2 Instances : " + str(ips))
-    for ip in ips:
+    cpu_ips = _describe_ips_ordered(ec2_client, cpu_instance_ids)
+    gpu_ips = _describe_ips_ordered(ec2_client, gpu_instance_ids)
+    log.info("EC2 CPU Instances : " + str(cpu_ips))
+    if gpu_ips:
+        log.info("EC2 GPU Instances : " + str(gpu_ips))
+    for ip in cpu_ips:
         post_provisioner(ip, ssh_username, ssh_key_path)
         if type == "elastic-fts":
             install_elastic_search(ip)
@@ -1035,6 +1091,12 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
             create_non_root_user(ip)
             check_root_login(ip,username="nonroot",password="couchbase")
 
+    # GPU nodes run on the Ubuntu 22 NVIDIA DL AMI: same apt-based post-provision
+    # as ubuntu22, no SUSE/Debian13/nonroot variants.
+    for ip in gpu_ips:
+        post_provisioner(ip, gpu_ssh_username, ssh_key_path)
+        install_zip_unzip(ip)
+
     # Rebooting due to CBQE-8153
     # It was observed that all the ports were reachable when the instances were stopped and started
     # It was observed that all the ports were reachable on reboot
@@ -1045,8 +1107,9 @@ def aws_get_servers(name, count, os, type, ssh_key_path, architecture=None):
     ec2_client.get_waiter('instance_status_ok').wait(InstanceIds=instance_ids)
     time.sleep(180)
 
-    instances = ec2_client.describe_instances(InstanceIds=instance_ids)
-    ips = [instance['PublicDnsName'] for instance in instances['Reservations'][0]['Instances']]
+    cpu_ips = _describe_ips_ordered(ec2_client, cpu_instance_ids)
+    gpu_ips = _describe_ips_ordered(ec2_client, gpu_instance_ids)
+    ips = cpu_ips + gpu_ips
 
     if type == "elastic-fts":
         restart_elastic_search(ips)
