@@ -42,6 +42,7 @@ class QueryDefinition(object):
                  index_where_clause=None, gsi_type=None, partition_by_fields=None, keyspace=None,
                  missing_indexes=False, missing_field_desc=False, capella_run=False, is_primary=False,
                  dimension=None, description=None, similarity=None, train_list=None, scan_nprobes=None,
+                 train_list_wait=None,
                  is_base64=False, include_fields=None, bhive_index=False, defer_build=False, num_replica=None,
                  persist_full_vector=True, expected_title=None, sparsejl_dim=None):
         if partition_by_fields is None:
@@ -74,6 +75,7 @@ class QueryDefinition(object):
         self.similarity = similarity
         self.train_list = train_list
         self.scan_nprobes = scan_nprobes
+        self.train_list_wait = train_list_wait
         self.limit = limit
         self.is_base64 = is_base64
         self.include_fields = include_fields
@@ -91,6 +93,7 @@ class QueryDefinition(object):
                                     num_replica=None, desc=None, partition_by_fields=None, num_partition=8,
                                     missing_indexes=False, missing_field_desc=False, dimension=None, train_list=None,
                                     description=None, similarity=None, scan_nprobes=None, include_fields=None,
+                                    train_list_wait=None,
                                     bhive_index=False, persist_full_vector=True):
         if dimension:
             self.dimension = dimension
@@ -102,6 +105,8 @@ class QueryDefinition(object):
             self.similarity = similarity
         if scan_nprobes:
             self.scan_nprobes = scan_nprobes
+        if train_list_wait is not None:
+            self.train_list_wait = train_list_wait
         if limit:
             self.limit = limit
         if num_replica is None:
@@ -183,6 +188,8 @@ class QueryDefinition(object):
             deployment_plan["similarity"] = self.similarity
         if self.scan_nprobes:
             deployment_plan["scan_nprobes"] = self.scan_nprobes
+        if self.train_list_wait is not None:
+            deployment_plan["train_list_wait"] = self.train_list_wait
         if self.sparsejl_dim:
             deployment_plan["sparsejl_dim"] = self.sparsejl_dim
         if self.persist_full_vector is False:

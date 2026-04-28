@@ -2967,7 +2967,7 @@ class GSIUtils(object):
     def get_create_index_list(self, definition_list, namespace, defer_build_mix=False,
                               defer_build=False, num_replica=None, deploy_node_info=None, randomise_replica_count=False,
                               trainlist=None, dimension=None, description=None, similarity=None, scan_nprobes=None,
-                              bhive_index=False):
+                              bhive_index=False, train_list_wait=None):
         create_index_list = []
         for index_gen in definition_list:
             nodes_list = None
@@ -2993,6 +2993,7 @@ class GSIUtils(object):
                                                           train_list=trainlist, dimension=idx_dimension,
                                                           description=description, similarity=idx_similarity,
                                                           scan_nprobes=scan_nprobes, bhive_index=bhive_index,
+                                                          train_list_wait=train_list_wait,
                                                           persist_full_vector=index_gen.persist_full_vector)
             create_index_list.append(query)
         return create_index_list

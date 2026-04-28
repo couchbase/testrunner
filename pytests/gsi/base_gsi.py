@@ -154,6 +154,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.vector_dim = self.input.param("vector_dim", "384")
         self.dimension = self.input.param("dimension", 384)
         self.trainlist = self.input.param("trainlist", None)
+        self.train_list_wait = self.input.param("train_list_wait", None)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.scan_nprobes = self.input.param("scan_nprobes", 100)
@@ -2892,7 +2893,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                           description_dimension=self.dimension)
                 create_queries = self.gsi_util_obj.get_create_index_list(definition_list=definitions,
                                                                          namespace=namespace,
-                                                                         num_replica=self.num_index_replica)
+                                                                         num_replica=self.num_index_replica,
+                                                                         train_list_wait=self.train_list_wait)
 
             for query in create_queries:
                 if self.compute_cluster_avg_rr_index() > rr:
@@ -4220,7 +4222,8 @@ class BaseSecondaryIndexingTests(QueryTests):
         for namespace in self.namespaces:
             queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace, defer_build=True,
-                                                              num_replica=self.num_index_replica)
+                                                              num_replica=self.num_index_replica,
+                                                              train_list_wait=self.train_list_wait)
             for query in queries:
                 create_queries.append(query)
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
@@ -4276,7 +4279,8 @@ class BaseSecondaryIndexingTests(QueryTests):
             create_queries = self.gsi_util_obj.get_create_index_list(definition_list=query_definitions,
                                                               namespace=namespace,
                                                               num_replica=replica_count,
-                                                              randomise_replica_count=True)
+                                                              randomise_replica_count=True,
+                                                              train_list_wait=self.train_list_wait)
             all_queries.extend(create_queries)
         with ThreadPoolExecutor() as executor:
             for query in all_queries:
