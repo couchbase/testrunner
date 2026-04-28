@@ -1,4 +1,7 @@
+import json
 from .tuq import QueryTests
+from lib.membase.api.rest_client import RestConnection
+from lib.remote.remote_util import RemoteMachineShellConnection
 
 class QueryDDLTests(QueryTests):
     def setUp(self):
@@ -95,22 +98,22 @@ class QueryDDLTests(QueryTests):
             self.run_cbq_query("CREATE OR REPLACE FUNCTION global_func1(a) { a + 1 }")
             self.run_cbq_query("CREATE OR REPLACE FUNCTION default._default.inline_func1(a) { a * 1000 }")
 
-            # MB-67884: Verify scoped function appears when filtering by bucket
+            # Verify scoped function appears when filtering by bucket
             ddl_result = self.run_cbq_query("SELECT EXTRACTDDL('default', {'flags': ['function']}) AS ddl_statements")
             ddl_text = str(ddl_result['results'])
             self.assertIn('inline_func1', ddl_text, "Scoped function should be in EXTRACTDDL output")
 
-            # MB-70691: Verify global function is NOT returned when filtering by bucket
+            # Verify global function is NOT returned when filtering by bucket
             self.assertNotIn('global_func1', ddl_text,
                              "Global function should NOT appear when filtering by specific bucket")
 
-            # MB-70691: Verify no filter (empty bucket) returns ALL functions
+            # Verify no filter (empty bucket) returns ALL functions
             ddl_all = self.run_cbq_query("SELECT EXTRACTDDL('', {'flags': ['function']}) AS ddl_statements")
             ddl_all_text = str(ddl_all['results'])
             self.assertIn('global_func1', ddl_all_text, "Global function should appear with no bucket filter")
             self.assertIn('inline_func1', ddl_all_text, "Scoped function should appear with no bucket filter")
 
-            # MB-70691: Verify no duplicate function entries
+            # Verify no duplicate function entries
             ddl_statements = ddl_all['results'][0]['ddl_statements']
             func_names = [s for s in ddl_statements if 'inline_func1' in s]
             self.assertEqual(len(func_names), 1, "Scoped function should not be duplicated")
@@ -127,24 +130,24 @@ class QueryDDLTests(QueryTests):
         try:
             self.run_cbq_query("DELETE FROM system:prepareds")
 
-            # Create prepared statements - one with default bucket, one global
+           # one with default bucket, one global
             self.run_cbq_query("PREPARE prepared_stmt1 FROM SELECT * FROM default LIMIT 10")
             self.run_cbq_query("PREPARE prepared_stmt2 FROM SELECT name FROM default WHERE type = 'test'")
 
-            # MB-67884: Verify prepared statements appear in output
+            # Verify prepared statements appear in output
             ddl_result = self.run_cbq_query("SELECT EXTRACTDDL('default', {'flags': ['prepared']}) AS ddl_statements")
             ddl_text = str(ddl_result['results'])
             self.assertIn('prepared_stmt1', ddl_text, "prepared_stmt1 should be in EXTRACTDDL output")
             self.assertIn('prepared_stmt2', ddl_text, "prepared_stmt2 should be in EXTRACTDDL output")
 
-            # MB-70690: Verify no duplicate prepared statements
+            # Verify no duplicate prepared statements
             ddl_statements = ddl_result['results'][0]['ddl_statements']
             stmt1_count = [s for s in ddl_statements if 'prepared_stmt1' in s]
             stmt2_count = [s for s in ddl_statements if 'prepared_stmt2' in s]
             self.assertEqual(len(stmt1_count), 1, "prepared_stmt1 should not be duplicated")
             self.assertEqual(len(stmt2_count), 1, "prepared_stmt2 should not be duplicated")
 
-            # MB-70690: Verify no filter (empty bucket) also has no duplicates
+            #Verify no filter (empty bucket) also has no duplicates
             ddl_all = self.run_cbq_query("SELECT EXTRACTDDL('', {'flags': ['prepared']}) AS ddl_statements")
             ddl_all_stmts = ddl_all['results'][0]['ddl_statements']
             all_stmt1 = [s for s in ddl_all_stmts if 'prepared_stmt1' in s]
@@ -152,4 +155,110 @@ class QueryDDLTests(QueryTests):
 
         finally:
             self.run_cbq_query("DELETE FROM system:prepareds")
+
+    def _curl_admin_endpoint(self, endpoint, user=None, password=None, method="GET"):
+        """Helper to make HTTP request to a query admin endpoint on port 8093."""
+        import http.client
+        import base64
+        conn = http.client.HTTPConnection(self.master.ip, int(self.n1ql_port), timeout=30)
+        headers = {}
+        if user and password:
+            creds = base64.b64encode(f"{user}:{password}".encode()).decode()
+            headers["Authorization"] = f"Basic {creds}"
+        try:
+            conn.request(method, endpoint, headers=headers)
+            resp = conn.getresponse()
+            resp.read()
+            status = resp.status
+            self.log.info(f"{method} {endpoint} (user={user}) => HTTP {status}")
+            return status
+        except Exception as e:
+            self.log.error(f"HTTP request failed for {endpoint}: {e}")
+            return 0
+        finally:
+            conn.close()
+
+    def test_admin_endpoints_unauthenticated(self):
+        """
+        MB-70631: Verify admin endpoints require authentication.
+        All endpoints should return 401 without credentials.
+        """
+        endpoints = [
+            "/admin/clusters",
+            "/admin/config"
+        ]
+        for endpoint in endpoints:
+            status = self._curl_admin_endpoint(endpoint)
+            self.log.info(f"Unauthenticated GET {endpoint} => HTTP {status}")
+            self.assertEqual(status, 401,
+                             f"{endpoint} should return 401 without auth, got {status}")
+
+    def test_admin_endpoints_read_authorized(self):
+       
+        rest = RestConnection(self.master)
+        try:
+            rest.add_set_builtin_user("read_user",
+                                      "name=ReadUser&roles=cluster_admin&password=readpass")
+            endpoints = [
+                "/admin/clusters",
+                "/admin/config"
+            ]
+            for endpoint in endpoints:
+                status = self._curl_admin_endpoint(endpoint, user="read_user", password="readpass")
+                self.log.info(f"Authorized GET {endpoint} (cluster_admin) => HTTP {status}")
+                self.assertEqual(status, 200,
+                                 f"GET {endpoint} should return 200 with cluster_admin, got {status}")
+        finally:
+            rest.delete_user_roles("read_user")
+
+    def test_admin_endpoints_read_unauthorized(self):
+        
+        rest = RestConnection(self.master)
+        try:
+            rest.add_set_builtin_user("noread_user",
+                                      "name=NoReadUser&roles=external_stats_reader&password=noreadpass")
+            self.log.info("Created user 'noread_user' with role external_stats_reader")
+            endpoints = [
+                "/admin/clusters",
+                "/admin/config"
+            ]
+            for endpoint in endpoints:
+                status = self._curl_admin_endpoint(endpoint, user="noread_user", password="noreadpass")
+                self.log.info(f"Unauthorized GET {endpoint} (external_stats_reader) => HTTP {status}")
+                # 401 or 403 both indicate access is denied
+                self.assertIn(status, [401, 403],
+                              f"GET {endpoint} should return 401/403 without settings read, got {status}")
+        finally:
+            rest.delete_user_roles("noread_user")
+
+    def test_admin_endpoints_write_unauthorized(self):
+        """
+        MB-70631: Verify non-GET requests need cluster.settings!write.
+        User with only read permission should get 403 on POST.
+        """
+        rest = RestConnection(self.master)
+        try:
+            rest.add_set_builtin_user("readonly_user",
+                                      "name=ReadOnlyUser&roles=ro_admin&password=ropass")
+            endpoints = [
+                "/admin/clusters",
+                "/admin/config"
+            ]
+            for endpoint in endpoints:
+                status = self._curl_admin_endpoint(endpoint, user="readonly_user",
+                                                   password="ropass", method="POST")
+                self.log.info(f"Write unauthorized POST {endpoint} (ro_admin) => HTTP {status}")
+                self.assertIn(status, [401, 403, 405],
+                              f"POST {endpoint} should return 401/403/405 with ro_admin, got {status}")
+        finally:
+            rest.delete_user_roles("readonly_user")
+
+    def test_admin_ping_unauthenticated(self):
+       
+        status = self._curl_admin_endpoint("/admin/ping")
+        self.log.info(f"Unauthenticated GET /admin/ping => HTTP {status}")
+        self.assertEqual(status, 200,
+                         f"/admin/ping should return 200 without auth, got {status}")
+
+
 
