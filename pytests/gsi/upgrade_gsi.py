@@ -1544,19 +1544,19 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     if self.upgrade_to[:3] >= "8.1":
                         self.log.info("Creating BQ indexes post-upgrade...")
                         try:
-                            bq_definitions = self.gsi_util_obj.get_index_definition_list(dataset="Cars",
-                                                                                          similarity="L2_SQUARED",
+                            bq_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                          similarity=self.similarity,
                                                                                           train_list=None,
                                                                                           scan_nprobes=100,
                                                                                           array_indexes=False,
                                                                                           limit=10,
                                                                                           quantization_algo_color_vector="RaBitQ",
                                                                                           quantization_algo_description_vector="RaBitQ",
-                                                                                          bhive_index=False)
+                                                                                          bhive_index=self.bhive_index)
                             bq_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bq_definitions,
                                                                                        namespace=self.namespaces[0],
                                                                                        num_replica=self.num_index_replica,
-                                                                                       bhive_index=False)
+                                                                                       bhive_index=self.bhive_index)
                             self.gsi_util_obj.create_gsi_indexes(create_queries=bq_create_queries, 
                                                                  database=self.namespaces[0],
                                                                  query_node=self.n1ql_node)

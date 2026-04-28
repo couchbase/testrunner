@@ -3614,18 +3614,28 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         disk_snapshots[bucket][index][key] = val
 
         # Loading new documents so that persisted snapshot wouldn't have these docs
-        for namespace in self.namespaces:
-            keyspace = namespace.split(":")[-1]
-            bucket, scope, collection = keyspace.split(".")
-            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
-                                            percent_update=0, percent_delete=0, scope=scope,
-                                            collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
-                                            create_end=self.num_of_docs_per_collection * 2,
-                                            dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
-            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
-                                                    generator=self.gen_update,
-                                                    timeout_secs=5000, use_magma_loader=True)
-            task.result()
+        if 'RaBitQ' in self.quantization_algo_description_vector:
+            num_new_docs = 20
+            dummy_vector = [0.1] * self.dimension
+            for namespace in self.namespaces:
+                for i in range(num_new_docs):
+                    insert_query = f'INSERT INTO {namespace} (KEY, VALUE) VALUES ("new_doc_{i}", {{"year": 2025, "type": "test", "rating": 3, "category": "Sedan", "fuel": "Petrol", "name": "test_car_{i}", "descriptionVector": {dummy_vector}, "colorRGBVector": {dummy_vector}}})'
+                    self.run_cbq_query(query=insert_query, server=query_node)
+                self.log.info(f"Inserted {num_new_docs} docs into {namespace} via N1QL")
+        else:
+            num_new_docs = self.num_of_docs_per_collection
+            for namespace in self.namespaces:
+                keyspace = namespace.split(":")[-1]
+                bucket, scope, collection = keyspace.split(".")
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=100,
+                                                percent_update=0, percent_delete=0, scope=scope,
+                                                collection=collection, json_template="Cars", key_prefix="new_doc", create_start=self.num_of_docs_per_collection,
+                                                create_end=self.num_of_docs_per_collection * 2,
+                                                dim=self.dimension, model=self.data_model, timeout=5000, workers=10)
+                task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                        generator=self.gen_update,
+                                                        timeout_secs=5000, use_magma_loader=True)
+                task.result()
         data_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         for data_node in data_nodes:
             remote_client = RemoteMachineShellConnection(data_node)
@@ -3645,7 +3655,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.log.info(f"Doc count after recovery for namespace {namespace}: {result}")
-            self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
+            self.assertEqual(result, doc_count[namespace] + num_new_docs,
                             "Index hasn't recovered the docs within the given time")
         self.drop_index_node_resources_utilization_validations()
 
