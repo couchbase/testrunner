@@ -17,7 +17,10 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         for outgoing_repl in src_outgoing_repls:
             src_target_cluster_uuid_list.add(outgoing_repl["uuid"])
         for repl in dest_incoming_repls:
-            uuid = repl["SourceClusterReplSpecs"][0]["targetClusterUUID"]
+            specs = repl.get("SourceClusterReplSpecs") or []
+            if not specs:
+                self.fail(f"SourceClusterReplSpecs empty for source cluster UUID {repl.get('SourceClusterUUID')}")
+            uuid = specs[0]["targetClusterUUID"]
             if uuid not in src_target_cluster_uuid_list:
                 self.fail(f"Target cluster UUID {uuid} not found in source cluster's outgoing replications")
 
@@ -26,9 +29,24 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         for outgoing_repl in dest_outgoing_repls:
             dest_target_cluster_uuid_list.add(outgoing_repl["uuid"])
         for repl in src_incoming_repls:
-            uuid = repl["SourceClusterReplSpecs"][0]["targetClusterUUID"]
+            specs = repl.get("SourceClusterReplSpecs") or []
+            if not specs:
+                self.fail(f"SourceClusterReplSpecs empty for source cluster UUID {repl.get('SourceClusterUUID')}")
+            uuid = specs[0]["targetClusterUUID"]
             if uuid not in dest_target_cluster_uuid_list:
                 self.fail(f"Target cluster UUID {uuid} not found in dest cluster's outgoing replications")
+
+    def _wait_for_incoming_repl_specs(self, master_rest, retries=18, interval=10):
+        repls = self.get_incoming_replications(master_rest)
+        count = 0
+        while count < retries:
+            ready = repls and all(r.get("SourceClusterReplSpecs") for r in repls)
+            if ready:
+                return repls
+            count += 1
+            self.wait_interval(interval, f"Waiting for incoming repls + SourceClusterReplSpecs to populate {count}/{retries}")
+            repls = self.get_incoming_replications(master_rest)
+        return repls
                 
     def stop_couchbase(self, server):
         remote_shell_conn = RemoteMachineShellConnection(server)
@@ -94,28 +112,15 @@ class TargetAwarenessXDCR(XDCRNewBaseTest):
         self.wait_interval(30, "Waiting for heartbeats to be sent and updated in target cluster")
 
         src_outgoing_repls = self.get_outgoing_replications(self.src_master_rest)
-        dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-        retries = 5
-        count = 0
-        while dest_incoming_repls is None and count < retries:
-            dest_incoming_repls = self.get_incoming_replications(self.dest_master_rest)
-            count += 1
-            self.wait_interval(2, f"Trying to get incoming replications from dest cluster for {count}/{retries} times")
-        if dest_incoming_repls is None:
-            self.fail("No incoming replications reported by dest cluster")
+        dest_incoming_repls = self._wait_for_incoming_repl_specs(self.dest_master_rest)
+        if not dest_incoming_repls or not all(r.get("SourceClusterReplSpecs") for r in dest_incoming_repls):
+            self.fail(f"Incoming replications / SourceClusterReplSpecs not populated on dest cluster: {dest_incoming_repls}")
         self.verify_source_to_dest_replication(src_outgoing_repls, dest_incoming_repls)
         if self._rdirection == "bidirection":
-            src_incoming_repls = self.get_incoming_replications(self.src_master_rest)
             dest_outgoing_repls = self.get_outgoing_replications(self.dest_master_rest)
-            retries = 5
-            count = 0
-            while src_incoming_repls is None and count < retries:
-                src_incoming_repls = self.get_incoming_replications(self.src_master_rest)
-                count += 1
-                self.wait_interval(2,
-                                   f"Trying to get incoming replications from src cluster for {count}/{retries} times")
-            if src_incoming_repls is None:
-                self.fail("No incoming replications reported by src cluster")
+            src_incoming_repls = self._wait_for_incoming_repl_specs(self.src_master_rest)
+            if not src_incoming_repls or not all(r.get("SourceClusterReplSpecs") for r in src_incoming_repls):
+                self.fail(f"Incoming replications / SourceClusterReplSpecs not populated on src cluster: {src_incoming_repls}")
             self.verify_dest_to_source_replication(dest_outgoing_repls, src_incoming_repls)
 
     def test_heartbeat(self):
