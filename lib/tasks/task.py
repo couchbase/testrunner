@@ -7008,10 +7008,10 @@ class MagmaDocLoader(Task):
                   f"-ex {self.sdk_docloader.percent_expiry} -rd {self.sdk_docloader.percent_read} " \
                   f"-cr {self.sdk_docloader.percent_create} -up {self.sdk_docloader.percent_update} " \
                   f"-dl {self.sdk_docloader.percent_delete} -mutate {self.sdk_docloader.mutate} " \
-                  f"-docSize {self.sdk_docloader.doc_size} " \
+                  f"-docSize {self.sdk_docloader.doc_size}  -valueType {self.sdk_docloader.json_template} " \
                   f"-scope {self.sdk_docloader.scope} -collection {self.sdk_docloader.collection} " \
                   f"-ops {self.sdk_docloader.ops_rate}  -workers {self.sdk_docloader.workers} " \
-                  f"-vecFilePath /mnt/nfsdata/collection.vecs -siftFilePath /data/bigann/bigann_base.bvecs"
+                  f"-vecFilePath /mnt/nfsdata/collection.vecs -siftFilePath /mnt/nfsdata/bigann/bigann_base.bvecs"
 
 
         else:

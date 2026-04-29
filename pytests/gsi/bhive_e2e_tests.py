@@ -1418,15 +1418,35 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             similarity = random.choice(simlarity_list)
             self.log.info(f"Selected similarity metric: {similarity}")
 
-            self.log.info("Getting query definitions...")
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(similarity=similarity)
-            self.log.info("Successfully got query definitions")
+            # Get dense index definitions (existing behavior)
+            self.log.info("Getting query definitions for dense indexes...")
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(similarity=similarity, is_sparse=False)
+            self.log.info("Successfully got dense query definitions")
 
-            self.log.info("Combining definitions and creating queries...")
+            self.log.info("Combining dense definitions and creating queries...")
             definitions = scalar_def + bhive_def + composite_def
             current_create_queries = self._get_create_queries(bhive_def, scalar_def, composite_def, namespace, defer_build_mix=False)
             create_queries.extend(current_create_queries)
-            self.log.info(f"Created {len(current_create_queries)} queries for namespace {namespace}")
+            self.log.info(f"Created {len(current_create_queries)} dense index queries for namespace {namespace}")
+
+            # If isSparse is True, also create sparse indexes on MSMARCOSiftEmbeddingProduct dataset
+            if self.isSparse:
+                self.log.info("isSparse=True: Getting query definitions for sparse indexes (MSMARCOSiftEmbeddingProduct)...")
+                sparse_bhive_def, sparse_scalar_def, sparse_composite_def = self._get_query_definitions(
+                    similarity="DOT",  # Sparse only supports DOT product
+                    is_sparse=True
+                )
+                self.log.info("Successfully got sparse query definitions")
+
+                self.log.info("Combining sparse definitions and creating queries...")
+                sparse_definitions = sparse_scalar_def + sparse_bhive_def + sparse_composite_def
+                definitions.extend(sparse_definitions)
+                sparse_create_queries = self._get_create_queries(
+                    sparse_bhive_def, sparse_scalar_def, sparse_composite_def,
+                    namespace, defer_build_mix=False
+                )
+                create_queries.extend(sparse_create_queries)
+                self.log.info(f"Created {len(sparse_create_queries)} sparse index queries for namespace {namespace}")
 
             self.log.info("Waiting for indexes to come online...")
             self.wait_until_indexes_online()
@@ -1460,7 +1480,10 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             if "embVector" in query:
                 self.log.info("Replacing embVector in query...")
                 query = query.replace("embVector", str(self.bhive_sample_vector))
-            if "DISTINCT" in query or "ANN_DISTANCE" not in query:
+            # Skip DISTINCT queries and queries that are not vector distance queries
+            # Support both dense (ANN_DISTANCE) and sparse (SPARSE_VECTOR_DISTANCE) queries
+            is_vector_query = "ANN_DISTANCE" in query or "SPARSE_VECTOR_DISTANCE" in query
+            if "DISTINCT" in query or not is_vector_query:
                 continue
             self.log.info(f"Running test query: {query}")
             self.run_cbq_query(query=query, server=query_node)
@@ -1615,13 +1638,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         self.sleep(120, "Sleeping for 2 minutes to allow indexes to be dropped")
 
         self.log.info("Performing final validations...")
-        self.check_storage_directory_cleaned_up(threshold_gb=0.05)
-        self.log.info("Storage directory cleanup validation completed")
-
-        if not self.validate_cpu_normalized:
-            self.log.error("CPU normalized validation failed")
-            raise AssertionError("CPU normalized validation failed")
-        self.log.info("CPU normalization validation completed successfully")
+        self.drop_index_node_resources_utilization_validations()
 
         self.log.info("=== test_bhive_rebalance_comprehensive completed successfully ===")
 
@@ -1665,10 +1682,11 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
         for namespace in self.namespaces:
             self.log.info(f"Creating indexes on {namespace}")
             similarity = random.choice(simlarity_list)
-
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, similarity)
-            definitions = scalar_def + bhive_def + composite_def
             suffix = namespace.replace(':', '_').replace('.', '_')
+
+            # Get dense index definitions (existing behavior)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(prefixes, similarity, is_sparse=False)
+            definitions = scalar_def + bhive_def + composite_def
 
             create_queries.append(self._get_create_queries(bhive_def, scalar_def, composite_def, namespace))
 
@@ -1679,6 +1697,28 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             alter_queries.append(f'ALTER INDEX scalar_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
             alter_queries.append(f'ALTER INDEX composite_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
             alter_queries.append(f'ALTER INDEX bhive_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
+
+            # If isSparse is True, also create sparse indexes on MSMARCOSiftEmbeddingProduct dataset
+            if self.isSparse:
+                self.log.info(f"isSparse=True: Creating sparse indexes on {namespace}")
+                sparse_bhive_def, sparse_scalar_def, sparse_composite_def = self._get_query_definitions(
+                    prefixes,
+                    similarity="DOT",  # Sparse only supports DOT product
+                    is_sparse=True
+                )
+                sparse_definitions = sparse_scalar_def + sparse_bhive_def + sparse_composite_def
+                definitions.extend(sparse_definitions)
+
+                create_queries.append(self._get_create_queries(sparse_bhive_def, sparse_scalar_def, sparse_composite_def, namespace))
+
+                drop_queries.append(self.gsi_util_obj.get_drop_index_list(definition_list=sparse_definitions, namespace=namespace))
+
+                build_queries.append(self.gsi_util_obj.get_build_indexes_query(definition_list=sparse_definitions, namespace=namespace))
+
+                # Add alter queries for sparse indexes
+                alter_queries.append(f'ALTER INDEX sparse_scalar_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
+                alter_queries.append(f'ALTER INDEX sparse_composite_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
+                alter_queries.append(f'ALTER INDEX sparse_bhive_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
 
         # Flatten all the lists
         create_queries = [item for sublist in create_queries for item in sublist]
@@ -1744,18 +1784,9 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         workload_stop_event.set()
         self._finish_mutations_workload(bucket_0_thread, bucket_1_thread)
-        # Drop all the indexes
-        self.log.info("Dropping all the indexes")
-        self.drop_all_indexes()
+        # storage directory and memory cleanup validations
+        self.drop_index_node_resources_utilization_validations()
 
-        self.log.info("Performing CPU validations")
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
-        self.check_storage_directory_cleaned_up(threshold_gb=0.05)
-        if not self.validate_cpu_normalized:
-            self.log.error("CPU normalized validation failed")
-            raise AssertionError("CPU normalized validation failed")
         self.log.info("Index lifecycle operations completed successfully")
 
     def test_index_lifecycle_operations_continuous(self):
@@ -1803,7 +1834,8 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             similarity = random.choice(similarity_list)
             suffix = namespace.replace(':', '_').replace('.', '_')
 
-            bhive_def, scalar_def, composite_def = self._get_query_definitions(similarity=similarity)
+            # Get dense index definitions (existing behavior)
+            bhive_def, scalar_def, composite_def = self._get_query_definitions(similarity=similarity, is_sparse=False)
             definitions = scalar_def + bhive_def + composite_def
 
             create_queries.append(
@@ -1823,6 +1855,35 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
             alter_queries.append(f'ALTER INDEX scalar_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
             alter_queries.append(f'ALTER INDEX composite_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
             alter_queries.append(f'ALTER INDEX bhive_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
+
+            # If isSparse is True, also create sparse indexes on MSMARCOSiftEmbeddingProduct dataset
+            if self.isSparse:
+                self.log.info(f"isSparse=True: Creating sparse indexes on {namespace}")
+                sparse_bhive_def, sparse_scalar_def, sparse_composite_def = self._get_query_definitions(
+                    similarity="DOT",  # Sparse only supports DOT product
+                    is_sparse=True
+                )
+                sparse_definitions = sparse_scalar_def + sparse_bhive_def + sparse_composite_def
+                definitions.extend(sparse_definitions)
+
+                create_queries.append(
+                    self.gsi_util_obj.get_create_index_list(
+                        definition_list=sparse_definitions,
+                        namespace=namespace,
+                        num_replica=self.num_index_replica,
+                        bhive_index=self.bhive_index,
+                        defer_build=True
+                    )
+                )
+
+                drop_queries.append(self.gsi_util_obj.get_drop_index_list(definition_list=sparse_definitions, namespace=namespace))
+
+                build_queries.append(self.gsi_util_obj.get_build_indexes_query(definition_list=sparse_definitions, namespace=namespace))
+
+                # Add alter queries for sparse indexes
+                alter_queries.append(f'ALTER INDEX sparse_scalar_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
+                alter_queries.append(f'ALTER INDEX sparse_composite_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
+                alter_queries.append(f'ALTER INDEX sparse_bhive_{suffix} ON {namespace} WITH {{"action":"replica_count","num_replica":2}}')
 
         # Flatten all the lists
         create_queries = [item for sublist in create_queries for item in sublist]
@@ -1871,16 +1932,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         logging.getLogger().setLevel(original_log_level)
         # Drop all the indexes.
-        self.drop_all_indexes()
-        self.log.info("Index lifecycle operations completed successfully")
-        self.log.info("Performing CPU validations")
-        # TODO uncomment after https://jira.issues.couchbase.com/browse/MB-65934 is fixed
-        # if not self.validate_memory_released():
-        #     raise AssertionError("Memory not released despite dropping all the indexes")
-        self.check_storage_directory_cleaned_up()
-        if not self.validate_cpu_normalized:
-            self.log.error("CPU normalized validation failed")
-            raise AssertionError("CPU normalized validation failed")
+        self.drop_index_node_resources_utilization_validations()
 
     def _perform_query_operations(self, queries, query_node, workload_stop_event):
         for query in queries:
@@ -2212,9 +2264,57 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
 
         return buckets
 
-    def _get_query_definitions(self, prefixes=["test_scalar", "test_bhive", "test_composite"], similarity="COSINE"):
-        bhive_def = self.gsi_util_obj.get_index_definition_list(
-                dataset=self.dataset,
+    def _get_query_definitions(self, prefixes=["test_scalar", "test_bhive", "test_composite"], similarity="COSINE",
+                                is_sparse=False):
+        """
+        Get query definitions for indexes.
+        
+        Args:
+            prefixes: Prefixes for index names [scalar, bhive, composite]
+            similarity: Similarity metric for dense indexes (COSINE, L2, DOT, etc.)
+            is_sparse: If True, generate sparse index definitions using self.json_template
+        
+        Returns:
+            Tuple of (bhive_def, scalar_def, composite_def)
+            When is_sparse=True, returns sparse BHIVE and composite definitions
+        """
+        if is_sparse:
+            # For sparse indexes, use self.json_template and DOT similarity (only supported)
+            # Sparse indexes use IVF1024 with no quantization
+            scalar_def = []
+            bhive_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=prefixes[1] + "_sparse",
+                similarity="DOT",  # Sparse only supports DOT product
+                train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                xattr_indexes=self.xattr_indexes,
+                limit=self.scan_limit,
+                is_base64=self.base64,
+                bhive_index=True,
+                is_sparse=True,
+                description_dimension=self.dimension
+            )
+
+            composite_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=prefixes[2] + "_sparse",
+                similarity="DOT",  # Sparse only supports DOT product
+                train_list=None,
+                scan_nprobes=self.scan_nprobes,
+                array_indexes=False,
+                xattr_indexes=self.xattr_indexes,
+                limit=self.scan_limit,
+                is_base64=self.base64,
+                bhive_index=False,
+                is_sparse=True,
+                description_dimension=self.dimension
+            )
+        else:
+            # Original behavior for dense indexes
+            bhive_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
                 prefix=prefixes[1],
                 similarity=similarity,
                 train_list=None,
@@ -2229,10 +2329,10 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 description_dimension=self.dimension
             )
 
-        scalar_def = self._create_scalar_indexes()
+            scalar_def = self._create_scalar_indexes()
 
-        composite_def = self.gsi_util_obj.get_index_definition_list(
-                dataset=self.dataset,
+            composite_def = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
                 prefix=prefixes[2],
                 similarity=similarity,
                 train_list=None,
@@ -2247,7 +2347,7 @@ class BhiveVectorIndex(BaseSecondaryIndexingTests):
                 description_dimension=self.dimension
             )
 
-        return bhive_def,scalar_def,composite_def
+        return bhive_def, scalar_def, composite_def
 
     #TODO: Implement this method.
     def _create_scalar_indexes(self):

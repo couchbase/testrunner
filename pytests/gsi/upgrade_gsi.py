@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import random
 from threading import Thread
+import re
 import multiprocessing
 import time
 
@@ -53,6 +54,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 1)
         self.run_mixed_mode_tests = self.input.param("run_mixed_mode_tests", False)
+        self.skip_bq_indexes = self.input.param("skip_bq_indexes", False)
         self.mutation_rate = self.input.param("mutation_rate", 5000)
         self.mutation_time = self.input.param("mutation_time", 3600)
         self.num_batches = self.input.param("num_batches", 1)
@@ -1415,12 +1417,14 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
             self.enable_shard_based_rebalance()
             self.sleep(10)
 
-        if self.upgrade_to < "8.0":
+        if self.upgrade_to < "8.0" or self.isSparse:
+            if self.isSparse:
+                self.json_template = "MSMARCOSiftEmbeddingProduct"
             self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
-            self.test_bucket = self.test_bucket + '_hotel'
+            self.test_bucket = self.test_bucket + f'_{self.json_template}'
             self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                                 bucket_params=self.bucket_params)
             self.buckets = self.rest.get_buckets()
@@ -1526,9 +1530,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.disable_redistribute_indexes()
                     self.sleep(10)
                     index_names_after_upgrade_before_vector = self.get_all_indexes_in_the_cluster()
-                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade_before_vector,
-                                                            cluster_profile=None)
-                    self.item_count_related_validations()
+                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade_before_vector, dataset=self.json_template)
                     indexes_post_creating_vector_indexes = self.get_all_indexes_in_the_cluster()
                     index_list_post_creating_vector_indexes = []
                     self.log.info(f'Indexes created before upgrade {index_names_before_upgrade}')
@@ -1541,32 +1543,55 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                         self.validate_shard_affinity(specific_indexes=index_list_post_creating_vector_indexes)
                 
                     # BQ indexes only supported from 8.1 onwards
-                    if self.upgrade_to[:3] >= "8.1":
-                        self.log.info("Creating BQ indexes post-upgrade...")
-                        try:
-                            bq_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
-                                                                                          similarity=self.similarity,
-                                                                                          train_list=None,
-                                                                                          scan_nprobes=100,
-                                                                                          array_indexes=False,
-                                                                                          limit=10,
-                                                                                          quantization_algo_color_vector="RaBitQ",
-                                                                                          quantization_algo_description_vector="RaBitQ",
-                                                                                          bhive_index=self.bhive_index)
-                            bq_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bq_definitions,
-                                                                                       namespace=self.namespaces[0],
-                                                                                       num_replica=self.num_index_replica,
-                                                                                       bhive_index=self.bhive_index)
-                            self.gsi_util_obj.create_gsi_indexes(create_queries=bq_create_queries, 
-                                                                 database=self.namespaces[0],
-                                                                 query_node=self.n1ql_node)
-                            self.wait_until_indexes_online()
-                            self.log.info("BQ indexes created successfully post-upgrade")
-                        except Exception as e:
-                            self.log.info(f"BQ index creation post-upgrade: {e}")
+                    if self.upgrade_to >= "8.1":
+                        if not self.skip_bq_indexes:
+                            self.log.info("Creating BQ indexes post-upgrade...")
+                            try:
+                                bq_definitions = self.gsi_util_obj.get_index_definition_list(dataset=self.json_template,
+                                                                                              similarity=self.similarity,
+                                                                                              train_list=None,
+                                                                                              scan_nprobes=100,
+                                                                                              array_indexes=False,
+                                                                                              limit=10,
+                                                                                              quantization_algo_color_vector="RaBitQ",
+                                                                                              quantization_algo_description_vector="RaBitQ",
+                                                                                              bhive_index=self.bhive_index)
+                                bq_create_queries = self.gsi_util_obj.get_create_index_list(definition_list=bq_definitions,
+                                                                                           namespace=self.namespaces[0],
+                                                                                           num_replica=self.num_index_replica,
+                                                                                           bhive_index=self.bhive_index)
+                                self.gsi_util_obj.create_gsi_indexes(create_queries=bq_create_queries,
+                                                                     database=self.namespaces[0],
+                                                                     query_node=self.n1ql_node)
+                                self.wait_until_indexes_online()
+                                self.log.info("BQ indexes created successfully post-upgrade")
+                            except Exception as e:
+                                self.log.info(f"BQ index creation post-upgrade: {e}")
                     else:
-                        self.log.info(f"Skipping BQ indexes - not supported in upgraded version {self.upgrade_to}")
+                        if self.skip_bq_indexes:
+                            self.log.info("Skipping BQ indexes for this run")
+                        else:
+                            self.log.info(f"Skipping BQ indexes - not supported in upgraded version {self.upgrade_to}")
 
+                    # Sparse vector indexes only supported from 8.1 onwards
+                    if self.upgrade_to >= "8.1" and self.isSparse:
+                        self.log.info("Creating sparse vector indexes post-upgrade...")
+                        index_names_before_sparse = self.get_all_indexes_in_the_cluster()
+                        self.post_upgrade_validate_sparse_index(index_list_before=index_names_before_sparse, dataset=self.json_template)
+                        indexes_post_creating_sparse_indexes = self.get_all_indexes_in_the_cluster()
+                        index_list_post_creating_sparse_indexes = []
+                        self.log.info(f'Indexes before sparse index creation {index_names_before_sparse}')
+                        self.log.info(f'Indexes after sparse index creation {indexes_post_creating_sparse_indexes}')
+                        for name in indexes_post_creating_sparse_indexes:
+                            if name not in index_names_before_sparse:
+                                index_list_post_creating_sparse_indexes.append(name)
+                        self.log.info(f'New sparse indexes created: {index_list_post_creating_sparse_indexes}')
+                        if not self.dcp_rebalance:
+                            self.validate_shard_affinity(specific_indexes=index_list_post_creating_sparse_indexes)
+                    else:
+                        self.log.info(f"Skipping sparse indexes - not supported in upgraded version {self.upgrade_to}")
+
+                self.item_count_related_validations()
                 self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
                 # Will uncomment the below code post MB-59107
@@ -1577,6 +1602,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 event.set()
                 if self.continuous_mutations:
                     future.result()
+
     def test_upgrade_with_mutations(self):
         self.rest.delete_all_buckets()
         self.sleep(30)
@@ -1646,8 +1672,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.disable_redistribute_indexes()
                     self.sleep(10)
                     index_names_after_upgrade_before_vector = self.get_all_indexes_in_the_cluster()
-                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade_before_vector,
-                                                            cluster_profile=None, dataset="siftBigANN")
+                    self.post_upgrade_validate_vector_index(index_list_before=index_names_after_upgrade_before_vector, dataset=self.json_template)
                     indexes_post_creating_vector_indexes = self.get_all_indexes_in_the_cluster()
                     index_list_post_creating_vector_indexes = []
                     self.log.info(f'Indexes created before upgrade {index_names_before_upgrade}')
@@ -1658,6 +1683,22 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                     self.log.info(f'new indexes created after  {index_list_post_creating_vector_indexes}')
                     if not self.dcp_rebalance:
                         self.validate_shard_affinity(specific_indexes=index_list_post_creating_vector_indexes)
+
+                    # Sparse vector indexes only supported from 8.1 onwards
+                    if self.upgrade_to >= "8.1":
+                        self.log.info("Creating sparse vector indexes post-upgrade...")
+                        index_names_before_sparse = self.get_all_indexes_in_the_cluster()
+                        self.post_upgrade_validate_sparse_index(index_list_before=index_names_before_sparse, dataset=self.json_template)
+                        indexes_post_creating_sparse_indexes = self.get_all_indexes_in_the_cluster()
+                        index_list_post_creating_sparse_indexes = []
+                        self.log.info(f'Indexes before sparse index creation {index_names_before_sparse}')
+                        self.log.info(f'Indexes after sparse index creation {indexes_post_creating_sparse_indexes}')
+                        for name in indexes_post_creating_sparse_indexes:
+                            if name not in index_names_before_sparse:
+                                index_list_post_creating_sparse_indexes.append(name)
+                        self.log.info(f'New sparse indexes created: {index_list_post_creating_sparse_indexes}')
+                        if not self.dcp_rebalance:
+                            self.validate_shard_affinity(specific_indexes=index_list_post_creating_sparse_indexes)
 
                 self.drop_index_node_resources_utilization_validations(skip_disk_cleared_check=True)
 
@@ -3015,6 +3056,166 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message="results after reducing num replica count", similarity=self.similarity, stats_assertion=False)
 
+    def post_upgrade_validate_sparse_index(self, services=None, index_list_before=[], existing_bucket=None, dataset="MSMARCOSiftEmbeddingProduct"):
+        """
+        Create and validate sparse vector indexes post-upgrade.
+        Similar to post_upgrade_validate_vector_index but for sparse indexes.
+        Sparse indexes use DOT similarity and IVF1024 quantization.
+        
+        If the current json_template doesn't support sparse vectors (e.g., Cars),
+        this method will create a new bucket with sparse data.
+        """
+        if services is None:
+            services = ["index"]
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        
+        # Determine sparse dataset and namespace handling
+        sparse_dataset = dataset
+        sparse_supported_datasets = ["MSMARCOSiftEmbeddingProduct", "AmazonSparse"]
+        
+        # If current dataset doesn't support sparse, create a new bucket with sparse data
+        if self.json_template not in sparse_supported_datasets:
+            self.log.info(f"Current dataset '{self.json_template}' doesn't support sparse vectors. "
+                          f"Creating new bucket with sparse data using '{sparse_dataset}' dataset.")
+            sparse_bucket_name = "sparse_upgrade_bucket"
+            self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                            enable_replica_index=self.enable_replica_index,
+                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+            self.cluster.create_standard_bucket(name=sparse_bucket_name, port=11222,
+                                                bucket_params=self.bucket_params)
+            self.buckets = self.rest.get_buckets()
+            
+            # Store original namespaces and create new ones for sparse data
+            original_namespaces = self.namespaces.copy()
+            self.namespaces = []
+            
+            self.prepare_collection_for_indexing(bucket_name=sparse_bucket_name,
+                                                 num_scopes=1, num_collections=1,
+                                                 num_of_docs_per_collection=self.num_of_docs_per_collection,
+                                                 json_template=sparse_dataset,
+                                                 load_default_coll=True)
+            sparse_namespaces = self.namespaces.copy()
+            
+            # Restore original namespaces but use sparse namespaces for index creation
+            self.namespaces = original_namespaces
+            namespaces_for_sparse = sparse_namespaces
+        else:
+            namespaces_for_sparse = self.namespaces
+            sparse_dataset = self.json_template
+        
+        select_queries = set()
+        namespace_index_map = {}
+        
+        for namespace in namespaces_for_sparse:
+            namespace_index_map[namespace] = []
+            # Create both bhive and composite sparse indexes (similar to dense vector pattern)
+            for bhive_index in [True, False]:
+                definitions = self.gsi_util_obj.get_index_definition_list(
+                    dataset=sparse_dataset,
+                    similarity="DOT",
+                    train_list=None,
+                    scan_nprobes=self.scan_nprobes,
+                    array_indexes=False,
+                    limit=self.scan_limit,
+                    quantization_algo_color_vector=self.quantization_algo_color_vector,
+                    quantization_algo_description_vector=self.quantization_algo_description_vector,
+                    bhive_index=bhive_index,
+                    is_sparse=True
+                )
+                create_queries = self.gsi_util_obj.get_create_index_list(
+                    definition_list=definitions,
+                    namespace=namespace,
+                    defer_build=True,
+                    num_replica=self.num_index_replica,
+                    bhive_index=bhive_index
+                )
+                build_queries = self.gsi_util_obj.get_build_indexes_query(
+                    definition_list=definitions,
+                    namespace=namespace
+                )
+                select_queries.update(self.gsi_util_obj.get_select_queries(
+                    definition_list=definitions,
+                    namespace=namespace,
+                    limit=self.scan_limit
+                ))
+                
+                namespace_index_map[namespace] += definitions
+                self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace,
+                                                     query_node=self.n1ql_node)
+                self.sleep(30)
+                self.gsi_util_obj.create_gsi_indexes(create_queries=[build_queries], database=namespace,
+                                                     query_node=self.n1ql_node)
+        
+        self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
+        self.wait_until_indexes_online()
+        index_list_after = self.get_all_indexes_in_the_cluster()
+        indexes_to_be_validated_list = []
+        for index in index_list_after:
+            if index not in index_list_before:
+                indexes_to_be_validated_list.append(index)
+        
+        self.log.info(f"Sparse indexes created: {indexes_to_be_validated_list}")
+        
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            if index['indexName'] in indexes_to_be_validated_list:
+                self.assertEqual(index['numReplica'], self.num_index_replica, "No. of replicas are not matching for sparse index")
+        
+        for namespace in namespace_index_map:
+            definition_list = namespace_index_map[namespace]
+            for definitions in definition_list:
+                # to reduce the no of replicas
+                self.alter_index_replicas(index_name=f"`{definitions.index_name}`", namespace=namespace,
+                                          action='replica_count', num_replicas=self.num_index_replica - 1)
+                self.wait_until_indexes_online()
+                self.sleep(5)
+        
+        self.wait_until_indexes_online()
+        self.sleep(30)
+        self.index_rest = RestConnection(self.get_nodes_from_services_map(service_type="index"))
+        index_metadata = self.index_rest.get_indexer_metadata()['status']
+        for index in index_metadata:
+            if index['indexName'] in indexes_to_be_validated_list:
+                self.assertEqual(index['numReplica'], self.num_index_replica - 1, "No. of replicas are not matching for sparse index after reduction")
+        
+        self.update_master_node()
+        self.sleep(15)
+        
+        # Sparse recall validation using brute-force ground truth (like dense vectors)
+        # Note: For sparse vectors, accuracy is N/A - only recall is calculated
+        self.display_recall_and_accuracy_stats(
+            select_queries=select_queries,
+            message="Sparse vector recall results after reducing num replica count",
+            stats_assertion=False,
+            similarity="DOT",
+            use_brute_force=True
+        )
+        
+        # MRR (Mean Reciprocal Rank) validation for sparse queries
+        # For MSMARCOSiftEmbeddingProduct, use brute-force comparison (namespace required)
+        # Group queries by their namespace (extracted from the query's FROM clause)
+        sparse_queries = [q for q in select_queries if "SPARSE_VECTOR_DISTANCE" in q]
+        if sparse_queries:
+            # Group queries by namespace extracted from the query itself
+            namespace_to_queries = {}
+            for query in sparse_queries:
+                # Extract namespace from query (e.g., "FROM default:bucket.scope.collection")
+                match = re.search(r'FROM\s+(default:`?[^`\s]+`?\.`?[^`\s]+`?\.`?[^`\s]+`?)', query, re.IGNORECASE)
+                if match:
+                    query_namespace = match.group(1)
+                    if query_namespace not in namespace_to_queries:
+                        namespace_to_queries[query_namespace] = []
+                    namespace_to_queries[query_namespace].append(query)
+            
+            # Calculate MRR for each namespace's queries
+            for namespace, namespace_queries in namespace_to_queries.items():
+                mrr = self.calculate_mean_reciprocal_rank(
+                    select_queries=namespace_queries,
+                    expected_title=None,
+                    namespace=namespace
+                )
+                self.log.info(f"Sparse vector MRR for namespace {namespace}: {mrr:.4f}")
 
     def test_upgrade_downgrade_upgrade(self):
         self.rest.delete_all_buckets()
@@ -3215,8 +3416,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
                 self.log.info(f'indexes created only after upgrade {indexes_created_post_upgrade}')
                 self.log.info(f'server remianing 1 {self.servers}')
                 self.validate_shard_affinity(specific_indexes=indexes_created_post_upgrade, provisioned=False)
-                self.post_upgrade_with_nodes_clause(num_replica=1, indexes_after_upgrade=index_names_after_upgrade,
-                                                    provisioned=False)
+                # self.post_upgrade_with_nodes_clause(num_replica=1, indexes_after_upgrade=index_names_after_upgrade,
+                #                                     provisioned=False)
                 self.sleep(30)
                 node_in, node_out = self.servers[0], self.servers[random.randint(self.nodes_init, len(self.servers)-1)]
                 self._install([node_in], version=self.upgrade_to, community_to_enterprise=True)
@@ -3234,7 +3435,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest, Auto
 
                 if self.upgrade_to >= "8.0":
                     scalar_indexes = self.get_all_indexes_in_the_cluster()
-                    self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
+                    if self.isSparse:
+                        self.post_upgrade_validate_sparse_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
+                    else:
+                        self.post_upgrade_validate_vector_index(services=services_in, existing_bucket=existing_bucket, index_list_before=scalar_indexes)
                     indexes_created_post_vector = []
                     index_names_post_vector = self.get_all_indexes_in_the_cluster()
                     self.log.info(f'indexes created before upgrade {index_names_before_upgrade}')

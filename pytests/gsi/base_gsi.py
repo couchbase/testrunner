@@ -631,7 +631,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         is_sparse = "SPARSE_VECTOR_DISTANCE" in select_query.upper()
 
         if is_sparse:
-            if use_brute_force or self.json_template == "MsMARCO":
+            if use_brute_force or self.json_template == "MsMARCO" or self.json_template == "MSMARCOSiftEmbeddingProduct":
                 # Use brute-force ground truth comparison for MsMARCO dataset
                 return self._validate_msmarco_sparse_recall(select_query, scan_consitency, variable_limit)
             else:
@@ -3185,13 +3185,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         collection_namespaces = self.namespaces
         time_now = time.time()
         while not event.is_set() and time.time() - time_now < timeout:
+            mutate = 1
             for namespace in collection_namespaces:
                 _, keyspace = namespace.split(':')
                 bucket, scope, collection = keyspace.split('.')
                 self.gen_create = SDKDataLoader(num_ops=num_docs_mutating, percent_create=50,
                                                 percent_update=50, percent_delete=0, scope=scope,
                                                 collection=collection, json_template=self.json_template,
-                                                output=True, username=self.username, password=self.password, create_end=num_docs_mutating, update_end=num_docs_mutating)
+                                                output=True, username=self.username, password=self.password,
+                                                create_end=num_docs_mutating, update_end=num_docs_mutating,
+                                                mutate=mutate)
                 if self.use_magma_loader:
                     task = self.cluster.async_load_gen_docs(self.master, bucket=bucket,
                                                             generator=self.gen_create, pause_secs=1,
@@ -3202,6 +3205,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                                     batch_size=10**4, dataset=self.json_template)
                     for task in tasks:
                         task.result()
+                mutate = 2 if mutate == 1 else 1
                 time.sleep(10)
 
     def validate_shard_unique_to_host(self, index_map, specific_index=None):
@@ -3732,6 +3736,169 @@ class BaseSecondaryIndexingTests(QueryTests):
         for query in query_stats_map:
             table.add_row([query, query_stats_map[query][0], query_stats_map[query][1]])
         table.display(message=message)
+
+    def calculate_mean_reciprocal_rank(self, select_queries, expected_title, namespace=None):
+        """
+        Calculate Mean Reciprocal Rank (MRR) for a set of queries.
+
+        For AmazonSparse (has title field):
+        1. Executes the query to get ordered results
+        2. Finds the position of the expected title in the results (1-indexed)
+        3. Calculates reciprocal rank: 1/position (or 0 if not found)
+        4. Returns the mean across all queries
+
+        For MsMARCO (no title field, uses doc_id comparison with brute-force):
+        1. Executes the GSI query to get ordered results (doc_ids)
+        2. Computes brute-force ground truth by fetching all docs and sorting by sparse dot product
+        3. For each GSI result doc_id, finds its position in brute-force results (1-indexed)
+        4. Calculates reciprocal rank: 1/position (or 0 if not found in brute-force)
+        5. Returns the mean across all queries
+
+        Args:
+            select_queries: List of select queries to execute
+            expected_title: Single expected title to search for (AmazonSparse) or query text (MsMARCO)
+            namespace: The namespace (bucket.scope.collection) - required for MsMARCO brute-force
+
+        Returns:
+            float: Mean Reciprocal Rank (0.0 to 1.0)
+        """
+        reciprocal_ranks = []
+        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+
+        # Determine if this is MsMARCO dataset (no title field, need brute-force comparison)
+        is_msmarco = self.json_template in ["MsMARCO", "MSMARCOSiftEmbeddingProduct"]
+
+        if is_msmarco:
+            self.log.info(
+                f"[MRR] MsMARCO mode: Using brute-force doc_id comparison across {len(select_queries)} queries")
+        else:
+            self.log.info(
+                f"[MRR] AmazonSparse mode: Searching for expected title: '{expected_title}' across {len(select_queries)} queries")
+
+        for idx, query in enumerate(select_queries, start=1):
+            try:
+                # Skip non-vector queries (primary index, DISTINCT queries)
+                if "SPARSE_VECTOR_DISTANCE" not in query.upper():
+                    continue
+
+                if is_msmarco and namespace:
+                    # MsMARCO: Use brute-force ground truth comparison
+                    rr = self._calculate_mrr_msmarco(query, namespace, n1ql_node, idx)
+                else:
+                    # AmazonSparse: Use title-based lookup
+                    rr = self._calculate_mrr_amazon_sparse(query, expected_title, n1ql_node, idx)
+
+                reciprocal_ranks.append(rr)
+
+            except Exception as e:
+                self.log.error(f"[MRR] Query {idx}: Error calculating MRR: {e}")
+                reciprocal_ranks.append(0.0)
+
+        # Calculate mean
+        mrr = sum(reciprocal_ranks) / len(reciprocal_ranks) if reciprocal_ranks else 0.0
+        self.log.info(f"[MRR] Mean Reciprocal Rank across {len(reciprocal_ranks)} queries: {mrr:.4f}")
+
+        return mrr
+
+    def _calculate_mrr_amazon_sparse(self, query, expected_title, n1ql_node, query_idx):
+        """
+        Calculate reciprocal rank for AmazonSparse dataset using title-based lookup.
+        """
+        result = self.run_cbq_query(query=query, server=n1ql_node)
+        query_results = result.get('results', [])
+
+        # Find position of expected title (1-indexed)
+        position = None
+        for pos, doc in enumerate(query_results, start=1):
+            if doc.get('title') == expected_title:
+                position = pos
+                break
+
+        # Calculate reciprocal rank
+        if position is not None:
+            rr = 1.0 / position
+            self.log.info(f"[MRR] Query {query_idx}: Expected title found at position {position}, RR = {rr:.4f}")
+        else:
+            rr = 0.0
+            self.log.info(f"[MRR] Query {query_idx}: Expected title NOT FOUND in results, RR = 0")
+
+        return rr
+
+    def _calculate_mrr_msmarco(self, query, namespace, n1ql_node, query_idx):
+        """
+        Calculate reciprocal rank for MsMARCO dataset using brute-force ground truth comparison.
+
+        MRR measures: At what position does the brute-force top-1 result appear in GSI results?
+        - If brute-force top-1 is GSI's 1st result: RR = 1.0
+        - If brute-force top-1 is GSI's 2nd result: RR = 0.5
+        - If brute-force top-1 is not in GSI results: RR = 0.0
+        """
+        # Extract sparse vector field and query vector from the query
+        vector_field, query_vector = self.extract_sparse_vector_field_and_query_vector(query)
+        query_indices, query_values = query_vector[0], query_vector[1]
+
+        # Execute GSI query and get results
+        gsi_result = self.run_cbq_query(query=query, server=n1ql_node,
+                                        scan_consistency=self.scan_consistency)
+        gsi_results = gsi_result.get('results', [])
+
+        # Extract doc_ids from GSI results (preserving order)
+        gsi_doc_ids = []
+        for doc in gsi_results:
+            doc_id = doc.get('id') or doc.get('doc_id') or doc.get('$1')
+            if doc_id:
+                gsi_doc_ids.append(doc_id)
+
+        if not gsi_doc_ids:
+            self.log.warning(f"[MRR] Query {query_idx}: No doc_ids in GSI results, RR = 0")
+            return 0.0
+
+        # Compute brute-force ground truth
+        # Fetch all docs with sparse vectors from the namespace
+        brute_force_query = f"SELECT meta().id AS doc_id, `sparse` FROM {namespace}"
+        bf_result = self.run_cbq_query(query=brute_force_query, server=n1ql_node)
+        all_docs = bf_result.get('results', [])
+
+        # Compute sparse dot product for each doc
+        doc_scores = []
+        for doc in all_docs:
+            doc_id = doc.get('doc_id')
+            sparse_vec = doc.get('sparse')
+            if sparse_vec and len(sparse_vec) == 2 and doc_id:
+                doc_indices, doc_values = sparse_vec[0], sparse_vec[1]
+                score = self._compute_sparse_dot_product(query_indices, query_values,
+                                                         doc_indices, doc_values)
+                doc_scores.append((doc_id, score))
+
+        # Sort by score descending (higher dot product = more similar)
+        doc_scores.sort(key=lambda x: x[1], reverse=True)
+
+        if not doc_scores:
+            self.log.warning(f"[MRR] Query {query_idx}: No brute-force results, RR = 0")
+            return 0.0
+
+        # Get brute-force top-1 doc_id (the "correct" answer)
+        bf_top1_doc_id = doc_scores[0][0]
+        bf_top1_score = doc_scores[0][1]
+
+        # Find position of brute-force top-1 in GSI results (1-indexed)
+        position = None
+        for pos, gsi_doc_id in enumerate(gsi_doc_ids, start=1):
+            if gsi_doc_id == bf_top1_doc_id:
+                position = pos
+                break
+
+        # Calculate reciprocal rank
+        if position is not None:
+            rr = 1.0 / position
+            self.log.info(f"[MRR] Query {query_idx}: Brute-force top-1 '{bf_top1_doc_id}' (score={bf_top1_score:.4f}) "
+                          f"found at GSI position {position}, RR = {rr:.4f}")
+        else:
+            rr = 0.0
+            self.log.info(f"[MRR] Query {query_idx}: Brute-force top-1 '{bf_top1_doc_id}' (score={bf_top1_score:.4f}) "
+                          f"NOT FOUND in GSI top-{len(gsi_doc_ids)} results, RR = 0")
+
+        return rr
 
     def display_recall_and_accuracy_stats(self, select_queries, message="query stats", stats_assertion=True,
                                           similarity="L2_SQUARED", query_expected_title_map=None,
