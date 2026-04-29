@@ -1050,12 +1050,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 9] FAILED: {str(e)}")
             raise
-        
         # ========== STEP 10: Wait for DEK rotation and run mutations ==========
         try:
             self.log.info("[STEP 10] Waiting 120 seconds for DEK rotation to take effect...")
             self.sleep(120, "Waiting for DEK rotation interval")
-            
             # Perform mutations to trigger new snapshot creation with rotated DEK
             self.log.info("[STEP 10] Running mutations to trigger snapshot creation with new DEK...")
             gen_update = SDKDataLoader(
@@ -1077,38 +1075,36 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             )
             for task in tasks:
                 task.result()
-            
             # Wait for snapshots to be created with new DEK
             self.sleep(120, "Waiting for new snapshots to be created with key2")
-
             new_in_use_key_ids = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_in_use_key_ids)
+            self.log.info(f"New key IDs {new_in_use_key_ids}")
             if not new_in_use_key_ids:
                 raise Exception("Indexer GetInUseKeys did not report any new key IDs after key rotation")
-            
             self.log.info("[STEP 10] PASSED - Key rotation wait completed")
         except Exception as e:
             self.log.error(f"[STEP 10] FAILED: {str(e)}")
             raise
-        
+        # Set high DEK rotation interval to prevent further rotations during validation
+        self.log.info("Setting high DEK rotation interval to stabilize keys for validation")
+        self._rotate_bucket_encryption_key(bucket_name, key2_id, dek_rotation_interval=36000, dek_lifetime=36000)
         # ========== STEP 11: Rerun validations with key2 ==========
         try:
             self.log.info("[STEP 11] Rerunning validations after key rotation...")
-            
-            # Run scan queries again
-            stats_before = self._capture_scan_stats()
-            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
-            self._validate_scan_stats_increment(stats_before)
-            
-            # Validate item counts
-            self.item_count_related_validations()
-            
+            new_in_use_key_ids_again = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_in_use_key_ids)
+            self.log.info(f"Double checking keys in use just before validation {new_in_use_key_ids_again}")
             # Validate file encryption with key2
             validation_passed = self._validate_file_encryption_with_key(
                 index_nodes, expected_key_id=new_in_use_key_ids, step_prefix="[STEP 11] "
             )
             if not validation_passed:
                 raise Exception("File encryption validation failed after key rotation to key2")
-            
+            # Run scan queries again
+            stats_before = self._capture_scan_stats()
+            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
+            self._validate_scan_stats_increment(stats_before)
+            # Validate item counts
+            self.item_count_related_validations()
             self.log.info("[STEP 11] PASSED - Post-rotation validations completed with key2")
         except Exception as e:
             self.log.error(f"[STEP 11] FAILED: {str(e)}")

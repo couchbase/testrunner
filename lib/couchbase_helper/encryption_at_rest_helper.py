@@ -162,6 +162,40 @@ class EncryptionAtRestHelper:
             if expected_value and expected_value in actual:
                 return True, expected_value
         return False, printable
+
+    def _log_failed_file_headers(self, node, failed_files, expected_key_ids):
+        """
+        Log actual header content for failed files to help debugging.
+        Only called when validation fails.
+        
+        Args:
+            node: Server object
+            failed_files: List of (file_path, error_reason) tuples
+            expected_key_ids: Expected encryption key IDs that were not found
+        """
+        if not failed_files:
+            return
+        
+        self.log.error("GSI_EAR_FAILED_HEADER_DEBUG_MARKER_V1")
+        self.log.error(f"Node {node.ip}: Logging header content for {len(failed_files)} failed files")
+        self.log.error(f"Node {node.ip}: Expected key IDs: {expected_key_ids}")
+        
+        for file_path, error_reason in failed_files:
+            header_read, actual_header, printable_header = self.get_file_header_text(
+                node, file_path, bytes_to_read=512
+            )
+            if header_read:
+                self.log.error(
+                    f"Node {node.ip}: File {file_path}\n"
+                    f"  Error: {error_reason}\n"
+                    f"  Actual header (first 300 chars): {printable_header[:300]}"
+                )
+            else:
+                self.log.error(
+                    f"Node {node.ip}: File {file_path}\n"
+                    f"  Error: {error_reason}\n"
+                    f"  Could not read header: {printable_header}"
+                )
     
     def verify_no_plaintext_in_file(self, node, file_path, search_patterns=None):
         """
@@ -560,10 +594,6 @@ class EncryptionAtRestHelper:
                             failed_files.append(
                                 (file_path, f"Missing encryption key ids {expected_key_ids} in header")
                             )
-                            self.log.warning(
-                                f"Node {node.ip}: File {file_path} is encrypted but header does not contain "
-                                f"any expected encryption key id from {expected_key_ids}"
-                            )
                             continue
                     encrypted_count += 1
                     self.log.info(
@@ -590,11 +620,15 @@ class EncryptionAtRestHelper:
                     "total_checked": len(sample_files),
                     "failed_files": failed_files
                 }
+                # Log actual header content for first few failed files
+                self._log_failed_file_headers(node, failed_files[:3], expected_key_ids)
             else:
                 results[node.ip] = {
                     "status": "failed",
                     "reason": "No encrypted files found in snapshot folders",
                     "failed_files": failed_files
                 }
+                # Log actual header content for first few failed files
+                self._log_failed_file_headers(node, failed_files[:3], expected_key_ids)
         
         return results
