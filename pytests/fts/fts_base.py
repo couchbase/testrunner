@@ -1320,6 +1320,21 @@ class FTSIndex:
             self.__log.info("Doc ID %s not found in search results." % doc_id)
             return -1
 
+    def _build_full_index_name(self):
+        """Construct the fully-prefixed index name (bucket.scope.name) for global endpoint."""
+        if self._source_name and self.index_type != "fulltext-alias":
+            scope = self.scope if self.scope else "_default"
+            return "{0}.{1}.{2}".format(self._source_name, scope, self.name)
+        return self.name
+
+    def _update_index_name(self, full_name):
+        """Update index name to the server-assigned full name if it differs."""
+        if full_name and full_name != self.name and not self.is_elixir:
+            self.__log.info("Index name updated from '{0}' to '{1}'".format(
+                self.name, full_name))
+            self.name = full_name
+            self.index_definition['name'] = full_name
+
     def create(self, rest=None):
         self.__log.info("Checking if index already exists ...")
         if not rest:
@@ -1327,11 +1342,18 @@ class FTSIndex:
         status, _ = rest.get_fts_index_definition(self.name, self._source_name, self.scope)
         if status != 400:
             rest.delete_fts_index(self.name, self._source_name, self.scope)
+        else:
+            full_name = self._build_full_index_name()
+            if full_name != self.name:
+                status, _ = rest.get_fts_index_definition(full_name, self._source_name, self.scope)
+                if status != 400:
+                    rest.delete_fts_index(full_name, self._source_name, self.scope)
         self.__log.info("Creating {0} {1} on {2}".format(
             self.index_type,
             self.name,
             rest.ip))
-        rest.create_fts_index(self.name, self.index_definition, self._source_name, self.scope)
+        _, full_name = rest.create_fts_index(self.name, self.index_definition, self._source_name, self.scope)
+        self._update_index_name(full_name)
         self.__cluster.get_indexes().append(self)
         self.uuid = self.get_uuid()
         global_vars.system_event_logs.add_event(SearchServiceEvents.index_created(rest.ip, self.uuid,
@@ -1344,7 +1366,8 @@ class FTSIndex:
             self.index_type,
             self.name,
             rest.ip))
-        rest.create_fts_index(self.name, self.index_definition, self._source_name, self.scope)
+        _, full_name = rest.create_fts_index(self.name, self.index_definition, self._source_name, self.scope)
+        self._update_index_name(full_name)
         self.__cluster.get_indexes().append(self)
 
     def update(self, rest=None):
@@ -3238,15 +3261,15 @@ class CouchbaseCluster:
         return fts_idx
 
     def get_fts_index_by_name(self, name):
-        """ Returns an FTSIndex object with the given name """
+        """ Returns an FTSIndex object with the given name (supports both short and full prefixed names) """
         for index in self.__indexes:
-            if index.name == name:
+            if index.name == name or index.name.endswith('.' + name):
                 return index
 
     def delete_fts_index(self, name):
-        """ Delete an FTSIndex object with the given name from a given node """
+        """ Delete an FTSIndex object with the given name from a given node (supports both short and full prefixed names) """
         for index in self.__indexes.copy():
-            if index.name == name:
+            if index.name == name or index.name.endswith('.' + name):
                 index.delete()
 
     def delete_all_fts_indexes(self):

@@ -115,7 +115,7 @@ class RbacFTS(FTSBaseTest):
         rest = self.get_rest_handle_for_credentials("Administrator", "password")
         index.create(rest)
 
-        api = "http://{0}:8094/api/index/travel".format(server.ip)
+        api = "http://{0}:8094/api/index/{1}".format(server.ip, index.name)
         response, content = httplib2.Http(timeout=120).request(api,
                                                               "DELETE",
                                                               headers=None)
@@ -139,7 +139,7 @@ class RbacFTS(FTSBaseTest):
         rest = self.get_rest_handle_for_credentials("Administrator", "password")
         index.create(rest)
 
-        api = "http://{0}:8094/api/index/travel".format(server.ip)
+        api = "http://{0}:8094/api/index/{1}".format(server.ip, index.name)
         response, content = httplib2.Http(timeout=120).request(api,
                                                                "GET",
                                                                headers=None)
@@ -164,7 +164,7 @@ class RbacFTS(FTSBaseTest):
         index.create(rest)
         self.wait_for_indexing_complete()
 
-        api = "http://{0}:8094/api/index/travel/query?".format(server.ip)
+        api = "http://{0}:8094/api/index/{1}/query?".format(server.ip, index.name)
         query = {"match": "Wick", "field": "city"}
         import urllib.request, urllib.parse, urllib.error
         api = api + urllib.parse.urlencode(query)

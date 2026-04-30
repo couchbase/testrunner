@@ -585,14 +585,14 @@ class LogRedactionTests(LogRedactionBase):
                                               password='password')
                 rest.create_bucket(bucket="default", ramQuotaMB=256)
                 self.sleep(15)
-        status = rest.create_fts_index("index1", index_definition)
+        status, full_index_name = rest.create_fts_index("index1", index_definition)
         if status:
-            log.info("Index 'index1' created")
+            log.info("Index '{0}' created".format(full_index_name))
         else:
             log.info("Error creating index, status = {0}".format(status))
         self.sleep(60, "waiting for docs to get indexed")
         query_json = {"query": {"field": "type", "match": "emp"}}
-        hits, _, _, _ = rest.run_fts_query(index_name="index1",
+        hits, _, _, _ = rest.run_fts_query(index_name=full_index_name,
                            query_json=query_json)
         log.info("Hits from query {0}: {1}".format(query_json, hits))
         self.set_redaction_level()

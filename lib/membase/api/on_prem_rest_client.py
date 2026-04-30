@@ -4127,7 +4127,7 @@ class RestConnection(object):
         return status, json_parsed
 
     def create_fts_index(self, index_name, params, bucket="_default", scope="_default",mode =None):
-        """create or edit fts index , returns {"status":"ok"} on success"""
+        """create or edit fts index , returns (status, full_index_name) on success"""
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)
         if self.is_elixir:
             if scope is None:
@@ -4139,10 +4139,18 @@ class RestConnection(object):
             return status, content
 
         if status:
-            log.info("Index {0} created".format(index_name))
+            full_name = index_name
+            try:
+                response = json.loads(content)
+                if 'name' in response:
+                    full_name = response['name']
+                    log.info("Index created with full name: {0}".format(full_name))
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+            log.info("Index {0} created".format(full_name))
+            return status, full_name
         else:
             raise Exception("Error creating index: {0}".format(content))
-        return status
 
     def update_fts_index(self, index_name, index_def, bucket="_default", scope="_default",mode=None):
         api = self.fts_baseUrl + "api/index/{0}".format(index_name)

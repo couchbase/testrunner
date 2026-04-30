@@ -1006,21 +1006,25 @@ class x509tests(BaseTestCase):
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx', port=18094, headers=" -XPUT -H \"Content-Type: application/json\" -u Administrator:password ",
                                                             client_cert=False, curl=True, verb='GET', data="'" + json.dumps(idx) + "'")
-        self.assertEqual(json.loads(output)['status'], "ok", "Issue with creating FTS index with client Cert")
+        create_resp = json.loads(output)
+        self.assertEqual(create_resp['status'], "ok", "Issue with creating FTS index with client Cert")
+        full_idx_name = create_resp.get('name', 'default_idx')
 
         output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=self.fts_port, headers=" -XPUT -H \"Content-Type: application/json\" -u Administrator:password ",
                                                         client_cert=False, curl=True, verb='GET', data="'" + json.dumps(idx) + "'", plain_curl=True)
-        self.assertEqual(json.loads(output)['status'], "ok", "Issue with creating FTS index with client Cert")
+        create_resp_01 = json.loads(output)
+        self.assertEqual(create_resp_01['status'], "ok", "Issue with creating FTS index with client Cert")
+        full_idx01_name = create_resp_01.get('name', 'default_idx01')
 
         if self.client_cert_state == 'enable':
-            output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx', port=18094, headers=" -H \"Content-Type: application/json\" ",
+            output = x509main()._execute_command_clientcert(host.ip, url='/api/index/{0}'.format(full_idx_name), port=18094, headers=" -H \"Content-Type: application/json\" ",
                                                             client_cert=True, curl=True, verb='DELETE')
         else:
-            output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx', port=18094, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
+            output = x509main()._execute_command_clientcert(host.ip, url='/api/index/{0}'.format(full_idx_name), port=18094, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
                                                             client_cert=False, curl=True, verb='DELETE')
         self.assertEqual(json.loads(output)['status'], "ok", "Issue with deleteing FTS index with client Cert")
 
-        output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=self.fts_port, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
+        output = x509main()._execute_command_clientcert(host.ip, url='/api/index/{0}'.format(full_idx01_name), port=self.fts_port, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
                                                         client_cert=False, curl=True, verb='DELETE', plain_curl=True)
         self.assertEqual(json.loads(output)['status'], "ok", "Issue with deleteing FTS index on 8094")
 

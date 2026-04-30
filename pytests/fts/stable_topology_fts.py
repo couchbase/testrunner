@@ -2833,12 +2833,14 @@ class StableTopFTS(FTSBaseTest):
 
         self.log.info("Running command : {0}".format(cmd))
         output = subprocess.check_output(cmd, shell=True)
-        if json.loads(output)["status"] == "ok":
+        create_response = json.loads(output)
+        if create_response["status"] == "ok":
+            full_index_name = create_response.get("name", "default_idx")
             query = "curl -g -k " + \
                     "-XPOST -H \"Content-Type: application/json\" " + \
                     "-u Administrator:password " + \
-                    "https://{0}:18094/api/index/default_idx/query -d ". \
-                        format(fts_node.ip, fts_ssl_port) + \
+                    "https://{0}:18094/api/index/{1}/query -d ". \
+                        format(fts_node.ip, full_index_name) + \
                     "\'{0}\'".format(json.dumps(qry))
             self.sleep(20, "wait for indexing to complete")
             output = subprocess.check_output(query, shell=True)

@@ -368,9 +368,9 @@ class FTSCallable:
                                                 scope=scope)
 
     def delete_fts_index(self, name):
-        """ Delete an FTSIndex object with the given name from a given node """
+        """ Delete an FTSIndex object with the given name from a given node (supports both short and full prefixed names) """
         for index in self.fts_indexes:
-            if index.name == name:
+            if index.name == name or index.name.endswith('.' + name):
                 index.delete()
 
     def delete_all(self):
@@ -642,9 +642,15 @@ class FTSCallable:
             Returns true / false if index exists
             Returns index's node and server group distribution if required -> node_def = True
             Returns index definition if required -> index_def = True
+            Tries both the short name and the fully-prefixed name (bucket.scope.name).
         """
         rest = RestConnection(self.cb_cluster.get_random_fts_node())
         resp = rest.get_fts_index_definition(index_name, bucket_name, scope_name)
+        if not resp[0] and bucket_name:
+            scope = scope_name if scope_name else "_default"
+            full_name = "{0}.{1}.{2}".format(bucket_name, scope, index_name)
+            if full_name != index_name:
+                resp = rest.get_fts_index_definition(full_name, bucket_name, scope_name)
         if resp[0]:
             if node_def:
                 return resp[1]['planPIndexes'][0]['nodes']
