@@ -75,7 +75,8 @@ class BackupRestore(FTSBaseTest):
 
         # store backup index definitions
         indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
-        for idx in indexes_for_backup:
+        resolved_indexes = self._resolve_index_names(indexes_for_backup, index_definitions, backup)
+        for idx in resolved_indexes:
             backup_index_def = backup[idx]
             index_definitions[idx]['backup_def'] = backup_index_def
 
@@ -86,12 +87,12 @@ class BackupRestore(FTSBaseTest):
         backup_client.restore()
 
         # getting restored indexes definitions and storing them in indexes definitions dict
-        for ix_name in indexes_for_backup:
+        for ix_name in resolved_indexes:
             _,restored_index_def = self.rest.get_fts_index_definition(ix_name)
             index_definitions[ix_name]['restored_def'] = restored_index_def
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
-        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=indexes_for_backup)
+        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=resolved_indexes)
 
         self._cleanup_indexes(index_definitions)
 
@@ -145,10 +146,11 @@ class BackupRestore(FTSBaseTest):
         time.sleep(10)
 
         # getting restored indexes definitions and storing them in indexes definitions dict
-        for ix in indexes_for_backup:
-            index_name = ix[0]
-            _,restored_index_def = self.rest.get_fts_index_definition(index_name)
-            index_definitions[index_name]['remapped_def'] = restored_index_def['indexDef']
+        short_remap_names = [ix[0] for ix in indexes_for_backup]
+        resolved_remap_names = self._resolve_index_names(short_remap_names, index_definitions, backup)
+        for ix, resolved_name in zip(indexes_for_backup, resolved_remap_names):
+            _,restored_index_def = self.rest.get_fts_index_definition(resolved_name)
+            index_definitions[resolved_name]['remapped_def'] = restored_index_def['indexDef']
 
         # prepare indexes information for tests
         expected_mappings = eval(TestInputSingleton.input.param("remapped_idx", "[]"))
@@ -158,9 +160,11 @@ class BackupRestore(FTSBaseTest):
             ix = self._decode_index(mapping)
             expected_indexes.append(ix)
 
-        for ix in expected_indexes:
+        resolved_expected_names = self._resolve_index_names(
+            [ix["name"] for ix in expected_indexes], index_definitions)
+        for ix, resolved_name in zip(expected_indexes, resolved_expected_names):
             ix_params_map = {}
-            ix_params_map["name"] = ix["name"]
+            ix_params_map["name"] = resolved_name
             ix_params_map["params"] = {}
             collection_index, _type, index_scope, index_collections = self.define_index_params(ix)
             ix_params_map["params"]["collection_index"] = collection_index
@@ -169,10 +173,17 @@ class BackupRestore(FTSBaseTest):
             ix_params_map["params"]["index_collections"] = index_collections
             expected_index_parameters.append(ix_params_map)
 
+        # resolve remap_data short names to full names
+        resolved_mappings = []
+        remap_name_map = dict(zip(short_remap_names, resolved_remap_names))
+        for mapping in expected_mappings:
+            resolved_mapping = (remap_name_map.get(mapping[0], mapping[0]),) + mapping[1:]
+            resolved_mappings.append(resolved_mapping)
+
         # check indexes remapping
         errors = self._check_indexes_remap(index_definitions=index_definitions,
                                            expected_index_parameters=expected_index_parameters,
-                                           remap_data=expected_mappings)
+                                           remap_data=resolved_mappings)
 
         self._cleanup_indexes(index_definitions)
 
@@ -215,7 +226,8 @@ class BackupRestore(FTSBaseTest):
 
         # store backup index definitions
         indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
-        for idx in indexes_for_backup:
+        resolved_indexes = self._resolve_index_names(indexes_for_backup, index_definitions, backup)
+        for idx in resolved_indexes:
             backup_index_def = backup[idx]
             index_definitions[idx]['backup_def'] = backup_index_def
 
@@ -245,12 +257,12 @@ class BackupRestore(FTSBaseTest):
         backup_client.restore()
 
         # getting restored indexes definitions and storing them in indexes definitions dict
-        for ix_name in indexes_for_backup:
+        for ix_name in resolved_indexes:
             _,restored_index_def = self.rest.get_fts_index_definition(ix_name)
             index_definitions[ix_name]['restored_def'] = restored_index_def
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
-        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=indexes_for_backup)
+        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=resolved_indexes)
 
         self._cleanup_indexes(index_definitions)
 
@@ -300,7 +312,7 @@ class BackupRestore(FTSBaseTest):
         # restoring indexes from backup
         backup_client.restore()
 
-        _, restored_alias_def = self.rest.get_fts_index_definition("index_alias")
+        _, restored_alias_def = self.rest.get_fts_index_definition(index_alias.name)
 
         original_alias_defn = initial_alias_def['indexDef']
         restored_alias_defn = restored_alias_def['indexDef']
@@ -447,7 +459,8 @@ class BackupRestore(FTSBaseTest):
 
         # store backup index definitions
         indexes_for_backup = eval(TestInputSingleton.input.param("expected_indexes", "[]"))
-        for idx in indexes_for_backup:
+        resolved_indexes = self._resolve_index_names(indexes_for_backup, index_definitions, backup)
+        for idx in resolved_indexes:
             backup_index_def = backup[idx]
             index_definitions[idx]['backup_def'] = backup_index_def
 
@@ -459,12 +472,12 @@ class BackupRestore(FTSBaseTest):
         backup_client.restore()
 
         # getting restored indexes definitions and storing them in indexes definitions dict
-        for ix_name in indexes_for_backup:
+        for ix_name in resolved_indexes:
             _,restored_index_def = self.rest.get_fts_index_definition(ix_name)
             index_definitions[ix_name]['restored_def'] = restored_index_def
 
         #compare all 3 types of index definitions: initial, backed up, and restored from backup
-        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=indexes_for_backup)
+        errors = self._check_indexes_definitions(index_definitions=index_definitions, indexes_for_backup=resolved_indexes)
 
         self._cleanup_indexes(index_definitions)
 
@@ -823,6 +836,30 @@ class BackupRestore(FTSBaseTest):
             if required_type not in index_types:
                 errors.append(f"Remapped type is not found in index {remapped['name']}. Expected type - {required_type}")
         return errors
+
+    def _resolve_index_names(self, short_names, index_definitions, backup=None):
+        """Resolve short index names (e.g. 'i1') to full names (e.g. 'b1._default.i1')
+        by matching against index_definitions keys and backup keys."""
+        resolved = []
+        for short_name in short_names:
+            if short_name in index_definitions:
+                resolved.append(short_name)
+                continue
+            if backup and short_name in backup:
+                resolved.append(short_name)
+                continue
+            full_name = None
+            for key in index_definitions.keys():
+                if key.endswith('.' + short_name):
+                    full_name = key
+                    break
+            if not full_name and backup:
+                for key in backup.keys():
+                    if key.endswith('.' + short_name):
+                        full_name = key
+                        break
+            resolved.append(full_name if full_name else short_name)
+        return resolved
 
     def _create_kv(self):
         containers = eval(TestInputSingleton.input.param("kv", "{}"))

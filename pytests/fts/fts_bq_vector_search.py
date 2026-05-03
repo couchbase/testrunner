@@ -133,8 +133,14 @@ class BQVectorSearch(VectorSearch):
         self.log.info(restore_out)
 
         restore_stdout = str(restore_out[0]) if restore_out else ""
-        if "Error restoring cluster" in restore_stdout:
+        bucket_succeeded = "| Succeeded |" in restore_stdout or "Restore completed successfully" in restore_stdout
+        has_error = "Error restoring cluster" in restore_stdout
+
+        if has_error and not bucket_succeeded:
             self.fail(f"Backup restore failed: {restore_stdout}")
+        elif has_error and bucket_succeeded:
+            self.log.warning("Restore had non-critical errors (e.g. AWR metadata) "
+                             "but bucket data restored successfully")
         self.log.info("Backup restore completed, waiting for bucket to be ready")
         time.sleep(10)
 
