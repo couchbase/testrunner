@@ -107,6 +107,7 @@ torch==2.4.0
 docker==7.1.0
 psutil==7.1.3
 pexpect==4.9.0
+pyspark==3.5.0
 # Not adding specific versions for the following to always get the latest compatible versions
 sentence-transformers
 transformers

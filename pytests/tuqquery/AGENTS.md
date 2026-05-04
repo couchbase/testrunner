@@ -188,4 +188,11 @@ Major configuration buckets in `conf/tuq/`:
 ```bash
 # Vector search tests (8 conf files for different scenarios)
 python testrunner.py -c conf/tuq/py-tuq-vector-knn.conf       # KNN search
+
+# Iceberg external collection tests (requires AWS credentials)
+python testrunner.py -c conf/tuq/py-tuq-iceberg.conf
 ```
+
+## Additional Documentation
+
+- **Iceberg Tests**: See [README_ICEBERG.md](README_ICEBERG.md) for external Iceberg collection test details

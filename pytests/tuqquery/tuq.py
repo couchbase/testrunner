@@ -299,8 +299,97 @@ class QueryTests(BaseTestCase):
             cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
             os.system(cmd)
             # os.remove(filename)
+        # Check for panics in query service logs
+        if not getattr(self, 'capella_run', False):
+            self.check_query_service_logs_for_panic()
+
         self.log.info("==============  QueryTests tearDown has completed ==============")
         super(QueryTests, self).tearDown()
+
+    def check_query_service_logs_for_panic(self):
+        """
+        Check query service (n1ql/cbq-engine) logs for panic messages.
+        Similar to check_gsi_logs_for_panic in gsi/newtuq.py.
+        """
+        panic_str = "panic"
+        fatal_str = "fatal error"
+        runtime_error_str = "runtime error"
+        strings_to_monitor = [panic_str, fatal_str, runtime_error_str]
+        fail_test = False
+        panic_details = []
+
+        # Get all n1ql nodes
+        try:
+            n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True)
+        except Exception as e:
+            self.log.warning(f"Could not get n1ql nodes for panic check: {str(e)}")
+            return
+
+        if not n1ql_nodes:
+            self.log.info("No n1ql nodes found, skipping query service panic check")
+            return
+
+        for server in n1ql_nodes:
+            shell = None
+            try:
+                shell = RemoteMachineShellConnection(server)
+                # Get the log directory path
+                try:
+                    _, log_dir = RestConnection(server).diag_eval(
+                        'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                except Exception as e:
+                    # Fallback to default log location
+                    log_dir = "/opt/couchbase/var/lib/couchbase/logs"
+                    self.log.warning(f"Could not get log dir via diag_eval, using default: {log_dir}")
+
+                query_log = str(log_dir) + '/query.log*'
+
+                for string in strings_to_monitor:
+                    # Use zgrep to search compressed and uncompressed logs
+                    cmd = f'zgrep -i "{string}" {query_log} 2>/dev/null | grep -v "\"level\":\"info\"" | wc -l'
+                    count, err = shell.execute_command(cmd)
+
+                    if isinstance(count, list):
+                        try:
+                            count = int(count[0].strip())
+                        except (ValueError, IndexError):
+                            count = 0
+                    else:
+                        try:
+                            count = int(str(count).strip())
+                        except ValueError:
+                            count = 0
+
+                    if count > 0:
+                        self.log.error(f"===== '{string}' OBSERVED {count} TIME(S) IN QUERY LOGS ON SERVER {server.ip} =====")
+                        
+                        # Get sample panic lines for debugging
+                        sample_cmd = f'zgrep -i "{string}" {query_log} 2>/dev/null | grep -v "\"level\":\"info\"" | tail -5'
+                        sample_output, _ = shell.execute_command(sample_cmd)
+                        if sample_output:
+                            self.log.error(f"Sample '{string}' entries from {server.ip}:")
+                            for line in sample_output[:5]:
+                                self.log.error(f"  {line}")
+                            panic_details.append({
+                                'server': server.ip,
+                                'pattern': string,
+                                'count': count,
+                                'samples': sample_output[:5]
+                            })
+                        fail_test = True
+
+            except Exception as e:
+                self.log.warning(f"Error checking query logs on {server.ip}: {str(e)}")
+            finally:
+                if shell:
+                    shell.disconnect()
+
+        if fail_test:
+            error_msg = f"PANIC/FATAL ERROR detected in query service logs! Details: {panic_details}"
+            self.log.error(error_msg)
+            # Don't fail the test immediately, just log the error
+            # Uncomment the line below to fail tests on panic detection
+            # self.fail(error_msg)
 
     def suite_tearDown(self):
         self.log.info("==============  QueryTests suite_tearDown has started ==============")

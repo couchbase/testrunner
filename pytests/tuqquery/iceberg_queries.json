@@ -1,0 +1,42 @@
+[
+  {
+    "name": "projection_limit_offset",
+    "query": "SELECT id, name, city, type, price FROM {keyspace} WHERE id < 10 ORDER BY id LIMIT 3 OFFSET 2"
+  },
+  {
+    "name": "between_in_filter",
+    "query": "SELECT id, name, type, price FROM {keyspace} WHERE id BETWEEN 10 AND 25 AND type IN [\"Hotel\", \"Inn\"] ORDER BY id"
+  },
+  {
+    "name": "distinct_like_cities",
+    "query": "SELECT DISTINCT city FROM {keyspace} WHERE id < 100 AND city LIKE \"New %\" ORDER BY city"
+  },
+  {
+    "name": "group_by_type_aggregates",
+    "query": "SELECT type, COUNT(1) AS hotel_count, MIN(price) AS min_price, MAX(price) AS max_price, AVG(price) AS avg_price FROM {keyspace} WHERE id < 25 GROUP BY type HAVING COUNT(1) >= 5 ORDER BY type"
+  },
+  {
+    "name": "any_satisfies_reviews",
+    "query": "SELECT id, name, ARRAY_LENGTH(reviews) AS review_count FROM {keyspace} WHERE id < 15 AND ANY r IN reviews SATISFIES r.ratings.Overall >= 4 AND r.ratings.Rooms >= 3 END ORDER BY id"
+  },
+  {
+    "name": "unnest_review_aggregates",
+    "query": "SELECT h.id, COUNT(1) AS review_count, ROUND(AVG(r.ratings.Overall), 3) AS avg_overall FROM {keyspace} AS h UNNEST h.reviews AS r WHERE h.id BETWEEN 0 AND 9 GROUP BY h.id ORDER BY h.id"
+  },
+  {
+    "name": "let_case_array_projection",
+    "query": "SELECT h.id, h.name, review_count, CASE WHEN h.price < 1000 THEN \"budget\" WHEN h.price < 3000 THEN \"mid\" ELSE \"premium\" END AS price_band, ARRAY r.author FOR r IN h.reviews END AS review_authors FROM {keyspace} AS h LET review_count = ARRAY_LENGTH(h.reviews) WHERE h.id IN [99, 100, 101] ORDER BY h.id"
+  },
+  {
+    "name": "scalar_subquery_price_filter",
+    "query": "SELECT h.id, h.name, h.price FROM {keyspace} AS h WHERE h.id < 15 AND h.price > (SELECT RAW AVG(h2.price) FROM {keyspace} AS h2 WHERE h2.id < 20)[0] ORDER BY h.id"
+  },
+  {
+    "name": "union_all_amenities",
+    "query": "SELECT u.id, u.name, u.amenity FROM (SELECT h.id, h.name, \"breakfast\" AS amenity FROM {keyspace} AS h WHERE h.id IN [0, 1, 2, 3, 4] AND h.free_breakfast UNION ALL SELECT h.id, h.name, \"parking\" AS amenity FROM {keyspace} AS h WHERE h.id IN [0, 1, 2, 3, 4] AND h.free_parking) AS u ORDER BY u.id, u.amenity"
+  },
+  {
+    "name": "window_rank_by_city",
+    "query": "SELECT h.id, h.name, h.city, h.price, h.avg_rating, RANK() OVER (PARTITION BY h.city ORDER BY h.avg_rating DESC, h.price ASC) AS city_rank FROM {keyspace} AS h WHERE h.city = \"Albuquerque\" AND h.id < 250 ORDER BY city_rank, h.id"
+  }
+]
