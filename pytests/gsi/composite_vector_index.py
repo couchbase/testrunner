@@ -3616,10 +3616,11 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # Loading new documents so that persisted snapshot wouldn't have these docs
         if 'RaBitQ' in self.quantization_algo_description_vector:
             num_new_docs = 20
-            dummy_vector = [0.1] * self.dimension
+            description_vector = [0.1] * self.dimension
+            color_vector = [0.1, 0.2, 0.3]
             for namespace in self.namespaces:
                 for i in range(num_new_docs):
-                    insert_query = f'INSERT INTO {namespace} (KEY, VALUE) VALUES ("new_doc_{i}", {{"year": 2025, "type": "test", "rating": 3, "category": "Sedan", "fuel": "Petrol", "name": "test_car_{i}", "descriptionVector": {dummy_vector}, "colorRGBVector": {dummy_vector}}})'
+                    insert_query = f'INSERT INTO {namespace} (KEY, VALUE) VALUES ("new_doc_{i}", {{"year": 2025, "type": "test", "rating": 3, "category": "Sedan", "fuel": "Petrol", "name": "test_car_{i}", "descriptionVector": {description_vector}, "colorRGBVector": {color_vector}}})'
                     self.run_cbq_query(query=insert_query, server=query_node)
                 self.log.info(f"Inserted {num_new_docs} docs into {namespace} via N1QL")
         else:
