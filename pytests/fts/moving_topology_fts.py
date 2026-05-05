@@ -2353,6 +2353,9 @@ class MovingTopFTS(FTSBaseTest):
                 ejected_nodes.append(node.id)
                 break
 
+        # Start data loading so it runs concurrently with the rebalance
+        load_tasks = self.async_load_data()
+
         self.log.info(
                 "removing node {0} from cluster".format(ejected_nodes))
         rest.rebalance(otpNodes=[node.id for node in nodes],
@@ -2368,6 +2371,9 @@ class MovingTopFTS(FTSBaseTest):
             rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
             self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
                                                      "failed after restarting")
+
+        for task in load_tasks:
+            task.result()
 
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
@@ -2398,6 +2404,9 @@ class MovingTopFTS(FTSBaseTest):
         self.log.info(
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
+        # Start data loading before the rebalance loop so it runs throughout
+        load_tasks = self.async_load_data()
+
         while count<5:
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=ejected_nodes)
@@ -2411,6 +2420,10 @@ class MovingTopFTS(FTSBaseTest):
                        ejectedNodes=ejected_nodes)
         self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
                                                      "failed after restarting")
+
+        for task in load_tasks:
+            task.result()
+
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         tasks = []
@@ -2461,6 +2474,9 @@ class MovingTopFTS(FTSBaseTest):
                     ejected_nodes.append(node.id)
                     break
 
+        # Start data loading so it runs concurrently with both rebalance phases
+        load_tasks = self.async_load_data()
+
         rest.rebalance(otpNodes=[node.id for node in nodes],
                        ejectedNodes=ejected_nodes)
         self.sleep(3)
@@ -2480,6 +2496,9 @@ class MovingTopFTS(FTSBaseTest):
         rest.rebalance(otpNodes=[node.id for node in nodes],
                        ejectedNodes=ejected_nodes)
         rest.monitorRebalance()
+
+        for task in load_tasks:
+            task.result()
 
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
@@ -2619,9 +2638,17 @@ class MovingTopFTS(FTSBaseTest):
         for node in self._cb_cluster.get_nodes():
             if node.ip == hostnames[0]:
                 node_obj = node
+
+        # Start data loading before failover so it runs during failover and rebalance
+        load_tasks = self.async_load_data()
+
         self._cb_cluster.failover(node=node_obj)
         time.sleep(30)
         self._cb_cluster.rebalance_failover_nodes()
+
+        for task in load_tasks:
+            task.result()
+
         frest = RestConnection(self._cb_cluster.get_fts_nodes()[0])
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
@@ -2985,9 +3012,8 @@ class MovingTopFTS(FTSBaseTest):
             query_thread, query_stop, query_errors = self._start_background_queries()
             self.sleep(phase_sleep)
 
-            self.log.info(f"CYCLE {cycle}: Running rebalance sequence")
-            # self._run_rebalance_cycle(phase_sleep)
-            self.sleep(300)
+            self.log.info(f"CYCLE {cycle}: Running rebalance sequence (mutations active)")
+            self._run_rebalance_cycle(phase_sleep)
 
             self.log.info(f"CYCLE {cycle}: Stopping mutations and queries")
             query_stop.set()
@@ -3000,7 +3026,6 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info(f"CYCLE {cycle}: Validation passed. "
                           f"Total indexes: {len(self._cb_cluster.get_indexes())}")
 
-        self.sleep(36000)
         self.log.info("=" * 70)
         self.log.info("FINAL: Dropping all indexes")
         self.log.info("=" * 70)

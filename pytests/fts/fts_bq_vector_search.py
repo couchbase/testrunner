@@ -8,12 +8,14 @@ import struct
 import base64
 import random
 import threading
+from threading import Thread
 
 import logger
 
 from TestInput import TestInputSingleton
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from .fts_base import NodeHelper
 from .fts_backup_restore import FTSIndexBackupClient
 from .fts_vector_search import VectorSearch
@@ -1382,6 +1384,22 @@ class BQVectorSearch(VectorSearch):
 
         self.log.info("test_bq_community_edition_negative passed")
 
+    def _async_load_during_topology_change(self):
+        """Start a background data-load that runs concurrently with rebalance/failover.
+
+        Uses SDKDataLoader with a distinct key prefix so it never overwrites the
+        restored vector documents. Returns the list of async task objects; callers
+        must call task.result() on each one after the topology change finishes.
+        """
+        mutation_gen = SDKDataLoader(
+            num_ops=100000,
+            percent_create=100,
+            percent_update=0,
+            percent_delete=0,
+            key_prefix="topo_load_"
+        )
+        return self._cb_cluster.async_load_all_buckets_from_generator(mutation_gen)
+
     def _setup_bq_index_for_topology_test(self):
         all_vectors, query_vectors = self._setup_bq_test_data(num_queries=10)
         index_obj = self._create_bq_fts_index_on_bucket("bq_topo")
@@ -1421,8 +1439,11 @@ class BQVectorSearch(VectorSearch):
 
         index_obj = self._create_bq_fts_index_on_bucket("bq_topo")
 
-        self.log.info("BQ index building has begun, starting rebalance-in...")
+        self.log.info("BQ index building has begun, starting data load and rebalance-in...")
+        load_tasks = self._async_load_during_topology_change()
         self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+        for task in load_tasks:
+            task.result()
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -1439,8 +1460,11 @@ class BQVectorSearch(VectorSearch):
 
         index_obj = self._create_bq_fts_index_on_bucket("bq_topo")
 
-        self.log.info("BQ index created, starting rebalance-out...")
+        self.log.info("BQ index created, starting data load and rebalance-out...")
+        load_tasks = self._async_load_during_topology_change()
         self._cb_cluster.rebalance_out()
+        for task in load_tasks:
+            task.result()
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -1457,13 +1481,16 @@ class BQVectorSearch(VectorSearch):
 
         index_obj = self._create_bq_fts_index_on_bucket("bq_topo")
 
-        self.log.info("BQ index created, starting swap rebalance...")
+        self.log.info("BQ index created, starting data load and swap rebalance...")
         rest = RestConnection(self._cb_cluster.get_master_node())
         if rest.is_enterprise_edition():
             services = ["fts"]
         else:
             services = ["fts,kv,index,n1ql"]
+        load_tasks = self._async_load_during_topology_change()
         self._cb_cluster.swap_rebalance(services=services)
+        for task in load_tasks:
+            task.result()
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -1477,11 +1504,17 @@ class BQVectorSearch(VectorSearch):
         failover_node = self._find_failover_node()
         self.log.info(f"Graceful failover of node {failover_node.ip}...")
 
+        # Start data loading before failover so it runs during failover and add-back
+        load_tasks = self._async_load_during_topology_change()
+
         task = self._cb_cluster.async_failover(graceful=True, node=failover_node)
         task.result()
         self.sleep(60, "Waiting after graceful failover")
 
         self._cb_cluster.add_back_node(recovery_type='delta', services=["kv,fts"])
+
+        for task in load_tasks:
+            task.result()
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -1495,10 +1528,16 @@ class BQVectorSearch(VectorSearch):
         failover_node = self._find_failover_node()
         self.log.info(f"Hard failover of node {failover_node.ip}...")
 
+        # Start data loading before failover so it runs during failover and add-back
+        load_tasks = self._async_load_during_topology_change()
+
         task = self._cb_cluster.async_failover(node=failover_node)
         task.result()
 
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
+
+        for task in load_tasks:
+            task.result()
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
@@ -1524,6 +1563,9 @@ class BQVectorSearch(VectorSearch):
         query_thread = threading.Thread(target=run_queries)
         query_thread.start()
 
+        # Start data loading alongside queries so both run during failover
+        load_tasks = self._async_load_during_topology_change()
+
         time.sleep(3)
         failover_node = self._find_failover_node()
         self.log.info(f"Triggering failover during queries on {failover_node.ip}...")
@@ -1531,6 +1573,8 @@ class BQVectorSearch(VectorSearch):
         task.result()
 
         query_thread.join(timeout=120)
+        for task in load_tasks:
+            task.result()
 
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv,fts"])
         self.wait_for_indexing_complete()
@@ -1548,8 +1592,11 @@ class BQVectorSearch(VectorSearch):
     def test_bq_rebalance_between_indexing_and_query(self):
         index_obj, all_vectors, query_vectors = self._setup_bq_index_for_topology_test()
 
-        self.log.info("Index is built, rebalancing before queries...")
+        self.log.info("Index is built, starting data load and rebalancing before queries...")
+        load_tasks = self._async_load_during_topology_change()
         self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+        for task in load_tasks:
+            task.result()
 
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)

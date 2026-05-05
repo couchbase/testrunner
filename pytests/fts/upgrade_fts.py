@@ -96,7 +96,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
     def test_offline_upgrade(self):
         post_upgrade_errors = {}
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
         fts_query = {"query": "dept:Engineering"}
 
         pre_upgrade_idx = fts_callable.create_fts_index("pre_upgrade_idx", source_type='couchbase',
@@ -191,7 +191,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
             self.fail()
 
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
         fts_query = {"query": "dept:Engineering"}
 
         pre_upgrade_idx = fts_callable.create_fts_index("pre_upgrade_idx", source_type='couchbase',
@@ -203,10 +203,14 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_callable.wait_for_indexing_complete(100)
         pre_upgrade_hits, pre_upgrade_matches, _, pre_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
 
+        # Phase 1: Rebalance out first FTS node, upgrade, rebalance back in
         nodes_out = []
         nodes_out.append(fts_nodes[0])
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
         rebalance.result()
+        for task in load_tasks:
+            task.result()
         upgrade_th = self._async_update(self.upgrade_to, nodes_out)
         for th in upgrade_th:
             th.join()
@@ -219,10 +223,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 node = "{0}:{1}".format(node.ip, node.port)
                 if node in self.services_map[service]:
                     services_in.append(service)
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=services_in)
         rebalance.result()
+        for task in load_tasks:
+            task.result()
 
         log.info("="*20 + " Starting partial fts upgrade tests")
         partial_upgrade_hits, partial_upgrade_matches, _, partial_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
@@ -234,10 +241,14 @@ class UpgradeFTS(NewUpgradeBaseTest):
         if len(errors) > 0:
             partial_upgrade_errors['_test_create_bucket_index'] = errors
 
+        # Phase 2: Rebalance out all FTS nodes, upgrade, rebalance back in
         nodes_out.clear()
         nodes_out = fts_nodes[0:]
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
         rebalance.result()
+        for task in load_tasks:
+            task.result()
         upgrade_th = self._async_update(self.upgrade_to, nodes_out)
         for th in upgrade_th:
             th.join()
@@ -249,10 +260,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 node = "{0}:{1}".format(node.ip, node.port)
                 if node in self.services_map[service]:
                     services_in.append(service)
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=services_in)
         rebalance.result()
+        for task in load_tasks:
+            task.result()
 
         log.info("="*20 + " Starting partial upgrade tests")
 
@@ -264,10 +278,14 @@ class UpgradeFTS(NewUpgradeBaseTest):
         if len(errors) > 0:
             full_fts_upgrade_errors['_test_backup_restore'] = errors
 
+        # Phase 3: Rebalance out KV node 1, upgrade, rebalance back in
         nodes_out.clear()
         nodes_out.append(kv_nodes[1])
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
         rebalance.result()
+        for task in load_tasks:
+            task.result()
         upgrade_th = self._async_update(self.upgrade_to, nodes_out)
         for th in upgrade_th:
             th.join()
@@ -280,15 +298,22 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 if node in self.services_map[service]:
                     services_in.append(service)
 
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=['kv,index,n1ql'])
         rebalance.result()
+        for task in load_tasks:
+            task.result()
 
+        # Phase 4: Rebalance out KV node 0 (master), upgrade, rebalance back in
         nodes_out.clear()
         nodes_out.append(kv_nodes[0])
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
         rebalance.result()
+        for task in load_tasks:
+            task.result()
 
         del self.servers[0]
         self.master = self.servers[1]
@@ -299,11 +324,13 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info("==== Upgrade Complete ====")
         self.sleep(120)
 
+        load_tasks = fts_callable.async_load_data()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  nodes_out, [],
                                                  services=['kv,index,n1ql'])
-
         rebalance.result()
+        for task in load_tasks:
+            task.result()
 
         errors = self._test_create_single_collection_index()
         if len(errors) > 0:
@@ -397,7 +424,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
                                    collections="collection1", collection_index=True)
         try:
-            fts_callable.load_data(100)
+            fts_callable.load_data(100000)
         except Exception as e:
             errors.append(f"Could not load data into collection: {e}")
             return errors
@@ -437,7 +464,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self._create_collections(scope="scope1", collection=["collection2", "collection3", "collection4"])
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
                                    collections=["collection2", "collection3", "collection4"], collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1",
                                                                   collection=["collection2", "collection3", "collection4"])
@@ -471,7 +498,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         log.info("="*20 + " _test_create_bucket_index")
         errors = []
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         fts_idx = fts_callable.create_fts_index("idx", source_type='couchbase',
                                                 source_name="default", index_type='fulltext-index',
@@ -897,7 +924,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self._create_collections(scope="scope1", collection="collection10")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1",
                                    collections="collection10", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection",
                                                                   scope="scope1", collection="collection10")
@@ -1007,7 +1034,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = []
         self._create_collections(scope="scope1", collection="collection11")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection11", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection11")
 
@@ -1080,7 +1107,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         self._create_collections(scope="scope1", collection="collection12")
         fts_callable = FTSCallable(self.servers, es_validate=False,
                                    es_reset=False, scope="scope1", collections="collection12", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection12")
 
@@ -1151,7 +1178,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = []
         self._create_collections(scope="scope1", collection="collection13")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection13", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection13")
 
@@ -1214,7 +1241,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = []
         self._create_collections(scope="scope1", collection="collection14")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection14", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection14")
 
@@ -1288,7 +1315,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         errors = []
         self._create_collections(scope="scope1", collection="collection15")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection15", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection15")
 
@@ -1528,7 +1555,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
 
         self._create_collections(scope="scope1", collection="collection25")
         fts_callable = FTSCallable(self.servers, es_validate=False, es_reset=False, scope="scope1", collections="collection25", collection_index=True)
-        fts_callable.load_data(100)
+        fts_callable.load_data(100000)
 
         _type = self.__define_index_parameters_collection_related(container_type="collection", scope="scope1", collection="collection25")
 

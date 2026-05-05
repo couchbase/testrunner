@@ -2234,6 +2234,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         self.log.info(
             "removing node(s) {0} from cluster".format(ejected_nodes))
 
+        # Start data loading before the rebalance loop so it runs throughout
+        load_tasks = self.async_load_data()
+
         while count < 5:
             rest.rebalance(otpNodes=[node.id for node in nodes],
                            ejectedNodes=ejected_nodes)
@@ -2247,6 +2250,10 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                        ejectedNodes=ejected_nodes)
         self.assertTrue(rest.monitorRebalance(), msg="rebalance operation "
                                                      "failed after restarting")
+
+        for task in load_tasks:
+            task.result()
+
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         tasks = []
@@ -2309,6 +2316,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
                     ejected_nodes.append(node.id)
                     break
 
+        # Start data loading so it runs concurrently with both rebalance phases
+        load_tasks = self.async_load_data()
+
         rest.rebalance(otpNodes=[node.id for node in nodes],
                        ejectedNodes=ejected_nodes)
         self.sleep(3)
@@ -2328,6 +2338,9 @@ class VectorSearchMovingTopFTS(FTSBaseTest):
         rest.rebalance(otpNodes=[node.id for node in nodes],
                        ejectedNodes=ejected_nodes)
         rest.monitorRebalance()
+
+        for task in load_tasks:
+            task.result()
 
         self.log.info("Cluster nodes: {}".format(self._cb_cluster.get_nodes()))
         for remove_node in eject_nodes:
