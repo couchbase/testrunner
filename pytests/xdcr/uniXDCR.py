@@ -1073,15 +1073,15 @@ class unidirectional(XDCRNewBaseTest):
         master_rest = RestConnection(self.src_master)
         master_remote = RemoteMachineShellConnection(self.src_master)
         self.setup_xdcr()
-        self.sleep(30)
+        self.sleep(90)
         status = master_rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd', alerts='xdcr_replication_deleted',)
         if not status:
             self.fail("Did not set alert settings")
         master_rest.remove_all_replications()
-        self.sleep(30)
+        self.sleep(90)
         log_file_path = '/opt/couchbase/var/lib/couchbase/logs/info.log'
-        pattern = 'XDCR replication deleted for target cluster UUID:'
-        cmd  =  f"grep -F '{pattern}' {log_file_path}"
+        pattern = 'XDCR replication link between the local bucket'
+        cmd  =  f"grep -F '{pattern}' {log_file_path} | grep -F 'has been removed'"
         o, e, exit_code = master_remote.execute_command(cmd, use_channel=True, timeout=100, get_exit_code=True)
         if exit_code==0:
             self.log.info(f"Found pattern '{pattern}' in log")
@@ -1117,7 +1117,7 @@ class unidirectional(XDCRNewBaseTest):
             else:
                 self.fail(f"Failed to create bucket {bucket_name} on destination cluster")
 
-        self.sleep(10, "Waiting for buckets to be ready")
+        self.sleep(30, "Waiting for buckets to be ready")
 
         # Add remote cluster reference
         remote_cluster_name = "multi_repl_cluster"
@@ -1141,7 +1141,7 @@ class unidirectional(XDCRNewBaseTest):
             )
             self.log.info(f"Started replication for bucket {bucket_name}")
 
-        self.sleep(30, "Waiting for replications to stabilize")
+        self.sleep(90, "Waiting for replications to stabilize")
 
         # Set alert settings for replication deleted
         status = master_rest.set_alerts_settings(
@@ -1159,12 +1159,12 @@ class unidirectional(XDCRNewBaseTest):
         master_rest.remove_all_replications()
         self.log.info("Removed all replications")
 
-        self.sleep(30, "Waiting for alerts to be logged")
+        self.sleep(90, "Waiting for alerts to be logged")
 
         # Verify the number of occurrences of the pattern in the log file
         log_file_path = '/opt/couchbase/var/lib/couchbase/logs/info.log'
-        pattern = 'XDCR replication deleted for target cluster UUID:'
-        cmd = f"grep -F '{pattern}' {log_file_path} | wc -l"
+        pattern = 'XDCR replication link between the local bucket'
+        cmd = f"grep -F '{pattern}' {log_file_path} | grep -F 'has been removed' | wc -l"
         o, e, exit_code = master_remote.execute_command(cmd, use_channel=True, timeout=100, get_exit_code=True)
 
         if exit_code != 0:
