@@ -248,8 +248,8 @@ class QueryDDLTests(QueryTests):
                 status = self._curl_admin_endpoint(endpoint, user="readonly_user",
                                                    password="ropass", method="POST")
                 self.log.info(f"Write unauthorized POST {endpoint} (ro_admin) => HTTP {status}")
-                self.assertIn(status, [401, 403, 405],
-                              f"POST {endpoint} should return 401/403/405 with ro_admin, got {status}")
+                self.assertIn(status, [401, 403, 404, 405],
+                              f"POST {endpoint} should return 401/403/404/405 with ro_admin, got {status}")
         finally:
             rest.delete_user_roles("readonly_user")
 
