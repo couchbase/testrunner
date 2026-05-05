@@ -3,11 +3,16 @@ from lib.couchbase_helper.documentgenerator import BlobGenerator
 from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest, FloatingServers, REPL_PARAM, XDCR_PARAM, NodeHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.membase.api.on_prem_rest_client import RestConnection
-from lib.membase.helper.cluster_helper import ClusterOperationHelper
+from lib.membase.api.exception import XDCRException
 from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 import threading
 import random
 import time
+
+BYTES_PER_MB = 1024 * 1024
+REPL_INIT_SLEEP_S = 10
+DEFAULT_CATCHUP_TIMEOUT_S = 600
+
 
 class MemoryTestXDCR(XDCRNewBaseTest):
     def setUp(self):
@@ -87,7 +92,7 @@ class MemoryTestXDCR(XDCRNewBaseTest):
 
             if match:
                 inuse_space = int(match.group(1))
-                self.log.info(f"Node {node.ip} heap inuse: {inuse_space:,} bytes ({inuse_space / (1024*1024):.2f} MB)")
+                self.log.info(f"Node {node.ip} heap inuse: {inuse_space:,} bytes ({inuse_space / BYTES_PER_MB:.2f} MB)")
                 return inuse_space
             else:
                 self.log.warning(f"Could not parse pprof heap output from {node.ip}: {first_line[:200]}")
@@ -129,8 +134,8 @@ class MemoryTestXDCR(XDCRNewBaseTest):
 
         peak = max(samples)
         avg = sum(samples) / len(samples)
-        self.log.info(f"Heap sampling complete: peak={peak:,} bytes ({peak/(1024*1024):.2f} MB), "
-                     f"avg={avg:,} bytes ({avg/(1024*1024):.2f} MB), samples={len(samples)}")
+        self.log.info(f"Heap sampling complete: peak={peak:,} bytes ({peak/BYTES_PER_MB:.2f} MB), "
+                     f"avg={avg:,} bytes ({avg/BYTES_PER_MB:.2f} MB), samples={len(samples)}")
 
         return peak
 
@@ -526,7 +531,7 @@ class MemoryTestXDCR(XDCRNewBaseTest):
 
             self.fail(f"MB-52156 REGRESSION DETECTED! Found {error_count} revision mismatch errors:\n{error_details}")
 
-        self.log.info("✓ No revision mismatch errors detected - MB-52156 fix is working correctly")
+        self.log.info("No revision mismatch errors detected - MB-52156 fix is working correctly")
 
     def _verify_refresh_loop_not_stuck(self):
         """Ensure remote cluster agent refresh loop doesn't get stuck"""
@@ -565,7 +570,7 @@ class MemoryTestXDCR(XDCRNewBaseTest):
             # Verify that remote cluster operations still work
             remote_clusters = self.src_rest.get_remote_clusters()
             active_clusters = [c for c in remote_clusters if not c.get('deleted', False)]
-            self.log.info(f"✓ Remote cluster agent is responsive, found {len(active_clusters)} active clusters")
+            self.log.info(f"Remote cluster agent is responsive, found {len(active_clusters)} active clusters")
 
         except Exception as e:
             self.log.error(f"Error checking refresh loop status: {e}")
@@ -616,7 +621,7 @@ class MemoryTestXDCR(XDCRNewBaseTest):
                 sync_error_summary = "\n".join(self.metadata_sync_errors)
                 self.fail(f"Remote cluster metadata sync errors detected:\n{sync_error_summary}")
 
-            self.log.info("✓ Remote cluster metadata is consistent across all nodes")
+            self.log.info("Remote cluster metadata is consistent across all nodes")
 
         except Exception as e:
             self.log.error(f"Error verifying metadata sync: {e}")
@@ -662,7 +667,7 @@ class MemoryTestXDCR(XDCRNewBaseTest):
             self.log.info(f"Cleaning up test cluster reference: {stale_test_cluster}")
             self.src_rest.remove_remote_cluster(stale_test_cluster)
 
-            self.log.info("✓ Stale reference validation completed successfully")
+            self.log.info("Stale reference validation completed successfully")
 
         except Exception as e:
             if "revision number does not match" in str(e).lower():
@@ -685,7 +690,7 @@ class MemoryTestXDCR(XDCRNewBaseTest):
             self.log.info(f"Metadata sync errors: {len(self.metadata_sync_errors)}")
             self.log.info(f"Total issues found: {total_errors}")
         else:
-            self.log.info("✓ No errors detected during test execution")
+            self.log.info("No errors detected during test execution")
     def _rapid_modification_worker(self, worker_id):
         """Worker function for rapid modification test"""
         thread_name = threading.current_thread().name
@@ -811,3 +816,573 @@ class MemoryTestXDCR(XDCRNewBaseTest):
         self.assertEqual(src_count, dest_count,
                          "Crash check mismatch: src={}, dest={}".format(src_count, dest_count))
         self.log.info("No goxdcr crashes 10K test passed")
+
+    def test_boundary_value(self):
+        """
+        Test boundary values for dcpFlowControlThrottle and componentEventsChanLength.
+        Reads param value from conf file and validates against defined boundaries.
+
+        Boundaries:
+        - dcpFlowControlThrottle: valid range 5-100
+        - componentEventsChanLength: valid range 1000-10000
+        """
+        self.log.info("=== Testing XDCR parameter boundary values ===")
+
+        # Define boundaries
+        boundaries = {
+            REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE: {
+                "name": "dcpFlowControlThrottle",
+                "min": 5,
+                "max": 100
+            },
+            REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH: {
+                "name": "componentEventsChanLength",
+                "min": 1000,
+                "max": 10000
+            }
+        }
+
+        # Read parameters from conf
+        dcp_throttle = self._input.param("dcpFlowControlThrottle", None)
+        events_chan = self._input.param("componentEventsChanLength", None)
+
+        if dcp_throttle is None and events_chan is None:
+            self.fail("Neither dcpFlowControlThrottle nor componentEventsChanLength specified in conf file")
+
+        # Build param_config dict with values to test
+        param_config = {}
+        test_params = []
+
+        if dcp_throttle is not None:
+            param_config[REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE] = dcp_throttle
+            boundary = boundaries[REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE]
+            should_be_valid = boundary['min'] <= dcp_throttle <= boundary['max']
+            test_params.append((REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE, boundary['name'], dcp_throttle, should_be_valid, boundary))
+
+        if events_chan is not None:
+            param_config[REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH] = events_chan
+            boundary = boundaries[REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH]
+            should_be_valid = boundary['min'] <= events_chan <= boundary['max']
+            test_params.append((REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH, boundary['name'], events_chan, should_be_valid, boundary))
+
+        # Log what we're testing
+        for _, name, value, should_be_valid, boundary in test_params:
+            self.log.info(f"Testing {name}={value} (valid range: {boundary['min']}-{boundary['max']}, should_be_valid={should_be_valid})")
+
+        # Determine if setup should succeed or fail
+        should_setup_succeed = all(valid for _, _, _, valid, _ in test_params)
+
+        if should_setup_succeed:
+            self.log.info(f"All values are valid, setup_xdcr should succeed")
+            try:
+                self.setup_xdcr()
+            except XDCRException as e:
+                self.fail(f"Expected setup_xdcr to succeed with {param_config}, but got XDCRException: {e}")
+            self.log.info("setup_xdcr succeeded as expected")
+            self.sleep(5, "Allow replication to initialize")
+        else:
+            invalid_params = [(name, value) for _, name, value, valid, _ in test_params if not valid]
+            self.log.info(f"Invalid params {invalid_params} , setup_xdcr should fail")
+            try:
+                self.setup_xdcr()
+            except XDCRException as e:
+                # Confirm rejection is actually due to the invalid param, not a transport error
+                name, value = invalid_params[0]
+                self._assert_validation_rejection(e, name, value)
+                self.log.info("=== Boundary value test PASSED ===")
+                return
+            self.fail(f"Expected setup_xdcr to fail with {param_config}, but it succeeded")
+
+        self.log.info("=== Boundary value test PASSED ===")
+
+    def test_large_doc_replication(self):
+        """
+        Section 3: Document Size Larger Than Buffer Size [P0]
+        Replicate documents larger than modified buffer size with low
+        dcpFlowControlThrottle. Verifies no data loss or corruption.
+
+        Conf params:
+            doc_size_bytes: document size in bytes (default 5MB)
+            num_docs: number of documents to load
+        """
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        gen = BlobGenerator("large-doc-", "large-doc-", self.doc_size_bytes, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("Large doc replication catchup failed: {}".format(e))
+
+        self.verify_results()
+        self.log.info("Large doc replication test passed: {} docs of {} bytes".format(
+            self.num_docs, self.doc_size_bytes))
+
+    def test_memory_footprint_baseline(self):
+        """
+        Section 4.1: Baseline Memory Footprint Test [P0]
+        Measure goxdcr heap usage during replication with throttle settings.
+        Verify memory increase stays within acceptable bounds.
+
+        Conf params:
+            heap_sample_duration_s: sampling window in seconds
+            heap_sample_interval_s: interval between samples
+            max_pct_increase: max allowed heap % increase
+        """
+        initial_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        gen = BlobGenerator("mem-test-", "mem-test-", self.doc_size_bytes, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        active_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("Memory footprint catchup failed: {}".format(e))
+
+        if initial_heap and active_heap:
+            pct_increase = ((active_heap - initial_heap) / initial_heap) * 100 if initial_heap > 0 else 0
+            self.log.info("Heap: initial={:.2f}MB, active={:.2f}MB, increase={:.1f}%".format(
+                initial_heap / BYTES_PER_MB, active_heap / BYTES_PER_MB, pct_increase))
+            if pct_increase > self.max_pct_increase:
+                self.fail("Heap increase {:.1f}% exceeds threshold {:.1f}%".format(
+                    pct_increase, self.max_pct_increase))
+
+        self.verify_results()
+        self.log.info("Memory footprint baseline test passed")
+
+    def _read_throttle_settings(self):
+        settings = self.src_rest.get_global_xdcr_params()
+        return {
+            REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE: settings.get(REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE),
+            REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH: settings.get(REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH),
+        }
+
+    def _assert_throttle_settings_persisted(self, expected, scenario):
+        actual = self._read_throttle_settings()
+        for param, exp_value in expected.items():
+            act_value = actual.get(param)
+            if act_value != exp_value:
+                self.fail("Setting {} did not persist across {}: expected={}, actual={}".format(
+                    param, scenario, exp_value, act_value))
+        self.log.info("Throttle settings persisted across {}: {}".format(scenario, actual))
+
+    def _assert_heap_within_threshold(self, before_heap, after_heap):
+        if not before_heap or not after_heap or before_heap <= 0:
+            self.fail("Heap sampling failed: before={}, after={}".format(before_heap, after_heap))
+        pct_change = ((after_heap - before_heap) / before_heap) * 100
+        self.log.info("Heap trend: before={:.2f}MB, after={:.2f}MB, change={:.1f}%".format(
+            before_heap / BYTES_PER_MB, after_heap / BYTES_PER_MB, pct_change))
+        if pct_change > self.max_pct_increase:
+            self.fail("Heap increase {:.1f}% exceeds threshold {:.1f}%".format(
+                pct_change, self.max_pct_increase))
+
+    def _assert_validation_rejection(self, exc, param, value):
+        msg = str(exc)
+        if "Unable to set replication setting" not in msg and param not in msg:
+            raise AssertionError(
+                "Update for {}={} failed but not with a validation rejection: {}".format(
+                    param, value, msg))
+        self.log.info("Update correctly rejected for invalid {}={}: {}".format(param, value, msg))
+
+    def test_settings_persistence_goxdcr_crash(self):
+        """
+        Section 7.1: Process Crash and Recovery [P0]
+        Set throttle settings, kill goxdcr, verify settings persist and
+        replication resumes after recovery.
+        """
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        pre_crash_settings = self._read_throttle_settings()
+
+        gen = BlobGenerator("pre-crash-", "pre-crash-", 1024, 0, 500)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10, "Allow initial data to replicate")
+
+        self.log.info("Killing goxdcr on source node {}".format(self.src_master.ip))
+        NodeHelper.kill_goxdcr(self.src_master)
+        self.sleep(30, "Waiting for goxdcr to restart")
+
+        shell = RemoteMachineShellConnection(self.src_master)
+        try:
+            output, _ = shell.execute_command("pgrep -c goxdcr || echo 0")
+            count = int(output[0].strip()) if output else 0
+            self.assertGreater(count, 0,
+                               "goxdcr did not restart after kill on {}".format(self.src_master.ip))
+        finally:
+            shell.disconnect()
+
+        self._assert_throttle_settings_persisted(pre_crash_settings, "goxdcr crash")
+
+        gen2 = BlobGenerator("post-crash-", "post-crash-", 1024, 0, 500)
+        self.src_cluster.load_all_buckets_from_generator(gen2)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=300)
+        except Exception as e:
+            self.fail("Replication after goxdcr crash failed: {}".format(e))
+
+        self.log.info("Settings persistence after goxdcr crash test passed")
+
+    def test_settings_persistence_service_restart(self):
+        """
+        Section 7.2: Service Restart [P0]
+        Set throttle settings, restart Couchbase service, verify settings
+        persist and replication resumes.
+        """
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        pre_restart_settings = self._read_throttle_settings()
+
+        gen = BlobGenerator("pre-restart-", "pre-restart-", 1024, 0, 500)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10, "Allow initial data to replicate")
+
+        self.log.info("Restarting Couchbase on source node {}".format(self.src_master.ip))
+        NodeHelper.do_a_warm_up(self.src_master)
+        NodeHelper.wait_node_restarted(
+            self.src_master, self, wait_time=120,
+            wait_if_warmup=True, check_service=True)
+        self.sleep(30, "Waiting for service stabilization")
+
+        self._assert_throttle_settings_persisted(pre_restart_settings, "service restart")
+
+        gen2 = BlobGenerator("post-restart-", "post-restart-", 1024, 0, 500)
+        self.src_cluster.load_all_buckets_from_generator(gen2)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=300)
+        except Exception as e:
+            self.fail("Replication after service restart failed: {}".format(e))
+
+        self.log.info("Settings persistence after service restart test passed")
+
+    def test_pause_resume_with_throttle(self):
+        """
+        Section 9.1: Pause and Resume with Low Throttle [P1]
+        Pause replication with low throttle settings, load a large number
+        of docs, resume, and verify no data loss.
+        """
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        self.src_cluster.pause_all_replications(verify=True)
+        self.sleep(5, "Waiting after pause")
+
+        gen = BlobGenerator("paused-", "paused-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(10, "Docs loaded while paused")
+
+        self.src_cluster.resume_all_replications(verify=True)
+
+        gen2 = BlobGenerator("resumed-", "resumed-", 1024, 0, self.num_docs // 2)
+        self.src_cluster.load_all_buckets_from_generator(gen2)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("Pause/resume with throttle catchup failed: {}".format(e))
+
+        self.verify_results()
+        self.log.info("Pause/resume with throttle test passed")
+
+    def test_crud_load_with_throttle(self):
+        """
+        Section 8: CRUD load under throttle settings [P1]
+        Sequential creates and an update batch under throttle settings.
+        Verifies replication catches up.
+        """
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        for i in range(3):
+            gen = BlobGenerator("mutation-{}-".format(i), "mutation-{}-".format(i),
+                                1024, 0, self.num_docs)
+            self.src_cluster.load_all_buckets_from_generator(gen)
+            self.sleep(2, "Batch {} loaded".format(i))
+
+        gen_update = BlobGenerator("mutation-0-", "mutation-0-updated-", 2048, 0, self.num_docs // 2)
+        self.src_cluster.load_all_buckets_from_generator(gen_update)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("CRUD load catchup failed: {}".format(e))
+
+        self.verify_results()
+        self.log.info("CRUD load with throttle test passed")
+
+    def test_backfill_with_low_settings(self):
+        """
+        Section 5.1: Backfill Pipeline with Low Settings [P0]
+        Verify backfill pipeline completes with minimal throttle settings.
+        Creates a new collection after replication starts to trigger backfill.
+        """
+        self.src_rest.create_scope("default", "backfill_scope")
+        self.src_rest.create_collection("default", "backfill_scope", "col1")
+        self.dest_rest.create_scope("default", "backfill_scope")
+        self.dest_rest.create_collection("default", "backfill_scope", "col1")
+
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        gen = BlobGenerator("backfill-", "backfill-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+
+        self.src_rest.create_collection("default", "backfill_scope", "col2")
+        self.dest_rest.create_collection("default", "backfill_scope", "col2")
+        self.sleep(10, "Waiting for backfill to trigger")
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=900)
+        except Exception as e:
+            self.fail("Backfill with low settings failed: {}".format(e))
+
+        self.log.info("Backfill with low settings test passed")
+
+
+    def test_update_dcp_flow_control_throttle_mid_replication(self):
+        """
+        Mid-replication update of dcpFlowControlThrottle (per-replication).
+        Starts replication with initial throttle, loads data, updates the
+        value mid-run, then verifies replication completes with no data loss.
+        When update_to is out of range the update should be rejected.
+
+        Conf params:
+            update_to: new dcpFlowControlThrottle value to apply mid-run
+            num_docs: number of documents to load
+        """
+        update_to = self._input.param("update_to", 25)
+        is_valid_update = 5 <= update_to <= 100
+
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        gen = BlobGenerator("mid-dcp-", "mid-dcp-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(5, "Allow some replication progress")
+
+        before_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        if is_valid_update:
+            self.log.info("Updating dcpFlowControlThrottle to {} mid-replication (valid)".format(update_to))
+            try:
+                self.update_xdcr_param_all_replications(
+                    REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE, update_to,
+                    scope="per_repl", verify=True)
+            except XDCRException as e:
+                self.fail("Valid mid-replication update to {} failed: {}".format(update_to, e))
+        else:
+            self.log.info("Updating dcpFlowControlThrottle to {} mid-replication (invalid, should fail)".format(update_to))
+            try:
+                self.update_xdcr_param_all_replications(
+                    REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE, update_to,
+                    scope="per_repl", verify=False)
+                self.fail("Expected rejection for invalid value {} but update succeeded".format(update_to))
+            except XDCRException as e:
+                self._assert_validation_rejection(e, REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE, update_to)
+
+        gen2 = BlobGenerator("mid-dcp2-", "mid-dcp2-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen2)
+
+        after_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        self._assert_heap_within_threshold(before_heap, after_heap)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("Mid-replication dcpFlowControlThrottle update catchup failed: {}".format(e))
+
+        self.verify_results()
+        self.log.info("Mid-replication dcpFlowControlThrottle update test passed")
+
+    def test_update_component_events_chan_length_mid_replication(self):
+        """
+        Mid-replication update of componentEventsChanLength (per-replication).
+        Starts replication with initial chan length, loads data, updates the
+        value mid-run, then verifies replication completes with no data loss.
+        When update_to is out of range the update should be rejected.
+
+        Conf params:
+            update_to: new componentEventsChanLength value to apply mid-run
+            num_docs: number of documents to load
+        """
+        update_to = self._input.param("update_to", 2500)
+        is_valid_update = 1000 <= update_to <= 10000
+
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        gen = BlobGenerator("mid-evt-", "mid-evt-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(5, "Allow some replication progress")
+
+        before_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        if is_valid_update:
+            self.log.info("Updating componentEventsChanLength to {} mid-replication (valid)".format(update_to))
+            try:
+                self.update_xdcr_param_all_replications(
+                    REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH, update_to,
+                    scope="per_repl", verify=True)
+            except XDCRException as e:
+                self.fail("Valid mid-replication update to {} failed: {}".format(update_to, e))
+        else:
+            self.log.info("Updating componentEventsChanLength to {} mid-replication (invalid, should fail)".format(update_to))
+            try:
+                self.update_xdcr_param_all_replications(
+                    REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH, update_to,
+                    scope="per_repl", verify=False)
+                self.fail("Expected rejection for invalid value {} but update succeeded".format(update_to))
+            except XDCRException as e:
+                self._assert_validation_rejection(e, REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH, update_to)
+
+        gen2 = BlobGenerator("mid-evt2-", "mid-evt2-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen2)
+
+        after_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        self._assert_heap_within_threshold(before_heap, after_heap)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("Mid-replication componentEventsChanLength update catchup failed: {}".format(e))
+
+        self.verify_results()
+        self.log.info("Mid-replication componentEventsChanLength update test passed")
+
+    def test_update_both_throttle_params_mid_replication(self):
+        """
+        Atomic mid-replication update of both dcpFlowControlThrottle and
+        componentEventsChanLength in a single per-replication REST call.
+        When either update_to value is out of range the whole call should
+        fail and both params must remain at their original values.
+
+        Conf params:
+            update_to_dcp: new dcpFlowControlThrottle value
+            update_to_events: new componentEventsChanLength value
+            num_docs: number of documents to load
+        """
+        update_to_dcp = self._input.param("update_to_dcp", 25)
+        update_to_events = self._input.param("update_to_events", 2500)
+        dcp_valid = 5 <= update_to_dcp <= 100
+        events_valid = 1000 <= update_to_events <= 10000
+        is_valid_update = dcp_valid and events_valid
+
+        self.setup_xdcr()
+        self.sleep(REPL_INIT_SLEEP_S, "Allow replication to initialize")
+
+        gen = BlobGenerator("mid-both-", "mid-both-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen)
+        self.sleep(5, "Allow some replication progress")
+
+        before_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        # Gather all active replications
+        all_replications = []
+        for cb_cluster in self.get_cb_clusters():
+            for remote_cluster_ref in cb_cluster.get_remote_clusters():
+                all_replications.extend(remote_cluster_ref.get_replications())
+
+        param_map = {
+            REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE: update_to_dcp,
+            REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH: update_to_events
+        }
+
+        if is_valid_update:
+            self.log.info("Applying atomic update {} (valid)".format(param_map))
+            for repl in all_replications:
+                src_bucket = repl.get_src_bucket().name
+                dest_bucket = repl.get_dest_bucket().name
+                rest = RestConnection(repl.get_src_cluster().get_master_node())
+                rest.set_xdcr_params(src_bucket, dest_bucket, param_map)
+
+                readback_dcp = repl.get_xdcr_setting(REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE)
+                readback_evt = repl.get_xdcr_setting(REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH)
+                self.assertEqual(readback_dcp, update_to_dcp,
+                                 "dcpFlowControlThrottle readback mismatch: expected={}, got={}".format(
+                                     update_to_dcp, readback_dcp))
+                self.assertEqual(readback_evt, update_to_events,
+                                 "componentEventsChanLength readback mismatch: expected={}, got={}".format(
+                                     update_to_events, readback_evt))
+        else:
+            self.log.info("Applying atomic update {} (invalid, should fail)".format(param_map))
+            for repl in all_replications:
+                src_bucket = repl.get_src_bucket().name
+                dest_bucket = repl.get_dest_bucket().name
+                rest = RestConnection(repl.get_src_cluster().get_master_node())
+
+                old_dcp = repl.get_xdcr_setting(REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE)
+                old_evt = repl.get_xdcr_setting(REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH)
+
+                try:
+                    rest.set_xdcr_params(src_bucket, dest_bucket, param_map)
+                    self.fail("Expected rejection for invalid combined update but call succeeded")
+                except XDCRException as e:
+                    self.log.info("Atomic update correctly rejected: {}".format(e))
+
+                cur_dcp = repl.get_xdcr_setting(REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE)
+                cur_evt = repl.get_xdcr_setting(REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH)
+                self.assertEqual(cur_dcp, old_dcp,
+                                 "dcpFlowControlThrottle changed after failed atomic update: old={}, cur={}".format(
+                                     old_dcp, cur_dcp))
+                self.assertEqual(cur_evt, old_evt,
+                                 "componentEventsChanLength changed after failed atomic update: old={}, cur={}".format(
+                                     old_evt, cur_evt))
+
+        gen2 = BlobGenerator("mid-both2-", "mid-both2-", 1024, 0, self.num_docs)
+        self.src_cluster.load_all_buckets_from_generator(gen2)
+
+        after_heap = self.sample_heap_peak(
+            self.src_master,
+            duration_s=self.heap_sample_duration_s,
+            interval_s=self.heap_sample_interval_s
+        )
+
+        self._assert_heap_within_threshold(before_heap, after_heap)
+
+        try:
+            self._wait_for_replication_to_catchup(timeout=DEFAULT_CATCHUP_TIMEOUT_S)
+        except Exception as e:
+            self.fail("Atomic combined mid-replication update catchup failed: {}".format(e))
+
+        self.verify_results()
+        self.log.info("Atomic combined mid-replication update test passed")

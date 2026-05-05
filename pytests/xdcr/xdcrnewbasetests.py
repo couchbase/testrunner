@@ -187,6 +187,8 @@ class REPL_PARAM:
     MIGRATION_MODE = "collectionsMigrationMode"
     MIRRORING_MODE = "collectionsMirroringMode"
     CONFLICT_LOGGING = "conflictLogging"
+    DCP_FLOW_CONTROL_THROTTLE = "dcpFlowControlThrottle"
+    COMPONENT_EVENTS_CHAN_LENGTH = "componentEventsChanLength"
 
 
 class TEST_XDCR_PARAM:
@@ -1435,12 +1437,12 @@ class XDCReplication:
             self.__test_xdcr_params.update(
                 dict(list(zip(argument_split[::2], argument_split[1::2])))
             )
-            
+
             # Skip conflict_logging parameter to avoid issues with replication creation
             if TEST_XDCR_PARAM.CONFLICT_LOGGING in self.__test_xdcr_params:
                 print(f"Skipping conflict_logging parameter in XDCReplication.__parse_test_xdcr_params")
                 del self.__test_xdcr_params[TEST_XDCR_PARAM.CONFLICT_LOGGING]
-                
+
         if 'filter_expression' in self.__test_xdcr_params:
             ex = self.__test_xdcr_params['filter_expression']
             if len(ex) > 0:
@@ -4184,9 +4186,30 @@ class XDCRNewBaseTest(unittest.TestCase):
         # Adding for MB-41318
         time.sleep(10)
         self.setup_all_replications()
+
+        self._apply_throttle_params()
+
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
+
+    def _apply_throttle_params(self):
+        """MB-68340: apply DCP flow control throttle / component events chan
+        length globally if specified in conf. No-op if neither is set."""
+        throttle_params = {}
+        dcp_throttle = self._input.param(REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE, None)
+        events_chan = self._input.param(REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH, None)
+        if dcp_throttle is not None:
+            throttle_params[REPL_PARAM.DCP_FLOW_CONTROL_THROTTLE] = dcp_throttle
+        if events_chan is not None:
+            throttle_params[REPL_PARAM.COMPONENT_EVENTS_CHAN_LENGTH] = events_chan
+        if not throttle_params:
+            return
+        for cluster in self.get_cb_clusters():
+            rest = RestConnection(cluster.get_master_node())
+            self.log.info("Applying throttle params on {}: {}".format(
+                cluster.get_name(), throttle_params))
+            rest.set_global_xdcr_params(throttle_params)
 
     def setup_xdcr_and_load(self):
         self.setup_xdcr()
@@ -4202,6 +4225,80 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         self.load_data_topology()
         self.setup_xdcr()
+
+    def set_xdcr_global_param(self, param, value):
+        """Set a global XDCR parameter and optionally verify.
+
+        Args:
+            param: REPL_PARAM constant
+            value: Value to set
+            verify: Whether to read back and verify the value
+        """
+        for cb_cluster in self.__cb_clusters:
+            master_node = cb_cluster.get_master_node()
+            rest = RestConnection(master_node)
+
+            try:
+                self.log.info("Setting global {} = {} on cluster {}".format(
+                    param, value, cb_cluster.get_name()))
+                rest.set_global_xdcr_param(param, value)
+
+            except Exception as e:
+                error_msg = "Failed to set global {} on {}: {}".format(
+                    param, cb_cluster.get_name(), str(e))
+                self.log.error(error_msg)
+                self.fail(error_msg)
+
+    def set_xdcr_per_replication_param(self, replication, param, value, verify=True):
+        """Set a per-replication XDCR parameter and optionally verify.
+
+        Args:
+            replication: XDCReplication object
+            param: REPL_PARAM constant
+            value: Value to set
+            verify: Whether to read back and verify the value
+        """
+        src_bucket = replication.get_src_bucket()
+        dest_bucket = replication.get_dest_bucket()
+
+        self.log.info("Setting per-replication {} = {} for {} -> {}".format(
+            param, value, src_bucket.name, dest_bucket.name))
+        replication.set_xdcr_param(param, value, verify_event=False)
+
+        if verify:
+            readback_value = replication.get_xdcr_setting(param)
+            if readback_value != value:
+                self.fail("Per-replication setting verification failed for {} -> {}: {} expected={}, actual={}".format(
+                    src_bucket.name, dest_bucket.name, param, value, readback_value))
+            self.log.info("Verified per-replication {} = {} for {} -> {}".format(
+                param, value, src_bucket.name, dest_bucket.name))
+
+    def update_xdcr_param_all_replications(self, param, value, scope="both", verify=True):
+        """Update an XDCR parameter for all running replications.
+
+        Args:
+            param: REPL_PARAM constant
+            value: Value to set
+            scope: Where to apply - "global", "per_repl", or "both" (default)
+            verify: Whether to verify the setting after applying
+        """
+        self.log.info("Updating XDCR parameter {} = {} (scope={})".format(param, value, scope))
+
+        # Get all replications
+        all_replications = []
+        for cb_cluster in self.__cb_clusters:
+            for remote_cluster_ref in cb_cluster.get_remote_clusters():
+                all_replications.extend(remote_cluster_ref.get_replications())
+
+        # Apply based on scope
+        if scope in ("global", "both"):
+            self.set_xdcr_global_param(param, value)
+
+        if scope in ("per_repl", "both"):
+            for repl in all_replications:
+                self.set_xdcr_per_replication_param(repl, param, value, verify=verify)
+
+        self.log.info("Successfully updated XDCR parameter {} = {}".format(param, value))
 
     def verify_rev_ids(self, xdcr_replications, kv_store=1, timeout=1200, skip=[]):
         """Verify RevId (sequence number, cas, flags value) for each item on
@@ -4657,7 +4754,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             "go", "run", "main.go",
             "-ip", server.ip,
             "-username", "Administrator",
-            "-password", "password", 
+            "-password", "password",
             "-bucket", bucket_name,
             "-num-docs", str(num_docs),
             "-num-xattrs", str(num_xattrs),
@@ -4881,7 +4978,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                             nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
-                                _count2 += node["interestingStats"]["curr_items"]                        
+                                _count2 += node["interestingStats"]["curr_items"]
 
                         self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
@@ -4908,7 +5005,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                         self.log.info(f"Count1: {_count1}, Count2: {_count2}")
 
                         self.log.info(f"Excluding paths: {exclude_paths}")
-                        
+
                         for path in exclude_paths:
                             self.log.info(f"Excluding {path} from count")
                             if bucket.name in path.split(".")[1]:
@@ -4923,16 +5020,16 @@ class XDCRNewBaseTest(unittest.TestCase):
                                     if path.split(".")[-1] in collections_info:
                                         print("Path: ", path.split(".")[-1])
                                         print(path)
-                                        if path.split(".")[0] == "C1":                                            
+                                        if path.split(".")[0] == "C1":
                                             docs_to_exclude_src += collections_info[path.split(".")[-1]]
                                             self.log.info(f"Docs to exclude src: {docs_to_exclude_src}")
-                                        
+
                                         if path.split(".")[0] == "C2":
                                             docs_to_exclude_dest += collections_info[path.split(".")[-1]]
                                             self.log.info(f"Docs to exclude dest: {docs_to_exclude_dest}")
                                     else:
                                         self.log.info(f"Collection {path.split('.')[-1]} not found in collections info")
-                                
+
                                 _count1 -= docs_to_exclude_src
                                 self.log.info(f"Count1 after excluding {path}: {_count1}")
                                 self.log.info(f"Docs to exclude src: {docs_to_exclude_src}")
