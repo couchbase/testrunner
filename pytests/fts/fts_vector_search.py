@@ -401,6 +401,7 @@ class VectorSearch(FTSBaseTest):
         self.change_nprobe_settings = self.input.param("change_nprobe_settings", False)
         self.knn_params = self.input.param("knn_params", {"ivf_nprobe_pct": 100, "ivf_max_codes_pct": 100})
         self.prefilter_docs = self.input.param("prefilter_docs", False)
+        self.fastmerge = self.input.param("fastmerge", False)
 
         self.start_key = self.input.param("start_key", 0)
         self.prefilter_query = self.input.param("prefilter_query",

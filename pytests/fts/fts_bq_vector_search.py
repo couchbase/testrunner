@@ -340,13 +340,19 @@ class BQVectorSearch(VectorSearch):
         if num_partitions:
             fts_index.update_num_pindexes(num_partitions)
 
+        if self.fastmerge:
+            if 'store' not in fts_index.index_definition['params']:
+                fts_index.index_definition['params']['store'] = {}
+            fts_index.index_definition['params']['store']['vector_index_fast_merge'] = True
+
         fts_index.index_definition['uuid'] = fts_index.get_uuid()
         fts_index.update()
         self.wait_for_indexing_complete()
 
         self.log.info(f"Created BQ FTS index '{index_name}' on "
                       f"{self.bq_bucket}.{self.bq_scope}.{collections} "
-                      f"with vector_index_optimized_for={self.bq_index_type}")
+                      f"with vector_index_optimized_for={self.bq_index_type}"
+                      f"{', vector_index_fast_merge=True' if self.fastmerge else ''}")
         return fts_index
 
     def _validate_bq_index_definition(self, index_obj, expected_bq_type=None):

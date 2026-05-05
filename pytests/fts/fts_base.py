@@ -6471,6 +6471,11 @@ class FTSBaseTest(unittest.TestCase):
                 if index_replica > 1:
                     fts_index.update_num_replicas(index_replica)
 
+            if getattr(self, 'fastmerge', False):
+                if 'store' not in fts_index.index_definition['params']:
+                    fts_index.index_definition['params']['store'] = {}
+                fts_index.index_definition['params']['store']['vector_index_fast_merge'] = True
+
             fts_index.index_definition['uuid'] = fts_index.get_uuid()
             fts_index.update()
             decoded_index['index_obj'] = fts_index
