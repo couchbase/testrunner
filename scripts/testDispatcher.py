@@ -974,6 +974,11 @@ def main():
                             # If nothing matches, fallback to default slave
                             slave_to_use = "deb12_P0_slave"
 
+                if (options.launch_job == 'test_suite_executor_cloud'
+                        and testsToLaunch[i]['component'] == 'smoke_capella'
+                        and testsToLaunch[i]['subcomponent'] == 'rbac'):
+                    branch_to_trigger = 'master'
+
                 url = launchString.format(options.version,
                                             testsToLaunch[i]['confFile'],
                                             descriptor,
