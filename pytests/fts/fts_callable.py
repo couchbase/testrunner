@@ -53,7 +53,7 @@ class FTSCallable:
         self.es = None
         self.es_index_name = FTSBaseTest.get_es_index_name()
         self.is_elixir = is_elixir
-        self._num_items = 10000
+        self._num_items = 100000
         self.query_types = ["match", "bool", "match_phrase",
                             "prefix", "fuzzy", "conjunction", "disjunction",
                             "wildcard", "regexp", "query_string",
@@ -278,7 +278,7 @@ class FTSCallable:
             index count specified by item_count
         """
         found = False
-        retry = TestInputSingleton.input.param("index_retry", 20)
+        retry = TestInputSingleton.input.param("index_retry", 100)
         for index in self.cb_cluster.get_indexes():
             if idx is not None and index.name != idx.name or index.index_type == "alias" or index.index_type == "fulltext-alias":
                 continue
@@ -337,7 +337,7 @@ class FTSCallable:
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
-            retry_mut_count = 20
+            retry_mut_count = 100
             if item_count == None:
                 while True and retry_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()

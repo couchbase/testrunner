@@ -1270,7 +1270,7 @@ class StableTopFTS(FTSBaseTest):
 
         #load data into collections
         bucket = self._cb_cluster.get_bucket_by_name('bucket1')
-        gen_create = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
+        gen_create = SDKDataLoader(num_ops=100000, percent_create=100, percent_update=0, percent_delete=0,
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                  scope="scope1", collection="collection1", json_template="emp", doc_expiry=0,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
@@ -1281,7 +1281,7 @@ class StableTopFTS(FTSBaseTest):
         for task in load_tasks:
             task.result()
 
-        gen_create1 = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
+        gen_create1 = SDKDataLoader(num_ops=100000, percent_create=100, percent_update=0, percent_delete=0,
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                  scope="scope2", collection="collection1", json_template="emp", doc_expiry=0,
                  doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,

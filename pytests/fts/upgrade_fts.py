@@ -105,7 +105,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 source_params=None, source_uuid=None, collection_index=False,
                                                 _type=None, analyzer="standard",
                                                 no_check=False, cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
         pre_upgrade_hits, pre_upgrade_matches, _, pre_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
         for server in self.servers:
             remote = RemoteMachineShellConnection(server)
@@ -200,7 +200,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 source_params=None, source_uuid=None, collection_index=False,
                                                 _type=None, analyzer="standard",
                                                 no_check=False, cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
         pre_upgrade_hits, pre_upgrade_matches, _, pre_upgrade_status = pre_upgrade_idx.execute_query(query=fts_query)
 
         # Phase 1: Rebalance out first FTS node, upgrade, rebalance back in
@@ -439,7 +439,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 _type=_type, analyzer="standard",
                                                 scope="scope1", collections=["collection1"], no_check=False,
                                                 cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         docs_indexed = fts_idx.get_indexed_doc_count()
 
@@ -475,7 +475,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                          source_params=None, source_uuid=None, collection_index=True, _type=_type, analyzer="standard",
                                                 scope="scope1", collections=["collection2", "collection3", "collection4"],
                                                 no_check=False, cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(300)
+        fts_callable.wait_for_indexing_complete(100000)
 
         docs_indexed = fts_idx.get_indexed_doc_count()
 
@@ -506,7 +506,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 source_params=None, source_uuid=None, collection_index=False,
                                                 _type=None, analyzer="standard",
                                                 no_check=False, cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         docs_indexed = fts_idx.get_indexed_doc_count()
 
@@ -939,7 +939,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         _data_types = {
             "text":  {"field": "type", "vals": ["emp", "emp1"]},
@@ -1048,7 +1048,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         check_pushdown = False
 
@@ -1121,7 +1121,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         check_pushdown = False
 
@@ -1196,7 +1196,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         check_pushdown = False
         like_expressions = ["LIKE"]
@@ -1255,7 +1255,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         check_pushdown = False
         relations = ['<', '<=', '=', '>', '>=']
@@ -1329,7 +1329,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
         fts_idx.index_definition['uuid'] = fts_idx.get_uuid()
         fts_idx.update()
 
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
 
         check_pushdown = False
         _data_types = {
@@ -1565,7 +1565,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
                                                 source_params=None, source_uuid=None, collection_index=True,
                                                 _type=_type, analyzer="standard", scope="scope1",
                                                 collections=["collection25"], no_check=False, cluster=self.cb_cluster)
-        fts_callable.wait_for_indexing_complete(100)
+        fts_callable.wait_for_indexing_complete(100000)
         rest = RestConnection(fts_node)
         fts_port = fts_node.fts_port or self.fts_port
         status, content = rest.get_rest_endpoint_data(endpoint, ip=fts_node.ip, port=fts_port)
