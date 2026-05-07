@@ -37,6 +37,7 @@ import os
 import re
 import numpy as np
 import faiss
+from lib.sdk_client3 import SDKClient
 
 
 class CompositeVectorIndex(BaseSecondaryIndexingTests):
@@ -4245,7 +4246,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.log.info(f"Expected title: '{expected_title}'")
 
             # Calculate MRR
-            mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title, namespace=namespace)
+            mrr = self.calculate_mean_reciprocal_rank(select_queries, expected_title, namespace=collection_namespace)
             self.log.info(f"[MRR] Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
             self.log.info("=" * 100)
 
@@ -7086,7 +7087,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         query_expected_title_map, use_brute_force = self.get_sparse_recall_params(all_definitions, select_queries)
         self.display_recall_and_accuracy_stats(select_queries=select_queries,
                                                message=f"results of skewed towards bhive {self.bhive_index}",
-                                               similarity=similarity, stats_assertion=False,
+                                                similarity=similarity, stats_assertion=False,
                                                query_expected_title_map=query_expected_title_map,
                                                use_brute_force=use_brute_force)
         # Calculate MRR for sparse vectors
@@ -7097,6 +7098,372 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                     expected_title_for_mrr = defn.expected_title
                     break
             if expected_title_for_mrr:
-                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr, namespace=namespace)
+                mrr = self.calculate_mean_reciprocal_rank(list(select_queries), expected_title_for_mrr,
+                                                          namespace=namespace)
                 self.log.info(f"[MRR] Final Mean Reciprocal Rank: {mrr:.4f} ({mrr * 100:.2f}%)")
         self.drop_index_node_resources_utilization_validations()
+
+    def test_composite_misc(self):
+        """
+        Extensible test for sparse vector mutation scenarios.
+        Supported scenarios:
+            - variable_length_sparse: Random length (80-150) sparse vectors with high-precision values
+            - duplicate_indices_sparse: Sparse vectors with duplicate indices
+            - random_sparse: Fully random sparse vectors (length 80-150) with high-precision values
+            - unsorted_indices_sparse: Shuffle existing sparse vector indices
+            - fixed_then_variable: Start with variable-length (80-150) sparse vectors, create indexes,
+                                   then run scans and mutations concurrently while tracking failed scans
+        """
+        mutation_scenario = self.input.param("mutation_scenario", "variable_length_sparse")
+        sparse_vec_size = self.input.param("sparse_vec_size", 1000)
+
+        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
+                                      skip_default_scope=self.skip_default)
+
+        for namespace in self.namespaces:
+            keyspace = namespace.split(":")[-1]
+            bucket, scope, collection = keyspace.split(".")
+
+            # Create single SDK connection for all scenarios
+            sdk_client = SDKClient(
+                hosts=[self.master.ip],
+                bucket=bucket,
+                username=self.master.rest_username,
+                password=self.master.rest_password
+            )
+
+            try:
+                # Create primary index for fetching doc keys
+                primary_idx_name = f"primary_sparse_misc_{''.join(random.choices(string.ascii_lowercase, k=5))}"
+                create_primary = f"CREATE PRIMARY INDEX `{primary_idx_name}` ON {namespace}"
+                self.run_cbq_query(query=create_primary)
+                self.wait_until_indexes_online()
+
+                if mutation_scenario == "fixed_then_variable":
+                    # Scenario: Start with variable-length sparse vectors, create indexes,
+                    # then run scans and mutations concurrently while tracking failed scans
+                    self.log.info("=" * 80)
+                    self.log.info("PHASE 1: Setting all docs to variable-length sparse vectors (80-150)")
+                    self.log.info("=" * 80)
+                    self._run_mutation_pass(sdk_client, scope, collection, sparse_vec_size, namespace,
+                                           "variable_length_sparse", batch_size=1000)
+
+                    # Drop primary index after initial load
+                    drop_primary = f"DROP INDEX `{primary_idx_name}` ON {namespace}"
+                    self.run_cbq_query(query=drop_primary)
+
+                    # Create indexes after initial variable-length load
+                    prefix = "sparse_misc_concurrent_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    definitions = self.gsi_util_obj.generate_amazon_sparse_vector_index_definitions_composite(
+                        index_name_prefix=prefix,
+                        skip_primary=True,
+                        scan_nprobes=self.scan_nprobes,
+                        limit=self.scan_limit,
+                    )
+                    create_queries = self.gsi_util_obj.get_create_index_list(
+                        definition_list=definitions,
+                        namespace=namespace,
+                        bhive_index=False
+                    )
+                    select_queries = self.gsi_util_obj.get_select_queries(
+                        definition_list=definitions,
+                        namespace=namespace,
+                        limit=self.scan_limit
+                    )
+
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                    self.wait_until_indexes_online()
+
+                    # Run initial scans before concurrent phase
+                    self.log.info("Running initial scans after index creation (variable-length sparse vectors)")
+                    for select_query in select_queries:
+                        result = self.run_cbq_query(query=select_query)
+                        self.log.info(f"Initial scan returned {len(result['results'])} results")
+
+                    # Phase 2: Run scans and mutations concurrently
+                    self.log.info("=" * 80)
+                    self.log.info("PHASE 2: Running scans and mutations CONCURRENTLY")
+                    self.log.info("=" * 80)
+
+                    # Recreate primary index for concurrent mutations
+                    primary_idx_name_p2 = f"primary_sparse_misc_p2_{''.join(random.choices(string.ascii_lowercase, k=5))}"
+                    create_primary_p2 = f"CREATE PRIMARY INDEX `{primary_idx_name_p2}` ON {namespace}"
+                    self.run_cbq_query(query=create_primary_p2)
+                    self.wait_until_indexes_online()
+
+                    # Track scan results during concurrent execution
+                    scan_results = {'total': 0, 'success': 0, 'failed': 0, 'errors': []}
+                    mutation_complete = [False]  # Use list for mutable reference in thread
+
+                    def run_concurrent_scans():
+                        """Run scans continuously while mutations are in progress"""
+                        scan_iteration = 0
+                        while not mutation_complete[0]:
+                            scan_iteration += 1
+                            for idx, select_query in enumerate(select_queries):
+                                if mutation_complete[0]:
+                                    break
+                                scan_results['total'] += 1
+                                try:
+                                    result = self.run_cbq_query(query=select_query)
+                                    num_results = len(result.get('results', []))
+                                    scan_results['success'] += 1
+                                    if scan_iteration % 10 == 0:  # Log every 10th iteration
+                                        self.log.info(f"Scan iter {scan_iteration}, query {idx}: {num_results} results")
+                                except Exception as e:
+                                    scan_results['failed'] += 1
+                                    error_info = {
+                                        'iteration': scan_iteration,
+                                        'query_index': idx,
+                                        'query': select_query[:100] + '...',
+                                        'error': str(e)
+                                    }
+                                    scan_results['errors'].append(error_info)
+                                    self.log.warning(f"Scan FAILED iter {scan_iteration}, query {idx}: {e}")
+
+                    def run_mutations():
+                        """Run mutations and signal completion"""
+                        try:
+                            self._run_mutation_pass(sdk_client, scope, collection, sparse_vec_size, namespace,
+                                                   "variable_length_mutation_phase2", batch_size=500)
+                        finally:
+                            mutation_complete[0] = True
+
+                    # Start concurrent execution
+                    with ThreadPoolExecutor(max_workers=2) as executor:
+                        scan_future = executor.submit(run_concurrent_scans)
+                        mutation_future = executor.submit(run_mutations)
+
+                        # Wait for mutations to complete (scans will stop automatically)
+                        mutation_future.result()
+                        scan_future.result()
+
+                    # Drop primary index after concurrent phase
+                    drop_primary_p2 = f"DROP INDEX `{primary_idx_name_p2}` ON {namespace}"
+                    self.run_cbq_query(query=drop_primary_p2)
+
+                    # Report scan results
+                    self.log.info("=" * 80)
+                    self.log.info("CONCURRENT SCAN RESULTS SUMMARY")
+                    self.log.info("=" * 80)
+                    self.log.info(f"Total scans executed: {scan_results['total']}")
+                    self.log.info(f"Successful scans: {scan_results['success']}")
+                    self.log.info(f"Failed scans: {scan_results['failed']}")
+                    if scan_results['failed'] > 0:
+                        self.log.info("Failed scan details:")
+                        for error in scan_results['errors'][:20]:  # Show first 20 errors
+                            self.log.info(f"  - Iter {error['iteration']}, Query {error['query_index']}: {error['error']}")
+                        if len(scan_results['errors']) > 20:
+                            self.log.info(f"  ... and {len(scan_results['errors']) - 20} more errors")
+                    
+                    success_rate = (scan_results['success'] / scan_results['total'] * 100) if scan_results['total'] > 0 else 0
+                    self.log.info(f"Scan success rate: {success_rate:.2f}%")
+                    self.log.info("=" * 80)
+
+                    # Run final scans after mutations complete
+                    self.log.info("Running final scans after concurrent mutations completed")
+                    for select_query in select_queries:
+                        result = self.run_cbq_query(query=select_query)
+                        self.log.info(f"Final scan returned {len(result['results'])} results")
+
+                else:
+                    # Single-phase scenarios
+                    self._execute_sparse_mutation_scenario(
+                        scenario=mutation_scenario,
+                        sdk_client=sdk_client,
+                        scope=scope,
+                        collection=collection,
+                        sparse_vec_size=sparse_vec_size,
+                        namespace=namespace
+                    )
+
+                    # Drop primary index after mutations
+                    drop_primary = f"DROP INDEX `{primary_idx_name}` ON {namespace}"
+                    self.run_cbq_query(query=drop_primary)
+
+                    # Generate sparse vector index definitions using gsi_util_obj
+                    prefix = "sparse_misc_" + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+                    definitions = self.gsi_util_obj.generate_amazon_sparse_vector_index_definitions_composite(
+                        index_name_prefix=prefix,
+                        skip_primary=True,
+                        scan_nprobes=self.scan_nprobes,
+                        limit=self.scan_limit,
+                    )
+
+                    create_queries = self.gsi_util_obj.get_create_index_list(
+                        definition_list=definitions,
+                        namespace=namespace,
+                        bhive_index=False
+                    )
+                    select_queries = self.gsi_util_obj.get_select_queries(
+                        definition_list=definitions,
+                        namespace=namespace,
+                        limit=self.scan_limit
+                    )
+
+                    self.gsi_util_obj.create_gsi_indexes(create_queries=create_queries, database=namespace)
+                    self.wait_until_indexes_online()
+
+                    # Run scan queries to validate indexes work post-mutation
+                    for select_query in select_queries:
+                        result = self.run_cbq_query(query=select_query)
+                        self.log.info(f"Scan returned {len(result['results'])} results")
+            finally:
+                sdk_client.close()
+
+            # Drop indexes
+            self.drop_index_node_resources_utilization_validations()
+
+    def _execute_sparse_mutation_scenario(self, scenario, sdk_client, scope, collection, sparse_vec_size, namespace):
+        """
+        Execute a sparse vector mutation scenario by updating the `sparse` field in existing docs.
+        Note: fixed_then_variable is handled directly in test_composite_misc with index creation between phases.
+
+        Args:
+            scenario: The mutation scenario to execute (e.g., 'variable_length_sparse')
+            sdk_client: SDKClient instance (connection managed by caller)
+            scope, collection: Namespace components
+            sparse_vec_size: Maximum index value for sparse vectors
+            namespace: Full namespace for N1QL queries (requires primary index)
+        """
+        batch_size = 1000
+        self._run_mutation_pass(sdk_client, scope, collection, sparse_vec_size, namespace, scenario, batch_size)
+
+    def _run_mutation_pass(self, sdk_client, scope, collection, sparse_vec_size, namespace, scenario, batch_size):
+        """
+        Run a single mutation pass over all documents.
+        
+        Args:
+            sdk_client: SDKClient instance
+            scope, collection: Namespace components  
+            sparse_vec_size: Maximum index value for sparse vectors
+            namespace: Full namespace for N1QL queries
+            scenario: The mutation scenario to apply
+            batch_size: Number of docs to process per batch
+        """
+        # Get all doc keys via N1QL (requires primary index to exist)
+        keys_query = f"SELECT RAW meta().id FROM {namespace}"
+        result = self.run_cbq_query(query=keys_query)
+        all_keys = result.get('results', [])
+        num_docs = len(all_keys)
+
+        self.log.info(f"Executing {scenario} scenario with {num_docs} docs, batch_size={batch_size}")
+
+        for batch_start in range(0, num_docs, batch_size):
+            batch_end = min(batch_start + batch_size, num_docs)
+            batch_keys = all_keys[batch_start:batch_end]
+
+            # Fetch each doc via SDK and apply mutations
+            updated_docs = {}
+            for doc_key in batch_keys:
+                try:
+                    result = sdk_client.get(doc_key, scope=scope, collection=collection)
+                    if result:
+                        # Handle different SDK return formats
+                        if hasattr(result, 'content_as'):
+                            # SDK 4.x GetResult object
+                            doc = result.content_as[dict]
+                        elif hasattr(result, 'value'):
+                            # SDK 3.x style
+                            doc = result.value
+                        elif isinstance(result, (list, tuple)) and len(result) > 2:
+                            # [flags, cas, value] format
+                            doc = result[2]
+                        elif isinstance(result, dict):
+                            doc = result
+                        else:
+                            self.log.warning(f"Unknown result format for {doc_key}: {type(result)}")
+                            continue
+
+                        if isinstance(doc, dict):
+                            self._apply_sparse_mutation(doc, scenario, sparse_vec_size)
+                            updated_docs[doc_key] = doc
+                except Exception as e:
+                    self.log.warning(f"Failed to get doc {doc_key}: {e}")
+                    continue
+
+            if updated_docs:
+                sdk_client.upsert_multi(updated_docs, scope=scope, collection=collection)
+            self.log.info(f"Updated batch {batch_start}-{batch_end}, docs: {len(updated_docs)}")
+
+        self.log.info(f"Successfully updated {num_docs} docs with scenario: {scenario}")
+
+    def _apply_sparse_mutation(self, doc, scenario, sparse_vec_size):
+        """
+        Apply a specific mutation scenario to a document's sparse field.
+
+        Args:
+            doc: The document dict to mutate (modified in place)
+            scenario: The mutation scenario to apply
+            sparse_vec_size: Maximum index value for sparse vectors
+        """
+        # Add marker field for tracking mutation scenario
+        doc['mutation_scenario'] = scenario
+
+        if scenario == "variable_length_sparse":
+            # Variable-length sparse vectors: 80-150 indices per doc with high-precision values
+            min_indices = 80
+            max_indices = 150
+            length = random.randint(min_indices, max_indices)
+            indices = sorted(random.sample(range(0, sparse_vec_size), length))
+            values = [random.uniform(0.001, 1.0) for _ in range(length)]
+            doc['sparse'] = [indices, values]
+
+        elif scenario == "duplicate_indices_sparse":
+            # Sparse vectors with duplicate indices but same total length as original
+            # E.g., [[1,1,2,2,3,4,5], [0.1, 0.2, 0.9, 0.15, 0.2, 0.99, 0.5]]
+            original_sparse = doc.get('sparse', [[], []])
+            original_length = len(original_sparse[0]) if original_sparse and original_sparse[0] else 10
+
+            # Generate indices with some duplicates
+            num_unique = max(2, original_length // 2)
+            unique_indices = random.sample(range(0, sparse_vec_size), num_unique)
+            indices = []
+            while len(indices) < original_length:
+                indices.append(random.choice(unique_indices))
+            indices.sort()
+            values = [random.uniform(0.001, 1.0) for _ in range(original_length)]
+            doc['sparse'] = [indices, values]
+
+        elif scenario == "random_sparse":
+            # Fully random sparse vectors - 80-150 indices with high-precision values
+            min_indices = 80
+            max_indices = 150
+            length = random.randint(min_indices, max_indices)
+            indices = sorted([random.randint(0, sparse_vec_size - 1) for _ in range(length)])
+            values = [random.uniform(-10.0, 10.0) for _ in range(length)]
+            doc['sparse'] = [indices, values]
+
+        elif scenario == "unsorted_indices_sparse":
+            # Shuffle existing sparse vector indices (and corresponding values)
+            # E.g., [[1,7,12,15,20], [0.9,0.1,0.09,0.07,0.02]] -> [[20,12,15,7,1], [0.02,0.09,0.07,0.1,0.9]]
+            original_sparse = doc.get('sparse', [[], []])
+            if original_sparse and original_sparse[0] and len(original_sparse[0]) > 1:
+                indices = original_sparse[0]
+                values = original_sparse[1]
+                # Pair indices with values, shuffle, then unpack
+                paired = list(zip(indices, values))
+                random.shuffle(paired)
+                shuffled_indices, shuffled_values = zip(*paired)
+                doc['sparse'] = [list(shuffled_indices), list(shuffled_values)]
+
+        elif scenario == "fixed_length_random_sparse_phase1":
+            # Phase 1: All docs get same fixed length (100) with random indices and high-precision values
+            # Used as first phase of fixed_then_variable scenario
+            fixed_length = self._fixed_sparse_length if hasattr(self, '_fixed_sparse_length') else 100
+            indices = sorted(random.sample(range(0, sparse_vec_size), fixed_length))
+            values = [random.uniform(0.001, 1.0) for _ in range(fixed_length)]
+            doc['sparse'] = [indices, values]
+
+        elif scenario == "variable_length_mutation_phase2":
+            # Phase 2: Mutate existing fixed-length sparse to variable lengths (80-150)
+            # Used as second phase of fixed_then_variable scenario
+            min_length = 80
+            max_length = 150
+            new_length = random.randint(min_length, max_length)
+            indices = sorted(random.sample(range(0, sparse_vec_size), new_length))
+            values = [random.uniform(0.001, 1.0) for _ in range(new_length)]
+            doc['sparse'] = [indices, values]
+
+        else:
+            self.log.warning(f"Unknown mutation scenario: {scenario}")

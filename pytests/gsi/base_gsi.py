@@ -2829,6 +2829,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         if not self.validate_cpu_normalized():
             raise AssertionError("CPU not normalized despite dropping all the indexes")
 
+
     def trigger_metadata_compaction_on_all_nodes(self, num_compactions=4):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for i in range(num_compactions):
