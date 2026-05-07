@@ -270,7 +270,7 @@ class OnPremBaseTestCase(unittest.TestCase):
 
             self.set_alternate_address_all_nodes()
             if self.bucket_storage == 'magma':
-                RestConnection(self.master).set_internalSetting("magmaMinMemoryQuota", 256)
+                RestConnection(self.master).set_internalSetting("magmaMinMemoryQuota", 100)
                 if self.bucket_size < 256:
                     self.bucket_size = 256
                 self.eviction_policy = "fullEviction"

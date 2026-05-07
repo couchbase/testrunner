@@ -1189,9 +1189,9 @@ class QueryAutoPrepareTests(QueryTests):
                 self._prepare_plan_statement("off_keep_save_manual_{0}".format(i),
                                              self._plan_stability_statement_for_day(30 + i), save=True)
 
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == mode_prepared_count + saved_statement_count,
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == mode_prepared_count +saved_statement_count,
                             eval=True, delay=1, tries=60)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') > 0,
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') == 3,
                             eval=True, delay=1, tries=60)
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
@@ -2253,7 +2253,7 @@ class QueryAutoPrepareTests(QueryTests):
 
     def _cleanup_plan_stability_state(self):
         self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
-        self.sleep(10)
+        self.run_cbq_query(query='DELETE FROM system:prepareds')
         self.run_cbq_query(query='DROP BUCKET IF EXISTS QUERY_METADATA')
         self.with_retry(lambda: self.run_cbq_query(
             query='SELECT COUNT(*) AS keyspace_count FROM system:keyspaces WHERE name = "QUERY_METADATA"')[
