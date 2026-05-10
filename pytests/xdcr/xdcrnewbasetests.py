@@ -3730,6 +3730,29 @@ class XDCRNewBaseTest(unittest.TestCase):
     def get_report_error_list(self):
         return self.__report_error_list
 
+    def _toggle_ce_backdoor_on_node(self, server, enable):
+        """Toggle the CE-restrictions backdoor on a single node.
+
+        Sets `disable_ce_restrictions` in ns_config via diag/eval, then
+        kills goxdcr so babysitter respawns it. The flag is cluster-wide
+        (ns_config replicates it to every node) -- toggling on any node
+        affects the whole cluster.
+
+        Relies on `allow_nonlocal_eval=true` being set cluster-wide,
+        which CouchbaseCluster.init_cluster() does as its first step.
+        """
+        flag = "true" if enable else "false"
+        code = "ns_config:set(disable_ce_restrictions, {0}).".format(flag)
+        status, content = RestConnection(server).diag_eval(code)
+        self.assertTrue(
+            status, "diag/eval failed on %s setting %s: %s"
+            % (server.ip, code, content))
+        shell = RemoteMachineShellConnection(server)
+        try:
+            shell.kill_goxdcr()
+        finally:
+            shell.disconnect()
+
     def __calculate_bucket_size(self, cluster_quota, num_buckets):
         if 'quota_percent' in self._input.test_params:
             quota_percent = int(self._input.test_params['quota_percent'])
