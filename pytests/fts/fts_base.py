@@ -5888,7 +5888,7 @@ class FTSBaseTest(unittest.TestCase):
             self.sleep(10, "giving sometime for index partition to be created")
             return True
 
-        rest = RestConnection(self.master)
+        rest = RestConnection(self._cb_cluster.get_master_node())
         self._num_vbuckets = len(rest.get_vbuckets(self._cb_cluster.get_bucket_by_name(index._source_name)))
 
         self.log.info("Validating index distribution for %s ..." % index.name)
