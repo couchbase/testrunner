@@ -5761,7 +5761,14 @@ class FTSBaseTest(unittest.TestCase):
                     elif index.collections:
                         container_doc_count = index.get_src_collections_doc_count(extra_collections=extra_collections)
                     else:
-                        container_doc_count = index.get_src_bucket_doc_count()
+                        # Bucket-level FTS index (no scope/collections): without custom
+                        # mapping it only indexes _default._default, so compare against
+                        # that collection's count rather than the bucket-wide active key
+                        # count. The bucket may legitimately contain docs in other
+                        # collections (e.g. magma DGM load path uses Java SDK
+                        # all_collections=true), which would inflate the bucket total.
+                        container_doc_count = self._cb_cluster.get_doc_count_in_collections(
+                            index.source_bucket, "_default", ["_default"])
 
                     if not self.compare_es:
                         self.log.info(f"Docs in bucket = {container_doc_count}, "
@@ -6544,7 +6551,14 @@ class FTSBaseTest(unittest.TestCase):
             elif index.collections:
                 container_doc_count = index.get_src_collections_doc_count()
             else:
-                container_doc_count = index.get_src_bucket_doc_count()
+                # Bucket-level FTS index (no scope/collections): without custom
+                # mapping it only indexes _default._default, so compare against
+                # that collection's count rather than the bucket-wide active key
+                # count. The bucket may legitimately contain docs in other
+                # collections (e.g. magma DGM load path uses Java SDK
+                # all_collections=true), which would inflate the bucket total.
+                container_doc_count = self._cb_cluster.get_doc_count_in_collections(
+                    index.source_bucket, "_default", ["_default"])
 
             self.log.info("Docs in index {0}={1}, bucket docs={2}".
                           format(index.name, docs_indexed, container_doc_count))

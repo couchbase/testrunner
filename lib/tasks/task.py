@@ -1739,11 +1739,16 @@ class ESBulkLoadGeneratorTask(Task):
                 for line in es_bulk_docs:
                     es_file.write("{}\n".format(line).encode())
                 es_file.close()
-                self.es_instance.load_bulk_data(es_filename,self.index_name)
-                loaded += batched
-                self.log.info("{0} documents bulk loaded into ES".format(loaded))
+                status = self.es_instance.load_bulk_data(es_filename, self.index_name)
+                if status:
+                    loaded += batched
+                    self.log.info("{0} documents bulk loaded into ES".format(loaded))
+                else:
+                    self.log.error("ES bulk load failed for batch of {0} docs; "
+                                   "loaded so far: {1}".format(batched, loaded))
                 self.es_instance.update_index(self.index_name)
                 batched = 0
+                es_bulk_docs = []
         indexed = self.es_instance.get_index_count(self.index_name)
         self.log.info("ES index count for '{0}': {1}".
                       format(self.index_name, indexed))
