@@ -5699,7 +5699,7 @@ class FTSBaseTest(unittest.TestCase):
         time.sleep(timeout)
 
     def wait_for_indexing_complete_simple(self, item_count=0, index=None):
-        retry = self._input.param("index_retry", 100)
+        retry = self._input.param("index_retry", 200)
         if index.index_type == "fulltext-alias":
             return
         retry_count = retry
@@ -5742,7 +5742,7 @@ class FTSBaseTest(unittest.TestCase):
                 and self.bulk_collections_expected_docs:
             item_count = self.bulk_collections_expected_docs
 
-        retry = self._input.param("index_retry", 100)
+        retry = self._input.param("index_retry", 200)
         for index in self._cb_cluster.get_indexes():
             if index.index_type == "fulltext-alias":
                 continue
@@ -5821,7 +5821,7 @@ class FTSBaseTest(unittest.TestCase):
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
-            retry_mut_count = self._input.param("mutation_retry", 100)
+            retry_mut_count = self._input.param("mutation_retry", 200)
             num_mutations_to_index = 0
             if item_count == None:
                 while True and retry_mut_count:

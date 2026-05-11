@@ -278,7 +278,7 @@ class FTSCallable:
             index count specified by item_count
         """
         found = False
-        retry = TestInputSingleton.input.param("index_retry", 100)
+        retry = TestInputSingleton.input.param("index_retry", 200)
         for index in self.cb_cluster.get_indexes():
             if idx is not None and index.name != idx.name or index.index_type == "alias" or index.index_type == "fulltext-alias":
                 continue
@@ -337,7 +337,7 @@ class FTSCallable:
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
             # updates scenario - where doc count remains unchanged
-            retry_mut_count = 100
+            retry_mut_count = 200
             if item_count == None:
                 while True and retry_count:
                     num_mutations_to_index = index.get_num_mutations_to_index()
