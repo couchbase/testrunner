@@ -3309,6 +3309,18 @@ class RestConnection(object):
         status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
         return status, json_parsed
 
+    def trigger_log_reencryption(self):
+        """
+        POST :: controller/dropEncryptionAtRestDeks/log
+        Trigger re-encryption or decryption of log files.
+        - For re-encryption: creates new active key and marks existing keys expired
+        - For decryption: called after disabling encryption to decrypt log files
+        """
+        api = self.baseUrl + 'controller/dropEncryptionAtRestDeks/log'
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
+        return status, json_parsed
+
     def trigger_kek_rotation(self, secret_id):
         """
         POST :: /controller/rotateSecret/<secret_id>
