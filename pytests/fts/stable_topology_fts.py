@@ -4703,6 +4703,7 @@ class StableTopFTS(FTSBaseTest):
 
     def _create_oso_containers(self, bucket=None, num_scopes=1, collections_per_scope=1, docs_per_collection=10000):
         load_tasks = []
+        load_timeout = max(3000, docs_per_collection // 2)
         for i in range(1, num_scopes+1):
             scope_name = "scope_"+str(i)
             self.cli_client.create_scope(bucket="default", scope=scope_name);
@@ -4715,7 +4716,7 @@ class StableTopFTS(FTSBaseTest):
                 gen_create = SDKDataLoader(num_ops=docs_per_collection, percent_create=100, percent_update=0, percent_delete=0,
                              load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                              scope=scope_name, collection=collection_name, json_template="emp", doc_expiry=0,
-                             doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
+                             doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=load_timeout,
                              start=0, end=0, op_type="create", all_collections=False, es_compare=False, es_host=None, es_port=None,
                              es_login=None, es_password=None)
 
