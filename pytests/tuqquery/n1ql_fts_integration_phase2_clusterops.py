@@ -47,7 +47,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
 
-        self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket)
+        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket)
         n1ql_node = self.find_child_node_with_service("n1ql")
         if n1ql_node is None:
             self.log("Cannot find n1ql child node!")
@@ -64,7 +64,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
             n1ql_doc_ids.append(result['id'])
 
         total_hits, hits, took, status = \
-            rest.run_fts_query(index_name="idx_beer_sample_fts",
+            rest.run_fts_query(index_name=fts_idx.name,
                                query_json=fts_request)
 
         fts_doc_ids = []
