@@ -201,3 +201,63 @@ class GoVectorLoader:
         except Exception as e:
             print(f"Error: {e}")
 
+
+class RRFDataLoader:
+    """Loader for Rank Fusion datasets (MS Marco, BEIR) using the rrf_loader docker image."""
+
+    def __init__(self, node, username, password, dataset, bucket, scope="rrf_scope",
+                 collection="passages", action="load_all", qrel_only=False):
+        self.node = node
+        self.username = username
+        self.password = password
+        self.dataset = dataset
+        self.bucket = bucket
+        self.scope = scope
+        self.collection = collection
+        self.action = action
+        self.qrel_only = qrel_only
+        try:
+            self.docker_client = docker.from_env()
+        except Exception as e:
+            self.docker_client = None
+            print(f"WARN: docker unavailable for RRFDataLoader: {e}")
+
+    def load_data(self, container_name=None):
+        if self.docker_client is None:
+            raise RuntimeError("Docker is unavailable; cannot run RRFDataLoader container.")
+        if container_name:
+            try:
+                cont = self.docker_client.containers.get(container_name)
+                cont.stop()
+                cont.remove()
+            except Exception as e:
+                print(e)
+
+        try:
+            docker_image = "sequoiatools/rrf_loader"
+            docker_run_params = (
+                f"-n {self.node.ip} -u {self.username} -p {self.password} "
+                f"-ds {self.dataset} -b {self.bucket} -sc {self.scope} "
+                f"-coll {self.collection} -a {self.action}"
+            )
+            if self.qrel_only:
+                docker_run_params += " --qrel_only True"
+
+            print(f"docker run params: {docker_run_params}")
+
+            try:
+                print(f"Pulling docker image {docker_image}")
+                self.docker_client.images.pull(docker_image)
+            except docker.errors.APIError as e:
+                print(f"Exception while pulling docker image {docker_image}: {e}")
+
+            try:
+                print(f"Running docker container {docker_image} with name {container_name}")
+                docker_output = self.docker_client.containers.run(
+                    docker_image, docker_run_params, name=container_name, remove=True)
+            except Exception as e:
+                print(f"Exception while running docker container: {e}")
+
+        except Exception as e:
+            print(f"Error: {e}")
+

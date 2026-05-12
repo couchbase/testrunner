@@ -100,7 +100,7 @@ except ImportError:
     _CbReplaceOptions = None
 
 from .vector_dataset_generator.vector_dataset_generator import VectorDataset
-from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVectorLoader
+from .vector_dataset_generator.vector_dataset_loader import VectorLoader, GoVectorLoader, RRFDataLoader
 from .docfilter_datagen.docfilter_datagen import DocFilterLoader
 from .synonym_datagen.synonym_datagen import SynonymDatagen
 
@@ -1584,6 +1584,7 @@ class FTSIndex:
                                   consistency_level='',
                                   consistency_vectors={},
                                   score='',
+                                  score_params=None,
                                   knn=None, vector_search=False):
         read_from_replica = TestInputSingleton.input.param("read_from_replica",False)
         parition_selection = TestInputSingleton.input.param("parition_selection","")
@@ -1633,7 +1634,12 @@ class FTSIndex:
         if read_from_replica:
             query_json['ctl']['partition_selection'] = parition_selection
         if score != '':
-            query_json['score'] = "none"
+            if score in ('rrf', 'rsf', 'dbsf'):
+                query_json['score'] = score
+            else:
+                query_json['score'] = "none"
+        if score_params is not None:
+            query_json['params'] = score_params
         if knn is not None:
             query_json['knn'] = knn
         return query_json
@@ -1705,7 +1711,8 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None,
+                      consistency_vectors={}, timeout=60000, rest=None, score='', score_params=None,
+                      expected_no_of_results=None,
                       node=None, knn=None, fields=None,
                       raise_on_error=False, variable_node=None,bucket_name=None,validation_data=None,fts_nodes=None):
 
@@ -1729,6 +1736,7 @@ class FTSIndex:
                                                     consistency_vectors=consistency_vectors,
                                                     timeout=timeout,
                                                     score=score,
+                                                    score_params=score_params,
                                                     knn=knn, vector_search=vector_search)
 
         hits = -1

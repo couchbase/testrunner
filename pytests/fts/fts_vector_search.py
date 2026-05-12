@@ -468,6 +468,20 @@ class VectorSearch(FTSBaseTest):
             self.vector_field_name = "vector_data"
         self.skip_validation_if_no_query_hits = self.input.param("skip_validation_if_no_query_hits", True)
         self.validate_memory_leak = self.input.param("validate_memory_leak", False)
+
+        self.rrf = self.input.param("rrf", False)
+        self.fusion_strategy = self.input.param("fusion_strategy", "rrf")
+        self.score_window_size = self.input.param("score_window_size", None)
+        self.score_rank_constant = self.input.param("score_rank_constant", None)
+        if self.rrf:
+            self.query["score"] = self.fusion_strategy
+            fusion_params = {}
+            if self.score_window_size is not None:
+                fusion_params["score_window_size"] = int(self.score_window_size)
+            if self.score_rank_constant is not None:
+                fusion_params["score_rank_constant"] = int(self.score_rank_constant)
+            if fusion_params:
+                self.query["params"] = fusion_params
         self.sleep_time_for_memory_leak_validation = self.input.param("sleep_time_for_memory_leak_validation", 300)
         if self.validate_memory_leak:
             self.memory_validator_thread = threading.Thread(target=self.start_memory_stat_collector_and_validator,
@@ -949,12 +963,16 @@ class VectorSearch(FTSBaseTest):
             self.raw_query['knn'][0]['vector'] = vector
             self.query["knn"][0]["filter"] = self.prefilter_query
 
+            doc_fusion_score = self.query.get('score', '')
+            doc_fusion_params = self.query.get('params', None)
             hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
-                                                                    fields=self.query['fields'])
+                                                                    fields=self.query['fields'],
+                                                                    score=doc_fusion_score, score_params=doc_fusion_params)
 
             hits_d,matches_d,time_taken_d,status_d = doc_filter_index.execute_query(query=self.raw_query['query'], knn=self.raw_query['knn'],
                                                                     explain=self.query['explain'], return_raw_hits=True,
-                                                                    fields=self.query['fields'])
+                                                                    fields=self.query['fields'],
+                                                                    score=doc_fusion_score, score_params=doc_fusion_params)
 
             return hits, hits_d, matches, matches_d, status, status_d
 
@@ -1001,12 +1019,16 @@ class VectorSearch(FTSBaseTest):
 
         # Run fts query
         self.log.info(f" Running FTS Query - {self.query}")
+        fusion_score = self.query.get('score', '')
+        fusion_params = self.query.get('params', None)
         num_retries = self.query_retries
         while num_retries:
             self.log.info(f"Attempt ({self.query_retries - num_retries + 1} / {self.query_retries})")
             hits, matches, time_taken, status = index.execute_query(query=self.query['query'], knn=self.query['knn'],
                                                                     explain=self.query['explain'], return_raw_hits=True,
-                                                                    fields=self.query['fields'],bucket_name=bucket_name,validation_data=validation_data,
+                                                                    fields=self.query['fields'],bucket_name=bucket_name,
+                                                                    score=fusion_score, score_params=fusion_params,
+                                                                    validation_data=validation_data,
                                                                     fts_nodes=fts_nodes,variable_node=variable_node)
             if type(status) == str or status['failed'] != 0:
                 print(f"debug : status : {status}\n")
