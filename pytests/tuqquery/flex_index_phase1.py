@@ -286,9 +286,9 @@ class FlexIndexTests(QueryTests):
             if self.use_index_name_in_query:
                 for index in expected_fts_index:
                     if final_hint == "":
-                        final_hint = "{0} {1}". format(index, use_fts_hint)
+                        final_hint = "`{0}` {1}". format(index, use_fts_hint)
                     else:
-                        final_hint = "{0}, {1} {2}".format(final_hint, index, use_fts_hint)
+                        final_hint = "{0}, `{1}` {2}".format(final_hint, index, use_fts_hint)
             else:
                 final_hint = use_fts_hint
 
@@ -296,9 +296,9 @@ class FlexIndexTests(QueryTests):
             if self.use_index_name_in_query and expected_gsi_index:
                 for index in expected_gsi_index:
                     if final_hint == "":
-                        final_hint = "{0} {1}". format(index, use_gsi_hint)
+                        final_hint = "`{0}` {1}". format(index, use_gsi_hint)
                     else:
-                        final_hint = "{0}, {1} {2}".format(final_hint, index, use_gsi_hint)
+                        final_hint = "{0}, `{1}` {2}".format(final_hint, index, use_gsi_hint)
             elif final_hint is not "":
                 final_hint = "{0}, {1}".format(final_hint, use_gsi_hint)
             else:
