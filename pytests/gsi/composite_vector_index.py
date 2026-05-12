@@ -775,14 +775,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         # AmazonSparse: Use binary recall and find position for MRR
                         result = self.run_cbq_query(query=new_query, server=self.n1ql_node)
                         query_results = result.get('results', [])
-                        
+
                         # Find position of expected_title in results (1-indexed)
                         position = 0
                         for pos, r in enumerate(query_results, start=1):
                             if r.get('title') == expected_title:
                                 position = pos
                                 break
-                        
+
                         recall = 1 if position > 0 else 0
                         rr = 1.0 / position if position > 0 else 0.0
 
@@ -954,34 +954,35 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             self.log.info(f"Mean Reciprocal Rank (MRR): {overall_mrr:.4f}")
         self.log.info("=" * 100)
 
-        # Step 7: Run mutation workload
-        self.log.info("")
-        self.log.info("=" * 100)
-        self.log.info("STEP 7: RUNNING MUTATION WORKLOAD")
-        self.log.info("=" * 100)
+        if self.json_template == "MsMARCO":
+            # Step 7: Run mutation workload
+            self.log.info("")
+            self.log.info("=" * 100)
+            self.log.info("STEP 7: RUNNING MUTATION WORKLOAD")
+            self.log.info("=" * 100)
 
-        data_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
-        key_prefix = "msmarco-" if self.json_template == "MsMARCO" else "doc_"
+            data_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+            key_prefix = "msmarco-" if self.json_template == "MsMARCO" else "doc_"
 
-        for namespace in self.namespaces:
-            keyspace = namespace.split(":")[-1]
-            bucket, scope, collection = keyspace.split(".")
-            bucket = bucket.split(':')[-1]
-            self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
-                                            percent_update=100, percent_delete=0, workers=10, scope=scope,
-                                            collection=collection, json_template=self.json_template, timeout=2000,
-                                            op_type="update", mutate=1, dim=384, ops_rate=10000,
-                                            key_prefix=key_prefix,
-                                            update_start=0, update_end=self.num_of_docs_per_collection)
-            task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
-                                                    generator=self.gen_update,
-                                                    timeout_secs=2000, use_magma_loader=True)
-            task.result()
-            self.log.info(f"Mutation workload completed for {namespace}")
+            for namespace in self.namespaces:
+                keyspace = namespace.split(":")[-1]
+                bucket, scope, collection = keyspace.split(".")
+                bucket = bucket.split(':')[-1]
+                self.gen_update = SDKDataLoader(num_ops=self.num_of_docs_per_collection, percent_create=0,
+                                                percent_update=100, percent_delete=0, workers=10, scope=scope,
+                                                collection=collection, json_template=self.json_template, timeout=2000,
+                                                op_type="update", mutate=1, dim=384, ops_rate=10000,
+                                                key_prefix=key_prefix,
+                                                update_start=0, update_end=self.num_of_docs_per_collection)
+                task = self.cluster.async_load_gen_docs(data_node, bucket=bucket,
+                                                        generator=self.gen_update,
+                                                        timeout_secs=2000, use_magma_loader=True)
+                task.result()
+                self.log.info(f"Mutation workload completed for {namespace}")
 
-        self.log.info("Mutation workload completed for all namespaces")
-        self.wait_until_indexes_online(timeout=600)
-        self.validate_no_pending_mutations()
+            self.log.info("Mutation workload completed for all namespaces")
+            self.wait_until_indexes_online(timeout=600)
+            self.validate_no_pending_mutations()
 
         # Step 8: Re-run recall and MRR check after mutations
         self.log.info("")
@@ -1021,14 +1022,14 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         # AmazonSparse: Use binary recall and find position for MRR
                         result = self.run_cbq_query(query=new_query, server=self.n1ql_node)
                         query_results = result.get('results', [])
-                        
+
                         # Find position of expected_title in results (1-indexed)
                         position = 0
                         for pos, r in enumerate(query_results, start=1):
                             if r.get('title') == expected_title or r.get('text') == expected_title:
                                 position = pos
                                 break
-                        
+
                         recall = 1 if position > 0 else 0
                         rr = 1.0 / position if position > 0 else 0.0
                 except Exception as e:
@@ -1059,7 +1060,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         if self.json_template == "MsMARCO":
             post_mutation_summary_table.set_headers(['Index Name', 'Total Queries', 'Avg Recall@K', 'MRR'])
         else:
-            post_mutation_summary_table.set_headers(['Index Name', 'Total Queries', 'Found', 'Missed', 'Recall %', 'MRR'])
+            post_mutation_summary_table.set_headers(
+                ['Index Name', 'Total Queries', 'Found', 'Missed', 'Recall %', 'MRR'])
 
         post_mutation_recall_sum = 0
         post_mutation_mrr_sum = 0
@@ -1101,7 +1103,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         if self.json_template == "MsMARCO":
             post_mutation_overall_recall_pct = (
-                post_mutation_recall_sum / post_mutation_overall_total * 100) if post_mutation_overall_total > 0 else 0
+                    post_mutation_recall_sum / post_mutation_overall_total * 100) if post_mutation_overall_total > 0 else 0
             post_mutation_overall_mrr = post_mutation_mrr_sum / post_mutation_overall_total if post_mutation_overall_total > 0 else 0
             post_mutation_summary_table.add_row([
                 'OVERALL',
@@ -1111,7 +1113,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
             ])
         else:
             post_mutation_overall_recall_pct = (
-                post_mutation_recall_sum / post_mutation_overall_total * 100) if post_mutation_overall_total > 0 else 0
+                    post_mutation_recall_sum / post_mutation_overall_total * 100) if post_mutation_overall_total > 0 else 0
             post_mutation_overall_mrr = post_mutation_mrr_sum / post_mutation_overall_total if post_mutation_overall_total > 0 else 0
             post_mutation_summary_table.add_row([
                 'OVERALL',
@@ -6218,6 +6220,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         # creating namespaces and loading docs
         scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(self.num_scopes)]
         self.sleep(10, "Allowing time after collection creation")
+        if self.isSparse:
+            self.json_template="MsMARCO"
         num_docs = 200
         for s_item in scopes:
             collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(self.num_collections)]
