@@ -21,11 +21,23 @@ class QueryMonitoringTests(QueryTests):
 
     def suite_setUp(self):
         super(QueryMonitoringTests, self).suite_setUp()
+        # Use a JS UDF so these monitoring tests can force a query to run for a known duration.
+        functions = 'function monitoring_sleep(delay) { var start = new Date().getTime(); while (new Date().getTime() < start + delay); return delay; }'
+        self.create_library("monitoring_helper", functions, ["monitoring_sleep"], replace=True)
+        self.run_cbq_query(query='CREATE OR REPLACE FUNCTION monitoring_sleep(t) LANGUAGE JAVASCRIPT AS "monitoring_sleep" AT "monitoring_helper"')
 
     def tearDown(self):
         super(QueryMonitoringTests, self).tearDown()
 
     def suite_tearDown(self):
+        try:
+            self.run_cbq_query(query='DROP FUNCTION monitoring_sleep')
+        except Exception as ex:
+            self.log.info("Ignoring monitoring_sleep cleanup error: {0}".format(str(ex)))
+        try:
+            self.delete_library("monitoring_helper")
+        except Exception as ex:
+            self.log.info("Ignoring monitoring_helper cleanup error: {0}".format(str(ex)))
         super(QueryMonitoringTests, self).suite_tearDown()
 
     ##############################################################################################
@@ -137,7 +149,7 @@ class QueryMonitoringTests(QueryTests):
             self.run_cbq_query(query="DROP PRIMARY INDEX on default:default.test.test2")
 
     def test_transaction_active(self):
-        queries = ['select * from default where name = "employee-9"','update default SET name = "employee-9000" where name = "employee-9"','COMMIT TRANSACTION']
+        queries = ['EXECUTE FUNCTION monitoring_sleep(15000)','EXECUTE FUNCTION monitoring_sleep(15000)','COMMIT TRANSACTION']
         tx_start = self.run_cbq_query(query="BEGIN WORK", txtimeout="2m")
         txid = tx_start['results'][0]['txid']
         for query in queries:
@@ -221,10 +233,7 @@ class QueryMonitoringTests(QueryTests):
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')
-        query = "(select * from " + self.query_buckets[0] + ") union (select d from " + self.query_buckets[
-            0] + " d JOIN " + self.query_buckets[0] + " def ON KEYS d.name) union (select * from " + self.query_buckets[
-                    0] + ")" + " union (select d from " + self.query_buckets[0] + ")"
-        self.run_cbq_query(query, server=server)
+        self._run_monitoring_sleep_query(delay_ms=30000, server=server)
 
     def run_parallel_query_collections(self):
         if self.use_query_context:
@@ -232,8 +241,7 @@ class QueryMonitoringTests(QueryTests):
         else:
             self.run_cbq_query(query="CREATE PRIMARY INDEX on default:default.test.test2")
 
-    '''Run basic cluster monitoring checks (outlined in the helper function) by executing 2 queries in parallel, must be
-       run with a sufficient number of docs to be an effective test (docs-per-day >=3).'''
+    '''Run basic cluster monitoring checks using deterministic 30-second sleep queries on specific nodes.'''
 
     def test_monitoring(self, test):
         for query_bucket in self.query_buckets:
@@ -269,8 +277,7 @@ class QueryMonitoringTests(QueryTests):
                 t52.start()
                 t53.start()
             e.set()
-            query = f'(select * from {query_bucket} ) union (select * from {query_bucket} ) union (select * from {query_bucket})'
-            self.run_cbq_query(query, server=self.servers[1])
+            self._run_monitoring_sleep_query(delay_ms=30000, server=self.servers[1])
             logging.debug('event is set')
             t50.join(100)
             t51.join(100)
@@ -890,9 +897,9 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], num_entries)
 
-        # Run more than num_entries(10) queries
-        for i in range(num_entries * 2):
-            self.run_cbq_query('select * from ' + self.query_buckets[0] + '')
+        # Run more than num_entries(10) queries. No explicit duration comment here, so keep each query > 1 second.
+        for _ in range(num_entries * 2):
+            self._run_monitoring_sleep_query()
 
         time.sleep(1)
         result = self.run_cbq_query('select * from system:completed_requests')
@@ -904,8 +911,8 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], num_entries)
 
-        for i in range(100):
-            self.run_cbq_query('select * from ' + self.query_buckets[0])
+        for _ in range(100):
+            self._run_monitoring_sleep_query()
 
         time.sleep(1)
         result = self.run_cbq_query('select * from system:completed_requests')
@@ -917,7 +924,7 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], num_entries)
 
-        self.run_cbq_query('select * from ' + self.query_buckets[0])
+        self._run_monitoring_sleep_query()
 
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 110)
@@ -929,27 +936,26 @@ class QueryMonitoringTests(QueryTests):
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
         # Test the default setting of 1 second
         self.run_cbq_query('select * from system:active_requests')
-        self.run_cbq_query('select * from ' + self.query_buckets[0])
+        self._run_monitoring_sleep_query()
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 1)
         # Wipe the completed logs for the next test
         self.run_cbq_query('delete from system:completed_requests')
 
-        # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 8 seconds
+        # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 3.5 seconds.
         min_duration = 3500
         # Change the collection setting
         response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], min_duration)
-        # Construct nonsense queries that run for 5 seconds
-        long_query = f'select * from {self.query_buckets[0]} union select * from {self.query_buckets[0]} union select * from {self.query_buckets[0]} union select * from {self.query_buckets[0]}'
-        self.run_cbq_query(long_query)
-        self.run_cbq_query(long_query)
-        # Run a query that runs for a normal amount of time ~2 seconds
-        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' limit 1000')
-        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' limit 1000')
+        # Construct sleep queries that run for 5 seconds.
+        self._run_monitoring_sleep_query(5000)
+        self._run_monitoring_sleep_query(5000)
+        # Run a query that runs for a normal amount of time ~1.5 seconds
+        self._run_monitoring_sleep_query()
+        self._run_monitoring_sleep_query()
 
-        # Only the queries run for longer than 8 seconds should show up
+        # Only the queries run for longer than 3.5 seconds should show up.
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
         # Wipe the completed logs for the next test
@@ -962,7 +968,7 @@ class QueryMonitoringTests(QueryTests):
         self.assertEqual(result['completed-threshold'], min_duration)
 
         self.run_cbq_query('select * from system:active_requests')
-        self.run_cbq_query('select * from ' + self.query_buckets[0])
+        self._run_monitoring_sleep_query()
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
 
@@ -973,11 +979,19 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertTrue(result['completed-threshold'] == min_duration)
         self.run_cbq_query('delete from system:completed_requests')
-        self.run_cbq_query('select * from ' + self.query_buckets[0])
-        self.run_cbq_query('select * from ' + self.query_buckets[0])
+        self._run_monitoring_sleep_query()
+        self._run_monitoring_sleep_query()
 
         # No queries should appear
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 0)
 
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
+
+    # This helper executes the JS UDF above, which busy-waits for delay_ms milliseconds
+    # so the monitoring tests can deterministically control query duration. If no
+    # server is specified, it runs on the first server.
+    def _run_monitoring_sleep_query(self, delay_ms=1500, server=None):
+        if server is None:
+            server = self.servers[1]
+        return self.run_cbq_query('EXECUTE FUNCTION monitoring_sleep({0})'.format(delay_ms), server=server)
