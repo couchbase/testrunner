@@ -180,7 +180,7 @@ class SparseVector(object):
                 print(f"Gzipped file already exists: {gz_path}")
             else:
                 print(f"Downloading {url} -> {gz_path}")
-                request.urlretrieve(url, gz_path, quiet=True)
+                request.urlretrieve(url, gz_path)
             # Unzip if needed
             if gz_path.endswith(".gz"):
                 print(f"Unzipping {gz_path} ...")
