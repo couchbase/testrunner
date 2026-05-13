@@ -4,6 +4,8 @@ azure-identity==1.25.1
 azure-mgmt-core==1.6.0
 azure-mgmt-resource==24.0.0
 azure-mgmt-storage==24.0.0
+azure-mgmt-network==24.0.0
+azure-mgmt-compute==24.0.0
 azure-storage-blob==12.27.1
 bcrypt==3.1.7
 beautifulsoup4==4.9.3
