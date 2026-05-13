@@ -9,13 +9,43 @@ import dns.resolver
 import time
 import io
 import logging
+import os as OS
+from azure.identity import ClientSecretCredential
+from azure.mgmt.network import NetworkManagementClient
+from azure.mgmt.compute import ComputeManagementClient
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
+
+# Suppress Azure SDK HTTP request/response logging (set to WARNING to hide INFO-level dumps)
+logging.getLogger('azure.core.pipeline.policies.http_logging_policy').setLevel(logging.WARNING)
+logging.getLogger('azure').setLevel(logging.WARNING)
+
 """
   Azure needs to install azure cli 'az' in dispatcher slave
 """
+
+
+def accept_all_traffic(host, username="root", password="couchbase"):
+    commands = ["iptables -I INPUT -j ACCEPT",
+                "iptables-save > /etc/sysconfig/iptables"]
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host,
+                username=username,
+                password=password)
+
+    for command in commands:
+            stdin, stdout, stderr = ssh.exec_command(command)
+            if stdout.channel.recv_exit_status() != 0:
+                ssh.exec_command("sudo shutdown")
+                time.sleep(10)
+                ssh.close()
+                raise Exception("The iptables could not be added to on {}".format(host))
+
+    ssh.close()
+
 
 def check_root_login(host, username ="root", password="couchbase"):
     try:
@@ -118,16 +148,22 @@ def install_zip_unzip(host, username="root", password="couchbase"):
 
     commands = []
 
+    stdin, stdout, stderr = ssh.exec_command("which tdnf 2>/dev/null")
+    has_tdnf = stdout.channel.recv_exit_status() == 0
+
     stdin, stdout, stderr = ssh.exec_command("yum --help")
-    if stdout.channel.recv_exit_status() != 0:
-        #Debian or Ubuntu...
+    has_yum = stdout.channel.recv_exit_status() == 0
+
+    if has_tdnf:
+        commands.append("tdnf install -y zip unzip")
+    elif has_yum:
+        commands.extend(configure_centos7_vault_repos(ssh))
+        commands.append("yum install -y zip unzip")
+    else:
         commands.extend([
             "apt-get update -y",
             "apt-get install -y zip unzip"
         ])
-    else:
-        commands.extend(configure_centos7_vault_repos(ssh))
-        commands.append("yum install -y zip unzip")
 
     for command in commands:
         log.info(f"Executing on {host}: {command}")
@@ -1255,63 +1291,234 @@ def gcp_get_servers(name, count, os, type, ssh_key_path, architecture):
 
     return hostnames
 
-AZ_TEMPLATE_MAP = {
-    "couchbase"  : "qe-image-20211129",
-    "elastic-fts": "qe-es-image-20211129",
-    "localstack" : "qe-localstack-image-20211129"
+# AZ_TEMPLATE_MAP = {
+#     "couchbase"  : "qe-image-20211129",
+#     "elastic-fts": "qe-es-image-20211129",
+#     "localstack" : "qe-localstack-image-20211129"
+# }
+
+AZ_OS_IMAGE_REFERENCE_MAP = {
+    "centos7": {
+        "publisher": "ntegralinc1586961136942",
+        "offer": "ntg_centos_7",
+        "sku": "ntg_centos_7_els",
+        "version": "latest",
+    },
+    "mariner2": {
+        "publisher": "MicrosoftCBLMariner",
+        "offer": "cbl-mariner",
+        "sku": "cbl-mariner-2",
+        "version": "latest",
+    },
+    "azurelinux3.0": {
+        "publisher": "ntegralinc1586961136942",
+        "offer": "ntg_azurelinux_3",
+        "sku": "ntg_azurelinux_3_gen2",
+        "version": "latest",
+    },
 }
-def az_get_servers(name, count, os, type, ssh_key_path, architecture):
-    vm_type = "Standard_B4ms"
-    security_group_name = "qe-test-nsg"
-    group_name = "qe-test"
-    ips = []
-    internal_ips = []
 
-    if type != "couchbase":
-        image_name = AZ_TEMPLATE_MAP[type]
-    else:
-        image_name = AZ_TEMPLATE_MAP["couchbase"]
 
-    """ az vm create -g qe-test -n from-w22 --image 'qe-test-image-20211112-westus2' --nsg qe-test-nsg
-           --size Standard_B4ms --output json  --count 2 --public-ip-sku Standard
-        image_name = "qe-test-image-20211112-westus2"
-    """
-    for x in range(1, count + 1):
-        cmd = "az vm create -g {0} -n {1}{2} --image {3} --nsg {4} --size {5} --public-ip-sku Standard --output json "\
-              .format(group_name, name, x, image_name, security_group_name, vm_type)
-        log.info("create vm {0}{1}".format(name, x))
-        stdout = subprocess.check_output(cmd, shell=True)
-        if isinstance(stdout, bytes):
-            # convert to string to load json
-            stdout = stdout.decode('utf-8')
-        if isinstance(stdout, str):
-            stdout = json.loads(stdout)
-            ips.append(stdout["publicIpAddress"])
-            internal_ips.append(stdout["privateIpAddress"])
-    """ no need post_provisioner run on azure """
-    log.info("public ips of vms: " + str(ips))
-    log.info("private ips of vms: " + str(internal_ips))
-    return ips, internal_ips
+def az_get_servers(name, count, os, type, ssh_public_key_path, ssh_private_key_path):
+    public_hostnames = []
+    private_ip_addresses = []
+
+    if type == "elastic-fts":
+        '''
+        The elastic-fts Instances are created with the following config
+        OS - Centos7
+        Instance Type - Standard_B4ms
+        Elastic Search Version - 1.7.3
+        '''
+        os = "centos7"
+
+    subscription_id = OS.environ["AZURE_SUBSCRIPTION_ID"]
+    resource_group = 'qe-os-certify'
+    location = 'West US 2'
+    vnet_name = 'os-certify-vnet'
+    subnet_name = 'default'
+    nsg_name = 'qe-os-certify-nsg'
+    credential = ClientSecretCredential(
+        tenant_id=OS.environ["AZURE_TENANT_ID"],
+        client_id=OS.environ["AZURE_CLIENT_ID"],
+        client_secret=OS.environ["AZURE_CLIENT_SECRET"]
+    )
+    network_client = NetworkManagementClient(credential, subscription_id)
+    compute_client = ComputeManagementClient(credential, subscription_id)
+    if os not in AZ_OS_IMAGE_REFERENCE_MAP:
+        raise ValueError("Unsupported Azure OS '{}'. Supported: {}".format(
+            os, list(AZ_OS_IMAGE_REFERENCE_MAP.keys())))
+    image_reference = AZ_OS_IMAGE_REFERENCE_MAP[os]
+
+    vm_username = 'azureuser'
+    subnet = network_client.subnets.get(resource_group, vnet_name, subnet_name)
+    nsg = network_client.network_security_groups.get(resource_group, nsg_name)
+
+    with open(ssh_public_key_path, 'r') as pub_ssh_file:
+        pub_ssh_key = pub_ssh_file.read().strip()
+
+    vm_names = []
+    for i in range(count):
+        vm_names.append(name + "-" + str(i))
+
+    # Phase 1: Submit all public IP creations in parallel
+    log.info("Phase 1: Creating {} public IPs in parallel".format(count))
+    ip_pollers = []
+    for vm_name in vm_names:
+        ip_name = vm_name + '_ip'
+        public_ip_addess_params = {
+            "location": location,
+            "sku": {"name": "Standard"},
+            "public_ip_allocation_method": "Static",
+            "public_ip_address_version": "IPV4",
+            "dns_settings": {
+                "domain_name_label": vm_name.lower()
+            }
+        }
+        log.info("Submitting public IP creation for {}".format(vm_name))
+        poller = network_client.public_ip_addresses.begin_create_or_update(
+            resource_group, ip_name, public_ip_addess_params)
+        ip_pollers.append((vm_name, poller))
+
+    public_ips = {}
+    for vm_name, poller in ip_pollers:
+        public_ips[vm_name] = poller.result()
+        log.info("Public IP ready for {}".format(vm_name))
+
+    # Phase 2: Submit all NIC creations in parallel
+    log.info("Phase 2: Creating {} NICs in parallel".format(count))
+    nic_pollers = []
+    for vm_name in vm_names:
+        nic_name = vm_name + '_nic'
+        nic_params = {
+            'location': location,
+            'ip_configurations': [{
+                'name': 'ip_config',
+                'public_ip_address': {
+                    'id': public_ips[vm_name].id
+                    },
+                'subnet': {
+                    'id': subnet.id
+                }
+            }],
+            'network_security_group': {
+                'id': nsg.id
+            }
+        }
+        log.info("Submitting NIC creation for {}".format(vm_name))
+        poller = network_client.network_interfaces.begin_create_or_update(
+            resource_group, nic_name, nic_params)
+        nic_pollers.append((vm_name, poller))
+
+    nics = {}
+    for vm_name, poller in nic_pollers:
+        nic_result = poller.result()
+        nics[vm_name] = nic_result
+        public_hostnames.append(public_ips[vm_name].dns_settings.fqdn)
+        private_ip_addresses.append(nic_result.ip_configurations[0].private_ip_address)
+        log.info("NIC ready for {}".format(vm_name))
+
+    # Phase 3: Submit all VM creations in parallel
+    log.info("Phase 3: Creating {} VMs in parallel".format(count))
+    vm_pollers = []
+    for vm_name in vm_names:
+        nic_name = vm_name + '_nic'
+        vm_params = {
+            'location': location,
+            'plan': {
+                'name': image_reference['sku'],
+                'publisher': image_reference['publisher'],
+                'product': image_reference['offer']
+            },
+            'properties': {
+                'osProfile': {
+                    'computerName': vm_name,
+                    'adminUsername': vm_username,
+                    'linuxConfiguration': {
+                        'disablePasswordAuthentication': True,
+                        'ssh': {
+                            'publicKeys': [{
+                                'path': '/home/{}/.ssh/authorized_keys'.format(vm_username),
+                                'keyData': pub_ssh_key
+                            }]
+                        }
+                    }
+                },
+                'hardwareProfile': {
+                    'vmSize': 'Standard_B4ms'
+                },
+                'storageProfile': {
+                    'imageReference': {
+                        'publisher': image_reference['publisher'],
+                        'offer': image_reference['offer'],
+                        'sku': image_reference['sku'],
+                        'version': image_reference['version']
+                    }
+                },
+                'networkProfile': {
+                    'networkInterfaces': [{
+                        'id': network_client.network_interfaces.get(resource_group, nic_name).id,
+                    }]
+                }
+            }
+        }
+        log.info("Submitting VM creation for {}".format(vm_name))
+        poller = compute_client.virtual_machines.begin_create_or_update(
+            resource_group, vm_name, vm_params)
+        vm_pollers.append((vm_name, poller))
+
+    for vm_name, poller in vm_pollers:
+        poller.result()
+        log.info("VM ready: {}".format(vm_name))
+
+    for host in public_hostnames:
+        print("Provisioning vm {}".format(host))
+        post_provisioner(host=host,
+                         username="azureuser",
+                         ssh_key_path=ssh_private_key_path,
+                         modify_hosts=True)
+        if type == "elastic-fts":
+            install_elastic_search(host)
+        accept_all_traffic(host=host)
+        install_zip_unzip(host=host)
+
+    if type == "elastic-fts":
+        restart_elastic_search(public_hostnames)
+
+    log.info("Azure VMs' hostnames: " + str(public_hostnames))
+    log.info("Azure VMs' private IPs: " + str(private_ip_addresses))
+    return public_hostnames, private_ip_addresses
+
 
 def az_terminate(name):
-    group_name = "qe-test"
-    cmd = "az vm list |  grep -o '\"computerName\": \"[^\"]*' | grep -o '[^\"]*$' | grep ^{}".format(name)
-    vms = subprocess.check_output(cmd, shell=True).decode('utf-8')
-    vms = vms.split("\n")
-    vms = [s for s in vms if s]
-    for vm_name in vms:
-        cmd1 = "az vm delete -g {0} -n {1} -y "\
-               .format(group_name, vm_name)
-        cmd2 = "az network nic delete -g {0} -n {1}VMNic --no-wait"\
-                .format(group_name, vm_name)
-        cmd3 = "az network public-ip delete -g {0} -n {1}PublicIP"\
-                .format(group_name, vm_name)
-        log.info("delete vm {0}".format(name))
-        subprocess.check_output(cmd1, shell=True)
-        log.info("delete network of vm {0}".format(name))
-        subprocess.check_output(cmd2, shell=True)
-        log.info("delete public ip of vm {0}".format(name))
-        subprocess.check_output(cmd3, shell=True)
+    subscription_id = '4211ea4a-0bc3-4612-8a69-3a38979ac3fa'
+    resource_group = 'qe-os-certify'
+    credential = ClientSecretCredential(
+        tenant_id=OS.environ["AZURE_TENANT_ID"],
+        client_id=OS.environ["AZURE_CLIENT_ID"],
+        client_secret=OS.environ["AZURE_CLIENT_SECRET"]
+    )
+    compute_client = ComputeManagementClient(credential, subscription_id)
+    network_client = NetworkManagementClient(credential, subscription_id)
+
+    vms = compute_client.virtual_machines.list(resource_group)
+    matched_vms = [vm.name for vm in vms if vm.name.startswith(name)]
+
+    for vm_name in matched_vms:
+        nic_name = vm_name + '_nic'
+        ip_name = vm_name + '_ip'
+
+        log.info("delete vm {0}".format(vm_name))
+        compute_client.virtual_machines.begin_delete(
+            resource_group, vm_name).result()
+
+        log.info("delete network of vm {0}".format(vm_name))
+        network_client.network_interfaces.begin_delete(
+            resource_group, nic_name).result()
+
+        log.info("delete public ip of vm {0}".format(vm_name))
+        network_client.public_ip_addresses.begin_delete(
+            resource_group, ip_name).result()
 
 
 if __name__ == "__main__":

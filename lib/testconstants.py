@@ -64,7 +64,8 @@ SYSTEMD_SERVER = ["centos 8", "centos 7",
                   "rocky 9", "rocky 10", "rocky 11",
                   "amazon linux release 2 (karoo)",
                   "amazon linux release 2023 (amazon linux)",
-                  "cbl-mariner/linux 2"]
+                  "cbl-mariner/linux 2",
+                  "azurelinux 3"]
 
 WIN_NUM_ERLANG_PROCESS = 4
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
@@ -134,8 +135,8 @@ LINUX_LOG_PATH = '/opt'
 LINUX_CAPI_INI = '/opt/couchbase/etc/couchdb/default.d/capi.ini'
 LINUX_CONFIG_FILE = '/opt/couchbase/var/lib/couchbase/config/config.dat'
 LINUX_CW_LOG_PATH = "/opt/couchbase/var/lib/couchbase/tmp/"
-LINUX_DISTRIBUTION_NAME = ["ubuntu", "centos", "red hat", "opensuse", "suse", "oracle linux"]
-RPM_DIS_NAME = ["centos", "red hat", "opensuse", "suse", "oracle linux"]
+LINUX_DISTRIBUTION_NAME = ["ubuntu", "centos", "red hat", "opensuse", "suse", "oracle linux", "azure linux"]
+RPM_DIS_NAME = ["centos", "red hat", "opensuse", "suse", "oracle linux", "azure linux"]
 MAC_CW_LOG_PATH = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/var/lib/couchbase/tmp"
 WINDOWS_CW_LOG_PATH = "c:/Program\ Files/Couchbase/Server/var/lib/couchbase/tmp/"
 CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbdump-config", "cbenable_core_dumps.sh", \

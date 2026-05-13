@@ -154,7 +154,7 @@ class NodeHelper:
             cmd = self.actions_dict[self.info.deliverable_type]["uninstall"]
             if "suse" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["suse_uninstall"]
-            if "mariner" in self.get_os():
+            if "mariner" in self.get_os() or "azurelinux" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["mariner_uninstall"]
             if "msi" in cmd:
                 '''WINDOWS UNINSTALL'''
@@ -358,7 +358,7 @@ class NodeHelper:
                 cmd_d = self.actions_dict[self.info.deliverable_type][
                     "suse_install"]
                 cmd_debug = None
-            elif "mariner" in self.get_os():
+            elif "mariner" in self.get_os() or "azurelinux" in self.get_os():
                 cmd = self.actions_dict[self.info.deliverable_type]["mariner_install"]
                 cmd_d = self.actions_dict[self.info.deliverable_type][
                     "mariner_install"]
