@@ -800,8 +800,14 @@ class EventingBaseTest(QueryHelperTests):
         if o!=0:
             self.log.info("script result {}".format(o))
             raise Exception("unable to start docker")
-        o=os.system('python3 scripts/curl_setup.py setup')
-        self.log.info("=== setup done =======")
+        retries = 5
+        for i in range(retries):
+            o=os.system('python3 scripts/curl_setup.py setup')
+            if o == 0:
+                self.log.info("=== setup done =======")
+                break
+            self.log.info("curl setup attempt {}/{} failed with result {}, retrying...".format(i + 1, retries, o))
+            self.sleep(10)
         if o!=0:
             self.log.info("script result {}".format(o))
             raise Exception("curl setup fail")

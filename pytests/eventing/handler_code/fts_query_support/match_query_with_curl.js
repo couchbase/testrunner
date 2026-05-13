@@ -51,7 +51,7 @@ function OnUpdate(doc, meta) {
 
 // --- Helper functions ---
 function runQuery(query, options) {
-    var it = couchbase.searchQuery("travel_sample_test", query, options);
+    var it = couchbase.searchQuery("travel-sample._default.travel_sample_test", query, options);
     var ids = [];
     for (let row of it) {
         ids.push(row.id);

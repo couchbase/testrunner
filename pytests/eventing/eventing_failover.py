@@ -47,7 +47,7 @@ class EventingFailover(EventingBaseTest):
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
         if getattr(self, 'is_fts', False):
-            self.fts_index_name = "travel_sample_test"
+            self.fts_index_name = "travel-sample._default.travel_sample_test"
             self.fts_doc_count = 31500
             self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
             self.fts_memory_quota = 3000

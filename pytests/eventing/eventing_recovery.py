@@ -79,7 +79,7 @@ class EventingRecovery(EventingBaseTest):
             ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         # FTS setup
         if getattr(self, 'is_fts', False):
-            self.fts_index_name = "travel_sample_test"
+            self.fts_index_name = "travel-sample._default.travel_sample_test"
             self.fts_doc_count = 31500
             self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
             self.fts_memory_quota = 3000

@@ -180,12 +180,13 @@ class EventingFTSQuerySupport(EventingBaseTest):
 
     def run_fts_to_test_against_queries(self):
         bucket, scope, _ = self._namespace_parts()
+        index_name = self.fts_index.name if getattr(self, "fts_index", None) else self.fts_index_name
         fts_query = self.construct_fts_query(
-            self.fts_index_name,
+            index_name,
             self.fts_query['query']
         )
         hits, _, _, _ = self.fts_callable.run_fts_query(
-            index_name=self.fts_index_name,
+            index_name=index_name,
             query_dict=fts_query,
             bucket_name=bucket,
             scope_name=scope,

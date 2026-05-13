@@ -42,7 +42,7 @@ function runFTSMatchQuery() {
         .field("reviews.content")
         .analyzer("standard");
     var options = { size: 10 };
-    var it = couchbase.searchQuery("travel_sample_test", matchQuery, options);
+    var it = couchbase.searchQuery("travel-sample._default.travel_sample_test", matchQuery, options);
     var ids = [];
     for (let row of it) {
         ids.push(row.id);

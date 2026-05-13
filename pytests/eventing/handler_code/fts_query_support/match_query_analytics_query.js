@@ -9,7 +9,7 @@ function OnUpdate(doc, meta) {
         var ftsCount = 0;
         var ftsIds = [];
         var ftsIt = couchbase.searchQuery(
-            "travel_sample_test",
+            "travel-sample._default.travel_sample_test",
             matchQuery,
             { size: 10 }
         );
