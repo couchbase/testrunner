@@ -231,6 +231,8 @@ class CNGHelper:
                         self._remote_path(shell), self.MIN_GO_VERSION))
             log.info("Go version on {0}: {1}".format(self.server.ip, go_version))
 
+            self._ensure_git_installed(shell)
+
             # protoc is only required when regenerating .pb.go stubs. The
             # stellar-gateway repo commits those stubs, so a regular build
             # succeeds without it. Warn if missing but do not fail — if
@@ -273,6 +275,76 @@ class CNGHelper:
             log.info("Dependency check passed on {0}".format(self.server.ip))
         finally:
             shell.disconnect()
+
+    # Distro -> (package-manager probe, install command). Ordered so that
+    # the most specific manager wins on hosts where multiple are present
+    # (e.g. dnf preferred over yum on RHEL9, apt-get over apt for
+    # stable non-interactive output).
+    _GIT_INSTALL_ROUTES = (
+        ("apt-get",
+         "(DEBIAN_FRONTEND=noninteractive apt-get update -y >/dev/null 2>&1 "
+         "|| true) && DEBIAN_FRONTEND=noninteractive apt-get install -y "
+         "--no-install-recommends git"),
+        ("dnf", "dnf install -y git"),
+        ("yum", "yum install -y git"),
+        ("zypper", "zypper --non-interactive install git"),
+        ("apk", "apk add --no-cache git"),
+    )
+
+    def _ensure_git_installed(self, shell):
+        """Ensure `git` is available; install via the host's package manager
+        if not. Minimal cloud images (notably debian-cloud and several
+        rocky/alma minimal images) ship without git, so the clone step in
+        `_ensure_clean_clone` would fail with rc=127 / "git: command not
+        found". Detect a usable package manager and install
+        non-interactively before that runs.
+        """
+        out, _ = shell.execute_command(self._login_cmd("command -v git"))
+        if out and any((line or "").strip() for line in out):
+            log.info("git found on {0}: {1}".format(
+                self.server.ip, self._first_nonempty(out)))
+            return
+
+        log.warning(
+            "git not found on {0}; attempting auto-install".format(
+                self.server.ip))
+
+        last_err = None
+        installed = False
+        for pkg_mgr, install_cmd in self._GIT_INSTALL_ROUTES:
+            probe_out, _ = shell.execute_command(
+                self._login_cmd("command -v {0}".format(pkg_mgr)))
+            if not (probe_out and any(
+                    (line or "").strip() for line in probe_out)):
+                continue
+            try:
+                self._run_and_check(
+                    shell, label="git install via {0}".format(pkg_mgr),
+                    cmd=install_cmd, timeout=600)
+                installed = True
+                break
+            except Exception as e:
+                last_err = e
+                log.warning(
+                    "git install via {0} failed on {1}: {2}".format(
+                        pkg_mgr, self.server.ip, e))
+
+        if not installed:
+            raise Exception(
+                "Could not auto-install git on {0}: no usable package "
+                "manager among apt-get/dnf/yum/zypper/apk, or all install "
+                "attempts failed. Last error: {1}".format(
+                    self.server.ip, last_err))
+
+        out, _ = shell.execute_command(self._login_cmd("command -v git"))
+        if not (out and any((line or "").strip() for line in out)):
+            raise Exception(
+                "git auto-install on {0} reported success but "
+                "`command -v git` still empty (PATH={1!r}). Last "
+                "install error: {2}".format(
+                    self.server.ip, self._remote_path(shell), last_err))
+        log.info("git installed on {0}: {1}".format(
+            self.server.ip, self._first_nonempty(out)))
 
     def _run_and_check(self, shell, label, cmd, timeout=300):
         """Run `cmd` through _login_cmd and verify a non-zero exit didn't slip
