@@ -1015,6 +1015,21 @@ class EventingBaseTest(QueryHelperTests):
                     total_count=total_count + stat[keys[0]][keys[1]]
         return total_count
 
+    def get_list_eventing_functions(self, curl_binding=None, deployed=None):
+        content = self.rest.get_list_of_eventing_functions(
+            curl_binding=curl_binding, deployed=deployed)
+        parsed = json.loads(content)
+        functions = parsed.get("functions", [])
+        self.log.info("get_list_of_eventing_functions(curl_binding={}, deployed={}): {}".format(
+            curl_binding, deployed, functions))
+        return functions
+
+    def set_curl_binding_config(self, disable_curl_binding):
+        status, response = self.rest.set_curl_binding_config(disable_curl_binding)
+        self.log.info("set_curl_binding_config(disable={}): status={} response={}".format(
+            disable_curl_binding, status, response))
+        return status, response
+
     def print_app_logs(self,name):
         content = self.rest.get_app_logs(name, self.function_scope)
         self.log.info("================== {} ============================================================".format(name))

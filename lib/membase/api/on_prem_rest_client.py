@@ -6331,10 +6331,19 @@ class RestConnection(object):
 
     '''
             return list of eventing functions
+            curl_binding: True/False — filter to functions that have curl bindings
+            deployed: True/False — filter to deployed functions
     '''
-    def get_list_of_eventing_functions(self):
+    def get_list_of_eventing_functions(self, curl_binding=None, deployed=None):
         authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/list/functions"
+        query_parts = []
+        if curl_binding is not None:
+            query_parts.append("curl_binding={}".format(str(curl_binding).lower()))
+        if deployed is not None:
+            query_parts.append("deployed={}".format(str(deployed).lower()))
+        if query_parts:
+            url += "?" + "&".join(query_parts)
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json',
                    'Authorization': 'Basic %s' % authorization}
@@ -6343,6 +6352,25 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return content
+
+    '''
+            Set disable_curl_binding in the global eventing config
+    '''
+    def set_curl_binding_config(self, disable_curl_binding):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/config"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json',
+                   'Authorization': 'Basic %s' % authorization}
+        body = json.dumps({"disable_curl_binding": disable_curl_binding})
+        status, content, header = self._http_request(api, 'POST',
+                                                     headers=headers,
+                                                     params=body)
+        try:
+            parsed = json.loads(content)
+        except (ValueError, TypeError):
+            parsed = content
+        return status, parsed
 
     '''
             Ensure that the eventing node is out of bootstrap node
