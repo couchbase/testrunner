@@ -99,6 +99,15 @@ class VectorSearchTests(QueryTests):
     def suite_tearDown(self):
         super(VectorSearchTests, self).suite_tearDown()
 
+    def _format_vec(self, vec):
+        """Format a row vector (dense ndarray or sparse csr row) for inline use
+        in N1QL query strings. Sparse rows return [[indices], [values]] — the
+        shape SPARSE_VECTOR_DISTANCE expects; csr_matrix has no .tolist().
+        """
+        if self.vector_type == 'sparse':
+            return [vec.indices.tolist(), vec.data.tolist()]
+        return vec.tolist()
+
     def test_knn_distances(self):
         begin = random.randint(0, len(self.xq) - self.query_count)
         self.log.info(f"Running KNN query for range [{begin}:{begin+self.query_count}]")
@@ -258,11 +267,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_nulls(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE null_field IS NOT MISSING AND price IS MISSING AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -282,7 +291,7 @@ class VectorSearchTests(QueryTests):
     '''Vector query that uses both ann and knn'''
     def test_ann_knn(self):
         query_num = 72
-        ann_query = f'SELECT raw id FROM default ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"),KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        ann_query = f'SELECT raw id FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"),KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         try:
             # Index is on (vec VECTOR)
@@ -302,11 +311,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_ann(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}),SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num+1].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}),SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num+1])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"),ANN_DISTANCE(vec, {self.xq[query_num+1].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"),KNN_DISTANCE(vec, {self.xq[query_num+1].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"),ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num+1])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"),KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num+1])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -326,11 +335,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_predicate_order(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT meta().id,CEIL(SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})) FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT meta().id,CEIL(SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})) FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT meta().id,CEIL(ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")) FROM default ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT meta().id,CEIL(KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")) FROM default ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT meta().id,CEIL(ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")) FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT meta().id,CEIL(KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")) FROM default ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -349,11 +358,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_array_any(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT RAW id FROM default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -372,11 +381,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_array_every(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT RAW id FROM default as d where EVERY b in d.nested.b satisfies b >= 1 END ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -395,11 +404,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_unnest(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT DISTINCT RAW d.id FROM default as d UNNEST d.nested.b AS b WHERE b > 1 ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -419,11 +428,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_subquery_from(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT RAW d.d.id FROM (select * from default as d where ANY b in d.nested.b satisfies b > 1 END ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100) d WHERE d.d.size = 8 and d.d.brand = "nike" ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -440,11 +449,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_subquery(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = 9 limit 100) and d.brand = "nike" ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -460,11 +469,11 @@ class VectorSearchTests(QueryTests):
     def test_ann_subquery_correlated(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY SPARSE_VECTOR_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY ANN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY KNN_DISTANCE(d.vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY ANN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw d.id from default d where d.size in (SELECT raw size from default def where def.size = d.size limit 100) and d.brand = "nike" ORDER BY KNN_DISTANCE(d.vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         try:
@@ -516,8 +525,8 @@ class VectorSearchTests(QueryTests):
         intersect = np.intersect1d(self.gt[10:11], indices)
         vector_id_1 = intersect[0]
         vector_id_2 = intersect[2]
-        vector_1 = self.xb[vector_id_1].tolist()
-        vector_2 = self.xb[vector_id_2].tolist()
+        vector_1 = self._format_vec(self.xb[vector_id_1])
+        vector_2 = self._format_vec(self.xb[vector_id_2])
         pos_1 = np.where(indices[0] == vector_id_1)[0][0]
         pos_2 = np.where(indices[0] == vector_id_2)[0][0]
         self.log.info(f"BEFORE position 1: {pos_1} and position 2: {pos_2}")
@@ -535,7 +544,7 @@ class VectorSearchTests(QueryTests):
         self.assertTrue(pos_1 == pos_2_after and pos_2 == pos_1_after)
 
     def test_explain_ann(self):
-        explain_ann = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        explain_ann = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[1])}, "{self.distance}") LIMIT 100'
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
@@ -551,7 +560,7 @@ class VectorSearchTests(QueryTests):
             IndexVector().drop_index(self.database, similarity=self.distance, use_bhive=self.use_bhive)
 
     def test_explain_knn_no_index(self):
-        explain_knn = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        explain_knn = f'EXPLAIN SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[1])}, "{self.distance}") LIMIT 100'
         explain = self.run_cbq_query(explain_knn)
         self.log.info(explain['results'])
         index_scan = explain['results'][0]['plan']['~children'][0]['~children'][0]
@@ -559,7 +568,7 @@ class VectorSearchTests(QueryTests):
         self.assertEqual(index_name, '#sequentialscan')
 
     def test_explain_knn_index(self):
-        explain_knn = f'EXPLAIN SELECT size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        explain_knn = f'EXPLAIN SELECT size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[1])}, "{self.distance}") LIMIT 100'
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
@@ -584,9 +593,9 @@ class VectorSearchTests(QueryTests):
         expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
         expected_property = "ORDER pushdown, LIMIT pushdown"
         if self.vector_type == 'sparse':
-            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[1].tolist()}, {self.nprobes}) LIMIT 100'
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[1])}, {self.nprobes}) LIMIT 100'
         else:
-            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}", {self.nprobes}) LIMIT 100'
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[1])}, "{self.distance}", {self.nprobes}) LIMIT 100'
         advise = self.run_cbq_query(advise_ann_query)
         self.log.info(advise['results'])
         adviseinfo = advise['results'][0]['advice']['adviseinfo']
@@ -618,9 +627,9 @@ class VectorSearchTests(QueryTests):
         expected_bhive_index1 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_brand_size_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`brand`,`size`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
         expected_bhive_index2 = f"CREATE VECTOR INDEX adv_VECTOR_vec{vector_type}VECTOR_INCLUDE_size_brand_id ON `default`(`vec` {vector_type} VECTOR) INCLUDE (`size`,`brand`,`id`) WITH {{ 'dimension': 128, 'similarity': '{similarity}', 'description': 'IVF,SQ8' }}"
         if self.vector_type == 'sparse':
-            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[1].tolist()}, {self.nprobes})'
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[1])}, {self.nprobes})'
         else:
-            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}", {self.nprobes})'
+            advise_ann_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[1])}, "{self.distance}", {self.nprobes})'
         advise = self.run_cbq_query(advise_ann_query)
         self.log.info(advise['results'])
         adviseinfo = advise['results'][0]['advice']['adviseinfo']
@@ -641,7 +650,7 @@ class VectorSearchTests(QueryTests):
     def test_advise_knn(self):
         expected_index1 = f"CREATE INDEX adv_brand_size ON `default`(`brand`,`size`)"
         expected_index2 = f"CREATE INDEX adv_size_brand ON `default`(`size`,`brand`)"
-        advise_knn_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN_DISTANCE(vec, {self.xq[1].tolist()}, "{self.distance}") LIMIT 100'
+        advise_knn_query = f'ADVISE SELECT id, size, brand FROM default WHERE size = 6 AND brand = "Puma" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[1])}, "{self.distance}") LIMIT 100'
         advise = self.run_cbq_query(advise_knn_query)
         self.log.info(advise['results'])
         adviseinfo = advise['results'][0]['advice']['adviseinfo']
@@ -678,8 +687,8 @@ class VectorSearchTests(QueryTests):
 
     def test_prepare(self):
         query_num = 1
-        prepare_knn_query = f'prepare prepare_knn_vector as SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-        prepare_ann_query = f'prepare prepare_ann_vector as SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        prepare_knn_query = f'prepare prepare_knn_vector as SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+        prepare_ann_query = f'prepare prepare_ann_vector as SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         if self.prepare_before:
             prepare_knn = self.run_cbq_query(prepare_knn_query)
             self.log.info(prepare_knn['results'])
@@ -719,7 +728,7 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
-            query_cte = f'WITH query_vector AS ( SELECT embedding FROM [{self.xq[query_num].tolist()}] embedding ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, query_vector[0].embedding, "{self.distance}") LIMIT 100'
+            query_cte = f'WITH query_vector AS ( SELECT embedding FROM [{self._format_vec(self.xq[query_num])}] embedding ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, query_vector[0].embedding, "{self.distance}") LIMIT 100'
             explain_query_cte = f'EXPLAIN {query_cte}'
             explain = self.run_cbq_query(explain_query_cte)
             result = self.run_cbq_query(query_cte)
@@ -739,7 +748,7 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
-            query_cte = f'WITH query_vector AS ( SELECT id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100 ) SELECT RAW id FROM query_vector'
+            query_cte = f'WITH query_vector AS ( SELECT id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100 ) SELECT RAW id FROM query_vector'
             explain_query_cte = f'EXPLAIN {query_cte}'
             explain = self.run_cbq_query(explain_query_cte)
             result = self.run_cbq_query(query_cte)
@@ -756,7 +765,7 @@ class VectorSearchTests(QueryTests):
 
     def test_cte3(self):
         query_num = 11
-        query_cte = f'WITH query_vector AS ( {self.xq[query_num].tolist()} ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, query_vector, "{self.distance}") LIMIT 100'
+        query_cte = f'WITH query_vector AS ( {self._format_vec(self.xq[query_num])} ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, query_vector, "{self.distance}") LIMIT 100'
         explain_query_cte = f'EXPLAIN {query_cte}'
         try:
             self.log.info("Create Vector Index")
@@ -776,7 +785,7 @@ class VectorSearchTests(QueryTests):
 
     def test_cte_udf(self):
         query_num = 21
-        create_udf = f'CREATE OR REPLACE FUNCTION embedding() {{ {self.xq[query_num].tolist()} }}'
+        create_udf = f'CREATE OR REPLACE FUNCTION embedding() {{ {self._format_vec(self.xq[query_num])} }}'
         self.run_cbq_query(create_udf)
         query_cte = f'WITH query_vector AS ( embedding() ) SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, query_vector, "{self.distance}") LIMIT 100'
         explain_query_cte = f'EXPLAIN {query_cte}'
@@ -798,7 +807,7 @@ class VectorSearchTests(QueryTests):
 
     def test_vector_transaction(self):
         query_num = 41
-        query = f'SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        query = f'SELECT RAW id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {query}'
         try:
             self.log.info("Create Vector Index")
@@ -832,7 +841,7 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
-            result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query(8, "adidas", {self.xq[query_num].tolist()})')
+            result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query(8, "adidas", {self._format_vec(self.xq[query_num])})')
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
             self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             self.assertTrue(recall > self.recall_ann)
@@ -846,8 +855,8 @@ class VectorSearchTests(QueryTests):
         try:
             self.log.info("Create Vector Index")
             IndexVector().create_index(self.database, index_order=self.index_order, similarity=self.distance, is_xattr=self.use_xattr, is_base64=self.use_base64, network_byte_order=self.use_bigendian, description=self.description, dimension=self.dimension, train=self.train, use_bhive=self.use_bhive, vector_type=self.vector_type)
-            result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query_js(8, "adidas", {self.xq[query_num].tolist()})')
-            explain = self.run_cbq_query(f'EXPLAIN EXECUTE FUNCTION ann_query_js(8, "adidas", {self.xq[query_num].tolist()})')
+            result = self.run_cbq_query(f'EXECUTE FUNCTION ann_query_js(8, "adidas", {self._format_vec(self.xq[query_num])})')
+            explain = self.run_cbq_query(f'EXPLAIN EXECUTE FUNCTION ann_query_js(8, "adidas", {self._format_vec(self.xq[query_num])})')
             recall, accuracy = UtilVector().compare_result(self.gt[query_num].tolist(), result['results'][0])
             self.log.info(f'Recall rate: {round(recall, 2)}% with acccuracy: {round(accuracy,2)}%')
             self.assertTrue(recall > self.recall_ann)
@@ -856,7 +865,7 @@ class VectorSearchTests(QueryTests):
 
     def test_use_index(self):
         query_num = 72
-        query = f'SELECT RAW id FROM default USE INDEX(vector_index_EUCLIDEAN) WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "L2") LIMIT 100'
+        query = f'SELECT RAW id FROM default USE INDEX(vector_index_EUCLIDEAN) WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "L2") LIMIT 100'
         explain_query = f'EXPLAIN {query}'
         try:
             self.log.info("Create Vector Indexes")
@@ -875,11 +884,11 @@ class VectorSearchTests(QueryTests):
     def test_early_filter_vector_only(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}", {self.nprobes}, {self.rerank}) LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}", {self.nprobes}, {self.rerank}) LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         expected_results = self.run_cbq_query(knn_query)['results']
         explain_query = f'EXPLAIN {ann_query}'
         # Create vector index based on conf file
@@ -902,11 +911,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_vector_only(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT meta().id FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT meta().id FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT meta().id FROM default ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT meta().id FROM default ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT meta().id FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT meta().id FROM default ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -926,11 +935,11 @@ class VectorSearchTests(QueryTests):
     def test_select_pushdown_index(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -970,11 +979,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_leading_scalar_orderby_vector(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1006,11 +1015,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_leading_scalar_orderby_scalar_vector(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size, brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size, brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size, brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size, brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size, brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size, brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1041,11 +1050,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_leading_scalar_in(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike"] ORDER BY size, brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike"] ORDER BY size, brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike"] ORDER BY size, brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike"] ORDER BY size, brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike"] ORDER BY size, brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike"] ORDER BY size, brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1076,11 +1085,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_non_leading_scalar_in(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY size, brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY size, brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY size, brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY size, brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY size, brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY size, brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1111,11 +1120,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_non_leading_scalar_non_ordered(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY price DESC, SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}), brand LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY price DESC, SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}), brand LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY price DESC, ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY price DESC, KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY price DESC, ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), brand LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" and price in [100,150] ORDER BY price DESC, KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), brand LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1146,11 +1155,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_non_leading_scalar_non_ordered_multiple_range(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}), brand LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}), brand LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), brand LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), brand LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1181,11 +1190,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_leading_range_scalar(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1218,11 +1227,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_leading_range_orderby_scalar(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1255,11 +1264,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_leading_range_orderby_scalar_non_ordered(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}), size LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}), size LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), size LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), size LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), size LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), size LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1292,11 +1301,11 @@ class VectorSearchTests(QueryTests):
     def test_limit_pushdown_non_ordered_multiple_range_scalar(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}) LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}) LIMIT 100'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY brand ASC,size,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1329,11 +1338,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_vector_only(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT meta().id FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT meta().id FROM default ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT meta().id FROM default ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT meta().id FROM default ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT meta().id FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT meta().id FROM default ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1352,11 +1361,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_scalar(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1382,11 +1391,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_scalar_orderby_scalar_vector(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand = "adidas" ORDER BY size,brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1412,11 +1421,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_scalar_in_orderby_scalar_vector(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY size,brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1442,11 +1451,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_leading_range_scalar(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1473,11 +1482,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_leading_range_scalar_orderby_scalar_vector(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand = "adidas" ORDER BY size,brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1504,11 +1513,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_leading_multiple_range_scalar_orderby_scalar_vector(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes})'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes})'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
-            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}")'
+            ann_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
+            knn_query = f'SELECT raw id FROM default WHERE size > 8 AND brand in ["adidas","reebok","nike"] ORDER BY size,brand,KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}")'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1535,11 +1544,11 @@ class VectorSearchTests(QueryTests):
     def test_no_limit_non_leading_scalar_non_ordered_multiple_range(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}), brand'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}), brand'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), brand'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), brand'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] and price in [100,150] ORDER BY price DESC, KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), brand'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1564,11 +1573,11 @@ class VectorSearchTests(QueryTests):
     def test_leading_vector_no_pushdown(self):
         query_num = 72
         if self.vector_type == 'sparse':
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, SPARSE_VECTOR_DISTANCE(vec, {self.xq[query_num].tolist()}, {self.nprobes}), size'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, SPARSE_VECTOR_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, {self.nprobes}), size'
             knn_query = ann_query
         else:
-            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), size'
-            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, KNN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}"), size'
+            ann_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), size'
+            knn_query = f'SELECT raw id FROM default WHERE size = 8 AND brand in ["adidas","nike","reebok"] ORDER BY brand DESC, KNN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}"), size'
         explain_query = f'EXPLAIN {ann_query}'
         expected_results = self.run_cbq_query(knn_query)['results']
         # Create vector index based on conf file so we can test pushdown under multiple conditions
@@ -1600,7 +1609,7 @@ class VectorSearchTests(QueryTests):
 
     def test_use_seqscan(self):
         query_num = 17
-        query = f'SELECT RAW id FROM default USE INDEX(`#sequentialscan`) WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        query = f'SELECT RAW id FROM default USE INDEX(`#sequentialscan`) WHERE size = 8 AND brand = "adidas" ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         explain_query = f'EXPLAIN {query}'
         try:
             self.log.info("Create Vector Indexes")
@@ -1745,7 +1754,7 @@ class VectorSearchTests(QueryTests):
     '''Aggregates should not be allowed'''
     def test_aggregate_pushdown_negative(self):
         query_num = 72
-        ann_query = f'SELECT COUNT(meta().id) FROM default ORDER BY ANN_DISTANCE(vec, {self.xq[query_num].tolist()}, "{self.distance}") LIMIT 100'
+        ann_query = f'SELECT COUNT(meta().id) FROM default ORDER BY ANN_DISTANCE(vec, {self._format_vec(self.xq[query_num])}, "{self.distance}") LIMIT 100'
         # Create vector index based on conf file so we can test pushdown under multiple conditions
         try:
             # Index is on (vec VECTOR)
