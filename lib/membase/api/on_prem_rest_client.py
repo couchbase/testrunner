@@ -3321,6 +3321,17 @@ class RestConnection(object):
         status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
         return status, json_parsed
 
+    def disable_log_encryption(self):
+        """
+        POST :: settings/security/encryptionAtRest/log
+        Disable log encryption at rest by setting encryptionMethod to disabled.
+        """
+        api = self.baseUrl + 'settings/security/encryptionAtRest/log'
+        headers = self._create_headers()
+        params = urllib.parse.urlencode({"encryptionMethod": "disabled"})
+        status, json_parsed, _ = self._http_request(api, method='POST', params=params, headers=headers)
+        return status, json_parsed
+
     def trigger_kek_rotation(self, secret_id):
         """
         POST :: /controller/rotateSecret/<secret_id>
@@ -4881,17 +4892,66 @@ class RestConnection(object):
         result = json.loads(content)
         return result
 
-    def get_query_vitals(self, server):
-        http = httplib2.Http(disable_ssl_certificate_validation=True)
+    def set_completed_stream_size(self, server, size):
         n1ql_port = CbServer.n1ql_port
         protocol = "http"
         if CbServer.use_https:
             n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
             protocol = "https"
-        api = "%s://%s:%s/" % (protocol,server.ip, n1ql_port) + "admin/vitals"
-        headers = self._create_headers_with_auth('Administrator', 'password')
-        response, content = http.request(api, "GET", headers=headers)
-        return response, content
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/settings"
+        status, content, _ = self._http_request(api, "POST", json.dumps({"completed-stream-size": size}))
+        return status, content
+
+    def get_query_in_use_encryption_keys(self, server):
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/encryption_at_rest"
+        status, content, _ = self._http_request(api, "GET")
+        if status:
+            content = json.loads(content)
+        return status, content
+
+    def trigger_query_ffdc(self, server):
+        """
+        POST :: admin/ffdc
+        Trigger FFDC (First Failure Data Capture) on query service.
+        """
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/ffdc"
+        status, content, _ = self._http_request(api, "POST")
+        return status, content
+
+    def get_query_vitals(self, server):
+        n1ql_port = CbServer.n1ql_port
+        protocol = "http"
+        if CbServer.use_https:
+            n1ql_port = str(CbServer.ssl_port_map.get(str(n1ql_port), str(n1ql_port)))
+            protocol = "https"
+        api = "%s://%s:%s/" % (protocol, server.ip, n1ql_port) + "admin/vitals"
+        status, content, _ = self._http_request(api, "GET")
+        return status, content
+
+    def get_query_settings(self, server):
+        """GET /settings/querySettings from the cluster manager (port 8091).
+        Returns (status, parsed_dict). Includes tmpSpaceDir for spill file location."""
+        protocol = "http"
+        port = server.port
+        if CbServer.use_https:
+            protocol = "https"
+            port = str(CbServer.ssl_port_map.get(str(port), str(port)))
+        api = "%s://%s:%s/settings/querySettings" % (protocol, server.ip, port)
+        status, content, _ = self._http_request(api, "GET")
+        if status:
+            content = json.loads(content)
+        return status, content
+
     '''End Monitoring/Profiling Rest Calls'''
 
     def create_whitelist(self, server, whitelist):

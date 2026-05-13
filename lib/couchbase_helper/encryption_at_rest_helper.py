@@ -102,18 +102,33 @@ class EncryptionAtRestHelper:
         shell = RemoteMachineShellConnection(node)
         cmd = f"xxd -l {bytes_to_read} -p {file_path} 2>/dev/null"
         output, _ = shell.execute_command(cmd)
+
+        if not output:
+            ls_out, _ = shell.execute_command(f"ls -la {file_path} 2>&1")
+            xxd_err_out, _ = shell.execute_command(f"xxd -l 64 {file_path} 2>&1")
+            file_type_out, _ = shell.execute_command(f"file {file_path} 2>&1")
+            shell.disconnect()
+            ls_str = ' '.join(ls_out).strip() if ls_out else "no ls output"
+            xxd_err_str = ' '.join(xxd_err_out).strip() if xxd_err_out else "(xxd also silent with stderr)"
+            file_type_str = ' '.join(file_type_out).strip() if file_type_out else "unknown"
+            diag = f"ls: [{ls_str}] | file: [{file_type_str}] | xxd -l 64 (with stderr): [{xxd_err_str}]"
+            return False, "", f"No output from xxd. {diag}"
+
         shell.disconnect()
-        
-        if output:
-            hex_str = ''.join(output).strip()
-            try:
-                raw_bytes = bytes.fromhex(hex_str)
-                actual = raw_bytes.decode('ascii', errors='replace')
-                printable = ''.join(c if c.isprintable() else '.' for c in actual)
-                return True, actual, printable
-            except (ValueError, UnicodeDecodeError) as e:
-                return False, "", f"hex parse error: {str(e)}"
-        return False, "", "No output from xxd command"
+        hex_str = ''.join(output).strip()
+        try:
+            raw_bytes = bytes.fromhex(hex_str)
+            actual = raw_bytes.decode('ascii', errors='replace')
+            # Build printable from raw bytes: keep printable ASCII as-is,
+            # represent everything else as \xNN so the output is always readable
+            # (avoids Unicode replacement chars and control characters in log lines)
+            printable = ''.join(
+                chr(b) if 32 <= b < 127 else f'\\x{b:02x}'
+                for b in raw_bytes
+            )
+            return True, actual, printable
+        except (ValueError, UnicodeDecodeError) as e:
+            return False, "", f"hex parse error: {str(e)}"
 
     def verify_file_header_contains(self, node, file_path, expected_text, bytes_to_read=512):
         """
@@ -163,40 +178,6 @@ class EncryptionAtRestHelper:
                 return True, expected_value
         return False, printable
 
-    def _log_failed_file_headers(self, node, failed_files, expected_key_ids):
-        """
-        Log actual header content for failed files to help debugging.
-        Only called when validation fails.
-        
-        Args:
-            node: Server object
-            failed_files: List of (file_path, error_reason) tuples
-            expected_key_ids: Expected encryption key IDs that were not found
-        """
-        if not failed_files:
-            return
-        
-        self.log.error("GSI_EAR_FAILED_HEADER_DEBUG_MARKER_V1")
-        self.log.error(f"Node {node.ip}: Logging header content for {len(failed_files)} failed files")
-        self.log.error(f"Node {node.ip}: Expected key IDs: {expected_key_ids}")
-        
-        for file_path, error_reason in failed_files:
-            header_read, actual_header, printable_header = self.get_file_header_text(
-                node, file_path, bytes_to_read=512
-            )
-            if header_read:
-                self.log.error(
-                    f"Node {node.ip}: File {file_path}\n"
-                    f"  Error: {error_reason}\n"
-                    f"  Actual header (first 300 chars): {printable_header[:300]}"
-                )
-            else:
-                self.log.error(
-                    f"Node {node.ip}: File {file_path}\n"
-                    f"  Error: {error_reason}\n"
-                    f"  Could not read header: {printable_header}"
-                )
-    
     def verify_no_plaintext_in_file(self, node, file_path, search_patterns=None):
         """
         Verify file contains no plaintext using strings command.
@@ -620,15 +601,272 @@ class EncryptionAtRestHelper:
                     "total_checked": len(sample_files),
                     "failed_files": failed_files
                 }
-                # Log actual header content for first few failed files
-                self._log_failed_file_headers(node, failed_files[:3], expected_key_ids)
             else:
                 results[node.ip] = {
                     "status": "failed",
                     "reason": "No encrypted files found in snapshot folders",
                     "failed_files": failed_files
                 }
-                # Log actual header content for first few failed files
-                self._log_failed_file_headers(node, failed_files[:3], expected_key_ids)
-        
+
+        return results
+
+    def verify_query_log_files_encrypted(self, query_nodes, expected_key_ids=None):
+        """
+        Verify that query service request log files are encrypted.
+
+        Checks rlstream.* (active stream) and local_request_log.* (archived) files
+        in the logs directory on each query node for the "Couchbase Encrypted"
+        magic-bytes header. If expected_key_ids is provided, also verifies that at
+        least one of the given key IDs appears in each file's header.
+
+        Args:
+            query_nodes: List of query service server objects
+            expected_key_ids: Optional list of key ID strings to look for in headers
+
+        Returns:
+            dict: {node_ip: {"rlstream": {file_path: result_dict},
+                             "local_request_log": {file_path: result_dict}}}
+                  where result_dict has "encrypted" (bool), "details" (str),
+                  and optionally "key_id_found" (bool).
+        """
+        results = {}
+        for node in query_nodes:
+            self.log.info(f"Validating query log file encryption on node {node.ip}")
+            node_result = {"rlstream": {}, "local_request_log": {}}
+
+            log_path = self.get_log_path(node)
+            shell = RemoteMachineShellConnection(node)
+            rlstream_out, _ = shell.execute_command(
+                f"find {log_path} -name 'rlstream.*' 2>/dev/null"
+            )
+            local_log_out, _ = shell.execute_command(
+                f"find {log_path} -name 'local_request_log.*' 2>/dev/null"
+            )
+            shell.disconnect()
+
+            rlstream_files = [f.strip() for f in rlstream_out if f.strip()]
+            local_log_files = [f.strip() for f in local_log_out if f.strip()]
+
+            self.log.info(
+                f"Node {node.ip}: found {len(rlstream_files)} rlstream file(s), "
+                f"{len(local_log_files)} local_request_log file(s)"
+            )
+
+            for category, file_list in (
+                ("rlstream", rlstream_files),
+                ("local_request_log", local_log_files),
+            ):
+                for file_path in file_list:
+                    is_encrypted, details = self.verify_file_encryption_magic_bytes(
+                        node, file_path
+                    )
+                    entry = {"encrypted": is_encrypted, "details": details}
+
+                    if is_encrypted and expected_key_ids:
+                        key_id_found = False
+                        for key_id in expected_key_ids:
+                            found, _ = self.verify_file_header_contains(
+                                node, file_path, str(key_id)
+                            )
+                            if found:
+                                key_id_found = True
+                                break
+                        entry["key_id_found"] = key_id_found
+                        if not key_id_found:
+                            self.log.warning(
+                                f"Node {node.ip}: {file_path} encrypted but none of "
+                                f"{expected_key_ids} found in header"
+                            )
+                    elif is_encrypted:
+                        entry["key_id_found"] = True
+
+                    log_level = self.log.info if is_encrypted else self.log.warning
+                    log_level(
+                        f"Node {node.ip}: {file_path} encrypted={is_encrypted}, "
+                        f"details={details}"
+                    )
+                    node_result[category][file_path] = entry
+
+            results[node.ip] = node_result
+
+        return results
+
+    def verify_query_ffdc_files_encrypted(self, query_nodes, expected_key_ids=None):
+        """
+        Verify that query FFDC files are encrypted.
+
+        Checks query_ffdc_MAN_areq*, query_ffdc_MAN_creq*, and query_ffdc_MAN_vita*
+        files in the logs directory on each query node for the "Couchbase Encrypted"
+        magic-bytes header. If expected_key_ids is provided, also verifies that at
+        least one of the given key IDs appears in each file's header.
+
+        Args:
+            query_nodes: List of query service server objects
+            expected_key_ids: Optional list of key ID strings to look for in headers
+
+        Returns:
+            dict: {node_ip: {file_path: {encrypted: bool, details: str, key_id_found: bool}}}
+        """
+        results = {}
+        for node in query_nodes:
+            self.log.info(f"Validating query FFDC file encryption on node {node.ip}")
+            node_result = {}
+
+            log_path = self.get_log_path(node)
+            shell = RemoteMachineShellConnection(node)
+            ffdc_out, _ = shell.execute_command(
+                f"find {log_path} -name 'query_ffdc_MAN_areq*' "
+                f"-o -name 'query_ffdc_MAN_creq*' -o -name 'query_ffdc_MAN_vita*' 2>/dev/null"
+            )
+            shell.disconnect()
+
+            ffdc_files = [f.strip() for f in ffdc_out if f.strip()]
+
+            self.log.info(
+                f"Node {node.ip}: found {len(ffdc_files)} FFDC file(s)"
+            )
+
+            for file_path in ffdc_files:
+                is_encrypted, details = self.verify_file_encryption_magic_bytes(
+                    node, file_path
+                )
+                entry = {"encrypted": is_encrypted, "details": details}
+
+                if is_encrypted and expected_key_ids:
+                    key_id_found = False
+                    for key_id in expected_key_ids:
+                        found, _ = self.verify_file_header_contains(
+                            node, file_path, str(key_id)
+                        )
+                        if found:
+                            key_id_found = True
+                            break
+                    entry["key_id_found"] = key_id_found
+                    if not key_id_found:
+                        self.log.warning(
+                            f"Node {node.ip}: {file_path} encrypted but none of "
+                            f"{expected_key_ids} found in header"
+                        )
+                elif is_encrypted:
+                    entry["key_id_found"] = True
+
+                log_level = self.log.info if is_encrypted else self.log.warning
+                log_level(
+                    f"Node {node.ip}: {file_path} encrypted={is_encrypted}, "
+                    f"details={details}"
+                )
+                node_result[file_path] = entry
+
+            results[node.ip] = node_result
+
+        return results
+
+    def verify_query_log_files_decrypted(self, query_nodes):
+        """
+        Verify that query service request log files are NOT encrypted.
+
+        Checks rlstream.* (active stream) and local_request_log.* (archived) files
+        in the logs directory on each query node. These files should NOT
+        have the "Couchbase Encrypted" magic-bytes header (encryption disabled).
+
+        Args:
+            query_nodes: List of query service server objects
+
+        Returns:
+            dict: {node_ip: {"rlstream": {file_path: result_dict},
+                             "local_request_log": {file_path: result_dict}}}
+                  where result_dict has "encrypted" (bool), "details" (str).
+        """
+        results = {}
+        for node in query_nodes:
+            self.log.info(f"Validating query log files are decrypted on node {node.ip}")
+            node_result = {"rlstream": {}, "local_request_log": {}}
+
+            log_path = self.get_log_path(node)
+            shell = RemoteMachineShellConnection(node)
+            rlstream_out, _ = shell.execute_command(
+                f"find {log_path} -name 'rlstream.*' 2>/dev/null"
+            )
+            local_log_out, _ = shell.execute_command(
+                f"find {log_path} -name 'local_request_log.*' 2>/dev/null"
+            )
+            shell.disconnect()
+
+            rlstream_files = [f.strip() for f in rlstream_out if f.strip()]
+            local_log_files = [f.strip() for f in local_log_out if f.strip()]
+
+            self.log.info(
+                f"Node {node.ip}: found {len(rlstream_files)} rlstream file(s), "
+                f"{len(local_log_files)} local_request_log file(s)"
+            )
+
+            for category, file_list in (
+                ("rlstream", rlstream_files),
+                ("local_request_log", local_log_files),
+            ):
+                for file_path in file_list:
+                    is_encrypted, details = self.verify_file_encryption_magic_bytes(
+                        node, file_path
+                    )
+                    entry = {"encrypted": is_encrypted, "details": details}
+
+                    log_level = self.log.info if not is_encrypted else self.log.warning
+                    log_level(
+                        f"Node {node.ip}: {file_path} encrypted={is_encrypted}, "
+                        f"details={details}"
+                    )
+                    node_result[category][file_path] = entry
+
+            results[node.ip] = node_result
+
+        return results
+
+    def verify_query_ffdc_files_decrypted(self, query_nodes):
+        """
+        Verify that query FFDC files are NOT encrypted.
+
+        Checks query_ffdc_MAN_areq*, query_ffdc_MAN_creq*, and query_ffdc_MAN_vita*
+        files in the logs directory on each query node. These files should NOT
+        have the "Couchbase Encrypted" magic-bytes header (encryption disabled).
+
+        Args:
+            query_nodes: List of query service server objects
+
+        Returns:
+            dict: {node_ip: {file_path: {encrypted: bool, details: str}}}
+        """
+        results = {}
+        for node in query_nodes:
+            self.log.info(f"Validating query FFDC files are decrypted on node {node.ip}")
+            node_result = {}
+
+            log_path = self.get_log_path(node)
+            shell = RemoteMachineShellConnection(node)
+            ffdc_out, _ = shell.execute_command(
+                f"find {log_path} -name 'query_ffdc_MAN_areq*' "
+                f"-o -name 'query_ffdc_MAN_creq*' -o -name 'query_ffdc_MAN_vita*' 2>/dev/null"
+            )
+            shell.disconnect()
+
+            ffdc_files = [f.strip() for f in ffdc_out if f.strip()]
+
+            self.log.info(
+                f"Node {node.ip}: found {len(ffdc_files)} FFDC file(s)"
+            )
+
+            for file_path in ffdc_files:
+                is_encrypted, details = self.verify_file_encryption_magic_bytes(
+                    node, file_path
+                )
+                entry = {"encrypted": is_encrypted, "details": details}
+
+                log_level = self.log.info if not is_encrypted else self.log.warning
+                log_level(
+                    f"Node {node.ip}: {file_path} encrypted={is_encrypted}, "
+                    f"details={details}"
+                )
+                node_result[file_path] = entry
+
+            results[node.ip] = node_result
+
         return results

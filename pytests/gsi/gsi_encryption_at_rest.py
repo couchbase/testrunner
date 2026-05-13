@@ -22,6 +22,7 @@ import json
 import random
 import re
 import string
+import time
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
@@ -499,6 +500,27 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         )
         return new_key_ids
 
+    def _poll_for_new_indexer_key_ids(self, index_nodes, baseline_key_ids, timeout=300, label=""):
+        """
+        Poll GetInUseKeys until key IDs appear that were not in baseline_key_ids.
+        Returns sorted list of new IDs. Raises AssertionError after timeout.
+        """
+        baseline = {str(k) for k in baseline_key_ids}
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            new_ids = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_key_ids)
+            if new_ids:
+                self.log.info(
+                    f"{label}New indexer key IDs detected: {new_ids} "
+                    f"(baseline was {sorted(baseline)})"
+                )
+                return new_ids
+            self.sleep(15, f"{label}Waiting for new indexer key IDs (baseline: {sorted(baseline)})")
+        self.fail(
+            f"{label}No new indexer key IDs appeared within {timeout} s. "
+            f"Baseline: {sorted(baseline)}"
+        )
+
     def _validate_file_encryption_with_key(self, index_nodes, expected_key_id=None, step_prefix=""):
         """
         Validate file encryption and optionally check for an expected key ID in headers.
@@ -875,6 +897,11 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         - GSI operations continue to work correctly
         - File headers contain the new key ID
         """
+        # 10 hours expressed in seconds — stable, no accidental DEK rotation
+        STABLE_INTERVAL_S = 36000
+        # 2 minutes expressed in seconds — trigger DEK rotation
+        ROTATION_INTERVAL_S = 120
+
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_gsi_encryption_at_rest_key_rotation")
         self.log.info(f"Test parameters: gsi_type={self.gsi_type}")
@@ -931,7 +958,23 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {str(e)}")
             raise
-        
+
+        # Pin DEK rotation interval high so no accidental rotation fires during setup
+        try:
+            self.log.info(
+                f"[STEP 3b] Pinning DEK rotation interval to {STABLE_INTERVAL_S} s "
+                f"({STABLE_INTERVAL_S // 60} min) to prevent rotation during setup..."
+            )
+            self._rotate_bucket_encryption_key(
+                bucket_name, key1_id,
+                dek_rotation_interval=STABLE_INTERVAL_S,
+                dek_lifetime=STABLE_INTERVAL_S
+            )
+            self.log.info("[STEP 3b] PASSED - DEK rotation interval pinned high")
+        except Exception as e:
+            self.log.error(f"[STEP 3b] FAILED: {str(e)}")
+            raise
+
         # ========== STEP 4: Load documents ==========
         try:
             self.log.info(f"[STEP 4] Loading {self.num_of_docs_per_collection} documents...")
@@ -958,7 +1001,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 4] FAILED: {str(e)}")
             raise
-        
+
         # ========== STEP 5: Create indexes ==========
         namespace = f"default:{bucket_name}._default._default"
         select_queries = set()
@@ -1042,20 +1085,47 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 8] FAILED: {str(e)}")
             raise
         
-        # ========== STEP 9: Configure DEK rotation ==========
+        # ========== STEP 9: Reduce DEK rotation interval to trigger first rotation ==========
         try:
-            self.log.info(f"[STEP 9] Configuring DEK rotation for bucket '{bucket_name}'...")
-            self._rotate_bucket_encryption_key(bucket_name, key2_id, dek_rotation_interval=120, dek_lifetime=120)
-            self.log.info(f"[STEP 9] PASSED - DEK rotation configured")
+            self.log.info(
+                f"[STEP 9] Reducing DEK rotation interval to {ROTATION_INTERVAL_S} s "
+                f"({ROTATION_INTERVAL_S // 60} min) to trigger first DEK rotation..."
+            )
+            self._rotate_bucket_encryption_key(
+                bucket_name, key2_id,
+                dek_rotation_interval=ROTATION_INTERVAL_S,
+                dek_lifetime=ROTATION_INTERVAL_S
+            )
+            self.log.info("[STEP 9] PASSED - DEK rotation interval set to trigger rotation")
         except Exception as e:
             self.log.error(f"[STEP 9] FAILED: {str(e)}")
             raise
-        # ========== STEP 10: Wait for DEK rotation and run mutations ==========
+
+        # ========== STEP 10: Poll for new DEK IDs, then immediately re-pin ==========
         try:
-            self.log.info("[STEP 10] Waiting 120 seconds for DEK rotation to take effect...")
-            self.sleep(120, "Waiting for DEK rotation interval")
-            # Perform mutations to trigger new snapshot creation with rotated DEK
-            self.log.info("[STEP 10] Running mutations to trigger snapshot creation with new DEK...")
+            self.log.info(
+                "[STEP 10] Polling GetInUseKeys for new indexer key IDs (timeout 300 s)..."
+            )
+            new_in_use_key_ids = self._poll_for_new_indexer_key_ids(
+                index_nodes, baseline_in_use_key_ids, timeout=300, label="[STEP 10] "
+            )
+            self.log.info(
+                f"[STEP 10] New key IDs detected: {new_in_use_key_ids}. "
+                f"Immediately pinning DEK rotation interval back to {STABLE_INTERVAL_S} s..."
+            )
+            self._rotate_bucket_encryption_key(
+                bucket_name, key2_id,
+                dek_rotation_interval=STABLE_INTERVAL_S,
+                dek_lifetime=STABLE_INTERVAL_S
+            )
+            self.log.info("[STEP 10] PASSED - DEK rotation detected, interval re-pinned high")
+        except Exception as e:
+            self.log.error(f"[STEP 10] FAILED: {str(e)}")
+            raise
+
+        # ========== STEP 10b: Run mutations to write snapshots under new DEK ==========
+        try:
+            self.log.info("[STEP 10b] Running mutations to trigger snapshot creation under new DEK...")
             gen_update = SDKDataLoader(
                 num_ops=1000,
                 percent_create=0,
@@ -1075,19 +1145,11 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             )
             for task in tasks:
                 task.result()
-            # Wait for snapshots to be created with new DEK
-            self.sleep(120, "Waiting for new snapshots to be created with key2")
-            new_in_use_key_ids = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_in_use_key_ids)
-            self.log.info(f"New key IDs {new_in_use_key_ids}")
-            if not new_in_use_key_ids:
-                raise Exception("Indexer GetInUseKeys did not report any new key IDs after key rotation")
-            self.log.info("[STEP 10] PASSED - Key rotation wait completed")
+            self.sleep(60, "Waiting for new snapshots to be persisted with new DEK")
+            self.log.info("[STEP 10b] PASSED - Mutations complete, snapshots should reflect new DEK")
         except Exception as e:
-            self.log.error(f"[STEP 10] FAILED: {str(e)}")
+            self.log.error(f"[STEP 10b] FAILED: {str(e)}")
             raise
-        # Set high DEK rotation interval to prevent further rotations during validation
-        self.log.info("Setting high DEK rotation interval to stabilize keys for validation")
-        self._rotate_bucket_encryption_key(bucket_name, key2_id, dek_rotation_interval=36000, dek_lifetime=36000)
         # ========== STEP 11: Rerun validations with key2 ==========
         try:
             self.log.info("[STEP 11] Rerunning validations after key rotation...")
@@ -1136,6 +1198,9 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         
         Use case: When DEKs may have been compromised and need to be replaced
         """
+        # 10 hours expressed in seconds — stable, no accidental DEK rotation
+        STABLE_INTERVAL_S = 36000
+
         self.log.info("=" * 80)
         self.log.info("STARTING TEST: test_gsi_encryption_at_rest_force_reencryption")
         self.log.info(f"Test parameters: gsi_type={self.gsi_type}")
@@ -1188,7 +1253,23 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {str(e)}")
             raise
-        
+
+        # Pin DEK rotation interval high so no accidental rotation fires during setup
+        try:
+            self.log.info(
+                f"[STEP 3b] Pinning DEK rotation interval to {STABLE_INTERVAL_S} s "
+                f"({STABLE_INTERVAL_S // 60} min) to prevent background rotation during setup..."
+            )
+            self._rotate_bucket_encryption_key(
+                bucket_name, key_id,
+                dek_rotation_interval=STABLE_INTERVAL_S,
+                dek_lifetime=STABLE_INTERVAL_S
+            )
+            self.log.info("[STEP 3b] PASSED - DEK rotation interval pinned high")
+        except Exception as e:
+            self.log.error(f"[STEP 3b] FAILED: {str(e)}")
+            raise
+
         # ========== STEP 4: Load documents ==========
         try:
             self.log.info(f"[STEP 4] Loading {self.num_of_docs_per_collection} documents...")
@@ -1215,7 +1296,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 4] FAILED: {str(e)}")
             raise
-        
+
         # ========== STEP 5: Create indexes ==========
         namespace = f"default:{bucket_name}._default._default"
         select_queries = set()
@@ -1317,39 +1398,24 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 9] FAILED: {str(e)}")
             raise
         
-        # ========== STEP 10: Wait for re-encryption to complete ==========
+        # ========== STEP 10: Poll for new DEK IDs, then immediately re-pin ==========
         try:
-            self.log.info("[STEP 10] Waiting for re-encryption to complete...")
-            
-            # Wait and check encryption status
-            max_wait_time = 300  # 5 minutes max
-            wait_interval = 30
-            total_waited = 0
-            reencryption_complete = False
-            
-            while total_waited < max_wait_time:
-                self.sleep(wait_interval, f"Waiting for re-encryption... ({total_waited + wait_interval}s/{max_wait_time}s)")
-                total_waited += wait_interval
-                
-                bucket_info = self.rest.get_bucket_json(bucket_name)
-                enc_info = bucket_info.get('encryptionAtRestInfo', {})
-                data_status = enc_info.get('dataStatus', '')
-                issues = enc_info.get('issues', [])
-                
-                self.log.info(f"[STEP 10] Data status: {data_status}, Issues: {issues}")
-                
-                if data_status == 'encrypted' and not issues:
-                    reencryption_complete = True
-                    break
-            
-            if not reencryption_complete:
-                self.log.warning(f"[STEP 10] Re-encryption may not be fully complete after {max_wait_time}s")
-
-            new_in_use_key_ids = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_in_use_key_ids)
-            if not new_in_use_key_ids:
-                raise Exception("Indexer GetInUseKeys did not report any new key IDs after re-encryption")
-            
-            self.log.info("[STEP 10] PASSED - Re-encryption wait completed")
+            self.log.info(
+                "[STEP 10] Polling GetInUseKeys for new indexer key IDs (timeout 300 s)..."
+            )
+            new_in_use_key_ids = self._poll_for_new_indexer_key_ids(
+                index_nodes, baseline_in_use_key_ids, timeout=300, label="[STEP 10] "
+            )
+            self.log.info(
+                f"[STEP 10] New key IDs detected: {new_in_use_key_ids}. "
+                f"Immediately pinning DEK rotation interval back to {STABLE_INTERVAL_S} s..."
+            )
+            self._rotate_bucket_encryption_key(
+                bucket_name, key_id,
+                dek_rotation_interval=STABLE_INTERVAL_S,
+                dek_lifetime=STABLE_INTERVAL_S
+            )
+            self.log.info("[STEP 10] PASSED - Re-encryption detected, interval re-pinned high")
         except Exception as e:
             self.log.error(f"[STEP 10] FAILED: {str(e)}")
             raise
