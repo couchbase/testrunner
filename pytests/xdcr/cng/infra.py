@@ -84,9 +84,11 @@ class InfraManager:
     def cleanup_all(self):
         errors = []
         for name, infra in self._registry.items():
+            lb_clean = True
             try:
                 infra.haproxy_helper.cleanup()
             except Exception as e:
+                lb_clean = False
                 errors.append("HAProxy cleanup ({0}) failed: {1}".format(name, e))
                 log.warning(errors[-1])
             for helper in infra.cng_helpers:
@@ -106,7 +108,17 @@ class InfraManager:
                     errors.append("CNG cert cleanup on {0} failed: {1}".format(
                         helper.server.ip, e))
                     log.warning(errors[-1])
-            self._registry.return_lb_server(infra.lb_server)
+            # Only return the LB to the floating pool if its haproxy was
+            # cleaned to a usable state. Returning a poisoned server makes
+            # the very next test's setup_for_cluster fail when it picks
+            # this server up again.
+            if lb_clean:
+                self._registry.return_lb_server(infra.lb_server)
+            else:
+                log.error(
+                    "LB server {0} (was {1}'s LB) NOT returned to pool — "
+                    "cleanup left it in an unknown state".format(
+                        infra.lb_server.ip, name))
             self._registry.pop(name)
         if errors:
             log.warning(

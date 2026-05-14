@@ -210,11 +210,29 @@ class HAProxyHelper:
     def start(self, frontend_port=HAPROXY_FRONTEND_PORT):
         """Start or restart HAProxy service and verify port readiness.
 
+        Pre-flight clears stale state from a prior aborted run: prior
+        systemctl 'failed' status (which blocks restart until cleared),
+        zombie haproxy processes, and any lingering bind on the frontend
+        port. Without these, a server returned to the floating pool by an
+        imperfect tearDown carries forward a stuck haproxy state and the
+        very next test's `systemctl restart haproxy` reports active=False.
+
         @param frontend_port: Port to verify is listening after start.
         """
         shell = RemoteMachineShellConnection(self.server)
         try:
             log.info("Starting HAProxy on {0}".format(self.server.ip))
+            # Best-effort pre-flight. Each command tolerates absence
+            # (|| true) so a fresh host with no prior state is OK.
+            shell.execute_command(
+                "systemctl reset-failed haproxy 2>/dev/null || true; "
+                "systemctl stop haproxy 2>/dev/null || true; "
+                "pkill -9 -x haproxy 2>/dev/null || true; "
+                "fuser -k {0}/tcp 2>/dev/null || true; "
+                "rm -f /run/haproxy.pid /var/run/haproxy.pid 2>/dev/null "
+                "|| true".format(frontend_port))
+            time.sleep(1)
+
             shell.execute_command("systemctl restart haproxy")
 
             end_time = time.time() + 15
@@ -225,8 +243,13 @@ class HAProxyHelper:
                 time.sleep(2)
             else:
                 status_out, _ = shell.execute_command(
-                    "systemctl status haproxy")
-                log.error("HAProxy status: {0}".format(status_out))
+                    "systemctl status haproxy --no-pager -l 2>&1 | tail -40")
+                journal_out, _ = shell.execute_command(
+                    "journalctl -u haproxy --no-pager -n 40 2>&1")
+                log.error("HAProxy status on {0}: {1}".format(
+                    self.server.ip, status_out))
+                log.error("HAProxy journal on {0}: {1}".format(
+                    self.server.ip, journal_out))
                 raise Exception(
                     "HAProxy failed to start on {0}".format(self.server.ip))
 
@@ -260,12 +283,16 @@ class HAProxyHelper:
             shell.disconnect()
 
     def cleanup(self):
-        """Stop HAProxy and restore original configuration in a single
-        SSH session to avoid connection churn."""
+        """Stop HAProxy, free the frontend port, clear any systemd 'failed'
+        state, and restore the original configuration. Verifies port 18098
+        is no longer bound — if it still is, escalates with pkill+fuser so
+        the floating server returns to the pool in a state usable by the
+        next test's setup_for_cluster.
+        """
         shell = RemoteMachineShellConnection(self.server)
         try:
             log.info("Cleaning up HAProxy on {0}".format(self.server.ip))
-            shell.execute_command("systemctl stop haproxy")
+            shell.execute_command("systemctl stop haproxy 2>/dev/null || true")
 
             end_time = time.time() + 10
             while time.time() < end_time:
@@ -275,12 +302,34 @@ class HAProxyHelper:
                     break
                 time.sleep(2)
             else:
-                shell.execute_command("pkill -9 haproxy || true")
+                shell.execute_command("pkill -9 -x haproxy 2>/dev/null || true")
                 time.sleep(1)
+
+            # Belt-and-braces: kill anything still bound on the frontend
+            # port and any residual haproxy process by name, then clear
+            # systemd's record of any failed start. Each command is
+            # best-effort.
+            shell.execute_command(
+                "fuser -k {0}/tcp 2>/dev/null || true; "
+                "pkill -9 -x haproxy 2>/dev/null || true; "
+                "systemctl reset-failed haproxy 2>/dev/null || true; "
+                "rm -f /run/haproxy.pid /var/run/haproxy.pid 2>/dev/null "
+                "|| true".format(HAPROXY_FRONTEND_PORT))
 
             shell.execute_command(
                 "test -f {0} && cp {0} {1} || true".format(
                     HAPROXY_CFG_BACKUP, HAPROXY_CFG_PATH))
+
+            # Final verification: port must be free for the next test.
+            check_out, _ = shell.execute_command(
+                "ss -Hltn 'sport = :{0}' 2>/dev/null | head -1 "
+                "|| true".format(HAPROXY_FRONTEND_PORT))
+            if check_out and any((line or "").strip() for line in check_out):
+                raise Exception(
+                    "HAProxy cleanup on {0}: port {1} still bound after "
+                    "stop/kill ({2!r}); refusing to silently return a "
+                    "poisoned LB server to the floating pool".format(
+                        self.server.ip, HAPROXY_FRONTEND_PORT, check_out))
             log.info("HAProxy cleaned up on {0}".format(self.server.ip))
         finally:
             shell.disconnect()

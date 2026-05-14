@@ -104,7 +104,13 @@ class ReplicationManager:
             count or self._num_items, self._value_size)
 
     def load_into_source_clusters(self, edges, items, prefix):
-        """Load docs into every unique source cluster in an edge list."""
+        """Load docs into every unique source cluster in an edge list.
+
+        Pins the loader to `_default._default` (all_collections=False) so
+        the bucket-level item-count comparison done by
+        verify_edges_converged is not polluted by `_system` scope items,
+        which XDCR does not replicate.
+        """
         seen = set()
         for src, _, _ in edges:
             if src.get_name() in seen:
@@ -113,7 +119,7 @@ class ReplicationManager:
             gen = BlobGenerator("{0}-{1}-".format(prefix, src.get_name()),
                                 "{0}-{1}-".format(prefix, src.get_name()),
                                 self._value_size, end=items)
-            src.load_all_buckets_from_generator(gen)
+            src.load_all_buckets_from_generator(gen, all_collections=False)
 
     def get_changes_left_total(self, src_cluster):
         """Sum replication_changes_left across all source buckets."""

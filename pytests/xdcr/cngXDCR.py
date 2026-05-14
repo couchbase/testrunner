@@ -27,6 +27,7 @@ import json
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
+from TestInput import TestInputSingleton
 from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers, NodeHelper, \
     REPL_PARAM, CONNECTIVITY_STATUS
 from .haproxy_utils import HAPROXY_FRONTEND_PORT
@@ -1986,6 +1987,15 @@ class XDCRCNGTopologyTests(CNGXDCRBaseTest):
     (3 clusters of 2 nodes + 3 LBs + 3 spare floating for rebalance).
     """
 
+    _MIN_CLUSTERS = 3
+
+    def setUp(self):
+        params = TestInputSingleton.input.test_params
+        existing = params.get("chain_length")
+        if existing is None or int(existing) < self._MIN_CLUSTERS:
+            params["chain_length"] = self._MIN_CLUSTERS
+        super().setUp()
+
     def test_cng_topology_chain(self):
         """Chain: C1 -> CNG(C2) -> CNG(C3). Transitive propagation across two CNG hops."""
         items = self._input.param("items", 2000)
@@ -2020,12 +2030,104 @@ class XDCRCNGTopologyTests(CNGXDCRBaseTest):
 
         edges = self._topology.build_ring(cluster_names)
         self._expect_all_refs_ok(edges)
+        self._log_ring_ref_uuids(edges)
         for src, dest, rc_name in edges:
             self._replication.start_for_buckets(src, dest, rc_name)
 
         self._replication.load_into_source_clusters(edges, items, "ring")
         self._replication.verify_edges_converged(
             edges, expected_per_source=items * len(cluster_names))
+
+    def _log_ring_ref_uuids(self, edges):
+        """Emit CNG_RING_DIAG lines covering cluster UUID, bucket UUID and
+        ref-resolved remote UUID for every edge. Captured BEFORE
+        start_for_buckets so the 3rd-edge createReplication failure does
+        not suppress diagnostic data."""
+        bucket_uuid_by_cluster = {}
+        cluster_uuid_by_name = {}
+        seen_clusters = {}
+        for src, dest, _ in edges:
+            for c in (src, dest):
+                seen_clusters[c.get_name()] = c
+
+        for name, cluster in seen_clusters.items():
+            rest = RestConnection(cluster.get_master_node())
+            try:
+                cluster_uuid_by_name[name] = rest.get_pools_info().get("uuid")
+            except Exception as e:
+                cluster_uuid_by_name[name] = "ERR:{0}".format(e)
+            buckets = cluster.get_buckets()
+            bname = buckets[0].name if buckets else "default"
+            try:
+                info = rest.get_bucket_json(bname)
+                bucket_uuid_by_cluster[name] = (bname, info.get("uuid"))
+            except Exception as e:
+                bucket_uuid_by_cluster[name] = (bname, "ERR:{0}".format(e))
+            log.info(
+                "CNG_RING_DIAG_CLUSTER cluster={0} master={1} "
+                "cluster_uuid={2} bucket={3} bucket_uuid={4}".format(
+                    name, cluster.get_master_node().ip,
+                    cluster_uuid_by_name[name],
+                    bucket_uuid_by_cluster[name][0],
+                    bucket_uuid_by_cluster[name][1]))
+
+        # Cross-cluster bucket-UUID collision summary.
+        seen_bucket_uuids = {}
+        for cname, (_, buuid) in bucket_uuid_by_cluster.items():
+            seen_bucket_uuids.setdefault(buuid, []).append(cname)
+        for buuid, owners in seen_bucket_uuids.items():
+            if len(owners) > 1:
+                log.error(
+                    "CNG_RING_DIAG_BUCKET_UUID_COLLISION buuid={0} "
+                    "shared_by={1} — ns_server will refuse XDCR between "
+                    "any pair of these because bucket-UUID equality is "
+                    "treated as the literal same bucket".format(
+                        buuid, owners))
+
+        for src, dest, rc_name in edges:
+            src_rest = RestConnection(src.get_master_node())
+            src_cuuid = cluster_uuid_by_name.get(src.get_name())
+            src_bname, src_buuid = bucket_uuid_by_cluster.get(
+                src.get_name(), ("?", "?"))
+            dest_bname, dest_buuid = bucket_uuid_by_cluster.get(
+                dest.get_name(), ("?", "?"))
+            try:
+                refs = src_rest.get_remote_clusters() or []
+            except Exception as e:
+                refs = []
+                log.warning("get_remote_clusters on {0} failed: {1}".format(
+                    src.get_name(), e))
+            match = next(
+                (r for r in refs if r.get("name") == rc_name), {})
+            remote_uuid = match.get("uuid", "MISSING")
+            remote_host = match.get("hostname", "MISSING")
+            if remote_uuid and remote_uuid == src_cuuid:
+                verdict = "SELF_LOOP_CLUSTER_UUID"
+            elif src_buuid and dest_buuid and src_buuid == dest_buuid:
+                verdict = "BUCKET_UUID_COLLISION"
+            else:
+                verdict = "ok"
+            log.info(
+                "CNG_RING_DIAG src={src_name} src_master={src_ip} "
+                "src_cluster_uuid={src_uuid} src_bucket={src_bname} "
+                "src_bucket_uuid={src_buuid} ref={rc_name} "
+                "remote_hostname={remote_host} "
+                "remote_cluster_uuid={remote_uuid} "
+                "intended_dest={dest_name} intended_dest_master={dest_ip} "
+                "intended_dest_bucket={dest_bname} "
+                "intended_dest_bucket_uuid={dest_buuid} "
+                "verdict={verdict}".format(
+                    src_name=src.get_name(),
+                    src_ip=src.get_master_node().ip,
+                    src_uuid=src_cuuid,
+                    src_bname=src_bname, src_buuid=src_buuid,
+                    rc_name=rc_name,
+                    remote_host=remote_host,
+                    remote_uuid=remote_uuid,
+                    dest_name=dest.get_name(),
+                    dest_ip=dest.get_master_node().ip,
+                    dest_bname=dest_bname, dest_buuid=dest_buuid,
+                    verdict=verdict))
 
     def test_cng_topology_mesh(self):
         """Full mesh: every cluster has a CNG ref to every other cluster."""

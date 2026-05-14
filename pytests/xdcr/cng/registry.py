@@ -31,7 +31,32 @@ class CNGInfraRegistry:
         self._infras = {}
         self._pool = floating_server_pool
 
+    def _dedupe_pool(self):
+        """In-place dedup of the shared floating-server pool by IP.
+
+        `XDCRNewBaseTest.__set_free_servers` re-appends every spare INI
+        server on every setUp without checking for membership, so the
+        underlying `FloatingServers._serverlist` accretes duplicates
+        across tests in the same Python process. Without this, a single
+        physical floating server can be popped as LB twice in one ring
+        bootstrap — two clusters share an LB IP, HAProxy on the second
+        attempt clobbers the first, and target identity gets crossed.
+        """
+        seen = set()
+        deduped = []
+        for s in self._pool:
+            if s.ip in seen:
+                continue
+            seen.add(s.ip)
+            deduped.append(s)
+        if len(deduped) != len(self._pool):
+            log.warning(
+                "Floating pool deduped from {0} to {1} entries".format(
+                    len(self._pool), len(deduped)))
+            self._pool[:] = deduped
+
     def reserve_lb_server(self):
+        self._dedupe_pool()
         if not self._pool:
             raise Exception("No floating servers available for load balancer.")
         server = self._pool.pop(0)
@@ -39,7 +64,7 @@ class CNGInfraRegistry:
         return server
 
     def return_lb_server(self, server):
-        if server and server not in self._pool:
+        if server and not any(s.ip == server.ip for s in self._pool):
             self._pool.append(server)
 
     def register(self, name, infra):

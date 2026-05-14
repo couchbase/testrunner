@@ -2287,11 +2287,12 @@ class CouchbaseCluster:
         @param timeout_secs: timeout
         @return: task objects list
         """
+        seed = "%s-key-" % self.__name
         if self.use_java_sdk:
             self.gen = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
-                                    percent_delete=0, doc_expiry=exp, all_collections=True)
+                                    percent_delete=0, doc_expiry=exp, all_collections=True,
+                                    key_prefix=seed)
         else:
-            seed = "%s-key-" % self.__name
             self.gen = self.__kv_gen[
                 OPS.CREATE] = BlobGenerator(
                 seed,
@@ -2334,7 +2335,8 @@ class CouchbaseCluster:
 
     def load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
                                         kv_store=1, flag=0, only_store_hash=True,
-                                        batch_size=1000, pause_secs=1, timeout_secs=30):
+                                        batch_size=1000, pause_secs=1, timeout_secs=30,
+                                        all_collections=True):
         """Load data synchronously on all buckets. Function wait for
         load data to finish.
         @param gen: BlobGenerator() object
@@ -2346,6 +2348,11 @@ class CouchbaseCluster:
         @param batch_size: batch size for load data at a time.
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
+        @param all_collections: when False, java-sdk loader stays on
+                _default._default; CB 8.x auto-exposes a `_system` scope
+                whose collections are never XDCR-replicated, so setting
+                this False is required for any test that compares
+                src/dest curr_items across clusters.
         """
         if not self.use_java_sdk:
             # TODO append generator values if op_type is already present
@@ -2354,7 +2361,9 @@ class CouchbaseCluster:
             self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
         else:
             self.gen = SDKDataLoader(num_ops=kv_gen.end, percent_create=100, percent_update=0,
-                                     percent_delete=0, doc_expiry=exp, all_collections=True)
+                                     percent_delete=0, doc_expiry=exp,
+                                     all_collections=all_collections,
+                                     key_prefix=kv_gen.name)
 
         tasks = []
         for bucket in self.__buckets:
@@ -2370,7 +2379,8 @@ class CouchbaseCluster:
 
     def async_load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
                                               kv_store=1, flag=0, only_store_hash=True,
-                                              batch_size=1000, pause_secs=1, timeout_secs=30):
+                                              batch_size=1000, pause_secs=1, timeout_secs=30,
+                                              all_collections=True):
         """Load data asynchronously on all buckets. Function wait for
         load data to finish.
         @param gen: BlobGenerator() object
@@ -2382,6 +2392,7 @@ class CouchbaseCluster:
         @param batch_size: batch size for load data at a time.
         @param pause_secs: pause for next batch load.
         @param timeout_secs: timeout
+        @param all_collections: see load_all_buckets_from_generator.
         """
         if not self.use_java_sdk:
             # TODO append generator values if op_type is already present
@@ -2390,7 +2401,9 @@ class CouchbaseCluster:
             self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
         else:
             self.gen = SDKDataLoader(num_ops=kv_gen.end, percent_create=100, percent_update=0,
-                                     percent_delete=0, doc_expiry=exp, all_collections=True)
+                                     percent_delete=0, doc_expiry=exp,
+                                     all_collections=all_collections,
+                                     key_prefix=kv_gen.name)
 
         tasks = []
         for bucket in self.__buckets:
@@ -2487,7 +2500,8 @@ class CouchbaseCluster:
                 elif op_type == OPS.DELETE:
                     percent_delete = perc
                 gen = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=percent_update,
-                                    percent_delete=percent_delete, doc_expiry=expiration, all_collections=True)
+                                    percent_delete=percent_delete, doc_expiry=expiration, all_collections=True,
+                                    key_prefix="%s-key-" % self.__name)
                 tasks.append(
                     self.__clusterop.async_load_gen_docs(
                         self.__master_node,
