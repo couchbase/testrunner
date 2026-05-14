@@ -395,6 +395,10 @@ class IndexVector(object):
             'lead': f'CREATE INDEX vector_index_{similarity} IF NOT EXISTS ON {collection}({vector_field} {vector_type} VECTOR, size, brand) WITH {vector_definition}',
         }
         if custom_index_fields:
+            if ",vec VECTOR" in custom_index_fields:
+                    custom_index_fields = custom_index_fields.replace(",vec VECTOR", f",vec {vector_type} VECTOR")
+            elif "vec VECTOR" in custom_index_fields:
+                    custom_index_fields = custom_index_fields.replace("vec VECTOR", f"vec {vector_type} VECTOR")
             if custom_name:
                 index_query = f'CREATE INDEX {custom_name} IF NOT EXISTS ON {collection}({custom_index_fields}) WITH {vector_definition}'
             else:
