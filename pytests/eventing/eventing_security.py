@@ -52,7 +52,7 @@ class EventingSecurity(EventingBaseTest):
 
         # FTS setup
         if getattr(self, 'is_fts', False):
-            self.fts_index_name = "travel-sample._default.travel_sample_test"
+            self.fts_index_name = "travel_sample_test"
             self.fts_doc_count = 31500
             self.fts_callable = FTSCallable(nodes=self.servers, es_validate=False)
             self.fts_memory_quota = 3000
@@ -120,12 +120,12 @@ class EventingSecurity(EventingBaseTest):
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
             plan_params = {"indexPartitions": 1, "numReplicas": 0}
-            fts_index = self.fts_callable.create_default_index(
+            self.fts_index = self.fts_callable.create_default_index(
                 index_name=self.fts_index_name,
                 bucket_name="travel-sample",
                 plan_params=plan_params
             )
-            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
         self.sleep(120)
@@ -206,12 +206,12 @@ class EventingSecurity(EventingBaseTest):
         if getattr(self, 'is_fts', False):
             self.load_sample_buckets(self.server, "travel-sample")
             plan_params = {"indexPartitions": 1, "numReplicas": 0}
-            fts_index = self.fts_callable.create_default_index(
+            self.fts_index = self.fts_callable.create_default_index(
                 index_name=self.fts_index_name,
                 bucket_name="travel-sample",
                 plan_params=plan_params
             )
-            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=fts_index)
+            self.fts_callable.wait_for_indexing_complete(item_count=self.fts_doc_count, idx=self.fts_index)
             self.sleep(30, "Waiting for FTS indexing to complete")
         ntonencryptionBase().disable_nton_cluster([self.master])
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
@@ -444,14 +444,15 @@ class EventingSecurity(EventingBaseTest):
         log.info("Running FTS validation...")
         bucket = "travel-sample"
         scope = "_default"
+        index_name = self.fts_index.name if getattr(self, "fts_index", None) else self.fts_index_name
 
         fts_query = self.construct_fts_query(
-            self.fts_index_name,
+            index_name,
             self.fts_query['query']
         )
 
         hits, _, _, _ = self.fts_callable.run_fts_query(
-            index_name=self.fts_index_name,
+            index_name=index_name,
             query_dict=fts_query,
             bucket_name=bucket,
             scope_name=scope,
