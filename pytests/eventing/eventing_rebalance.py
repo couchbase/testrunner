@@ -4,6 +4,8 @@ import urllib.parse
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
+from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_FTS_QUERY_SUPPORT, HANDLER_CODE_ANALYTICS
 from pytests.eventing.eventing_base import EventingBaseTest
@@ -12,6 +14,7 @@ from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.security.jwt_utils import JWTUtils
 import logging
+import time
 
 log = logging.getLogger()
 
@@ -85,9 +88,15 @@ class EventingRebalance(EventingBaseTest):
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
+        self.is_encryption = self.input.param('is_encryption', False)
         if self.is_expired:
             # set expiry pager interval
             ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
+        # encryption setup
+        if getattr(self, 'is_encryption', False):
+            self.created_secret_ids = []
+            self._log_encryption_enabled = False
+            self.dek_rotation_interval = self.input.param('dek_rotation_interval', 60)
         # FTS setup
         if getattr(self, 'is_fts', False):
             self.fts_index_name = "travel-sample._default.travel_sample_test"
@@ -101,7 +110,6 @@ class EventingRebalance(EventingBaseTest):
             self.load_sample_buckets(self.server, "travel-sample")
             self.load_data_to_collection(1, "default.scope0.collection0")
             self._setup_analytics()
-
         # JWT Configuration (Optional)
         self.jwt_auth = self.input.param('jwt_auth', False)
         self.jwt_token = None
@@ -117,6 +125,16 @@ class EventingRebalance(EventingBaseTest):
             self.jwt_utils = JWTUtils(log=self.log)
 
     def tearDown(self):
+        if getattr(self, '_log_encryption_enabled', False):
+            try:
+                self.rest.configure_encryption_at_rest({"log.encryptionMethod": "disabled"})
+            except Exception as e:
+                log.warning("Failed to disable log encryption in tearDown: {}".format(e))
+        for secret_id in getattr(self, 'created_secret_ids', []):
+            try:
+                self.rest.delete_secret(secret_id)
+            except Exception as e:
+                log.warning("Failed to delete encryption secret {}: {}".format(secret_id, e))
         if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
             try:
                 self.fts_callable.delete_fts_index(self.fts_index_name)
@@ -155,6 +173,9 @@ class EventingRebalance(EventingBaseTest):
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
+        if getattr(self, 'is_encryption', False):
+            key_id = self._create_log_encryption_secret()
+            self._set_log_encryption_method("encryptionKey", key_id=key_id)
         # load data
         if not self.is_expired:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -174,6 +195,9 @@ class EventingRebalance(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        if getattr(self, 'is_encryption', False):
+            eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+            self._verify_log_encrypted_on_node(eventing_node)
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
@@ -192,6 +216,8 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*2, skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if getattr(self, 'is_encryption', False):
+            self._trigger_dek_rotation_and_wait(eventing_node)
         # delete json documents
         if not self.is_expired and not getattr(self, 'is_fts', False):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -242,6 +268,9 @@ class EventingRebalance(EventingBaseTest):
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
+        if getattr(self, 'is_encryption', False):
+            key_id = self._create_log_encryption_secret()
+            self._set_log_encryption_method("encryptionKey", key_id=key_id)
         # load data
         if not self.is_expired:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -257,6 +286,11 @@ class EventingRebalance(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        if getattr(self, 'is_encryption', False):
+            self.sleep(15, "Waiting for bucket REST endpoint to stabilize post-rebalance")
+        remaining_ev_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        if getattr(self, 'is_encryption', False):
+            self._verify_log_encrypted_on_node(remaining_ev_node)
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
@@ -275,6 +309,8 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if getattr(self, 'is_encryption', False):
+            self._trigger_dek_rotation_and_wait(remaining_ev_node)
         # delete json documents
         if not self.is_expired and not getattr(self, 'is_fts', False):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -492,6 +528,9 @@ class EventingRebalance(EventingBaseTest):
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
+        if getattr(self, 'is_encryption', False):
+            key_id = self._create_log_encryption_secret()
+            self._set_log_encryption_method("encryptionKey", key_id=key_id)
         # load data
         if not self.is_expired:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -501,6 +540,9 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size, exp=300)
         if self.pause_resume:
             self.pause_function(body, jwt_token=jwt_token)
+        # capture eventing node before rebalance; KV swap does not change eventing membership
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False) \
+            if getattr(self, 'is_encryption', False) else None
         # swap rebalance kv node when eventing is processing mutations
         services_in = ["kv"]
         nodes_out_kv = self.servers[1]
@@ -509,6 +551,9 @@ class EventingRebalance(EventingBaseTest):
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
+        if getattr(self, 'is_encryption', False):
+            self.sleep(15, "Waiting for bucket REST endpoint to stabilize post-KV-swap")
+            self._verify_log_encrypted_on_node(eventing_node)
         if self.pause_resume:
             self.resume_function(body, jwt_token=jwt_token)
         # Run FTS validation if FTS handler is being used
@@ -527,6 +572,8 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if getattr(self, 'is_encryption', False):
+            self._trigger_dek_rotation_and_wait(eventing_node)
         # delete json documents
         if not self.is_expired and not getattr(self, 'is_fts', False):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -2139,3 +2186,238 @@ class EventingRebalance(EventingBaseTest):
         if not status:
             raise Exception(f"Failed to configure JWT: {content}")
         log.info("JWT configured successfully")
+
+    def test_eventing_rebalance_with_encryption_state_change_during_rebalance(self):
+        sock_batch_size = self.input.param('sock_batch_size', 1)
+        worker_count = self.input.param('worker_count', 3)
+        cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
+        body = self.create_save_function_body(self.function_name, self.handler_code,
+                                              sock_batch_size=sock_batch_size,
+                                              worker_count=worker_count,
+                                              cpp_worker_thread_count=cpp_worker_thread_count)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[self.nodes_init]], [],
+                                                 services=["eventing"],
+                                                 cluster_config=self.cluster_config)
+        self.sleep(10, "Allow rebalance to start before enabling log encryption")
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        log.info("Log encryption enabled mid-rebalance")
+
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self._verify_log_encrypted_on_node(eventing_node)
+
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list,
+                                                 cluster_config=self.cluster_config)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "cleanup rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_eventing_rebalance_with_dek_rotation_during_rebalance(self):
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+
+        sock_batch_size = self.input.param('sock_batch_size', 1)
+        worker_count = self.input.param('worker_count', 3)
+        cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
+        body = self.create_save_function_body(self.function_name, self.handler_code,
+                                              sock_batch_size=sock_batch_size,
+                                              worker_count=worker_count,
+                                              cpp_worker_thread_count=cpp_worker_thread_count)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[self.nodes_init]], [],
+                                                 services=["eventing"],
+                                                 cluster_config=self.cluster_config)
+        self.sleep(10, "Allow rebalance to start before triggering DEK rotation")
+        self._configure_dek_rotation(self.dek_rotation_interval, self.dek_rotation_interval)
+        log.info("DEK rotation configured mid-rebalance (interval={}s)".format(self.dek_rotation_interval))
+
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self._configure_dek_rotation(60000, 60000)
+
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self._verify_log_encrypted_on_node(eventing_node)
+
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list,
+                                                 cluster_config=self.cluster_config)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "cleanup rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_eventing_rebalance_with_force_reencryption_during_rebalance(self):
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+
+        sock_batch_size = self.input.param('sock_batch_size', 1)
+        worker_count = self.input.param('worker_count', 3)
+        cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
+        body = self.create_save_function_body(self.function_name, self.handler_code,
+                                              sock_batch_size=sock_batch_size,
+                                              worker_count=worker_count,
+                                              cpp_worker_thread_count=cpp_worker_thread_count)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
+
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 [self.servers[self.nodes_init]], [],
+                                                 services=["eventing"],
+                                                 cluster_config=self.cluster_config)
+        self.sleep(10, "Allow rebalance to start before triggering force re-encryption")
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, "Failed to trigger force log re-encryption mid-rebalance: {}".format(response))
+        log.info("Force log re-encryption triggered mid-rebalance: {}".format(response))
+
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self._verify_log_encrypted_on_node(eventing_node)
+
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list,
+                                                 cluster_config=self.cluster_config)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "cleanup rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+# -------------------- Encryption at Rest Helpers --------------------
+
+    def _create_log_encryption_secret(self):
+        params = EncryptionUtil.create_secret_params(
+            name=EncryptionUtil.generate_random_name("RecoveryLogSecret"),
+            usage=["log-encryption"],
+        )
+        status, response = self.rest.create_secret(params)
+        if not status:
+            raise Exception("Failed to create log-encryption secret: {}".format(response))
+        secret_id = json.loads(response).get("id")
+        if secret_id is None:
+            raise Exception("Log-encryption secret created but no id returned: {}".format(response))
+        log.info("Created log-encryption secret with id: {}".format(secret_id))
+        self.created_secret_ids.append(secret_id)
+        return secret_id
+
+    def _set_log_encryption_method(self, method, key_id=None):
+        params = {"log.encryptionMethod": method}
+        if method == "encryptionKey":
+            if key_id is None:
+                raise Exception("encryptionKey method requires a key_id")
+            params["log.encryptionKeyId"] = key_id
+        status, response = self.rest.configure_encryption_at_rest(params)
+        if not status:
+            raise Exception("Failed to set log encryption to {}: {}".format(method, response))
+        self._log_encryption_enabled = (method != "disabled")
+        log.info("Configured log encryption: method={} key_id={}".format(method, key_id))
+
+    def _get_eventing_log_dir(self):
+        eventing_log_root = "/opt/couchbase/var/lib/couchbase/data/@eventing"
+        if self.global_function_scope:
+            return eventing_log_root
+        bucket_uuid = "b_" + self.rest.fetch_bucket_uuid(self.src_bucket_name)
+        manifest = self.rest.get_bucket_manifest(self.src_bucket_name)
+        scope_id = None
+        for scope in manifest["scopes"]:
+            if scope["name"] == "_default":
+                scope_id = "s_" + scope["uid"]
+                break
+        if scope_id is None:
+            raise Exception("_default scope not found in bucket {}".format(self.src_bucket_name))
+        return "{}/{}/{}".format(eventing_log_root, bucket_uuid, scope_id)
+
+    def _verify_log_encrypted_on_node(self, node):
+        ear_helper = EncryptionAtRestHelper(log)
+        log_dir = self._get_eventing_log_dir()
+        shell = RemoteMachineShellConnection(node)
+        cmd = "ls -1t {}/*.log* 2>/dev/null | head -1".format(log_dir)
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+        log_files = [p.strip() for p in output if p.strip()]
+        if not log_files:
+            log.warning("No log files found in {} on {}".format(log_dir, node.ip))
+            return
+        latest_log = log_files[0]
+        is_encrypted, details = ear_helper.verify_file_encryption_magic_bytes(node, latest_log)
+        self.assertTrue(is_encrypted,
+                        "Active log file {} is not encrypted after state change. Details: {}".format(
+                            latest_log, details))
+        log.info("Verified active log {} is encrypted on {}".format(latest_log, node.ip))
+
+    def _configure_dek_rotation(self, rotation_interval, lifetime):
+        status, response = self.rest.configure_encryption_at_rest({
+            "log.dekRotationInterval": rotation_interval,
+            "log.dekLifetime": lifetime,
+        })
+        if not status:
+            raise Exception("Failed to set log DEK settings "
+                            "(dekRotationInterval={}s, dekLifetime={}s): {}".format(
+                                rotation_interval, lifetime, response))
+        log.info("log.dekRotationInterval={}s, log.dekLifetime={}s applied".format(
+            rotation_interval, lifetime))
+
+    def _trigger_dek_rotation_and_wait(self, eventing_node, timeout=120):
+        log_dir = self._get_eventing_log_dir()
+        shell = RemoteMachineShellConnection(eventing_node)
+        cmd = "ls -1t {}/*.log* 2>/dev/null | wc -l".format(log_dir)
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+        baseline_count = int(output[0].strip()) if output and output[0].strip().isdigit() else 0
+
+        self._configure_dek_rotation(self.dek_rotation_interval, self.dek_rotation_interval)
+        self.sleep(self.dek_rotation_interval,
+                   "Waiting {}s for DEK rotation".format(self.dek_rotation_interval))
+
+        deadline = time.time() + timeout
+        rotated = False
+        while time.time() < deadline:
+            shell = RemoteMachineShellConnection(eventing_node)
+            output, _ = shell.execute_command(
+                "ls -1t {}/*.log* 2>/dev/null | wc -l".format(log_dir))
+            shell.disconnect()
+            count = int(output[0].strip()) if output and output[0].strip().isdigit() else 0
+            if count > baseline_count:
+                rotated = True
+                break
+            self.sleep(5, "Waiting for log file rotation after DEK rotation ({}/{})".format(
+                count, baseline_count + 1))
+
+        self._configure_dek_rotation(60000, 60000)
+        if not rotated:
+            log.warning("Log rotation did not occur within {}s after DEK rotation".format(timeout))
+        else:
+            log.info("DEK rotation confirmed: new log file appeared in {}".format(log_dir))

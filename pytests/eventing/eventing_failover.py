@@ -4,6 +4,8 @@ import urllib.parse
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
+from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
+from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL, HANDLER_CODE_FTS_QUERY_SUPPORT, HANDLER_CODE_ANALYTICS
 from pytests.eventing.eventing_base import EventingBaseTest
@@ -12,6 +14,7 @@ from pytests.fts.fts_callable import FTSCallable
 from pytests.eventing.fts_query_definitions import ALL_QUERIES
 from pytests.security.jwt_utils import JWTUtils
 import logging
+import time
 
 log = logging.getLogger()
 
@@ -46,6 +49,7 @@ class EventingFailover(EventingBaseTest):
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
+        self.is_encryption = self.input.param('is_encryption', False)
         if getattr(self, 'is_fts', False):
             self.fts_index_name = "travel-sample._default.travel_sample_test"
             self.fts_doc_count = 31500
@@ -58,6 +62,11 @@ class EventingFailover(EventingBaseTest):
             self.load_sample_buckets(self.server, "travel-sample")
             self.load_data_to_collection(1, "default.scope0.collection0")
             self._setup_analytics()
+        # Encryption at Rest setup
+        if getattr(self, 'is_encryption', False):
+            self.created_secret_ids = []
+            self._log_encryption_enabled = False
+            self.dek_rotation_interval = self.input.param('dek_rotation_interval', 60)
 
         # JWT Configuration (Optional)
         self.jwt_auth = self.input.param('jwt_auth', False)
@@ -74,6 +83,16 @@ class EventingFailover(EventingBaseTest):
             self.jwt_utils = JWTUtils(log=self.log)
 
     def tearDown(self):
+        if getattr(self, '_log_encryption_enabled', False):
+            try:
+                self.rest.configure_encryption_at_rest({"log.encryptionMethod": "disabled"})
+            except Exception as e:
+                log.warning("Failed to disable log encryption in tearDown: {}".format(e))
+        for secret_id in getattr(self, 'created_secret_ids', []):
+            try:
+                self.rest.delete_secret(secret_id)
+            except Exception as e:
+                log.warning("Failed to delete encryption secret {}: {}".format(secret_id, e))
         if getattr(self, 'is_fts', False) and getattr(self, 'fts_index_name', None):
             try:
                 self.fts_callable.delete_fts_index(self.fts_index_name)
@@ -109,6 +128,9 @@ class EventingFailover(EventingBaseTest):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
+        if getattr(self, 'is_encryption', False):
+            key_id = self._create_log_encryption_secret()
+            self._set_log_encryption_method("encryptionKey", key_id=key_id)
         # load some data
         if getattr(self, 'is_analytics', False):
             task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",
@@ -125,6 +147,9 @@ class EventingFailover(EventingBaseTest):
         fail_over_task.result()
         # Wait for failover to complete
         self.sleep(10)
+        if getattr(self, 'is_encryption', False):
+            self._verify_log_encrypted_on_node(eventing_server[0])
+            self._trigger_dek_rotation_and_wait(eventing_server[0])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -138,7 +163,7 @@ class EventingFailover(EventingBaseTest):
         if self.non_default_collection:
             self.verify_doc_count_collections("src_bucket.src_bucket.src_bucket", self.docs_per_day * self.num_docs,expected_duplicate=True)
         else:
-            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,expected_duplicate=True)
+            self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs, expected_duplicate=True)
         self.undeploy_and_delete_function(body, jwt_token=jwt_token)
 
     def test_vb_shuffle_during_failover_add_back(self):
@@ -186,6 +211,9 @@ class EventingFailover(EventingBaseTest):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
+        if getattr(self, 'is_encryption', False):
+            key_id = self._create_log_encryption_secret()
+            self._set_log_encryption_method("encryptionKey", key_id=key_id)
         # load some data
         if getattr(self, 'is_analytics', False):
             task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",
@@ -204,6 +232,9 @@ class EventingFailover(EventingBaseTest):
         self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         task.result()
+        if getattr(self, 'is_encryption', False):
+            self._verify_log_encrypted_on_node(eventing_server[0])
+            self._trigger_dek_rotation_and_wait(eventing_server[0])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -329,6 +360,9 @@ class EventingFailover(EventingBaseTest):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=jwt_token)
         self.deploy_function(body, jwt_token=jwt_token)
+        if getattr(self, 'is_encryption', False):
+            key_id = self._create_log_encryption_secret()
+            self._set_log_encryption_method("encryptionKey", key_id=key_id)
         # load some data
         if getattr(self, 'is_analytics', False):
             task=self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",
@@ -346,6 +380,9 @@ class EventingFailover(EventingBaseTest):
         fail_over_task.result()
         fail_over_task2.result()
         task.result()
+        if getattr(self, 'is_encryption', False):
+            self._verify_log_encrypted_on_node(eventing_server[0])
+            self._trigger_dek_rotation_and_wait(eventing_server[0])
         # Run FTS validation if FTS handler is being used
         if getattr(self, 'is_fts', False):
             self.run_fts_validation()
@@ -742,3 +779,176 @@ class EventingFailover(EventingBaseTest):
         if not status:
             raise Exception(f"Failed to configure JWT: {content}")
         log.info("JWT configured successfully")
+
+    def test_eventing_failover_with_encryption_state_change_during_failover(self):
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                            wait_for_loading=False)
+        # fail over an eventing node, then enable encryption mid-failover
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]],
+                                                     graceful=False)
+        self.sleep(10, "Allow failover to start before enabling log encryption")
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        log.info("Log encryption enabled mid-failover")
+        fail_over_task.result()
+        self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        task.result()
+        self._verify_log_encrypted_on_node(eventing_server[0])
+        self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                          expected_duplicate=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_failover_with_dek_rotation_during_failover(self):
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                            wait_for_loading=False)
+        # fail over an eventing node, then trigger DEK rotation mid-failover
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]],
+                                                     graceful=False)
+        self.sleep(10, "Allow failover to start before triggering DEK rotation")
+        self._configure_dek_rotation(self.dek_rotation_interval, self.dek_rotation_interval)
+        log.info("DEK rotation configured mid-failover (interval={}s)".format(self.dek_rotation_interval))
+        fail_over_task.result()
+        self._configure_dek_rotation(60000, 60000)
+        self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        task.result()
+        self._verify_log_encrypted_on_node(eventing_server[0])
+        self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                          expected_duplicate=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_failover_with_force_reencryption_during_failover(self):
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        task = self.load_data_to_collection(self.docs_per_day * self.num_docs, "src_bucket._default._default",
+                                            wait_for_loading=False)
+        # fail over an eventing node, then trigger force re-encryption mid-failover
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]],
+                                                     graceful=False)
+        self.sleep(10, "Allow failover to start before triggering force re-encryption")
+        status, response = self.rest.trigger_log_reencryption()
+        self.assertTrue(status, "Failed to trigger force log re-encryption mid-failover: {}".format(response))
+        log.info("Force log re-encryption triggered mid-failover: {}".format(response))
+        fail_over_task.result()
+        self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        task.result()
+        self._verify_log_encrypted_on_node(eventing_server[0])
+        self.verify_doc_count_collections("src_bucket._default._default", self.docs_per_day * self.num_docs,
+                                          expected_duplicate=True)
+        self.undeploy_and_delete_function(body)
+
+# -------------------- Encryption at Rest Helpers --------------------
+
+    def _create_log_encryption_secret(self):
+        params = EncryptionUtil.create_secret_params(
+            name=EncryptionUtil.generate_random_name("RecoveryLogSecret"),
+            usage=["log-encryption"],
+        )
+        status, response = self.rest.create_secret(params)
+        if not status:
+            raise Exception("Failed to create log-encryption secret: {}".format(response))
+        secret_id = json.loads(response).get("id")
+        if secret_id is None:
+            raise Exception("Log-encryption secret created but no id returned: {}".format(response))
+        log.info("Created log-encryption secret with id: {}".format(secret_id))
+        self.created_secret_ids.append(secret_id)
+        return secret_id
+
+    def _set_log_encryption_method(self, method, key_id=None):
+        params = {"log.encryptionMethod": method}
+        if method == "encryptionKey":
+            if key_id is None:
+                raise Exception("encryptionKey method requires a key_id")
+            params["log.encryptionKeyId"] = key_id
+        status, response = self.rest.configure_encryption_at_rest(params)
+        if not status:
+            raise Exception("Failed to set log encryption to {}: {}".format(method, response))
+        self._log_encryption_enabled = (method != "disabled")
+        log.info("Configured log encryption: method={} key_id={}".format(method, key_id))
+
+    def _get_eventing_log_dir(self):
+        eventing_log_root = "/opt/couchbase/var/lib/couchbase/data/@eventing"
+        if self.global_function_scope:
+            return eventing_log_root
+        bucket_uuid = "b_" + self.rest.fetch_bucket_uuid(self.src_bucket_name)
+        manifest = self.rest.get_bucket_manifest(self.src_bucket_name)
+        scope_id = None
+        for scope in manifest["scopes"]:
+            if scope["name"] == "_default":
+                scope_id = "s_" + scope["uid"]
+                break
+        if scope_id is None:
+            raise Exception("_default scope not found in bucket {}".format(self.src_bucket_name))
+        return "{}/{}/{}".format(eventing_log_root, bucket_uuid, scope_id)
+
+    def _verify_log_encrypted_on_node(self, node):
+        ear_helper = EncryptionAtRestHelper(log)
+        log_dir = self._get_eventing_log_dir()
+        shell = RemoteMachineShellConnection(node)
+        cmd = "ls -1t {}/*.log* 2>/dev/null | head -1".format(log_dir)
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+        log_files = [p.strip() for p in output if p.strip()]
+        if not log_files:
+            log.warning("No log files found in {} on {}".format(log_dir, node.ip))
+            return
+        latest_log = log_files[0]
+        is_encrypted, details = ear_helper.verify_file_encryption_magic_bytes(node, latest_log)
+        self.assertTrue(is_encrypted,
+                        "Active log file {} is not encrypted after state change. Details: {}".format(
+                            latest_log, details))
+        log.info("Verified active log {} is encrypted on {}".format(latest_log, node.ip))
+
+    def _configure_dek_rotation(self, rotation_interval, lifetime):
+        status, response = self.rest.configure_encryption_at_rest({
+            "log.dekRotationInterval": rotation_interval,
+            "log.dekLifetime": lifetime,
+        })
+        if not status:
+            raise Exception("Failed to set log DEK settings "
+                            "(dekRotationInterval={}s, dekLifetime={}s): {}".format(
+                                rotation_interval, lifetime, response))
+        log.info("log.dekRotationInterval={}s, log.dekLifetime={}s applied".format(
+            rotation_interval, lifetime))
+
+    def _trigger_dek_rotation_and_wait(self, eventing_node, timeout=120):
+        log_dir = self._get_eventing_log_dir()
+        shell = RemoteMachineShellConnection(eventing_node)
+        cmd = "ls -1t {}/*.log* 2>/dev/null | wc -l".format(log_dir)
+        output, _ = shell.execute_command(cmd)
+        shell.disconnect()
+        baseline_count = int(output[0].strip()) if output and output[0].strip().isdigit() else 0
+
+        self._configure_dek_rotation(self.dek_rotation_interval, self.dek_rotation_interval)
+        self.sleep(self.dek_rotation_interval,
+                   "Waiting {}s for DEK rotation".format(self.dek_rotation_interval))
+
+        deadline = time.time() + timeout
+        rotated = False
+        while time.time() < deadline:
+            shell = RemoteMachineShellConnection(eventing_node)
+            output, _ = shell.execute_command(
+                "ls -1t {}/*.log* 2>/dev/null | wc -l".format(log_dir))
+            shell.disconnect()
+            count = int(output[0].strip()) if output and output[0].strip().isdigit() else 0
+            if count > baseline_count:
+                rotated = True
+                break
+            self.sleep(5, "Waiting for log file rotation after DEK rotation ({}/{})".format(
+                count, baseline_count + 1))
+
+        self._configure_dek_rotation(60000, 60000)
+        if not rotated:
+            log.warning("Log rotation did not occur within {}s after DEK rotation".format(timeout))
+        else:
+            log.info("DEK rotation confirmed: new log file appeared in {}".format(log_dir))

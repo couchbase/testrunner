@@ -3,6 +3,7 @@ import logging
 import time
 import re as _re
 
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ANALYTICS, HANDLER_CODE_ONDEPLOY
 from lib.couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -24,6 +25,26 @@ class EventingEncryptionAtRest(EventingBaseTest):
             self.handler_code = "handler_code/logger.js"
         elif handler_code == "heavy_logger":
             self.handler_code = "handler_code/heavy_logger.js"
+        elif handler_code == "subdoc":
+            self.handler_code = "handler_code/ABO/subdoc_array_and_field_op.js"
+        elif handler_code == "bucket_cache":
+            self.handler_code = "handler_code/ABO/cache_compare_values.js"
+        elif handler_code == "xattrs":
+            self.handler_code = "handler_code/xattrs_handler1.js"
+        elif handler_code == "n1ql_bucket_op":
+            self.handler_code = HANDLER_CODE.N1QL_BUCKET_OPS
+        elif handler_code == "sbm":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_SBM
+        elif handler_code == "timers":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_TIMERS
+        elif handler_code == "curl":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_CURL
+        elif handler_code == "base64":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_BASE64
+        elif handler_code == "crc":
+            self.handler_code = HANDLER_CODE.BASIC_BUCKET_ACCESSORS_CRC
+        elif handler_code == "ondeploy":
+            self.handler_code = HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP
 
         self.app_log_max_size = self.input.param("app_log_max_size", 41943040)
         self.app_log_max_files = self.input.param("app_log_max_files", 10)
@@ -349,7 +370,117 @@ class EventingEncryptionAtRest(EventingBaseTest):
             self._file_is_encrypted(eventing_node, latest_after),
             "Latest log {} is not encrypted after enabling log encryption".format(
                 latest_after))
+
+        applogs = self.get_app_logs(self.function_name, size=self.logsize, aggregate=self.aggregate)
+        self._assert_app_log_non_empty(applogs)
         self.undeploy_and_delete_function(body)
+
+
+    def test_log_encryption_with_diff_handler_codes(self):
+        """
+        Sanity encryption test driven with different handler codes:
+        - Deploy function, make mutations, verify log is unencrypted
+        - Enable log encryption, trigger more mutations
+        - Verify latest log file now carries the encryption signature
+        """
+        handler_code_name = self.input.param('handler_code', 'logger')
+
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        if len(eventing_nodes) >= 2:
+            target_nodes = len(eventing_nodes) - 1
+            self.config_num_nodes_running(target_nodes, self.src_bucket_name, "_default")
+
+        self.load_data_to_collection(self.num_docs, "src_bucket._default._default")
+        body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
+        body['settings']['app_log_max_size'] = self.app_log_max_size
+        body['settings']['app_log_max_files'] = self.app_log_max_files
+        if 'num_timer_partitions' not in body['settings']:
+            body['settings']['num_timer_partitions'] = 2
+        self.rest.create_function(body['appname'], body, self.function_scope)
+        self.deploy_function(body)
+
+        log.info("Verifying OnUpdate mutations are processed")
+        if handler_code_name == "sbm":
+            self.verify_doc_count_collections("src_bucket._default._default", self.num_docs * 2)
+        elif handler_code_name == "xattrs":
+            self.verify_doc_count_collections("dst_bucket._default._default", self.num_docs * 2)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", self.num_docs)
+
+        log_dir = self._get_log_dir()
+        eventing_node = self.get_nodes_from_services_map(
+            service_type="eventing", get_all_nodes=False)
+        self.sleep(15, "Wait for app-log writes to settle before snapshot")
+
+        files_before = self._list_log_files(eventing_node, log_dir)
+        self.assertGreater(
+            len(files_before), 0,
+            "No eventing log files found in {} before enabling encryption".format(log_dir))
+        latest_before = files_before[0]
+        self.assertFalse(
+            self._file_is_encrypted(eventing_node, latest_before),
+            "Latest log {} is unexpectedly encrypted before enabling encryption".format(
+                latest_before))
+
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+
+        self.load_data_to_collection(self.num_docs, "src_bucket._default._default")
+        files_after = self._wait_for_rotation(
+            eventing_node, log_dir, baseline_count=len(files_before),
+            timeout=self.rotation_wait_timeout)
+
+        latest_after = files_after[0]
+        self.assertTrue(
+            self._file_is_encrypted(eventing_node, latest_after),
+            "Latest log {} is not encrypted after enabling log encryption".format(
+                latest_after))
+
+        self.pause_function(body)
+        self.sleep(10)
+        self.resume_function(body)
+
+        log.info("Verifying OnDelete mutations are processed")
+        self.load_data_to_collection(self.num_docs, "src_bucket._default._default", is_delete=True)
+        self.sleep(10)
+        if handler_code_name == "sbm":
+            self.verify_doc_count_collections("src_bucket._default._default", 0)
+        else:
+            self.verify_doc_count_collections("dst_bucket._default._default", 0)
+        self.undeploy_and_delete_function(body)
+
+
+    # ----------- Internal Undeployment Scenarios with Log Encryption ----------
+
+    def test_log_encryption_dropping_function_scope(self):
+        """
+        Internal Undeployment Scenario with Log Encryption:
+        Function should get undeployed when src_bucket is dropped
+        """
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        body = self._create_and_deploy_function()
+        self.rest.delete_bucket(self.src_bucket_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        self.delete_function(body)
+
+    def test_log_encryption_dropping_metadata_keyspace(self):
+        """
+        Internal Undeployment Scenario with Log Encryption:
+        Function should get undeployed when metadata bucket is dropped
+        """
+        key_id = self._create_log_encryption_secret()
+        self._set_log_encryption_method("encryptionKey", key_id=key_id)
+        self.load_data_to_collection(self.num_docs, "src_bucket._default._default")
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body['settings']['app_log_max_size'] = self.app_log_max_size
+        body['settings']['app_log_max_files'] = self.app_log_max_files
+        self.rest.create_function(body['appname'], body, self.function_scope)
+        self.deploy_function(body)
+        self.verify_doc_count_collections("dst_bucket._default._default", 1)
+        self.rest.delete_bucket(self.metadata_bucket_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        self.delete_function(body)
 
 
     # --------------- Encryption at Rest State Change Tests ----------------
