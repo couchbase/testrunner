@@ -29,6 +29,7 @@ XDCR (Cross Data Center Replication) test suite validates Couchbase replication 
 | **Target Awareness** | `targetAwarenessXDCR.py` | Target cluster awareness and incoming/outgoing replication tracking |
 | **Variable vBuckets** | `variableVbucketXDCR.py` | Dynamic vBucket configuration |
 | **XATTR** | `xdcr_xattr_sdk.py` | Extended attributes replication |
+| **forwardLocalOnly** | `forwardLocalOnlyXDCR.py` | AA bidirectional ECCV replication of local-only mutations; covers Type-1/2/3 mutation classification, foreign-HLV skip, `disableHlvBasedShortCircuit`, advanced filtering, 3-cluster mixed-ECCV, SGW/mobile negative case, mixed-mode setting persistence; verifies `xdcr_non_local_mutations_skipped_total` Prometheus counter |
 | **Statistics** | `statsXDCR.py` | XDCR replication statistics and metrics |
 | **Memory** | `memoryTestXDCR.py` | Memory usage during replication |
 | **xdcrDiffer** | `xdcrDiffer.py` | Data comparison tool with encryption support |
@@ -74,6 +75,7 @@ INI files in `b/resources/` define cluster topology with dynamic IP placeholders
 - `pauseResumeXDCR.py` - Replication pause/resume lifecycle
 - `rebalanceXDCR.py` - Replication during cluster rebalance
 - `compressionXDCR.py` - Compression over XDCR
+- `forwardLocalOnlyXDCR.py` - forwardLocalOnly replication setting tests (AA bidirectional ECCV)
 - `xdcrDiffer.py` - xdcrDiffer binary tests
 - `conf/xdcr/*.conf` - 40+ test configuration files
 

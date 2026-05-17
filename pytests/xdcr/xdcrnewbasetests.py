@@ -6091,3 +6091,737 @@ class XDCRNewBaseTest(unittest.TestCase):
         node.rest_password = new_password
         self.log.info("Changed Administrator password on {0}".format(node.ip))
 
+    # ==================================================================
+    # Generic helpers promoted from forwardLocalOnlyXDCR. Reusable by any
+    # XDCR suite. Helpers that log use `self._log_tag()` so subclasses
+    # can prefix log lines with a per-suite tag.
+    # ==================================================================
+    def _log_tag(self):
+        """Per-suite log tag for greppable CI output. Subclasses override
+        to return e.g. `[FLO-pv-not-local]`. Default empty so base log
+        lines are unchanged."""
+        return ""
+
+    # ------------------------------------------------------------------
+    # Set-then-verify REST helpers. Every XDCR setting change SHOULD
+    # route through one of these so a silently-rejected setting fails
+    # the test fast instead of being shadowed by a downstream assertion.
+    # ------------------------------------------------------------------
+    def _coerce_xdcr_value(self, value):
+        """Lowercase bools for goxdcr's expected string form. Pass-through
+        for everything else. Single coercion site avoids drift between
+        callers that pre-coerce and callers that don't."""
+        if isinstance(value, bool):
+            return str(value).lower()
+        return value
+
+    def set_xdcr_param_verified(self, cluster, src_bucket, dest_bucket,
+                                 param, value, settle=0, assert_match=True):
+        """POST `param=value` to replication settings, sleep `settle`s,
+        GET and assert. Returns the read-back value (str)."""
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        coerced = self._coerce_xdcr_value(value)
+        self.log.info(
+            "{0} SET xdcr_param: cluster={1} {2}->{3} {4}={5}".format(
+                tag, cluster.get_name(), src_bucket, dest_bucket,
+                param, value))
+        rest.set_xdcr_param(src_bucket, dest_bucket, param, coerced)
+        if settle:
+            time.sleep(settle)
+        try:
+            actual = rest.get_xdcr_param(src_bucket, dest_bucket, param)
+        except Exception as e:
+            self.fail(
+                "{0} VERIFY FAILED: could not read back {1} on {2}->{3}: "
+                "{4}".format(tag, param, src_bucket, dest_bucket, e))
+        self.log.info(
+            "{0} VERIFY xdcr_param: {1}->{2} {3}={4} (expected {5})".format(
+                tag, src_bucket, dest_bucket, param, actual, value))
+        if assert_match:
+            self.assertEqual(
+                str(actual).lower(), str(value).lower(),
+                "{0} {1} did not persist on {2}->{3}; got {4!r}".format(
+                    tag, param, src_bucket, dest_bucket, actual))
+        return actual
+
+    def set_xdcr_params_verified(self, cluster, src_bucket, dest_bucket,
+                                  param_value_map, settle=0,
+                                  assert_match=True):
+        """Multi-key variant. POSTs all params in one REST call, sleeps
+        `settle`, reads each key back and asserts."""
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        self.log.info(
+            "{0} SET xdcr_params: cluster={1} {2}->{3} {4}".format(
+                tag, cluster.get_name(), src_bucket, dest_bucket,
+                param_value_map))
+        rest.set_xdcr_params(src_bucket, dest_bucket, param_value_map)
+        if settle:
+            time.sleep(settle)
+        readback = {}
+        for param, expected in param_value_map.items():
+            try:
+                actual = rest.get_xdcr_param(
+                    src_bucket, dest_bucket, param)
+            except Exception as e:
+                self.fail(
+                    "{0} VERIFY FAILED: could not read back {1} on "
+                    "{2}->{3}: {4}".format(
+                        tag, param, src_bucket, dest_bucket, e))
+            readback[param] = actual
+            self.log.info(
+                "{0} VERIFY xdcr_params: {1}->{2} {3}={4} (expected "
+                "{5})".format(
+                    tag, src_bucket, dest_bucket, param, actual,
+                    expected))
+            if assert_match:
+                self.assertEqual(
+                    str(actual).lower(), str(expected).lower(),
+                    "{0} {1} did not persist on {2}->{3}; got "
+                    "{4!r}".format(
+                        tag, param, src_bucket, dest_bucket, actual))
+        return readback
+
+    def set_global_xdcr_param_verified(self, cluster, param, value,
+                                        settle=0, assert_match=True):
+        """POST global /settings/replications, sleep, GET, assert."""
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        coerced = self._coerce_xdcr_value(value)
+        self.log.info(
+            "{0} SET global xdcr_param: cluster={1} {2}={3}".format(
+                tag, cluster.get_name(), param, value))
+        rest.set_global_xdcr_param(param, coerced)
+        if settle:
+            time.sleep(settle)
+        actual = self.get_global_xdcr_param(cluster, param)
+        self.log.info(
+            "{0} VERIFY global xdcr_param: cluster={1} {2}={3} "
+            "(expected {4})".format(
+                tag, cluster.get_name(), param, actual, value))
+        if assert_match:
+            self.assertEqual(
+                str(actual).lower(), str(value).lower(),
+                "{0} global {1} did not persist on {2}; got {3!r}".format(
+                    tag, param, cluster.get_name(), actual))
+        return actual
+
+    def set_bucket_prop_verified(self, cluster, bucket, prop, value,
+                                  settle=0, assert_match=True):
+        """change_bucket_props one prop, sleep, GET via get_bucket_json,
+        assert. Returns the read-back value."""
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        coerced = self._coerce_xdcr_value(value)
+        self.log.info(
+            "{0} SET bucket_prop: cluster={1} bucket={2} {3}={4}".format(
+                tag, cluster.get_name(), bucket.name, prop, value))
+        rest.change_bucket_props(bucket, **{prop: coerced})
+        if settle:
+            time.sleep(settle)
+        try:
+            info = rest.get_bucket_json(bucket.name)
+            actual = info.get(prop)
+        except Exception as e:
+            self.fail(
+                "{0} VERIFY FAILED: could not read back {1} on {2}/{3}: "
+                "{4}".format(
+                    tag, prop, cluster.get_name(), bucket.name, e))
+        self.log.info(
+            "{0} VERIFY bucket_prop: {1}/{2} {3}={4} (expected {5})".format(
+                tag, cluster.get_name(), bucket.name, prop, actual, value))
+        if assert_match:
+            self.assertEqual(
+                str(actual).lower(), str(value).lower(),
+                "{0} {1} did not persist on {2}/{3}; got {4!r}".format(
+                    tag, prop, cluster.get_name(), bucket.name, actual))
+        return actual
+
+    def get_global_xdcr_param(self, cluster, param):
+        """GET /settings/replications, return param value or None."""
+        rest = RestConnection(cluster.get_master_node())
+        api = rest.baseUrl[:-1] + "/settings/replications"
+        status, content, _ = rest._http_request(api)
+        if not status:
+            self.log.warning(
+                "Failed to GET /settings/replications on {0}".format(
+                    cluster.get_name()))
+            return None
+        try:
+            obj = json.loads(content)
+            return obj.get(param)
+        except Exception as e:
+            self.log.warning(
+                "Could not parse global xdcr settings: {0}".format(e))
+            return None
+
+    # ------------------------------------------------------------------
+    # Prometheus scrape helpers. Distinct from "metric absent from
+    # response" (legitimate zero) -- raises on infra failure so callers
+    # do not silently coerce a node-down event into a zero reading.
+    # ------------------------------------------------------------------
+    def scrape_prometheus_metric(self, server, metric_name,
+                                   sum_across_labels=True,
+                                   endpoints=("_prometheusMetrics",)):
+        """Scrape `metric_name` from the node's Prometheus endpoint(s).
+        Returns the summed float (default) or a list of (endpoint, line)
+        tuples if `sum_across_labels=False`.
+        Raises `MetricsScrapeError` if every endpoint is unreachable."""
+        rest = RestConnection(server)
+        total = 0.0
+        lines = []
+        any_ok = False
+        last_err = None
+        for endpoint in endpoints:
+            try:
+                status, content = rest.get_rest_endpoint_data(
+                    endpoint, ip=server.ip, port=server.port)
+            except Exception as e:
+                last_err = e
+                continue
+            if not status:
+                last_err = "non-OK status from {0}".format(endpoint)
+                continue
+            any_ok = True
+            text = (content.decode()
+                    if isinstance(content, bytes) else str(content))
+            for line in text.splitlines():
+                stripped = line.lstrip()
+                if stripped.startswith("#") or not stripped:
+                    continue
+                # Exact-match the metric token. `startswith` would
+                # also match histogram/summary auto-series
+                # (`<name>_sum`, `<name>_count`, `<name>_bucket`,
+                # `<name>_created`) AND any unrelated metric whose
+                # name extends `metric_name` as a prefix -- both
+                # inflate the sum and break strict counter
+                # assertions. Token is everything before `{` or
+                # whitespace, whichever comes first.
+                name = stripped.split("{", 1)[0].split(None, 1)[0]
+                if name != metric_name:
+                    continue
+                if sum_across_labels:
+                    try:
+                        total += float(line.rsplit(None, 1)[-1])
+                    except ValueError:
+                        self.log.warning(
+                            "{0} Could not parse metric line: {1}"
+                            .format(self._log_tag(), line))
+                else:
+                    lines.append((endpoint, line))
+        if not any_ok:
+            raise MetricsScrapeError(
+                "Prometheus scrape failed on {0}: {1}".format(
+                    server.ip, last_err))
+        return total if sum_across_labels else lines
+
+    def scrape_prometheus_lines(self, server, name_substr,
+                                 endpoints=("_prometheusMetrics",
+                                             "_prometheusMetricsHigh")):
+        """Return every line whose name contains `name_substr`
+        (case-insensitive) across the given endpoints. Used to detect
+        whether a metric is exposed under a different name or label
+        set than expected. Best-effort; does not raise on individual
+        endpoint failure."""
+        rest = RestConnection(server)
+        matches = []
+        for endpoint in endpoints:
+            try:
+                status, content = rest.get_rest_endpoint_data(
+                    endpoint, ip=server.ip, port=server.port)
+            except Exception as e:
+                self.log.warning(
+                    "Endpoint {0} scrape on {1} raised: {2}".format(
+                        endpoint, server.ip, e))
+                continue
+            if not status:
+                continue
+            text = (content.decode()
+                    if isinstance(content, bytes) else str(content))
+            for line in text.splitlines():
+                if line.startswith("#") or not line.strip():
+                    continue
+                if name_substr.lower() in line.lower():
+                    matches.append((endpoint, line))
+        return matches
+
+    # ------------------------------------------------------------------
+    # SDK helpers. _get_sdk_client is a hook subclasses may override to
+    # return a pooled / cached client. Default opens a fresh SDKClient
+    # which the caller MUST close.
+    # ------------------------------------------------------------------
+    def _get_sdk_client(self, cluster, bucket_name):
+        """Default factory: open a fresh SDKClient. Subclasses may
+        override to return a cached / shared client (e.g. FLO suite's
+        `_borrow_sdk_client`)."""
+        try:
+            from sdk_client3 import SDKClient
+        except ModuleNotFoundError:
+            from lib.sdk_client3 import SDKClient
+        master = cluster.get_master_node()
+        return SDKClient(
+            bucket=bucket_name,
+            hosts=[master.ip],
+            username=master.rest_username,
+            password=master.rest_password)
+
+    def sdk_get_raw(self, cluster, bucket, key, scope=None, collection=None):
+        """Direct SDK get that BYPASSES sdk_client3.get()'s broken retry
+        loop (sdk_client3.py:678 recurses infinitely on
+        CouchbaseException). Returns the GetResult on success, None on
+        DocumentNotFound, raises on any other SDK error.
+
+        Use this anywhere a bare `client.get(key)` would be vulnerable
+        to the recursion bug.
+
+        The default `_get_sdk_client` factory opens a fresh SDKClient
+        per call. The try/finally close() prevents fd leakage in
+        callers that loop (e.g., `wait_for_doc_present`,
+        `capture_doc_cas`) -- without it, suites that don't override
+        `_get_sdk_client` exhaust file descriptors and hit EMFILE.
+        Suites that override the factory to return a cached client
+        (e.g. FLO's `_SharedSDKClient`) implement `close()` as a no-op
+        so the cached connection survives across calls."""
+        bucket_name = bucket.name if hasattr(bucket, "name") else bucket
+        client = self._get_sdk_client(cluster, bucket_name)
+        try:
+            if scope or collection:
+                client.collection_connect(scope, collection)
+                coll = client.collection
+            else:
+                coll = client.default_collection
+            try:
+                return coll.get(key)
+            except Exception as e:
+                msg = str(e)
+                if ("DocumentNotFoundException" in msg
+                        or "document_not_found" in msg
+                        or "KEY_ENOENT" in msg):
+                    return None
+                raise
+        finally:
+            try:
+                client.close()
+            except Exception as e:
+                self.log.warning(
+                    "sdk_get_raw client.close() raised "
+                    "(non-fatal): {0}".format(e))
+
+    def wait_for_doc_present(self, cluster, bucket, key, timeout=300,
+                              poll_interval=5, scope=None, collection=None):
+        """Poll `cluster/bucket` for `key` until it exists or `timeout`
+        elapses. Returns the GetResult or None on timeout/error.
+        Routes through `sdk_get_raw` to bypass sdk_client3.get()'s
+        recursive retry path."""
+        bucket_name = bucket.name if hasattr(bucket, "name") else bucket
+        tag = self._log_tag()
+        deadline = time.time() + timeout
+        attempts = 0
+        while time.time() < deadline:
+            attempts += 1
+            try:
+                res = self.sdk_get_raw(
+                    cluster, bucket, key, scope=scope,
+                    collection=collection)
+            except Exception as e:
+                self.log.warning(
+                    "{0} unexpected SDK error on {1}/{2}/{3} "
+                    "(attempt {4}): {5}".format(
+                        tag, cluster.get_name(),
+                        bucket_name, key, attempts, e))
+                return None
+            if res is not None:
+                self.log.info(
+                    "{0} doc {1} found on {2}/{3} (attempt {4})".format(
+                        tag, key, cluster.get_name(),
+                        bucket_name, attempts))
+                return res
+            self.log.info(
+                "{0} doc {1} not yet on {2}/{3} (attempt {4}); "
+                "polling in {5}s".format(
+                    tag, key, cluster.get_name(),
+                    bucket_name, attempts, poll_interval))
+            time.sleep(poll_interval)
+        self.log.error(
+            "{0} doc {1} NOT FOUND on {2}/{3} after {4}s "
+            "({5} attempts)".format(
+                tag, key, cluster.get_name(),
+                bucket_name, timeout, attempts))
+        return None
+
+    # ------------------------------------------------------------------
+    # CAS capture + diff. Sentinel distinguishes a doc that doesn't
+    # exist (None) from a CAS read that failed for infra reasons -- so
+    # cas_pre[k] != cas_post[k] comparisons don't reclassify a network
+    # blip as a product CAS change.
+    # ------------------------------------------------------------------
+    CAS_READ_FAILED = "__cas_read_failed__"
+    CAS_DIFF_MAX_FAIL_RATIO = 0.05
+
+    def capture_doc_cas(self, cluster, bucket, key_prefix, count,
+                         scope=None, collection=None):
+        """Read CAS for keys `<prefix>-0..count-1`. Returns
+        {key: cas-or-sentinel}. Values:
+          * `int`               - live CAS
+          * `None`              - doc does not exist (legitimate DNF)
+          * `CAS_READ_FAILED`   - infra failure
+        Diff comparisons MUST skip keys with the sentinel on either
+        side -- otherwise a transient network blip reads as a CAS
+        change."""
+        tag = self._log_tag()
+        bucket_name = bucket.name if hasattr(bucket, "name") else bucket
+        cas_map = {}
+        for i in range(count):
+            key = "{0}-{1}".format(key_prefix, i)
+            try:
+                res = self.sdk_get_raw(
+                    cluster, bucket, key,
+                    scope=scope, collection=collection)
+            except Exception as e:
+                self.log.error(
+                    "{0} CAS read INFRA FAILURE for {1} on {2}/{3}"
+                    "{4}: {5}".format(
+                        tag, key, cluster.get_name(), bucket_name,
+                        " ({0}.{1})".format(scope, collection)
+                        if scope else "", e))
+                cas_map[key] = self.CAS_READ_FAILED
+                continue
+            if res is None:
+                cas_map[key] = None
+                continue
+            cas = getattr(res, "cas", None)
+            if cas is None and isinstance(res, dict):
+                cas = res.get("cas")
+            cas_map[key] = cas
+        return cas_map
+
+    def count_cas_changes(self, cas_pre, cas_post, log_label="",
+                           max_fail_ratio=None):
+        """Diff two CAS snapshots safely. Returns
+        (changed, failed, failed_above_threshold)."""
+        tag = self._log_tag()
+        threshold = (max_fail_ratio if max_fail_ratio is not None
+                     else self.CAS_DIFF_MAX_FAIL_RATIO)
+        changed = 0
+        failed = 0
+        total = 0
+        for k in cas_pre:
+            total += 1
+            v_pre = cas_pre[k]
+            v_post = cas_post.get(k)
+            if (v_pre == self.CAS_READ_FAILED
+                    or v_post == self.CAS_READ_FAILED):
+                failed += 1
+                continue
+            if v_pre != v_post:
+                changed += 1
+        ratio = (failed / total) if total > 0 else 0.0
+        failed_above_threshold = ratio > threshold
+        if failed:
+            self.log.warning(
+                "{0} {1}CAS-diff INFRA: {2}/{3} keys had read "
+                "failures (ratio={4:.3f}; threshold={5:.3f})".format(
+                    tag, log_label, failed, total, ratio, threshold))
+        if failed_above_threshold:
+            self.log.error(
+                "{0} {1}CAS-diff failure ratio EXCEEDS threshold; "
+                "`changed` count is unreliable".format(tag, log_label))
+        return changed, failed, failed_above_threshold
+
+    # ------------------------------------------------------------------
+    # Topology assertion helpers. Run BEFORE feature assertions so
+    # topology drift (e.g. ctopology=chain silently honored as bidir)
+    # fails with explicit attribution rather than green-on-broken.
+    # ------------------------------------------------------------------
+    def assert_no_direct_replication(self, src_cluster, forbidden_cluster):
+        """Assert `src_cluster` has no remote-cluster ref pointing
+        directly at `forbidden_cluster`."""
+        forbidden_ip = forbidden_cluster.get_master_node().ip
+        rest = RestConnection(src_cluster.get_master_node())
+        for remote in rest.get_remote_clusters():
+            if remote.get("deleted"):
+                continue
+            host = remote.get("hostname", "")
+            if forbidden_ip in host:
+                self.fail(
+                    "Topology assertion failed: cluster {0} has a direct "
+                    "remote-cluster ref to {1} ({2}); should not contain "
+                    "a shortcut".format(
+                        src_cluster.get_name(),
+                        forbidden_cluster.get_name(), host))
+        self.log.info(
+            "Topology asserted: no direct {0}<->{1} remote-cluster ref"
+            .format(src_cluster.get_name(),
+                     forbidden_cluster.get_name()))
+
+    def assert_direct_replication(self, src_cluster, peer_cluster):
+        """Assert `src_cluster` has a non-deleted remote-cluster ref
+        pointing at `peer_cluster`. Used in star/ring/chain topology
+        self-tests."""
+        peer_ip = peer_cluster.get_master_node().ip
+        rest = RestConnection(src_cluster.get_master_node())
+        for remote in rest.get_remote_clusters():
+            if remote.get("deleted"):
+                continue
+            if peer_ip in remote.get("hostname", ""):
+                self.log.info(
+                    "Topology asserted: {0}->{1} direct ref present"
+                    .format(src_cluster.get_name(),
+                             peer_cluster.get_name()))
+                return
+        self.fail(
+            "Topology assertion failed: cluster {0} has no remote ref to "
+            "{1} ({2})".format(
+                src_cluster.get_name(), peer_cluster.get_name(), peer_ip))
+
+    def assert_ring_topology(self, expected_n_clusters,
+                              fail_on_conf_mismatch=False):
+        """Verify a daisy-chain ring (A->B->C->A) topology with
+        exactly N clusters and unidirectional forward edges.
+
+        Strict positive proof (not just conf-string sniffing):
+          * Cluster count matches.
+          * Forward edges exist: C1->C2, C2->C3, ..., Cn->C1.
+          * No "shortcut" edges (would defeat data-loss callouts).
+        Skips on cluster-count mismatch unless `fail_on_conf_mismatch`
+        is True; FAILS if conf claims ring + unidir but actual remote-
+        cluster refs don't match (i.e. base class silently ignored
+        the params)."""
+        clusters = self.get_cb_clusters()
+        if len(clusters) < expected_n_clusters:
+            self.skipTest(
+                "{0} requires >={1} clusters; got {2}".format(
+                    self._log_tag(), expected_n_clusters, len(clusters)))
+        topology = self._input.param("ctopology", "chain")
+        if topology != "ring":
+            if fail_on_conf_mismatch:
+                self.fail("ctopology must be ring; got {0!r}".format(
+                    topology))
+            self.skipTest("requires ctopology=ring; got {0!r}".format(
+                topology))
+        rdirection = self._input.param("rdirection", "unidirection")
+        if rdirection != "unidirection":
+            if fail_on_conf_mismatch:
+                self.fail(
+                    "rdirection must be unidirection; got {0!r}"
+                    .format(rdirection))
+            self.skipTest(
+                "requires rdirection=unidirection; got {0!r}"
+                .format(rdirection))
+        for i in range(expected_n_clusters):
+            self.assert_direct_replication(
+                clusters[i],
+                clusters[(i + 1) % expected_n_clusters])
+        for i in range(expected_n_clusters):
+            src = clusters[i]
+            forward = clusters[(i + 1) % expected_n_clusters]
+            for other in clusters:
+                if other is src or other is forward:
+                    continue
+                self.assert_no_direct_replication(src, other)
+
+    def capture_checkpoint_seqnos(self, cluster):
+        """Read the most recent vb checkpoint seqno per replication.
+        Returns dict {repl_id: max_seqno} where max_seqno is the
+        max across vbuckets (or 0 on read failure)."""
+        tag = self._log_tag()
+        rest = RestConnection(cluster.get_master_node())
+        seqnos = {}
+        for repl in rest.get_replications():
+            repl_id = repl.get("id")
+            if not repl_id:
+                continue
+            try:
+                ckpt = rest.get_recent_xdcr_vb_ckpt(repl_id)
+            except Exception as e:
+                self.log.warning(
+                    "{0} could not read checkpoint for {1}: {2}".format(
+                        tag, repl_id, e))
+                seqnos[repl_id] = 0
+                continue
+            if isinstance(ckpt, dict):
+                seqnos[repl_id] = int(ckpt.get("seqno", 0))
+            else:
+                seqnos[repl_id] = 0
+        return seqnos
+
+    # ------------------------------------------------------------------
+    # Version detection (mixed-mode aware)
+    # ------------------------------------------------------------------
+    def node_version(self, server):
+        """Return the node's server version string. Raises on read
+        failure: an unreachable node must not be silently coerced to
+        None, which would make a partial cluster look uniform."""
+        return RestConnection(server).get_nodes_self().version
+
+    def cluster_versions(self, cluster):
+        """Map node-ip -> version for every node. Raises if any node
+        is unreachable."""
+        return {node.ip: self.node_version(node)
+                for node in cluster.get_nodes()}
+
+    def is_mixed_mode(self, cluster):
+        """True if the cluster has >=2 distinct node versions. Raises
+        if version detection fails on any node."""
+        versions = set(self.cluster_versions(cluster).values())
+        versions.discard(None)
+        return len(versions) > 1
+
+    # ------------------------------------------------------------------
+    # Pipeline-stats helpers. goxdcr stores `replication["target"]` as
+    # `<remote_cluster_uuid>/<src_bucket>/<dst_bucket>` -- to filter
+    # replications by destination cluster, callers MUST resolve the
+    # peer's UUID first (the human cluster name is NOT in the target
+    # path). Previous bug: peer_name-not-in-target silently dropped
+    # every replication and zeros looked like product failure.
+    # ------------------------------------------------------------------
+    PIPELINE_STATS = (
+        "docs_received_from_dcp",
+        "docs_processed",
+        "docs_filtered",
+        "docs_written",
+    )
+
+    def remote_cluster_uuid_for_peer(self, cluster, peer_cluster):
+        """Resolve `peer_cluster`'s remote-cluster UUID as recorded on
+        `cluster`. Returns None when no matching ref exists."""
+        tag = self._log_tag()
+        peer_ip = peer_cluster.get_master_node().ip
+        rest = RestConnection(cluster.get_master_node())
+        refs = rest.get_remote_clusters()
+        for ref in refs:
+            if ref.get("deleted"):
+                continue
+            host = ref.get("hostname", "")
+            if peer_ip in host:
+                uuid = ref.get("uuid")
+                if uuid:
+                    self.log.info(
+                        "{0} remote-cluster UUID for peer {1} ({2}) "
+                        "on {3}: {4}".format(
+                            tag, peer_cluster.get_name(), peer_ip,
+                            cluster.get_name(), uuid))
+                    return uuid
+        self.log.warning(
+            "{0} no remote-cluster ref for peer {1} ({2}) on {3}; "
+            "refs={4}".format(
+                tag, peer_cluster.get_name(), peer_ip,
+                cluster.get_name(),
+                [(r.get("name"), r.get("hostname"), r.get("uuid"))
+                 for r in refs]))
+        return None
+
+    def replications_to_peer(self, cluster, peer_cluster,
+                              src_bucket_filter=None):
+        """Yield (replication_dict, src_bucket) for every active
+        replication on `cluster` whose target is `peer_cluster`,
+        optionally restricted to a single source bucket. If UUID
+        resolution fails, yields ALL replications and logs a warning
+        -- over-counting is preferable to silently dropping every
+        replication when the peer's UUID can't be resolved."""
+        rest = RestConnection(cluster.get_master_node())
+        replications = rest.get_replications()
+        peer_uuid = self.remote_cluster_uuid_for_peer(
+            cluster, peer_cluster)
+        for repl in replications:
+            if peer_uuid is not None:
+                target = repl.get("target", "") or ""
+                rid = repl.get("id", "") or ""
+                if peer_uuid not in target and peer_uuid not in rid:
+                    continue
+            src_bucket = repl.get("source", "default")
+            if src_bucket_filter and src_bucket != src_bucket_filter:
+                continue
+            yield repl, src_bucket
+
+    def read_repl_stat(self, cluster, repl_id, src_bucket, stat):
+        """Fetch a per-replication stat from
+        `pools/default/buckets/@xdcr-<bucket>/stats`. Path:
+        `replications/<repl_id>/<stat>`. Raises on read failure."""
+        full = "replications/{0}/{1}".format(repl_id, stat)
+        return cluster.get_xdcr_stat(src_bucket, full)
+
+    def get_docs_processed_to_peer(self, cluster, peer_cluster,
+                                     src_bucket_filter=None):
+        """Sum pipeline signals across replications on `cluster` whose
+        destination is `peer_cluster`. Returns dict with the four
+        PIPELINE_STATS keys plus `_failed_reads` (list of per-stat
+        error messages, so callers can distinguish "stat not
+        exported" from "stat is zero")."""
+        tag = self._log_tag()
+        stats = {s: 0 for s in self.PIPELINE_STATS}
+        stats["_failed_reads"] = []
+        any_repl = False
+        for repl, src_bucket in self.replications_to_peer(
+                cluster, peer_cluster,
+                src_bucket_filter=src_bucket_filter):
+            any_repl = True
+            repl_id = repl.get("id", "")
+            for stat in self.PIPELINE_STATS:
+                try:
+                    stats[stat] += int(self.read_repl_stat(
+                        cluster, repl_id, src_bucket, stat))
+                except Exception as e:
+                    stats["_failed_reads"].append(
+                        "{0}/{1}/{2}: {3}".format(
+                            repl_id, src_bucket, stat, e))
+        if not any_repl:
+            self.log.warning(
+                "{0} no replications matched on {1} for peer {2}; "
+                "returning zeros".format(
+                    tag, cluster.get_name(),
+                    peer_cluster.get_name()))
+        if stats["_failed_reads"]:
+            self.log.warning(
+                "{0} pipeline stat read failures on {1}->{2}: {3}"
+                .format(tag, cluster.get_name(),
+                         peer_cluster.get_name(),
+                         stats["_failed_reads"]))
+        self.log.info(
+            "{0} pipeline stats on {1}->{2}: {3}".format(
+                tag, cluster.get_name(),
+                peer_cluster.get_name(), stats))
+        return stats
+
+    def get_docs_written_to_peer(self, cluster, peer_cluster):
+        """Sum `docs_written` across replications on `cluster` whose
+        destination is `peer_cluster`. Delegates to
+        `get_docs_processed_to_peer` so peer-UUID resolution + read
+        failure logging stay in one place."""
+        return self.get_docs_processed_to_peer(
+            cluster, peer_cluster).get("docs_written", 0)
+
+    def wait_for_pipeline_delta(self, cluster, peer_cluster, baseline,
+                                 min_delta, timeout=300,
+                                 poll_interval=10):
+        """Poll `get_docs_processed_to_peer` until any of the four
+        PIPELINE_STATS advances by at least `min_delta` over
+        `baseline`, or `timeout` elapses. Stats samples refresh on
+        a periodic flush -- read 100ms after a write usually sees
+        stale values, so a poll is required."""
+        tag = self._log_tag()
+        deadline = time.time() + timeout
+        last = baseline
+        while time.time() < deadline:
+            last = self.get_docs_processed_to_peer(cluster, peer_cluster)
+            for stat in self.PIPELINE_STATS:
+                if last.get(stat, 0) - baseline.get(stat, 0) >= min_delta:
+                    self.log.info(
+                        "{0} pipeline delta observed: "
+                        "{1} pre={2} post={3} >= {4}".format(
+                            tag, stat, baseline.get(stat, 0),
+                            last.get(stat, 0), min_delta))
+                    return last
+            time.sleep(poll_interval)
+        self.log.warning(
+            "{0} pipeline delta NOT observed within {1}s; final={2}"
+            .format(tag, timeout, last))
+        return last
+
+
+class MetricsScrapeError(RuntimeError):
+    """Raised when a Prometheus scrape endpoint cannot be read.
+    Distinct from "metric absent from response" (legitimate zero)."""
+
+
