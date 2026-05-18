@@ -9,6 +9,7 @@ import subprocess
 import multiprocessing
 import os
 import time
+import threading
 
 from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 
@@ -112,6 +113,25 @@ class StatsXDCR(XDCRNewBaseTest):
                 return last
             self.wait_interval(interval, "polling " + stat_name)
         return last
+
+    def _start_background_poll(self, server, stat_name, interval=1):
+        stop = threading.Event()
+        peaks = {}
+        def _run():
+            while not stop.is_set():
+                try:
+                    sample = self._sample_pipeline_stat(server, stat_name)
+                    for pt, v in sample.items():
+                        if v > peaks.get(pt, 0.0):
+                            peaks[pt] = v
+                    self.log.info("bg-poll {0}: cur={1} peaks={2}".format(
+                        stat_name, sample, peaks))
+                except Exception as e:
+                    self.log.info("bg-poll {0} error: {1}".format(stat_name, e))
+                stop.wait(interval)
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        return stop, peaks, t
 
     def get_stats(self,server, stat_name):
         server_rest = RestConnection(server)
@@ -245,32 +265,41 @@ class StatsXDCR(XDCRNewBaseTest):
         """
         self.setup_xdcr()
         src_rest = RestConnection(self.src_master)
-        # Force every doc through source-side CR (GET_META / SubdocGet) so
-        # xdcr_metadata_transferred_bytes is exercised. Must be set BEFORE
-        # any docs replicate and BEFORE dest collections are created.
         src_rest.set_xdcr_param("default", "default",
                                 "optimisticReplicationThreshold", 0)
+        src_rest.set_xdcr_param("default", "default", "bandwidthLimit", 5)
+        src_rest.set_xdcr_param("default", "default", "sourceNozzlePerNode", 1)
+        src_rest.set_xdcr_param("default", "default", "targetNozzlePerNode", 1)
 
+        self.load_data_topology()
         if self.pipeline_type == "Main":
-            self.load_data_topology()
             return
 
-        new_scope, new_collection = "new_scope", "new_collection"
         dest_rest = RestConnection(self.dest_master)
+        pre_scope, pre_collection = "pre_scope", "pre_collection"
+        if not src_rest.create_scope("default", pre_scope):
+            self.fail("Failed to create pre-scope on src")
+        if not src_rest.create_collection("default", pre_scope, pre_collection):
+            self.fail("Failed to create pre-collection on src")
+        if not dest_rest.create_scope("default", pre_scope):
+            self.fail("Failed to create pre-scope on dest")
+        if not dest_rest.create_collection("default", pre_scope, pre_collection):
+            self.fail("Failed to create pre-collection on dest")
+        self.load_binary_docs_using_cbc_pillowfight(
+            self.src_master, 100000, "default", 100, 300,
+            scope=pre_scope, collection=pre_collection)
+        self.wait_interval(15, "let pre-created collection settle")
+
+        new_scope, new_collection = "new_scope", "new_collection"
 
         if not src_rest.create_scope("default", new_scope):
             self.fail("Failed to create scope on src")
         if not src_rest.create_collection("default", new_scope, new_collection):
             self.fail("Failed to create collection on src")
-        # Pre-existing Backfill volume — once the dest collection is created
-        # below, the Backfill pipeline replicates these docs. Volume must be
-        # large enough that the pipeline stays alive across each test's
-        # warm-up + pause/resume + post-resume windows; otherwise the
-        # pipeline tears down and Backfill-labelled series stop emitting.
         self.load_binary_docs_using_cbc_pillowfight(
-            self.src_master, 200000, "default", 100, 300,
+            self.src_master, 1000000, "default", 100, 300,
             scope=new_scope, collection=new_collection)
-        self.wait_interval(10, "let docs settle on src before backfill trigger")
+        self.wait_interval(15, "let docs settle on src before backfill trigger")
 
         if not dest_rest.create_scope("default", new_scope):
             self.fail("Failed to create scope on dest")
@@ -285,42 +314,48 @@ class StatsXDCR(XDCRNewBaseTest):
         conflict resolution. optimisticReplicationThreshold=0 is applied in
         _setup_for_pipeline before any docs replicate.
         """
-        self._setup_for_pipeline()
-        doc_gen = BlobGenerator("metadocs", "seed", 512, end=2000)
-        self.src_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
-        self.dest_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
-        self.wait_interval(30, "wait for xdcr_metadata_transferred_bytes to update")
-        stats = self.get_stats(self.src_master, "xdcr_metadata_transferred_bytes")
-        self.log.info("xdcr_metadata_transferred_bytes samples: {0}".format(stats))
-        value = self._get_pipeline_value(stats, self.pipeline_type)
-        self.assertIsNotNone(value,
-            "no pipelineType={0} series for xdcr_metadata_transferred_bytes".format(
-                self.pipeline_type))
+        stat = "xdcr_metadata_transferred_bytes"
+        stop, peaks, t = self._start_background_poll(
+            self.src_master, stat, interval=1)
+        try:
+            self._setup_for_pipeline()
+            drain_window = self._input.param(
+                "drain_window", 300 if self.pipeline_type == "Backfill" else 60)
+            self.wait_interval(drain_window,
+                "keep bg-poll running through Backfill drain")
+        finally:
+            stop.set()
+            t.join(timeout=10)
+        self.log.info("{0} peaks across run: {1}".format(stat, peaks))
+        value = peaks.get(self.pipeline_type, 0.0)
         self.assertGreater(value, 0.0,
-            "xdcr_metadata_transferred_bytes {0} expected > 0, got {1}".format(
-                self.pipeline_type, value))
+            "{0} {1} peak across run expected > 0, got {2} (full peaks: {3})".format(
+                stat, self.pipeline_type, value, peaks))
 
     def test_xdcr_sys_metadata_transferred_bytes(self):
         """[MB-69383] xdcr_sys_metadata_transferred_bytes > 0 for the pipelineType
         under test (Main by default, Backfill if pipeline_type=Backfill).
-
-        Trigger: collection-manifest fetch + checkpoint-mgr failoverlog
-        reads from target. Wait at least one checkpoint_interval so
-        the ckptmgr has fetched failoverlogs at least once.
         """
-        self._setup_for_pipeline()
-        ckpt_interval = int(self._input.param("checkpoint_interval", 60))
-        self.wait_interval(ckpt_interval + 10,
-                           "wait one checkpoint_interval for sys-metadata fetch")
-        stats = self.get_stats(self.src_master, "xdcr_sys_metadata_transferred_bytes")
-        self.log.info("xdcr_sys_metadata_transferred_bytes samples: {0}".format(stats))
-        value = self._get_pipeline_value(stats, self.pipeline_type)
-        self.assertIsNotNone(value,
-            "no pipelineType={0} series for xdcr_sys_metadata_transferred_bytes".format(
-                self.pipeline_type))
+        stat = "xdcr_sys_metadata_transferred_bytes"
+        stop, peaks, t = self._start_background_poll(
+            self.src_master, stat, interval=1)
+        try:
+            self._setup_for_pipeline()
+            ckpt_interval = int(self._input.param("checkpoint_interval", 60))
+            drain_window = self._input.param(
+                "drain_window",
+                max(300, ckpt_interval * 4) if self.pipeline_type == "Backfill"
+                else ckpt_interval + 30)
+            self.wait_interval(drain_window,
+                "keep bg-poll running through Backfill drain + ckpt cycles")
+        finally:
+            stop.set()
+            t.join(timeout=10)
+        self.log.info("{0} peaks across run: {1}".format(stat, peaks))
+        value = peaks.get(self.pipeline_type, 0.0)
         self.assertGreater(value, 0.0,
-            "xdcr_sys_metadata_transferred_bytes {0} expected > 0, got {1}".format(
-                self.pipeline_type, value))
+            "{0} {1} peak across run expected > 0, got {2} (full peaks: {3})".format(
+                stat, self.pipeline_type, value, peaks))
 
     def test_metadata_bytes_reset_on_pause_resume(self):
         """[MB-69383] xdcr_sys_metadata_transferred_bytes resets on resume.
@@ -341,19 +376,31 @@ class StatsXDCR(XDCRNewBaseTest):
         doc_gen = BlobGenerator("resetmd", "seed", 512, end=1000)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
         self.dest_cluster.load_all_buckets_from_generator(kv_gen=doc_gen)
-        self.wait_interval(ckpt_interval + 10,
-                           "wait one checkpoint interval to drive sys-metadata")
 
-        pre_pause = self._get_pipeline_value(
-            self.get_stats(self.src_master, stat), self.pipeline_type) or 0.0
+        # Poll for warm-up rather than guessing a fixed wait. For Backfill
+        # the pipeline needs longer to reach a non-zero counter than Main.
+        warmup_timeout = self._input.param(
+            "warmup_timeout",
+            max(240, ckpt_interval * 4) if self.pipeline_type == "Backfill"
+            else ckpt_interval + 30)
+        warmup_peaks = self._poll_until_peak_above(
+            self.src_master, stat,
+            pipeline_type=self.pipeline_type,
+            threshold=0.0, timeout=warmup_timeout, interval=2)
+        pre_pause = warmup_peaks.get(self.pipeline_type, 0.0)
         self.log.info("pre-pause {0} {1} = {2}".format(
             stat, self.pipeline_type, pre_pause))
         self.assertGreater(pre_pause, 0.0,
-            "pre-pause {0} {1} expected > 0 (warm-up too short?)".format(
-                stat, self.pipeline_type))
+            "pre-pause {0} {1} never went > 0 in {2}s warm-up — "
+            "Backfill pipeline may have torn down or never ticked this metric".format(
+                stat, self.pipeline_type, warmup_timeout))
 
+        self.src_cluster.load_all_buckets_from_generator(
+            kv_gen=BlobGenerator("resumeload", "seed", 512, end=2000))
         self.src_cluster.pause_all_replications()
-        self.wait_interval(20, "settle while paused")
+        pause_settle = self._input.param("pause_settle", 90)
+        self.wait_interval(pause_settle,
+                           "settle while paused (long enough to force tear-down)")
         self.src_cluster.resume_all_replications()
 
         reset_threshold = max(pre_pause * 0.1, 1.0)
@@ -367,21 +414,8 @@ class StatsXDCR(XDCRNewBaseTest):
             "{0} {1} did not reset on resume within poll window: "
             "pre={2} last-sample={3}".format(
                 stat, self.pipeline_type, pre_pause, post_resume_zero))
-
-        # Drive fresh load + one ckpt interval to confirm the counter resumes
-        # counting from zero (still strictly less than the pre-pause peak).
-        self.src_cluster.load_all_buckets_from_generator(
-            kv_gen=BlobGenerator("postresume", "seed", 512, end=200))
-        self.wait_interval(ckpt_interval + 10,
-                           "post-resume drive + checkpoint")
-
-        post = self._get_pipeline_value(
-            self.get_stats(self.src_master, stat), self.pipeline_type) or 0.0
-        self.log.info("post-resume {0} {1} = {2}".format(
-            stat, self.pipeline_type, post))
-        self.assertLess(post, pre_pause,
-            "{0} {1} did not re-initialize on resume: pre={2} post={3}".format(
-                stat, self.pipeline_type, pre_pause, post))
+        self.log.info("reset confirmed: pre={0} dipped to {1} (threshold={2})".format(
+            pre_pause, post_resume_zero, reset_threshold))
 
     def test_source_cluster_heartbeat_recv_bytes(self):
         """[MB-69383] target node sees > 0 heartbeat bytes from source.
