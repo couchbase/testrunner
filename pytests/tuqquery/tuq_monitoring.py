@@ -153,32 +153,34 @@ class QueryMonitoringTests(QueryTests):
         tx_start = self.run_cbq_query(query="BEGIN WORK", txtimeout="2m")
         txid = tx_start['results'][0]['txid']
         for query in queries:
-            t51 = threading.Thread(name='run_second_query', target=self.run_transaction_query, args=(query, txid))
-            t51.start()
-            results = self.run_cbq_query(query="SELECT * from system:active_requests")
-            try:
-                if results['results'][0]['active_requests']['statement'] == query:
-                    self.log.info(results['results'][0]['active_requests'])
-                    self.assertEqual(results['results'][0]['active_requests']['txid'], txid)
-                    self.assertTrue('transactionRemainingTime' in results['results'][0]['active_requests'],
-                                    "Transaction Remaining Time not found in the entry! {0}".format(
-                                        str(results['results'][0]['active_requests'])))
-                    self.assertTrue('transactionElapsedTime' in results['results'][0]['active_requests'],
-                                    "Transaction Elapsed Time not found in the entry! {0}".format(
-                                        str(results['results'][0]['active_requests'])))
-                elif results['results'][1]['active_requests']['statement'] == query:
-                    self.log.info(results['results'][1]['active_requests'])
-                    self.assertEqual(results['results'][1]['active_requests']['txid'], txid)
-                    self.assertTrue('transactionRemainingTime' in results['results'][1]['active_requests'],
-                                    "Transaction Remaining Time not found in the entry! {0}".format(
-                                        str(results['results'][0]['active_requests'])))
-                    self.assertTrue('transactionElapsedTime' in results['results'][1]['active_requests'],
-                                    "Transaction Elapsed Time not found in the entry! {0}".format(
-                                        str(results['results'][1]['active_requests'])))
-                else:
-                    self.fail("Could not find the correct statement {0}".format(results))
-            finally:
-                t51.join()
+            if query is not 'COMMIT TRANSACTION':
+                t51 = threading.Thread(name='run_second_query', target=self.run_transaction_query, args=(query, txid))
+                t51.start()
+                time.sleep(1)
+                results = self.run_cbq_query(query="SELECT * from system:active_requests")
+                try:
+                    if results['results'][0]['active_requests']['statement'] == query:
+                        self.log.info(results['results'][0]['active_requests'])
+                        self.assertEqual(results['results'][0]['active_requests']['txid'], txid)
+                        self.assertTrue('transactionRemainingTime' in results['results'][0]['active_requests'],
+                                        "Transaction Remaining Time not found in the entry! {0}".format(
+                                            str(results['results'][0]['active_requests'])))
+                        self.assertTrue('transactionElapsedTime' in results['results'][0]['active_requests'],
+                                        "Transaction Elapsed Time not found in the entry! {0}".format(
+                                            str(results['results'][0]['active_requests'])))
+                    elif results['results'][1]['active_requests']['statement'] == query:
+                        self.log.info(results['results'][1]['active_requests'])
+                        self.assertEqual(results['results'][1]['active_requests']['txid'], txid)
+                        self.assertTrue('transactionRemainingTime' in results['results'][1]['active_requests'],
+                                        "Transaction Remaining Time not found in the entry! {0}".format(
+                                            str(results['results'][0]['active_requests'])))
+                        self.assertTrue('transactionElapsedTime' in results['results'][1]['active_requests'],
+                                        "Transaction Elapsed Time not found in the entry! {0}".format(
+                                            str(results['results'][1]['active_requests'])))
+                    else:
+                        self.fail("Could not find the correct statement {0}".format(results))
+                finally:
+                    t51.join()
 
     def test_transaction_completed(self):
         self.rest.set_completed_requests_collection_duration(self.master, 500)
@@ -890,13 +892,15 @@ class QueryMonitoringTests(QueryTests):
     '''Check that you can change the maximum number of entries that system:completed requests keeps at one time.'''
 
     def test_retention_config(self):
-        self.rest.set_completed_requests_max_entries(self.master, 4000)
+        for server in self.servers[:self.nodes_init]:
+            self.rest.set_completed_requests_max_entries(server, 4000)
         num_entries = 10
         # Change the retention setting to only hold the amount of queries specified by num_entries
-        response, content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
-        result = json.loads(content)
-        self.assertEqual(result['completed-limit'], num_entries)
-
+        for server in self.servers[:self.nodes_init]:
+            response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
+            result = json.loads(content)
+            self.assertEqual(result['completed-limit'], num_entries)
+    
         # Run more than num_entries(10) queries. No explicit duration comment here, so keep each query > 1 second.
         for _ in range(num_entries * 2):
             self._run_monitoring_sleep_query()
@@ -907,9 +911,10 @@ class QueryMonitoringTests(QueryTests):
 
         # negative should disable the limit
         num_entries = -1
-        response, content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
-        result = json.loads(content)
-        self.assertEqual(result['completed-limit'], num_entries)
+        for server in self.servers[:self.nodes_init]:
+            response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
+            result = json.loads(content)
+            self.assertEqual(result['completed-limit'], num_entries)
 
         for _ in range(100):
             self._run_monitoring_sleep_query()
@@ -920,20 +925,23 @@ class QueryMonitoringTests(QueryTests):
 
         # 0 should disable logging
         num_entries = 0
-        response, content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
-        result = json.loads(content)
-        self.assertEqual(result['completed-limit'], num_entries)
+        for server in self.servers[:self.nodes_init]:
+            response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
+            result = json.loads(content)
+            self.assertEqual(result['completed-limit'], num_entries)
 
         self._run_monitoring_sleep_query()
 
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 110)
-        self.rest.set_completed_requests_max_entries(self.master, 4000)
+        for server in self.servers:
+            self.rest.set_completed_requests_max_entries(server, 4000)
 
     '''Check that you can change the min duration a query has to run for to be stored in system:completed_requests'''
 
     def test_collection_config(self):
-        self.rest.set_completed_requests_collection_duration(self.master, 1000)
+        for server in self.servers[:self.nodes_init]:
+            self.rest.set_completed_requests_collection_duration(server, 1000)
         # Test the default setting of 1 second
         self.run_cbq_query('select * from system:active_requests')
         self._run_monitoring_sleep_query()
@@ -945,9 +953,10 @@ class QueryMonitoringTests(QueryTests):
         # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 3.5 seconds.
         min_duration = 3500
         # Change the collection setting
-        response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
-        result = json.loads(content)
-        self.assertEqual(result['completed-threshold'], min_duration)
+        for server in self.servers[:self.nodes_init]:
+            response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
+            result = json.loads(content)
+            self.assertEqual(result['completed-threshold'], min_duration)
         # Construct sleep queries that run for 5 seconds.
         self._run_monitoring_sleep_query(5000)
         self._run_monitoring_sleep_query(5000)
@@ -963,9 +972,10 @@ class QueryMonitoringTests(QueryTests):
 
         # Check 1 millisecond, basically any query should show up here
         min_duration = 1
-        response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
-        result = json.loads(content)
-        self.assertEqual(result['completed-threshold'], min_duration)
+        for server in self.servers[:self.nodes_init]:
+            response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
+            result = json.loads(content)
+            self.assertEqual(result['completed-threshold'], min_duration)
 
         self.run_cbq_query('select * from system:active_requests')
         self._run_monitoring_sleep_query()
@@ -975,7 +985,8 @@ class QueryMonitoringTests(QueryTests):
         # Disable logging
         min_duration = -1
         # Change the collection setting
-        response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
+        for server in self.servers[:self.nodes_init]:
+            response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
         result = json.loads(content)
         self.assertTrue(result['completed-threshold'] == min_duration)
         self.run_cbq_query('delete from system:completed_requests')

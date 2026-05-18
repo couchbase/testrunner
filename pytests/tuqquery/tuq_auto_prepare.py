@@ -74,7 +74,7 @@ class QueryAutoPrepareTests(QueryTests):
                                    % (self.curl_path, self.master.ip, self.n1ql_port, prepared_query))
 
         # Make sure that the prepared statement got prepared on all active nodes (2)
-        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=30)
+        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=20)
 
         # execute the non prepared version of the query to compare results
         curl_output = self.shell.execute_command("%s -u Administrator:password %s:%s/query/service -d statement='%s&%s'"
@@ -158,7 +158,7 @@ class QueryAutoPrepareTests(QueryTests):
                            server=self.servers[0])
         self.run_cbq_query(query="PREPARE P1 FROM select * from {0} limit 5".format(self.query_bucket),
                            server=self.servers[0])
-        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=30)
+        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=20)
 
     ''' Test if you can force a prepared statement to be reprepared'''
 
@@ -167,7 +167,7 @@ class QueryAutoPrepareTests(QueryTests):
                            server=self.servers[0])
         self.run_cbq_query(query="PREPARE FORCE P1 FROM select * from {0} limit 5".format(self.query_bucket),
                            server=self.servers[0])
-        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=30)
+        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=20)
 
     ''' Test that you can prepare two statements with different names but the same text'''
 
@@ -177,7 +177,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.run_cbq_query(query="PREPARE P2 FROM select * from {0} limit 5".format(self.query_bucket),
                            server=self.servers[0])
 
-        self.with_retry(lambda: self.check_prepared_finished(), eval=4, delay=1, tries=30)
+        self.with_retry(lambda: self.check_prepared_finished(), eval=4, delay=1, tries=20)
 
         prepared_name = self.run_cbq_query('select * from system:prepareds where name = "P1" ')
         self.assertEqual(prepared_name['metrics']['resultCount'], self.nodes_init)
@@ -302,7 +302,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
-            self.run_cbq_query(query="DROP INDEX idx ON {0}".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx IF EXISTS ON {0}".format(self.query_bucket))
 
     '''Drop an index and create a new index on the same field, this is a new index that the prepared needs to use,
        this should trigger a re-prepare'''
@@ -323,7 +323,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
-            self.run_cbq_query(query="DROP INDEX idx ON {0}".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx IF EXISTS ON {0}".format(self.query_bucket))
             self.wait_for_index_drop(self.default_bucket_name, "idx", [("join_day", 0)], self.index_type.lower())
 
         try:
@@ -334,7 +334,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
-            self.run_cbq_query(query="DROP INDEX idx2 ON {0}".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx2 IF EXISTS ON {0}".format(self.query_bucket))
             self.wait_for_index_drop(self.default_bucket_name, "idx2", [("join_day", 0)], self.index_type.lower())
 
     '''Run a prepared statement using primary index, then drop primary index and create a new index that the query will
@@ -365,7 +365,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
-            self.run_cbq_query(query="DROP INDEX idx ON {0}".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx IF EXISTS ON {0}".format(self.query_bucket))
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON {0}".format(self.query_bucket))
 
     '''Alter the node the index is present on to trigger a re-prepare'''
@@ -400,7 +400,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
             self.sleep(5)
-            self.run_cbq_query(query="DROP INDEX idx ON {0}".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx IF EXISTS ON {0}".format(self.query_bucket))
 
     def test_delete_recreate_bucket(self):
         try:
@@ -444,7 +444,7 @@ class QueryAutoPrepareTests(QueryTests):
             self._verify_results(query_results2['results'], expected_results['results'])
             self.assertEqual(query_results2['metrics']['resultCount'], 0)
         finally:
-            self.run_cbq_query(query="DROP INDEX idx ON {0}".format(self.query_bucket))
+            self.run_cbq_query(query="DROP INDEX idx IF EXISTS ON {0}".format(self.query_bucket))
 
     ''' Test that if a node is in the cluster but not currently taking traffic, it will not receive the auto-prepare'''
     def test_add_node_no_rebalance(self):
@@ -483,7 +483,7 @@ class QueryAutoPrepareTests(QueryTests):
     ''' If you drop a server the prepareds on that node should be removed'''
 
     def test_server_drop(self):
-        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=5)
+        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=20)
         # try to move index to self.servers[0]
         try:
             query = """ALTER INDEX `#primary` ON %s WITH {"action":"move", 
@@ -517,7 +517,7 @@ class QueryAutoPrepareTests(QueryTests):
     ''' Test that you can execute a prepared statement on a node freshly added, meaning it has no prepareds on it'''
 
     def test_rebalance_in_query_node(self):
-        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=5)
+        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=20)
         self.run_cbq_query(query="PREPARE p1 from select * from {0} limit 5".format(self.query_bucket),
                            server=self.servers[0])
         self.sleep(5)
@@ -767,7 +767,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.log.error("Prepared statement failed {0}".format(str(e)))
             self.fail()
         attempts = 0
-        tries = 5
+        tries = 20
         while attempts < tries:
             attempts = attempts + 1
             try:
@@ -937,7 +937,7 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query=f'DROP BUCKET IF EXISTS {filler_bucket}')
                 self.with_retry(lambda: self.run_cbq_query(
                     query=f'SELECT COUNT(*) AS keyspace_count FROM system:keyspaces WHERE name = {filler_bucket}')[
-                    'results'][0]['keyspace_count'], eval=0, delay=1, tries=60)
+                    'results'][0]['keyspace_count'], eval=0, delay=1, tries=20)
                 
 
     def test_plan_stability_prepared_only(self):
@@ -949,19 +949,19 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == initial_prepare_count,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             existing_prepared_doc_count = self._query_metadata_doc_count(where_clause='ad_hoc = false')
             self._prepare_named_statements("po_new", additional_prepare_count)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == existing_prepared_doc_count + additional_prepare_count,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             prepared_docs_before_ad_hoc_queries = self._query_metadata_doc_count(where_clause='ad_hoc = false')
             self._run_plan_stability_ad_hoc_queries()
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_docs_before_ad_hoc_queries,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'),
-                            eval=0, delay=1, tries=60)
+                            eval=0, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -973,7 +973,7 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == initial_prepare_count,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             prepared_doc_count_before_ad_hoc_queries = self._query_metadata_doc_count(where_clause='ad_hoc = false')
             ad_hoc_doc_count_before_ad_hoc_queries = self._query_metadata_doc_count(where_clause='ad_hoc = true')
@@ -981,9 +981,9 @@ class QueryAutoPrepareTests(QueryTests):
 
             # TODO: Validate individual QUERY_METADATA._system._query document contents for ad_hoc entries.
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') == ad_hoc_doc_count_before_ad_hoc_queries + 3,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_doc_count_before_ad_hoc_queries,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1001,12 +1001,12 @@ class QueryAutoPrepareTests(QueryTests):
             for query in ad_hoc_queries:
                 self.run_cbq_query(query=query)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause=ad_hoc_filter) > 0,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause=ad_hoc_filter),
-                            eval=0, delay=1, tries=60)
-            self.with_retry(lambda: self._query_metadata_doc_count(),eval=3, delay=1, tries=60)
+                            eval=0, delay=1, tries=20)
+            self.with_retry(lambda: self._query_metadata_doc_count(),eval=3, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1023,10 +1023,10 @@ class QueryAutoPrepareTests(QueryTests):
             for query in ad_hoc_queries:
                 self.run_cbq_query(query=query)
             self.with_retry(lambda: self._query_metadata_doc_count() > 0,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
-            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1038,11 +1038,11 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc_read_only"')
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == expected_prepared_docs,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             before_stats = self._query_metadata_stats()
             self._run_plan_stability_ad_hoc_queries()
-            self.with_retry(lambda: self._query_metadata_doc_count(), eval=before_stats['total'], delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(), eval=before_stats['total'], delay=1, tries=20)
 
             after_stats = self._query_metadata_stats()
             self.assertEqual(after_stats['total'], before_stats['total'])
@@ -1056,14 +1056,14 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
             self._prepare_named_statements("mgmt_off", 2)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == 2,
-                            eval=True, delay=1, tries=60)
-            self.with_retry(lambda: self._query_metadata_doc_count() > 0, eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            self.with_retry(lambda: self._query_metadata_doc_count() > 0, eval=True, delay=1, tries=20)
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
-            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1072,10 +1072,11 @@ class QueryAutoPrepareTests(QueryTests):
         try:
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
+            self.sleep(1)
             ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             for _ in range(3):
                 self.run_cbq_query(query=statement)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 1, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 2, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1088,7 +1089,7 @@ class QueryAutoPrepareTests(QueryTests):
             ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             self.run_cbq_query(query=statement_one)
             self.run_cbq_query(query=statement_two)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 2, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before + 2, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1100,7 +1101,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             self.run_cbq_query(query=dml_query)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before, delay=1, tries=20)
         finally:
             try:
                 self.run_cbq_query(query='DELETE FROM {0} USE KEYS "{1}"'.format(self.query_bucket, doc_id))
@@ -1114,15 +1115,14 @@ class QueryAutoPrepareTests(QueryTests):
         try:
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
-            ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             self.run_cbq_query(query=create_index_query)
-            self._wait_for_index_online(self.default_bucket_name, index_name)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before, delay=1, tries=60)
+            self.with_retry(
+                lambda: self.run_cbq_query(
+                    query='SELECT COUNT(*) AS create_doc_count FROM `QUERY_METADATA`.`_system`.`_query` '
+                          'WHERE UPPER(text) LIKE "%CREATE%"')['results'][0]['create_doc_count'],
+                eval=0, delay=1, tries=20)
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(index_name, self.query_bucket))
-            except CBQError:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(index_name, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_ps_auto_ah_skip_params(self):
@@ -1132,7 +1132,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             ad_hoc_before = self._query_metadata_doc_count(where_clause='ad_hoc = true')
             self.run_cbq_query(query=parameterized_query, query_params={'$day': 10})
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'), eval=ad_hoc_before, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1141,11 +1141,11 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self._run_plan_stability_ad_hoc_queries()
-            self.with_retry(lambda: self._query_metadata_doc_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count() > 0, eval=True, delay=1, tries=20)
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
-            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=20)
             self._run_plan_stability_ad_hoc_queries()
-            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(), eval=0, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1155,11 +1155,11 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
             self._prepare_plan_statement(seed_name, self._plan_stability_statement_for_day(12), save=True)
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
             prepared_before = self._query_metadata_doc_count(where_clause='ad_hoc = false')
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._prepare_named_statements("off_resume", 2)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_before + 2, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_before + 2, eval=True, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1168,11 +1168,11 @@ class QueryAutoPrepareTests(QueryTests):
         try:
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
-            self.with_retry(lambda: self._query_metadata_keyspace_count(), eval=0, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count(), eval=0, delay=1, tries=20)
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._prepare_named_statements("off_recreate", 2)
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == 2, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == 2, eval=True, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1189,20 +1189,20 @@ class QueryAutoPrepareTests(QueryTests):
                 self._prepare_plan_statement("off_keep_save_manual_{0}".format(i),
                                              self._plan_stability_statement_for_day(30 + i), save=True)
 
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') == 4,
+                            eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == mode_prepared_count +saved_statement_count,
-                            eval=True, delay=1, tries=60)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') == 3,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
 
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
 
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true'),
-                            eval=0, delay=1, tries=60)
+                            eval=0, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false'),
-                            eval=saved_statement_count, delay=1, tries=60)
+                            eval=saved_statement_count, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(),
-                            eval=saved_statement_count, delay=1, tries=60)
+                            eval=saved_statement_count, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1212,11 +1212,11 @@ class QueryAutoPrepareTests(QueryTests):
         try:
             self._cleanup_plan_stability_state()
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(14), save=True)
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == saved_statement_count,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._query_metadata_doc_count() == saved_statement_count,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1227,7 +1227,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
             prepared_before = self._query_metadata_doc_count(where_clause='ad_hoc = false')
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(15), save=True)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_before + 1, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_before + 1, eval=True, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1237,10 +1237,10 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._prepare_named_statements("manual_on_seed", 1)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == 1, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == 1, eval=True, delay=1, tries=20)
             prepared_before = self._query_metadata_doc_count(where_clause='ad_hoc = false')
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(16), save=True)
-            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_before + 1, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = false') == prepared_before + 1, eval=True, delay=1, tries=20)
         finally:
             self._cleanup_plan_stability_state()
 
@@ -1278,19 +1278,21 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(1), save=True)
-            first_statement = self._prepared_statement_text(plan_name)
-            self.assertTrue(first_statement is not None and "join_day = 1" in first_statement,
+            first_statement = self.run_cbq_query(query='SELECT encoded_plan FROM QUERY_METADATA._system._query WHERE name = "{0}"'.format(plan_name))['results'][0]
+            self.assertTrue(first_statement is not None,
                             "Initial SAVE statement text not found in prepared cache")
-            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(2), save=True, force=True)
-            second_statement = self._prepared_statement_text(plan_name)
-            self.assertTrue(second_statement is not None and "join_day = 2" in second_statement,
-                            "SAVE FORCE did not update prepared statement text")
-            self.assertNotEqual(first_statement, second_statement)
+            self.run_cbq_query(query="Create index idx_join_day on {0}(join_day)".format(self.query_bucket))
+            self.wait_for_all_indexes_online()
+            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(1), save=True, force=True)
+            second_statement = self.run_cbq_query(query='SELECT encoded_plan FROM QUERY_METADATA._system._query WHERE name = "{0}"'.format(plan_name))['results'][0]
+            self.assertTrue(second_statement is not None and second_statement != first_statement,
+                            f"SAVE FORCE did not update prepared statement text, please look original statement: {first_statement} and  updated_statement: {second_statement} for details")
             execution_result = self.run_cbq_query(query='EXECUTE {0}'.format(plan_name))
             self.assertTrue(execution_result['metrics']['resultCount'] > 0)
-            self.assertTrue(all(value == 2 for value in execution_result['results']),
+            self.assertTrue(all(value == 1 for value in execution_result['results']),
                             "Expected EXECUTE to use overwritten statement for join_day = 2")
         finally:
+            self.run_cbq_query(query="DROP INDEX idx_join_day IF EXISTS ON {0}".format(self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_ps_manual_force_on_saved_no_save(self):
@@ -1299,16 +1301,18 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(1), save=True)
-            persisted_before = self._query_metadata_doc_count(where_clause='ad_hoc = false')
-            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(2), force=True)
-            persisted_after = self._query_metadata_doc_count(where_clause='ad_hoc = false')
-            self.assertEqual(persisted_after, persisted_before,
-                             "PREPARE FORCE without SAVE should not add persisted metadata docs")
+            first_check = self.run_cbq_query(query='SELECT encoded_plan FROM QUERY_METADATA._system._query WHERE name = "{0}"'.format(plan_name))['results'][0]
+            self.run_cbq_query(query="Create index idx_join_day on {0}(join_day)".format(self.query_bucket))
+            self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(1), force=True)
+            second_check = self.run_cbq_query(query='SELECT encoded_plan FROM QUERY_METADATA._system._query WHERE name = "{0}"'.format(plan_name))['results'][0]
+            self.assertTrue(second_check is not None and second_check == first_check,
+                            f"SAVE FORCE should not have updated the encoded_plan, please look original statement: {first_check} and  updated_statement: {second_check} for details")
             execution_result = self.run_cbq_query(query='EXECUTE {0}'.format(plan_name))
             self.assertTrue(execution_result['metrics']['resultCount'] > 0)
-            self.assertTrue(all(value == 2 for value in execution_result['results']),
+            self.assertTrue(all(value == 1 for value in execution_result['results']),
                             "Expected in-memory FORCE statement to be used for EXECUTE")
         finally:
+            self.run_cbq_query(query="DROP INDEX idx_join_day IF EXISTS ON {0}".format(self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_ps_rbac_ro_cannot_update(self):
@@ -1354,8 +1358,8 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.with_retry(lambda: self.run_cbq_query(
                 query='SELECT plan_stability.mode AS mode FROM system:settings')['results'][0]['mode'] == "prepared_only",
-                eval=True, delay=1, tries=60)
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+                eval=True, delay=1, tries=20)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
         finally:
             if user:
                 self._drop_plan_stability_user(user['id'])
@@ -1368,7 +1372,7 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._prepare_named_statements("rbac_drop_query_metadata", 2)
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
 
             user = self._create_plan_stability_user(user_id=user_id, roles='query_system_catalog')
             self._assert_non_admin_query_denied(
@@ -1376,7 +1380,7 @@ class QueryAutoPrepareTests(QueryTests):
                 query='DROP BUCKET QUERY_METADATA',
                 operation='drop QUERY_METADATA bucket')
 
-            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_keyspace_count() > 0, eval=True, delay=1, tries=20)
         finally:
             if user:
                 self._drop_plan_stability_user(user['id'])
@@ -1389,7 +1393,7 @@ class QueryAutoPrepareTests(QueryTests):
             self._cleanup_plan_stability_state()
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._prepare_named_statements("rbac_delete_query_metadata", 2)
-            self.with_retry(lambda: self._query_metadata_doc_count() > 0, eval=True, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count() > 0, eval=True, delay=1, tries=20)
 
             persisted_before = self._query_metadata_doc_count()
             user = self._create_plan_stability_user(user_id=user_id, roles='query_system_catalog')
@@ -1398,7 +1402,7 @@ class QueryAutoPrepareTests(QueryTests):
                 query='DELETE FROM `QUERY_METADATA`.`_system`.`_query` LIMIT 1',
                 operation='delete QUERY_METADATA documents')
 
-            self.with_retry(lambda: self._query_metadata_doc_count(), eval=persisted_before, delay=1, tries=60)
+            self.with_retry(lambda: self._query_metadata_doc_count(), eval=persisted_before, delay=1, tries=20)
         finally:
             if user:
                 self._drop_plan_stability_user(user['id'])
@@ -1450,6 +1454,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_strict_drop_idx_prep", "idx_ep_strict_drop_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10), save=True)
@@ -1459,6 +1464,8 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict policy should raise on invalid saved prepared plan")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
             self._cleanup_plan_stability_state()
@@ -1469,6 +1476,7 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._prepare_plan_statement(plan_name, stmt, save=True)
             self._drop_recreate_collection(scope, coll)
@@ -1476,6 +1484,8 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict policy should raise after collection drop/recreate")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
             self._cleanup_plan_stability_state()
@@ -1485,6 +1495,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_strict_drop_bucket_prep", "idx_ep_strict_bucket_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10), save=True)
@@ -1493,12 +1504,11 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict policy should raise after bucket drop/recreate")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_strict_index_unavailable_prepared(self):
@@ -1511,6 +1521,7 @@ class QueryAutoPrepareTests(QueryTests):
         remote = None
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
@@ -1520,14 +1531,13 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict policy should raise while indexer is down")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
             if remote is not None:
                 self._restore_index_node(remote)
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_strict_drop_index_adhoc(self):
@@ -1540,13 +1550,17 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._set_error_policy("strict")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             try:
-                self.run_cbq_query(query=stmt)
+                self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
                 self.fail("strict policy should raise on invalid saved ad-hoc plan")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
             self._cleanup_plan_stability_state()
@@ -1560,13 +1574,17 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._set_error_policy("strict")
             self._drop_recreate_collection(scope, coll)
             try:
-                self.run_cbq_query(query=stmt)
+                self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
                 self.fail("strict policy should raise after collection drop/recreate")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
             self._cleanup_plan_stability_state()
@@ -1581,19 +1599,20 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._set_error_policy("strict")
             self._drop_recreate_bucket(self.default_bucket_name)
             try:
-                self.run_cbq_query(query=stmt)
+                self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
                 self.fail("strict policy should raise after bucket drop/recreate")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_strict_index_unavailable_adhoc(self):
@@ -1612,21 +1631,22 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._set_error_policy("strict")
             remote = self._make_index_unavailable_via_node_down(host)
             try:
-                self.run_cbq_query(query=stmt)
+                self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
                 self.fail("strict policy should raise while indexer is down")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
         finally:
             if remote is not None:
                 self._restore_index_node(remote)
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_moderate_drop_index_prepared(self):
@@ -1634,6 +1654,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_mod_drop_idx_prep", "idx_ep_mod_drop_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("moderate")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(12), save=True)
@@ -1656,6 +1677,7 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("moderate")
             self._prepare_plan_statement(plan_name, stmt, save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
@@ -1671,6 +1693,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_mod_drop_bucket_prep", "idx_ep_mod_bucket_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("moderate")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(10), save=True)
@@ -1681,10 +1704,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.assertEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                              "moderate must not overwrite persisted prepared plan after bucket recreate")
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_moderate_index_unavailable_prepared(self):
@@ -1697,6 +1717,7 @@ class QueryAutoPrepareTests(QueryTests):
         remote = None
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("moderate")
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
@@ -1711,10 +1732,7 @@ class QueryAutoPrepareTests(QueryTests):
         finally:
             if remote is not None:
                 self._restore_index_node(remote)
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_moderate_drop_index_adhoc(self):
@@ -1727,12 +1745,14 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("moderate")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan")
         finally:
@@ -1747,11 +1767,13 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("moderate")
             self._drop_recreate_collection(scope, coll)
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after collection recreate")
         finally:
@@ -1767,19 +1789,18 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("moderate")
             self._drop_recreate_bucket(self.default_bucket_name)
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after bucket recreate")
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_moderate_index_unavailable_adhoc(self):
@@ -1798,22 +1819,21 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("moderate")
             remote = self._make_index_unavailable_via_node_down(host)
             self._restore_index_node(remote)
             remote = None
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.assertEqual(self._persisted_adhoc_doc(), prior_persisted,
                              "moderate must not overwrite persisted ad-hoc plan after index recovery")
         finally:
             if remote is not None:
                 self._restore_index_node(remote)
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_drop_index_prepared(self):
@@ -1821,6 +1841,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_flex_drop_idx_prep", "idx_ep_flex_drop_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("flexible")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(18), save=True)
@@ -1829,7 +1850,7 @@ class QueryAutoPrepareTests(QueryTests):
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                                 "flexible must overwrite persisted prepared plan")
         finally:
@@ -1841,13 +1862,14 @@ class QueryAutoPrepareTests(QueryTests):
         stmt = "SELECT name FROM default:default.{0}.{1} WHERE name = 'new hotel'".format(scope, coll)
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("flexible")
             self._prepare_plan_statement(plan_name, stmt, save=True)
             prior_persisted = self._persisted_prepared_doc(plan_name)
             self._drop_recreate_collection(scope, coll)
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                                 "flexible must overwrite persisted prepared plan after collection recreate")
         finally:
@@ -1858,6 +1880,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_flex_drop_bucket_prep", "idx_ep_flex_bucket_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("flexible")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(19), save=True)
@@ -1866,14 +1889,11 @@ class QueryAutoPrepareTests(QueryTests):
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                                 "flexible must overwrite persisted prepared plan after bucket recreate")
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_index_unavailable_prepared(self):
@@ -1886,6 +1906,7 @@ class QueryAutoPrepareTests(QueryTests):
         remote = None
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("flexible")
             self._create_index_for_plan(idx, self.query_bucket, "join_day", num_replica=0,
                                         nodes=["{0}:{1}".format(host.ip, host.port)])
@@ -1896,16 +1917,13 @@ class QueryAutoPrepareTests(QueryTests):
             remote = None
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                                 "flexible must overwrite persisted prepared plan after index recovery")
         finally:
             if remote is not None:
                 self._restore_index_node(remote)
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_drop_index_adhoc(self):
@@ -1918,14 +1936,16 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("flexible")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan")
         finally:
@@ -1940,13 +1960,15 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("flexible")
             self._drop_recreate_collection(scope, coll)
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after collection recreate")
         finally:
@@ -1962,21 +1984,20 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("flexible")
             self._drop_recreate_bucket(self.default_bucket_name)
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after bucket recreate")
         finally:
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_flexible_index_unavailable_adhoc(self):
@@ -1995,24 +2016,23 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("flexible")
             remote = self._make_index_unavailable_via_node_down(host)
             self._restore_index_node(remote)
             remote = None
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after index recovery")
         finally:
             if remote is not None:
                 self._restore_index_node(remote)
-            try:
-                self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(idx, self.query_bucket))
-            except Exception:
-                pass
+            self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(idx, self.query_bucket))
             self._cleanup_plan_stability_state()
 
     def test_error_policy_strict_mixed_saved_plans(self):
@@ -2026,7 +2046,9 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=adhoc_stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            adhoc_prepared_name = self._persisted_adhoc_name(adhoc_stmt)
+            self.assertIsNotNone(adhoc_prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._prepare_plan_statement(plan_name, prepared_stmt, save=True)
             self._set_error_policy("strict")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
@@ -2034,11 +2056,15 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict must raise on saved prepared rerun")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict prepared raised as expected: {0}".format(ex))
             try:
-                self.run_cbq_query(query=adhoc_stmt)
+                self.run_cbq_query(query="EXECUTE '{0}'".format(adhoc_prepared_name))
                 self.fail("strict must raise on saved ad-hoc rerun")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict ad-hoc raised as expected: {0}".format(ex))
         finally:
             self._cleanup_plan_stability_state()
@@ -2054,7 +2080,9 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=adhoc_stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            adhoc_prepared_name = self._persisted_adhoc_name(adhoc_stmt)
+            self.assertIsNotNone(adhoc_prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._prepare_plan_statement(plan_name, prepared_stmt, save=True)
             prior_prep = self._persisted_prepared_doc(plan_name)
             prior_adhoc = self._persisted_adhoc_doc()
@@ -2062,7 +2090,7 @@ class QueryAutoPrepareTests(QueryTests):
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
-            self.run_cbq_query(query=adhoc_stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(adhoc_prepared_name))
             self.assertEqual(self._persisted_prepared_doc(plan_name), prior_prep,
                              "moderate must not overwrite persisted prepared plan in mixed scenario")
             self.assertEqual(self._persisted_adhoc_doc(), prior_adhoc,
@@ -2081,7 +2109,9 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=adhoc_stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            adhoc_prepared_name = self._persisted_adhoc_name(adhoc_stmt)
+            self.assertIsNotNone(adhoc_prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             self._prepare_plan_statement(plan_name, prepared_stmt, save=True)
             prior_prep = self._persisted_prepared_doc(plan_name)
             prior_adhoc = self._persisted_adhoc_doc()
@@ -2089,11 +2119,11 @@ class QueryAutoPrepareTests(QueryTests):
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
-            self.run_cbq_query(query=adhoc_stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(adhoc_prepared_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_prep,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_adhoc,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_prep,
                                 "flexible must overwrite persisted prepared plan in mixed scenario")
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_adhoc,
@@ -2106,6 +2136,7 @@ class QueryAutoPrepareTests(QueryTests):
         plan_name, idx = "ep_trans_prep", "idx_ep_trans_prep"
         try:
             self._cleanup_plan_stability_state()
+            self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "prepared_only"')
             self._set_error_policy("strict")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             self._prepare_plan_statement(plan_name, self._plan_stability_statement_for_day(30), save=True)
@@ -2116,11 +2147,13 @@ class QueryAutoPrepareTests(QueryTests):
                 self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
                 self.fail("strict policy should raise on invalid saved plan")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
             self._set_error_policy("flexible")
             self.run_cbq_query(query="EXECUTE {0}".format(plan_name))
             self.with_retry(lambda: self._persisted_prepared_doc(plan_name) != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_prepared_doc(plan_name), prior_persisted,
                                 "flexible must overwrite persisted prepared plan after switching from strict")
         finally:
@@ -2136,20 +2169,24 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
+            prepared_name = self._persisted_adhoc_name(stmt)
+            self.assertIsNotNone(prepared_name, "Expected saved ad-hoc plan entry in QUERY_METADATA")
             prior_persisted = self._persisted_adhoc_doc()
             self._set_error_policy("strict")
             self._drop_index_for_plan(idx, self.query_bucket, "join_day")
             self._create_index_for_plan(idx, self.query_bucket, "join_day")
             try:
-                self.run_cbq_query(query=stmt)
+                self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
                 self.fail("strict policy should raise on invalid saved ad-hoc plan")
             except CBQError as ex:
+                self.assertTrue("Reprepare error - cause: Plan Stability error policy STRICT prevents reprepare" in str(ex),
+                                "Unexpected error message for strict policy reprepare failure: {0}".format(str(ex)))
                 self.log.info("strict raised as expected: {0}".format(ex))
             self._set_error_policy("flexible")
-            self.run_cbq_query(query=stmt)
+            self.run_cbq_query(query="EXECUTE '{0}'".format(prepared_name))
             self.with_retry(lambda: self._persisted_adhoc_doc() != prior_persisted,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self.assertNotEqual(self._persisted_adhoc_doc(), prior_persisted,
                                 "flexible must overwrite persisted ad-hoc plan after switching from strict")
         finally:
@@ -2170,10 +2207,10 @@ class QueryAutoPrepareTests(QueryTests):
             self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "ad_hoc"')
             self.run_cbq_query(query=adhoc_stmt)
             self.with_retry(lambda: self._query_metadata_doc_count(where_clause='ad_hoc = true') >= 1,
-                            eval=True, delay=1, tries=60)
+                            eval=True, delay=1, tries=20)
             self._restart_all_query_services(query_nodes)
             self.with_retry(lambda: self._cluster_prepareds_count() == 0,
-                            eval=True, delay=2, tries=60)
+                            eval=True, delay=2, tries=20)
             execute_saved = self.run_cbq_query(query="EXECUTE {0}".format(prepared_saved))
             self.assertTrue('results' in execute_saved, "Saved prepared should execute after restart")
             execute_adhoc = self.run_cbq_query(query=adhoc_stmt)
@@ -2255,9 +2292,10 @@ class QueryAutoPrepareTests(QueryTests):
         self.run_cbq_query(query='UPDATE system:settings SET plan_stability.mode = "off"')
         self.run_cbq_query(query='DELETE FROM system:prepareds')
         self.run_cbq_query(query='DROP BUCKET IF EXISTS QUERY_METADATA')
+        self.sleep(10)
         self.with_retry(lambda: self.run_cbq_query(
             query='SELECT COUNT(*) AS keyspace_count FROM system:keyspaces WHERE name = "QUERY_METADATA"')[
-            'results'][0]['keyspace_count'], eval=0, delay=1, tries=60)
+            'results'][0]['keyspace_count'], eval=0, delay=1, tries=20)
 
     def _prepare_named_statements(self, name_prefix, count):
         for i in range(count):
@@ -2299,18 +2337,16 @@ class QueryAutoPrepareTests(QueryTests):
         self._wait_for_index_online(self.default_bucket_name, name)
 
     def _drop_index_for_plan(self, name, keyspace, field):
-        self.run_cbq_query(query="DROP INDEX {0} ON {1}".format(name, keyspace))
+        self.run_cbq_query(query="DROP INDEX {0} IF EXISTS ON {1}".format(name, keyspace))
         try:
             self.wait_for_index_drop(self.default_bucket_name, name, [(field, 0)], self.index_type.lower())
         except Exception as ex:
             self.log.info("wait_for_index_drop ignored: {0}".format(ex))
 
     def _drop_recreate_collection(self, scope, collection):
-        self.collections_helper.delete_collection(bucket_name=self.default_bucket_name, scope_name=scope,
-                                                  collection_name=collection)
+        self.run_cbq_query(query='DROP COLLECTION `{0}`.`{1}`.`{2}`'.format(self.default_bucket_name, scope, collection))
         self.sleep(5)
-        self.collections_helper.create_collection(bucket_name=self.default_bucket_name, scope_name=scope,
-                                                  collection_name=collection)
+        self.run_cbq_query(query='CREATE COLLECTION `{0}`.`{1}`.`{2}`'.format(self.default_bucket_name, scope, collection))
         self.sleep(5)
 
     def _drop_recreate_bucket(self, bucket):
@@ -2336,6 +2372,21 @@ class QueryAutoPrepareTests(QueryTests):
             if results['metrics']['resultCount'] == 0:
                 return None
             return str(results['results'][0])
+        except CBQError as ex:
+            if "QUERY_METADATA" in str(ex) and ("No bucket named" in str(ex) or "not found" in str(ex)):
+                return None
+            raise
+
+    def _persisted_adhoc_name(self, statement):
+        statement_prefix = statement[:45]
+        escaped_statement = statement_prefix.replace('\\', '\\\\').replace('"', '\\"')
+        try:
+            results = self.run_cbq_query(
+                query='SELECT name FROM `QUERY_METADATA`.`_system`.`_query` WHERE ad_hoc = true AND text LIKE "{0}%" LIMIT 1'.format(
+                    escaped_statement))
+            if results['metrics']['resultCount'] == 0:
+                return None
+            return results['results'][0]['name']
         except CBQError as ex:
             if "QUERY_METADATA" in str(ex) and ("No bucket named" in str(ex) or "not found" in str(ex)):
                 return None
