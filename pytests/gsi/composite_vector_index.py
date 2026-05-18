@@ -96,7 +96,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                 num_collections=self.num_collections,
                 num_of_docs_per_collection=self.num_of_docs_per_collection,
                 json_template=self.json_template,
-                load_default_coll=False)
+                load_default_coll=not skip_default_scope)
         else:
             self.restore_couchbase_bucket(
                 backup_filename=self.vector_backup_filename,
@@ -4480,7 +4480,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         doc_count = {}
         for namespace in self.namespaces:
-            count_query = f"select count(year) from {namespace} where year > 0;"
+            if self.isSparse:
+                count_query = f"select count(size) from {namespace} where size > 0;"
+            else:
+                count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             doc_count[namespace] = result
         # changing the interval to 20 mins
@@ -4529,7 +4532,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         for key, val in stats.items() if 'num_docs_pending' in key]
         self.log.info(f"Docs Pending after indexer kill: {docs_pending}")
         for namespace in self.namespaces:
-            count_query = f"select count(year) from {namespace} where year > 0;"
+            if self.isSparse:
+                count_query = f"select count(size) from {namespace} where size > 0;"
+            else:
+                count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.log.info(f"Doc count after recovery for namespace {namespace}: {result}")
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
@@ -4839,7 +4845,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         doc_count = {}
         for namespace in self.namespaces:
-            count_query = f"select count(year) from {namespace} where year > 0;"
+            if self.isSparse:
+                count_query = f"select count(size) from {namespace} where size > 0;"
+            else:
+                count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             doc_count[namespace] = result
         self.log.info(f"Doc count before recovery: {doc_count}")
@@ -4877,7 +4886,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
                         for key, val in stats.items() if 'num_docs_pending' in key]
         self.log.info(f"Docs Pending after projector kill: {docs_pending}")
         for namespace in self.namespaces:
-            count_query = f"select count(year) from {namespace} where year > 0;"
+            if self.isSparse:
+                count_query = f"select count(size) from {namespace} where size > 0;"
+            else:
+                count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.log.info(f"Doc count after recovery for namespace {namespace}: {result}")
             self.assertEqual(result, doc_count[namespace] + self.num_of_docs_per_collection,
@@ -4934,7 +4946,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         doc_count = {}
         for namespace in self.namespaces:
-            count_query = f"select count(year) from {namespace} where year > 0;"
+            if self.isSparse:
+                count_query = f"select count(size) from {namespace} where size > 0;"
+            else:
+                count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             doc_count[namespace] = result
         self.log.info(f"Doc count before recovery: {doc_count}")
@@ -5023,7 +5038,10 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
         num_rollback = self.index_rest.get_num_rollback_stat(bucket=self.buckets[0].name)
         self.assertGreaterEqual(num_rollback, 0, "No rollback has happened")
         for namespace in self.namespaces:
-            count_query = f"select count(year) from {namespace} where year > 0;"
+            if self.isSparse:
+                count_query = f"select count(size) from {namespace} where size > 0;"
+            else:
+                count_query = f"select count(year) from {namespace} where year > 0;"
             result = self.run_cbq_query(query=count_query, server=query_node)['results'][0]["$1"]
             self.log.info(f"Doc count after recovery for namespace {namespace}: {result}")
 
@@ -5379,7 +5397,8 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
         build_query = vector_idx.generate_build_query(namespace=collection_namespace)
 
-        self.run_cbq_query(query=query, server=self.n1ql_node)
+        query_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
+        self.run_cbq_query(query=query, server=query_node)
         data_node = self.get_nodes_from_services_map(service_type="kv")
 
         remote_machine = RemoteMachineShellConnection(data_node)
@@ -5740,11 +5759,17 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
             # make vector field null for some of the docs and run scans
             collection_namespace = self.namespaces[0]
-            upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
+            if self.isSparse:
+                upsert_query = f"update {collection_namespace} SET `sparse` = 12345 WHERE size = 5 LIMIT 10000"
+            else:
+                upsert_query = f"update {collection_namespace} set descriptionVector = null where rating = 0"
             self.run_cbq_query(query=upsert_query)
 
             # Fetch no of docs which will be mutated to validate the stats count
-            select_query = f"select count(*) from {collection_namespace} where rating = 0"
+            if self.isSparse:
+                select_query = f"select count(*) from {collection_namespace} where `sparse` = 12345"
+            else:
+                select_query = f"select count(*) from {collection_namespace} where rating = 0"
             result = self.run_cbq_query(query=select_query)
             doc_count = int(result["results"][0]["$1"])
 

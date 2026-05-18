@@ -2573,7 +2573,7 @@ class GSIUtils(object):
                             scan_nprobes=scan_nprobes, limit=limit,
                             expected_title=query_text, sparsejl_dim=sparsejl_dim,
                             query_template=FULL_SCAN_ORDER_BY_TEMPLATE.format(
-                                f"{sparse_vecfield}, {scan_sparse_vec}",
+                                f"meta().id, {sparse_vecfield}, {scan_sparse_vec}",
                                 scan_sparse_vec)))
 
         # 2. Single vector field + single scalar INCLUDE (matches shoe: leading_scalar)
