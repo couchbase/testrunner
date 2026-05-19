@@ -2315,7 +2315,9 @@ class RemoteMachineShellConnection(KeepRefs):
                         output, error = self.execute_command('{0}dpkg -i /tmp/{1}'\
                                                  .format(environment, build.name),
                                                          debug=debug_logs)
-
+                    if "debian 12" in self.info.distribution_version.lower():
+                        self.execute_command("apt-get install -y libtinfo5 libncurses5",
+                                             debug=debug_logs)
 
             if "SUSE" in self.info.distribution_type:
                 msgs_check = ["insserv: Service network is missed in the runlevels 2 4",
@@ -3989,6 +3991,8 @@ class RemoteMachineShellConnection(KeepRefs):
                     if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                         """from watson, systemd is used in centos 7, suse 12 """
                         log.info("Running systemd command on this server")
+                        self.execute_command("systemctl daemon-reload")
+                        self.execute_command("systemctl reset-failed couchbase-server.service")
                         o, r = self.execute_command("systemctl start couchbase-server.service")
                         self.log_command_output(o, r)
                         self.sleep(5,"waiting for couchbase server to come up")
