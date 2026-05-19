@@ -1257,6 +1257,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
         if is_sparse:
             if use_brute_force or self.json_template == "MsMARCO" or self.json_template == "MSMARCOSiftEmbeddingProduct":
+
                 # Use brute-force ground truth comparison for MsMARCO dataset
                 return self._validate_msmarco_sparse_recall(select_query, scan_consitency, variable_limit)
             else:
@@ -4585,26 +4586,26 @@ class BaseSecondaryIndexingTests(QueryTests):
             for query in query_stats_map:
                 if self.bhive_index and "colorRGBVector" in query:
                     continue
-                
+
                 recall = query_stats_map[query][0]
                 accuracy = query_stats_map[query][1]
-                
+
                 # For sparse vectors: recall threshold depends on method used
                 # For dense vectors: recall is continuous (0.0 to 1.0)
                 if self.isSparse or "SPARSE_VECTOR_DISTANCE" in query:
                     if use_brute_force:
                         # MsMARCO brute-force: recall is continuous (0.0 to 1.0)
                         self.assertGreaterEqual(recall * 100, 70,
-                                              f"Sparse brute-force recall for query {query} is {recall * 100:.2f}% (expected >= 70%)")
+                                                f"Sparse brute-force recall for query {query} is {recall * 100:.2f}% (expected >= 70%)")
                     else:
                         # AmazonSparse binary recall: 1 = good (document found), 0 = bad (document not found)
                         self.assertEqual(recall, 1,
-                                       f"Sparse vector recall for query {query} is {recall} (expected 1). "
-                                       f"Expected document was not found in top-{self.scan_limit} results.")
+                                         f"Sparse vector recall for query {query} is {recall} (expected 1). "
+                                         f"Expected document was not found in top-{self.scan_limit} results.")
                 else:
                     # Dense vector recall threshold
                     self.assertGreaterEqual(recall * 100, 70,
-                                          f"recall for query {query} is less than threshold 70")
+                                            f"recall for query {query} is less than threshold 70")
                 # uncomment the below code snippet to do assertions for accuracy (dense vectors only)
                 # if accuracy is not None:
                 #     self.assertGreaterEqual(accuracy * 100, 70,

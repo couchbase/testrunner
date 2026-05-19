@@ -5791,8 +5791,7 @@ class CompositeVectorIndex(BaseSecondaryIndexingTests):
 
     def test_scans_with_expiry_workload_for_composite_vector_index(self):
         data_node = self.get_nodes_from_services_map(service_type="kv")
-        self.restore_couchbase_bucket(backup_filename=self.vector_backup_filename,
-                                      skip_default_scope=self.skip_default)
+        self._setup_data_for_indexing(skip_default_scope=self.skip_default)
         if self.bhive_index:
             self.index_rest.set_index_settings({"indexer.bhive.topNScan": 500})
 
