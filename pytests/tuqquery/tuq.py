@@ -3290,6 +3290,7 @@ class QueryTests(BaseTestCase):
             for query in queries:
                 filein.write(query)
                 filein.write('\n')
+            filein.close()
             fileout = sftp.open(filename, 'r')
             filedata = fileout.read()
             fileout.close()
@@ -3339,7 +3340,10 @@ class QueryTests(BaseTestCase):
                 else:
                     main_command = main_command + " -f=" + filename
 
-        self.log.info("running command on {0}: {1}".format(self.master.ip, main_command))
+        safe_cmd = main_command
+        if self.password:
+            safe_cmd = safe_cmd.replace("-p {0}".format(self.password), "-p *")
+        self.log.info("running command on {0}: {1}".format(self.master.ip, safe_cmd))
         output = ""
         if shell.remote:
             stdin, stdout, stderro = shell._ssh_client.exec_command(main_command)
