@@ -1224,6 +1224,15 @@ class VectorSearch(FTSBaseTest):
         if len(bad_indexes) != 0:
             self.fail(f"Indexes have poor accuracy and recall: {bad_indexes}")
 
+        if self.search_history:
+            self.validate_search_history()
+
+        if self.index_insights:
+            for index in indexes:
+                self.validate_index_insights(index['index_obj'].name,
+                                             field=self.vector_field_name,
+                                             insight="centroidCardinalities")
+
     def test_basic_vector_search_store_all(self):
 
         indexes = []
@@ -1895,6 +1904,15 @@ class VectorSearch(FTSBaseTest):
             if n1ql_hits_dot != self.k or hits_dot != self.k:
                 self.fail("Could not get expected hits for index with l2, N1QL hits: {}, Search Hits: {}, Expected: {}".
                           format(n1ql_hits_dot, hits_dot, self.k))
+
+        if self.search_history:
+            self.validate_search_history()
+
+        if self.index_insights:
+            for index in indexes:
+                self.validate_index_insights(index['index_obj'].name,
+                                             field=self.vector_field_name,
+                                             insight="centroidCardinalities")
 
     def test_vector_search_update_partitions(self):
 
@@ -2873,6 +2891,9 @@ class VectorSearch(FTSBaseTest):
 
         print(all_stats)
 
+        if self.search_history:
+            self.validate_search_history()
+
     def test_nprobe_settings_negative(self):
         containers = self._cb_cluster._setup_bucket_structure(cli_client=self.cli_client)
         bucketvsdataset = self.load_vector_data(containers, dataset=self.vector_dataset)
@@ -3264,3 +3285,6 @@ class VectorSearch(FTSBaseTest):
         self.log.info(f"Accuracy and recall for queries run on each index : {all_stats}")
         if len(bad_indexes) != 0:
             self.fail(f"Indexes have poor accuracy and recall or failed prefilter condition: {bad_indexes}")
+
+        if self.search_history:
+            self.validate_search_history()

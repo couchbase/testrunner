@@ -4599,6 +4599,8 @@ class FTSBaseTest(unittest.TestCase):
         self.query_size = self._input.param("query_size", 200000)
         self.docker_containers = []
 
+        if self.search_history:
+            self.enable_search_history()
 
     def create_capella_config(self):
         services_count = {}
@@ -5266,6 +5268,90 @@ class FTSBaseTest(unittest.TestCase):
                     self.consistency_vectors = json.loads(self.consistency_vectors)
         self.ntonencrypt = self._input.param('ntonencrypt', 'disable')
         self.ntonencrypt_level = self._input.param('ntonencrypt_level', 'control')
+        self.search_history = self._input.param("search_history", False)
+        self.index_insights = self._input.param("index_insights", False)
+
+    def enable_search_history(self):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        rest = RestConnection(fts_node)
+        rest.set_node_setting("searchHistoryEnabled", "true")
+        self.log.info("Search history enabled on {0}".format(fts_node.ip))
+
+    def disable_search_history(self):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        rest = RestConnection(fts_node)
+        rest.set_node_setting("searchHistoryEnabled", "false")
+        self.log.info("Search history disabled on {0}".format(fts_node.ip))
+
+    def validate_search_history(self, index_name=None):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        rest = RestConnection(fts_node)
+        response = rest.get_search_history(limit=100, index=index_name)
+        self.log.info("Search history response: {0}".format(json.dumps(response)))
+
+        self.assertIn("results", response,
+                      "Search history response missing 'results' field")
+        self.assertIn("total", response,
+                      "Search history response missing 'total' field")
+
+        results = response["results"]
+        if results is None:
+            results = []
+        total = response["total"]
+
+        self.assertTrue(len(results) > 0,
+                        "Search history has no entries after queries were run")
+        self.assertTrue(total > 0,
+                        "Search history 'total' is 0 after queries were run")
+
+        required_fields = ["timestamp", "index", "request", "tookMs",
+                           "totalHits", "status"]
+        for entry in results:
+            for field in required_fields:
+                self.assertIn(field, entry,
+                              "Search history entry missing '{0}' field: {1}"
+                              .format(field, entry))
+            self.assertTrue(len(entry["timestamp"]) > 0,
+                            "Empty timestamp in search history entry")
+            self.assertIn(entry["status"], ["success", "error"],
+                          "Unexpected status '{0}' in search history entry"
+                          .format(entry["status"]))
+
+        if index_name:
+            matching = [e for e in results if index_name in e["index"]]
+            self.assertTrue(len(matching) > 0,
+                            "No search history entries found for index '{0}'"
+                            .format(index_name))
+        self.log.info("Search history validation passed: {0} entries found"
+                      .format(len(results)))
+
+    def validate_index_insights(self, index_name, field, insight="termFrequencies",
+                                limit=5, descending=True):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        rest = RestConnection(fts_node)
+        response = rest.get_index_insights(index_name, field, insight,
+                                           limit=limit, descending=descending)
+        self.log.info("Index insights response for {0}/{1}: {2}"
+                      .format(index_name, insight, json.dumps(response)))
+
+        self.assertTrue(response is not None,
+                        "Index insights returned None for {0}".format(insight))
+
+        if isinstance(response, dict):
+            results = response.get("results", response.get("entries", []))
+        elif isinstance(response, list):
+            results = response
+        else:
+            results = []
+
+        self.assertTrue(len(results) > 0,
+                        "Index insights returned no results for {0} on field '{1}'"
+                        .format(insight, field))
+        self.assertTrue(len(results) <= limit,
+                        "Index insights returned {0} results, exceeding limit {1}"
+                        .format(len(results), limit))
+        self.log.info("Index insights validation passed for {0}: {1} results"
+                      .format(insight, len(results)))
 
     def _get_mutation_vectors(self):
         self.log.info("Grepping for 'MutationResult' in java_sdk_loader.log")

@@ -226,6 +226,14 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
             self.log.info("Matches: %s" % matches)
 
+        if self.search_history:
+            self.validate_search_history()
+
+        if self.index_insights:
+            for index in self._cb_cluster.get_indexes():
+                self.validate_index_insights(index.name, field="name",
+                                             insight="termFrequencies")
+
     def run_default_index_query_rfr(self, query=None, expected_hits=None, expected_no_of_results=None):
         self.create_simple_default_index()
         if self.read_from_replica:
@@ -278,6 +286,13 @@ class StableTopFTS(FTSBaseTest):
         else:
             n1ql_executor = None
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
+
+        if self.search_history:
+            self.validate_search_history(index_name=index.name)
+
+        if self.index_insights:
+            self.validate_index_insights(index.name, field="name",
+                                         insight="termFrequencies")
 
     def test_query_type_rfr(self):
         """

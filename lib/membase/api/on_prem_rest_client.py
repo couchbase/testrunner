@@ -4353,6 +4353,36 @@ class RestConnection(object):
             raise Exception("Error Updating {0}: {1}".format(setting_name, content))
         return status
 
+    def get_search_history(self, limit=25, offset=0, index=None, min_duration=None):
+        api = self.fts_baseUrl + "api/searchHistory?"
+        params = "limit={0}&offset={1}".format(limit, offset)
+        if index:
+            params += "&index={0}".format(index)
+        if min_duration:
+            params += "&minDuration={0}".format(min_duration)
+        api += params
+        status, content, header = self._http_request(api)
+        if status:
+            return json.loads(content)
+        else:
+            raise Exception("Error fetching search history: {0}".format(content))
+
+    def get_index_insights(self, index_name, field, insight, limit=5, descending=True):
+        api = self.fts_baseUrl + "api/index/{0}/insights".format(index_name)
+        payload = {
+            "field": field,
+            "insight": insight,
+            "limit": limit,
+            "descending": descending
+        }
+        status, content, header = self.urllib_request(
+            api, verb='POST', params=json.dumps(payload))
+        if status:
+            return json.loads(content)
+        else:
+            raise Exception("Error fetching index insights for {0}: {1}"
+                            .format(index_name, content))
+
     def unfreeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/unfreeze".format(name)

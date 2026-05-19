@@ -287,7 +287,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def construct_bool_query(self):
         """
-        Constructs a bool query with must, must_not and should clauses
+        Constructs a bool query with must, must_not, should and filter clauses
         """
         fts_bool_query = {}
         es_bool_query = {'bool': {}}
@@ -317,6 +317,40 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         else:
             fts_bool_query['should'] = {"disjuncts": [should_fts]}
         es_bool_query['bool']['should'] = should_es
+
+        if bool(random.getrandbits(1)):
+            filter_fts_query, filter_es_query = self.construct_match_query(
+                ret_list=False)
+            fts_bool_query['filter'] = filter_fts_query
+            if isinstance(filter_es_query, list):
+                es_bool_query['bool']['filter'] = filter_es_query
+            else:
+                es_bool_query['bool']['filter'] = [filter_es_query]
+
+        return fts_bool_query, es_bool_query
+
+    def construct_bool_filter_query(self):
+        """
+        Constructs a bool query that always includes a filter clause
+        """
+        fts_bool_query = {}
+        es_bool_query = {'bool': {}}
+
+        must_fts_query, must_es_query = self.construct_match_query(
+            ret_list=bool(random.getrandbits(1)))
+        if isinstance(must_fts_query, list):
+            fts_bool_query['must'] = {"conjuncts": must_fts_query}
+        else:
+            fts_bool_query['must'] = {"conjuncts": [must_fts_query]}
+        es_bool_query['bool']['must'] = must_es_query
+
+        filter_fts_query, filter_es_query = self.construct_match_query(
+            ret_list=False)
+        fts_bool_query['filter'] = filter_fts_query
+        if isinstance(filter_es_query, list):
+            es_bool_query['bool']['filter'] = filter_es_query
+        else:
+            es_bool_query['bool']['filter'] = [filter_es_query]
 
         return fts_bool_query, es_bool_query
 

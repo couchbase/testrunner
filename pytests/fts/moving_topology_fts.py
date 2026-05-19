@@ -1099,6 +1099,9 @@ class MovingTopFTS(FTSBaseTest):
         if len(err) > 0:
             self.fail(err)
 
+        if self.search_history:
+            self.validate_search_history()
+
     def rebalance_in_between_indexing_and_querying_rfr(self):
         #TESTED
         self.load_data()
@@ -1152,6 +1155,9 @@ class MovingTopFTS(FTSBaseTest):
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
             self.fail(err)
+
+        if self.search_history:
+            self.validate_search_history()
 
     def rebalance_out_between_indexing_and_querying_rfr(self):
         #TESTED
@@ -1227,6 +1233,9 @@ class MovingTopFTS(FTSBaseTest):
         if len(err) > 0:
             self.fail(err)
 
+        if self.search_history:
+            self.validate_search_history()
+
     def hard_failover_and_remove_between_indexing_and_querying(self):
         #TESTED
         self.load_data()
@@ -1254,6 +1263,9 @@ class MovingTopFTS(FTSBaseTest):
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
             self.fail(err)
+
+        if self.search_history:
+            self.validate_search_history()
 
     def hard_failover_no_rebalance_between_indexing_and_querying(self):
         #TESTED
@@ -1402,6 +1414,9 @@ class MovingTopFTS(FTSBaseTest):
         err = self.validate_partition_distribution(frest)
         if len(err) > 0:
             self.fail(err)
+
+        if self.search_history:
+            self.validate_search_history()
 
     def warmup_between_indexing_and_querying(self):
         #TESTED
@@ -1856,6 +1871,9 @@ class MovingTopFTS(FTSBaseTest):
         hits, _, _, _ = index.execute_query(query=self.query,
                                          expected_hits=self._get_expected_query_hits())
         self.log.info("SUCCESS! Hits: %s" % hits)
+
+        if self.search_history:
+            self.validate_search_history()
 
     def graceful_failover_during_querying(self):
         index = self.create_index_generate_queries()
