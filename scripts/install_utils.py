@@ -409,6 +409,20 @@ class NodeHelper:
     def pre_init_cb(self):
         try:
             self._set_ip_version()
+            if self.ip != "127.0.0.1":
+                rest = RestConnection(self.node)
+                hostname = self.ip.replace('[', '').replace(']', '')
+                status, content = rest.rename_node(
+                    hostname=hostname,
+                    username=self.node.rest_username,
+                    password=self.node.rest_password,
+                )
+                if status:
+                    log.info("Node renamed to {0}, regenerating certificate".format(self.ip))
+                    rest.regenerate_cluster_certificate()
+                    log.info("Certificate regenerated after node-init on {0}".format(self.ip))
+                else:
+                    log.warning("rename_node failed on {0}: {1}".format(self.ip, content))
             if params["fts_query_limit"] > 0:
                 self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
         except Exception as e:
