@@ -35,24 +35,28 @@ class XDCRPrioritization(XDCRNewBaseTest):
     def __verify_dcp_priority(self, server, expected_priority):
         shell = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
-        match = False
         for bucket in rest.get_buckets():
             repl = rest.get_replication_for_buckets(bucket.name, bucket.name)
+            expected = [p.lower() for p in expected_priority[bucket.name]]
+            match = False
+            last_actual = None
             # Taking 10 samples of DCP priority ~5 seconds apart.
             # cbstats takes ~4 secs + 2 seconds sleep
             for sample in range(10):
                 output, error = shell.execute_cbstats(bucket, "dcp", print_results=False)
                 for stat in output:
                     if re.search("eq_dcpq:xdcr:dcp_" + repl['id'] + ".*==:priority:", stat):
-                        actual_priority = stat.split("==:priority:")[1].lstrip()
-                        if actual_priority in expected_priority[bucket.name]:
+                        actual_priority = stat.split("==:priority:")[1].lstrip().lower()
+                        last_actual = actual_priority
+                        self.log.info("Sample {0}: dcp priority={1}".format(sample + 1, actual_priority))
+                        if actual_priority in expected:
                             match = True
-                        self.log.info("Sample {0}:".format(sample + 1))
-                        self.print_status(bucket.name, server.ip, "dcp priority",
-                                          actual_priority,
-                                          expected_priority[bucket.name],
-                                          match=match)
-                        time.sleep(2)
+                            break
+                if match:
+                    break
+                self.sleep(2)
+            self.print_status(bucket.name, server.ip, "dcp priority",
+                              last_actual, expected, match=match)
 
 
     def _verify_dcp_priority(self, server):
@@ -69,7 +73,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
                 elif goxdcr_priority == "medium":
                     expected_priority[bucket.name].append("high")
             else:
-                expected_priority[bucket.name] = "medium"
+                expected_priority[bucket.name] = ["medium"]
         self.__verify_dcp_priority(server, expected_priority)
 
     def _verify_goxdcr_priority(self, cluster):
