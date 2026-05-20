@@ -1,6 +1,7 @@
 import json
 import time
 from .tuq import QueryTests
+import os
 
 
 class ConversationalSessionTests(QueryTests):
@@ -13,8 +14,10 @@ class ConversationalSessionTests(QueryTests):
     def setUp(self):
         super(ConversationalSessionTests, self).setUp()
         self.log.info("==============  ConversationalSessionTests setup has started ==============")
-        self.natural_cred = self.input.param("natural_cred", "")
-        self.natural_orgid = self.input.param("natural_orgid", "")
+        self.natural_capella_user = os.environ.get("NATURAL_CAPELLA_USER", None)
+        self.natural_capella_password = os.environ.get("NATURAL_CAPELLA_PASSWORD", None)
+        self.natural_cred = self.natural_capella_user + ":" + self.natural_capella_password
+        self.natural_orgid = os.environ.get("NATURAL_ORGID", None)
         self.natural_context = self.input.param(
             "natural_context",
             "travel-sample.inventory.airport,travel-sample.inventory.airline,"
