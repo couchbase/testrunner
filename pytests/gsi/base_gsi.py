@@ -31,6 +31,7 @@ from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
 from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.encryption_at_rest_helper import EncryptionAtRestHelper
+from .gsi_encryption_helpers import GSIEncryptionHelpers
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import WIN_COUCHBASE_LOGS_PATH, LINUX_COUCHBASE_LOGS_PATH
@@ -164,6 +165,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.sparsejl_dim = self.input.param("sparsejl_dim", 4096)
         self.gsi_util_obj = GSIUtils(self.run_cbq_query)
         self.encryption_helper = EncryptionAtRestHelper(log)
+        self.gsi_encryption_helper = GSIEncryptionHelpers(log)
         self.description = self.input.param("description", None)
         self.similarity = self.input.param("similarity", "L2_SQUARED")
         self.base64 = self.input.param("base64", False)
@@ -235,63 +237,685 @@ class BaseSecondaryIndexingTests(QueryTests):
     # File Encryption Validation Methods
     # ========================================================================
 
-    def validate_file_encryption(self, index_nodes, expected_key_id=None, encrypted_bucket_names=None):
-        """
-        File encryption validation for GSI with encryption at rest.
-        
-        Currently only validates files under the Snapshots folder (@2i/Snapshots/).
-        Other validations are not ready and will be added in future iterations.
-        
-        Args:
-            index_nodes: List of index server objects
-            expected_key_id: Optional encryption key id expected in encrypted file headers
-            encrypted_bucket_names: Optional list of bucket names whose index files should be
-                checked for encryption
-            
+    def _build_bucket_key_map_safe(self, index_nodes, encrypted_bucket_names):
+        """Build the per-bucket key map once for UUID filtering; fall back to empty dict on error."""
+        if not index_nodes:
+            raise AssertionError("index_nodes is empty — cannot build bucket key map")
+        rest = RestConnection(index_nodes[0])
+        try:
+            bucket_key_map = self.gsi_encryption_helper.build_bucket_key_map(
+                rest, encrypted_bucket_names or [],
+            )
+        except Exception as exc:
+            self.log.error(f"build_bucket_key_map failed: {exc!r} — proceeding with empty map")
+            bucket_key_map = {}
+        self.log.debug(f"Per-bucket key map for encryption validation: {bucket_key_map}")
+        return bucket_key_map
+
+    def _build_per_node_bucket_key_map_safe(self, index_nodes, encrypted_bucket_names):
+        """Build per-node bucket key maps, one per index node.
+
+        Each indexer node has its own set of encryption keys. This method
+        queries each node's GetInUseKeys separately so key-ID resolution uses
+        the correct keys for each node's files.
+
+        Falls back to an empty dict for any node that fails, so validation
+        continues rather than aborting.
+
         Returns:
-            dict: Aggregated validation results
+            dict: {node_ip: {bucket_name: {"uuid": str, "key_ids": [str]}}}
         """
-        self.log.info("=== Starting GSI file encryption validation ===")
-        self.log.info("NOTE: Currently only checking files under the Snapshots folder. Other validations are not ready.")
-        
-        all_results = {}
-        
-        # Only validate files under the Snapshots folder
-        self.log.info("--- Validating GSI Snapshots folder file encryption ---")
-        snapshot_results = self.encryption_helper.verify_gsi_snapshot_files_encrypted(
-            index_nodes,
-            expected_key_id=expected_key_id,
-            encrypted_bucket_names=encrypted_bucket_names
+        try:
+            per_node = self.gsi_encryption_helper.build_per_node_bucket_key_map(
+                index_nodes, encrypted_bucket_names or [],
+            )
+        except Exception as exc:
+            self.log.error(
+                f"build_per_node_bucket_key_map failed: {exc!r} — "
+                "per-node key maps will be empty"
+            )
+            per_node = {}
+        self.log.debug(f"Per-node bucket key maps: {per_node}")
+        return per_node
+
+    def _build_metadata_inst_id_set_safe(self, index_nodes):
+        """Return the set of instIds for internal (metadata) indexes.
+
+        Queries ``/getIndexStatus`` on the first index node and returns the
+        set of ``instId`` strings for entries whose ``scope`` is ``_system``
+        or whose ``collection`` is ``_query``.  These are indexes created
+        automatically by Couchbase (e.g. system-scoped query-metadata indexes)
+        and must be excluded from encryption validation.
+
+        Falls back to an empty set on any error so callers proceed without
+        filtering rather than aborting the whole validation run.
+
+        Args:
+            index_nodes: List of index server objects.
+
+        Returns:
+            set[str]: instId strings for internal indexes.
+        """
+        if not index_nodes:
+            self.log.error("index_nodes is empty — returning empty metadata inst-ID set")
+            return set()
+        rest = RestConnection(index_nodes[0])
+        try:
+            inst_ids = self.gsi_encryption_helper._build_metadata_inst_id_set(rest)
+        except Exception as exc:
+            self.log.error(
+                f"_build_metadata_inst_id_set failed: {exc!r} — "
+                "no metadata indexes will be excluded from validation"
+            )
+            inst_ids = set()
+        return inst_ids
+
+    def _run_common_encryption_verifiers(self, _safe_run, helper, index_nodes,
+                                         bucket_key_map, expected_key_id,
+                                         encrypted_bucket_names, query_node,
+                                         per_node_bkm=None):
+        """Run engine-agnostic verifiers: error_files, storage_stats_rest,
+        metadata_repo, plaintext_leakage (gated on query_node + samples),
+        naming_leak.
+        Called from validate_moi, validate_plasma_bhive, and validate_bhive.
+        """
+        _safe_run("error_files",
+                  helper.verify_gsi_error_files_encrypted,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  per_node_bucket_key_map=per_node_bkm)
+        _safe_run("storage_stats_rest",
+                  helper.verify_storage_stats_rest,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  per_node_bucket_key_map=per_node_bkm)
+        _safe_run("metadata_repo",
+                  helper.verify_gsi_metadata_repo_encrypted,
+                  index_nodes, expected_key_id=expected_key_id)
+
+        # Optional plaintext-leakage scan (needs a query node + bucket names).
+        if query_node and encrypted_bucket_names:
+            try:
+                samples = helper.collect_plaintext_samples_via_n1ql(
+                    query_node, encrypted_bucket_names,
+                )
+            except Exception as exc:
+                self.log.error(
+                    f"plaintext sample collection failed: {exc!r} — leakage scan skipped"
+                )
+                samples = []
+            if samples:
+                _safe_run("plaintext_leakage",
+                          helper.verify_no_plaintext_in_encrypted_files,
+                          index_nodes,
+                          plaintext_samples=samples,
+                          encrypted_bucket_names=encrypted_bucket_names,
+                          bucket_key_map=bucket_key_map)
+        else:
+            self.log.info(
+                "plaintext_leakage check skipped (need query_node and "
+                "encrypted_bucket_names to run)"
+            )
+
+        if not index_nodes:
+            self.log.warning("index_nodes is empty — naming-leak check skipped")
+            forbidden = []
+        else:
+            rest = RestConnection(index_nodes[0])
+            try:
+                forbidden = helper._collect_forbidden_names(rest)
+            except Exception as exc:
+                self.log.error(
+                    f"_collect_forbidden_names failed: {exc!r} — naming-leak skipped"
+                )
+                forbidden = []
+        _safe_run("naming_leak",
+                  helper.verify_no_sensitive_names_in_paths,
+                  index_nodes, forbidden)
+
+    def _finalize_encryption_results(self, engine_label, results, fail_on_error):
+        """Build and log the consolidated summary block; raise or return.
+
+        Calls _log_encryption_summary, _build_encryption_summary_lines,
+        _format_encryption_summary_block with title
+        'GSI {engine_label} ENCRYPTION VALIDATION SUMMARY', sets
+        results['_overall'], and either raises AssertionError or returns
+        the results dict.
+        """
+        self._log_encryption_summary(results)
+        passed_lines, skipped_lines, failed_lines = \
+            self._build_encryption_summary_lines(results)
+        results["_overall"] = {
+            "failed": bool(failed_lines),
+            "passed_summary": passed_lines,
+            "skipped_summary": skipped_lines,
+            "failure_summary": failed_lines,
+        }
+        title = f"GSI {engine_label} ENCRYPTION VALIDATION SUMMARY"
+        block = self._format_encryption_summary_block(
+            title, passed_lines, skipped_lines, failed_lines,
         )
-        all_results["gsi_snapshot_files"] = snapshot_results
-        
-        # Log summary and errors for failed validations
-        passed = sum(1 for r in snapshot_results.values() if r.get("status") == "passed")
-        failed = sum(1 for r in snapshot_results.values() if r.get("status") == "failed")
-        skipped = sum(1 for r in snapshot_results.values() if r.get("status") == "skipped")
-        self.log.info(f"GSI snapshot files: {passed} passed, {failed} failed, {skipped} skipped")
-        
-        # Log error messages for failed snapshot file validations
-        for node, result in snapshot_results.items():
-            if result.get("status") == "failed":
-                self.log.error(f"GSI snapshot file encryption validation FAILED on {node}: {result}")
-        
-        # TODO validations (to be implemented in future iterations when ready)
-        todo_items = [
-            "GSI storage files (BHIVE/Plasma/MOI) validation - not ready",
-            "GSI indexer_stats.log validation - not ready",
-            "Index metadata (Magma vs ForestDB) validation - not ready",
-            "Index metaKV tokens validation - not ready",
-            "Temp files (scan backfill files) validation - not ready",
-            "Request handler cache persisted data validation - not ready",
-            "Persisted stats files validation - not ready"
-        ]
-        all_results["TODO"] = todo_items
-        for item in todo_items:
-            self.log.info(f"TODO: {item}")
-        
-        self.log.info("=== GSI file encryption validation completed ===")
-        return all_results
+        if failed_lines:
+            self.log.error(block)
+            if fail_on_error:
+                self.log.info(
+                    f"=== GSI {engine_label} encryption validation completed (FAILED) ==="
+                )
+                raise AssertionError(block)
+            self.log.info(
+                f"=== GSI {engine_label} encryption validation completed (FAILED, not raising) ==="
+            )
+        else:
+            self.log.info(block)
+            self.log.info(
+                f"=== GSI {engine_label} encryption validation completed (PASSED) ==="
+            )
+        return results
+
+    def validate_engine_encryption(self, engine_type, index_nodes,
+                                   expected_key_id=None,
+                                   encrypted_bucket_names=None,
+                                   query_node=None, fail_on_error=True):
+        """Dispatcher for engine-specific GSI encryption validation.
+
+        engine_type is case-insensitive and accepts exactly:
+          - 'moi'    → validate_moi
+          - 'plasma' → validate_plasma_bhive  (Plasma + BHive co-exist)
+          - 'bhive'  → validate_plasma_bhive  (same — BHive always has Plasma shards)
+
+        Any other value raises ValueError listing the allowed values.
+        The caller is responsible for translating their own engine string
+        (e.g. self.gsi_type='memory_optimized') to one of the three canonical
+        names. The dispatcher does NOT do this translation.
+
+        Args:
+            engine_type: One of 'moi', 'plasma', or 'bhive' (case-insensitive).
+            index_nodes: List of index server objects.
+            expected_key_id: Optional key ID (or list of IDs) the test expects.
+            encrypted_bucket_names: Optional bucket-name filter for per-bucket
+                categories.
+            query_node: Optional query-service node; enables plaintext_leakage
+                check when provided together with encrypted_bucket_names.
+            fail_on_error: If True (default), raises AssertionError with a
+                consolidated summary after all verifiers have run.
+
+        Returns:
+            dict: per-category result dicts plus an '_overall' key.
+
+        Raises:
+            ValueError: engine_type is not one of the three canonical values.
+        """
+        engine_lower = engine_type.lower()
+        if engine_lower == "moi":
+            return self.validate_moi(
+                index_nodes,
+                expected_key_id=expected_key_id,
+                encrypted_bucket_names=encrypted_bucket_names,
+                query_node=query_node,
+                fail_on_error=fail_on_error,
+            )
+        elif engine_lower in ("plasma", "bhive"):
+            return self.validate_plasma_bhive(
+                index_nodes,
+                expected_key_id=expected_key_id,
+                encrypted_bucket_names=encrypted_bucket_names,
+                query_node=query_node,
+                fail_on_error=fail_on_error,
+            )
+        else:
+            raise ValueError(
+                f"engine_type must be one of {{'moi', 'plasma', 'bhive'}}, "
+                f"got {engine_type!r}"
+            )
+
+    def validate_moi(self, index_nodes, expected_key_id=None,
+                     encrypted_bucket_names=None, query_node=None,
+                     fail_on_error=True):
+        """Validate encryption for Memory-Optimized Index (MOI) storage.
+
+        MOI is exclusive: a cluster configured as memory_optimized never has
+        Plasma or BHive indexes.
+
+        Files checked and validation method per file type:
+          snapshots (@2i/<hash>.index/snapshot.<ts>/data/shard-*,
+                     @2i/<hash>.index/snapshot.<ts>/delta/shard-*,
+                     @2i/<hash>.index/snapshot.<ts>/manifest.json):
+            Header magic check — "Couchbase Encrypted" + key ID in file header.
+            checksums.json, files.json: NOT checked (plaintext by design).
+          codebook: NOT checked — vector indexes cannot be created with MOI
+            storage, so no codebook files are ever present on disk.
+          error_files, storage_stats_rest, metadata_repo, plaintext_leakage,
+          naming_leak: see _run_common_encryption_verifiers.
+
+        Summary title: GSI MOI ENCRYPTION VALIDATION SUMMARY
+        """
+        self.log.info("=== Starting GSI MOI encryption validation ===")
+        helper = self.gsi_encryption_helper
+        results = {}
+        bucket_key_map = self._build_bucket_key_map_safe(
+            index_nodes, encrypted_bucket_names
+        )
+        per_node_bkm = self._build_per_node_bucket_key_map_safe(
+            index_nodes, encrypted_bucket_names
+        )
+        # Build the set of instIds for internal (metadata) indexes so they are
+        # excluded from all path-based verifiers below.
+        metadata_inst_ids = self._build_metadata_inst_id_set_safe(index_nodes)
+
+        def _safe_run(category, fn, *args, **kwargs):
+            try:
+                results[category] = fn(*args, **kwargs)
+            except Exception as exc:
+                self.log.error(
+                    f"[{category}] verifier raised: {exc!r} — recorded as failure"
+                )
+                results[category] = {
+                    "_helper_error": {
+                        "status": "failed",
+                        "reason": f"verifier raised: {exc!r}",
+                    }
+                }
+
+        # MOI-specific verifiers
+        _safe_run("snapshots",
+                  helper.verify_gsi_snapshot_files_encrypted,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  metadata_inst_ids=metadata_inst_ids,
+                  per_node_bucket_key_map=per_node_bkm)
+        # Note: codebook is NOT checked for MOI — vector indexes cannot be
+        # created with MOI storage, so no codebook files are ever present.
+        # TODO: @2i/indexstats/stats — observed on MOI clusters but currently
+        #       NOT encrypted. Confirm with the indexer team whether it should
+        #       be encrypted (bucket key or log key) and add a verifier then.
+        # Common verifiers
+        self._run_common_encryption_verifiers(
+            _safe_run, helper, index_nodes, bucket_key_map,
+            expected_key_id, encrypted_bucket_names, query_node,
+            per_node_bkm=per_node_bkm
+        )
+        return self._finalize_encryption_results("MOI", results, fail_on_error)
+
+    def validate_plasma_bhive(self, index_nodes, expected_key_id=None,
+                               encrypted_bucket_names=None, query_node=None,
+                               fail_on_error=True):
+        """Validate encryption for Plasma and BHive storage (non-MOI clusters).
+
+        Plasma and BHive indexes can co-exist on the same cluster regardless of
+        which gsi_type was configured. Both sets of verifiers always run; each
+        one returns a graceful skip result when no matching files are found on
+        disk — the overall result does NOT fail just because one engine type has
+        no indexes.
+
+        Plasma-specific verifiers:
+          data_files_key_id (@2i/<hash>.index/{docIndex,mainIndex}/{header,log.*.data}
+                              + recovery/ counterparts):
+            Grep key ID in file body. All *.json excluded.
+            Skips gracefully when no Plasma index directories exist.
+          plasma_shard_data (@2i/shards/<shard_id>/data/{header,log.*.data}
+                              + data/recovery/ counterparts):
+            Grep key ID in file body.
+            Skips gracefully when no shard directories exist.
+
+        BHive-specific verifiers:
+          bhive_pindex_lss (@2i/@bhive/<hash>.index/mainIndex/lss.{N}/{header,log.*.data}
+                             excl. lss.*/recovery/chkp.*):
+            Grep key ID in file body.
+            Skips gracefully when no BHive pindex directories exist.
+          bhive_vindex_magma (@2i/@bhive/bhive-shards/<shard>/kvstore-{N}/rev-{ver}/
+                               {keyIndex,seqIndex}/sstable.N.data):
+            Grep key ID in file body.
+            Skips gracefully when no BHive vindex shard directories exist.
+
+        Shared (Plasma + BHive):
+          codebook (@2i/<hash>.index/codebook/*.codebook,
+                    @2i/@bhive/<hash>.index/codebook/*.codebook):
+            Skips gracefully when no codebook directories exist.
+            Header magic check — "Couchbase Encrypted" + key ID in header.
+
+        Common verifiers (same as validate_moi):
+          error_files, storage_stats_rest, metadata_repo, plaintext_leakage,
+          naming_leak (@2i/ AND @2i/@bhive/ path components).
+
+        Summary title: GSI PLASMA/BHIVE ENCRYPTION VALIDATION SUMMARY
+        """
+        self.log.info("=== Starting GSI Plasma/BHive encryption validation ===")
+        helper = self.gsi_encryption_helper
+        results = {}
+        bucket_key_map = self._build_bucket_key_map_safe(
+            index_nodes, encrypted_bucket_names
+        )
+        per_node_bkm = self._build_per_node_bucket_key_map_safe(
+            index_nodes, encrypted_bucket_names
+        )
+        # Build the set of instIds for internal (metadata) indexes so they are
+        # excluded from all path-based verifiers below.
+        metadata_inst_ids = self._build_metadata_inst_id_set_safe(index_nodes)
+
+        def _safe_run(category, fn, *args, **kwargs):
+            try:
+                results[category] = fn(*args, **kwargs)
+            except Exception as exc:
+                self.log.error(
+                    f"[{category}] verifier raised: {exc!r} — recorded as failure"
+                )
+                results[category] = {
+                    "_helper_error": {
+                        "status": "failed",
+                        "reason": f"verifier raised: {exc!r}",
+                    }
+                }
+
+        # Plasma-specific (each skips gracefully if no Plasma files found)
+        _safe_run("data_files_key_id",
+                  helper.verify_gsi_data_files_key_id,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  metadata_inst_ids=metadata_inst_ids,
+                  per_node_bucket_key_map=per_node_bkm)
+        _safe_run("plasma_shard_data",
+                  helper.verify_gsi_plasma_shard_data_encrypted,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  per_node_bucket_key_map=per_node_bkm)
+        # BHive-specific (each skips gracefully if no BHive files found)
+        _safe_run("bhive_pindex_lss",
+                  helper.verify_gsi_bhive_pindex_lss_encrypted,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  metadata_inst_ids=metadata_inst_ids,
+                  per_node_bucket_key_map=per_node_bkm)
+        _safe_run("bhive_vindex_magma",
+                  helper.verify_gsi_bhive_vindex_magma_encrypted,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  per_node_bucket_key_map=per_node_bkm)
+        # Codebook (Plasma + BHive — skips gracefully when no vector indexes)
+        _safe_run("codebook",
+                  helper.verify_gsi_codebook_encrypted,
+                  index_nodes,
+                  expected_key_id=expected_key_id,
+                  encrypted_bucket_names=encrypted_bucket_names,
+                  bucket_key_map=bucket_key_map,
+                  per_node_bucket_key_map=per_node_bkm)
+        # Common verifiers
+        self._run_common_encryption_verifiers(
+            _safe_run, helper, index_nodes, bucket_key_map,
+            expected_key_id, encrypted_bucket_names, query_node,
+            per_node_bkm=per_node_bkm
+        )
+        return self._finalize_encryption_results(
+            "PLASMA/BHIVE", results, fail_on_error
+        )
+
+    def validate_log_encryption_files_encrypted(self, index_nodes,
+                                                expected_key_id=None,
+                                                fail_on_error=True):
+        """
+        Validate disk-side categories governed by the cluster-level
+        log-encryption secret (independent of per-bucket encryption):
+
+          - indexer_stats_log       header magic + key ID on indexer_stats.log
+          - projector_stats_log     header magic + key ID on projector_stats.log
+          - request_handler_cache   header magic + key ID under @2i/cache
+
+        Call this only when log-encryption is enabled on the cluster. With
+        only bucket-encryption enabled these files are written in cleartext
+        and validation will (correctly) fail.
+
+        Args:
+            index_nodes: List of index server objects.
+            expected_key_id: Optional key ID (or list of IDs) expected in
+                file headers.
+            fail_on_error: If True, raises ``AssertionError`` with a
+                consolidated summary on any failure. If False, returns the
+                results dict unconditionally.
+
+        Returns:
+            dict: per-category ``{node_ip -> result_dict}`` plus an
+                ``"_overall"`` key with ``failed`` / ``passed_summary`` /
+                ``failure_summary``.
+        """
+        self.log.info("=== Starting GSI log-encryption file validation ===")
+        helper = self.gsi_encryption_helper
+        results = {}
+
+        def _safe_run(category, fn, *args, **kwargs):
+            try:
+                results[category] = fn(*args, **kwargs)
+            except Exception as exc:
+                self.log.error(
+                    f"[{category}] verifier raised: {exc!r} — recorded as failure"
+                )
+                results[category] = {
+                    "_helper_error": {
+                        "status": "failed",
+                        "reason": f"verifier raised: {exc!r}",
+                    }
+                }
+
+        _safe_run("indexer_stats_log",
+                  helper.verify_gsi_indexer_stats_log_encrypted,
+                  index_nodes, expected_key_id=expected_key_id)
+        _safe_run("projector_stats_log",
+                  helper.verify_gsi_projector_stats_log_encrypted,
+                  index_nodes, expected_key_id=expected_key_id)
+        _safe_run("request_handler_cache",
+                  helper.verify_gsi_request_handler_cache_encrypted,
+                  index_nodes, expected_key_id=expected_key_id)
+
+        self._log_encryption_summary(results)
+        passed_lines, skipped_lines, failed_lines = \
+            self._build_encryption_summary_lines(results)
+        results["_overall"] = {
+            "failed": bool(failed_lines),
+            "passed_summary": passed_lines,
+            "skipped_summary": skipped_lines,
+            "failure_summary": failed_lines,
+        }
+
+        block = self._format_encryption_summary_block(
+            "GSI LOG ENCRYPTION VALIDATION SUMMARY",
+            passed_lines, skipped_lines, failed_lines,
+        )
+
+        if failed_lines:
+            self.log.error(block)
+            if fail_on_error:
+                self.log.info(
+                    "=== GSI log-encryption file validation completed (FAILED) ==="
+                )
+                raise AssertionError(block)
+            self.log.info(
+                "=== GSI log-encryption file validation completed (FAILED, not raising) ==="
+            )
+        else:
+            self.log.info(block)
+            self.log.info(
+                "=== GSI log-encryption file validation completed (PASSED) ==="
+            )
+        return results
+
+    # File-name patterns deliberately stripped from the summary lines. The
+    # actual file paths are already in the per-file warning/error logs
+    # produced during the run, so the summary block stays a high-level dashboard.
+    @staticmethod
+    def _encryption_node_counts(result):
+        """
+        Reduce one node's per-category result dict to ``(passed, failed, total)``.
+
+        Each verifier exposes slightly different counters; this helper picks
+        the right one for each shape so the summary stays uniform. Returns
+        ``None`` for any field that the result doesn't expose so the caller
+        can render ``"-"`` instead of a misleading zero.
+        """
+        if not isinstance(result, dict):
+            return None, None, None
+        # Standard file-sweep shape (snapshot / data / error / codebook /
+        # request_handler_cache).
+        passed = (result.get("passed_count")
+                  if "passed_count" in result else None)
+        if passed is None:
+            passed = result.get("encrypted_count")
+        total = result.get("total_checked")
+        if total is None:
+            total = result.get("checked_stores")
+        failed = None
+        for key in ("failed_files", "failed_stores", "failed_indexes",
+                    "violations"):
+            if isinstance(result.get(key), list):
+                failed = len(result[key])
+                break
+        # Stats-log single-file shape: status passed → 1/1, failed → 0/1.
+        if passed is None and total is None and "file" in result:
+            status = result.get("status")
+            passed = 1 if status == "passed" else 0
+            total = 1
+            failed = 1 if status == "failed" else 0
+        # Plaintext-leakage shape: total_leaks + per-category files_checked.
+        if "total_leaks" in result:
+            failed = result.get("total_leaks")
+            files_checked = sum(
+                (info.get("files_checked") or 0)
+                for info in (result.get("by_category") or {}).values()
+            )
+            total = files_checked
+            passed = max(files_checked - (failed or 0), 0)
+        return passed, failed, total
+
+    @staticmethod
+    def _format_encryption_summary_block(title, passed_lines, skipped_lines,
+                                         failed_lines):
+        """Render the consolidated PASSED / SKIPPED / FAILED summary block.
+
+        SKIPPED is shown as its own section so it doesn't get mistaken for a
+        positive confirmation — a skipped verifier never asserted anything.
+        Legend is emitted once at the top so log readers know what each
+        status means without grepping the source.
+        """
+        parts = [f"=== {title} ==="]
+        parts.append(
+            "Legend: PASSED=verifier ran & confirmed encryption | "
+            "SKIPPED=verifier bailed (nothing to check / TODO stub) — "
+            "NOT a positive confirmation | FAILED=real regression"
+        )
+        if passed_lines:
+            parts.append(f"PASSED ({len(passed_lines)} entries):")
+            parts.extend(f"  - {line}" for line in passed_lines)
+        if skipped_lines:
+            parts.append(f"SKIPPED ({len(skipped_lines)} entries):")
+            parts.extend(f"  - {line}" for line in skipped_lines)
+        if failed_lines:
+            parts.append(f"FAILED ({len(failed_lines)} entries):")
+            parts.extend(f"  - {line}" for line in failed_lines)
+        parts.append("=== END SUMMARY ===")
+        return "\n".join(parts)
+
+    def _build_encryption_summary_lines(self, results):
+        """
+        Produce three high-level lists for the consolidated summary block:
+        ``(passed_lines, skipped_lines, failed_lines)``.
+
+        - PASSED: verifier ran and confirmed encryption.
+        - SKIPPED / TODO: verifier bailed (nothing to check) or is a stub.
+                          Not a regression, but NOT a positive confirmation
+                          either — split out so they don't masquerade as
+                          passes. Includes the ``reason`` field when present.
+        - FAILED: verifier ran and found a real problem.
+
+        Each line is counts only — per-file diagnostics live in the
+        verifier's own warning/error logs emitted during the run.
+        """
+        passed_lines = []
+        skipped_lines = []
+        failed_lines = []
+        for category, node_results in results.items():
+            if category == "_overall" or not isinstance(node_results, dict):
+                continue
+            for node_ip, result in node_results.items():
+                if not isinstance(result, dict):
+                    continue
+                status = result.get("status", "unknown")
+                passed, failed, total = self._encryption_node_counts(result)
+
+                def _fmt(value):
+                    return "-" if value is None else str(value)
+
+                if status in ("skipped", "todo"):
+                    reason = result.get("reason") or (
+                        "verifier not implemented" if status == "todo"
+                        else "nothing to check"
+                    )
+                    skipped_lines.append(
+                        f"[{category}] node={node_ip} status={status} "
+                        f"reason={reason}"
+                    )
+                    continue
+
+                line = (
+                    f"[{category}] node={node_ip} status={status} "
+                    f"passed={_fmt(passed)}/{_fmt(total)} "
+                    f"failed={_fmt(failed)}"
+                )
+                # Soft-fail entries (e.g. partially_encrypted stores) get a
+                # tag so they stand out in the passed list without inflating
+                # the failure list.
+                soft = result.get("soft_failed")
+                if soft:
+                    line += f" soft_failed={len(soft)}"
+                if status == "failed":
+                    failed_lines.append(line)
+                else:
+                    passed_lines.append(line)
+        return passed_lines, skipped_lines, failed_lines
+
+    def _log_encryption_summary(self, results):
+        """
+        Log per-category pass/fail/skip/todo counts and surface failures.
+
+        Walks the aggregated dict returned by the encryption validators,
+        tallies per-node statuses for every category, and emits an ``error``
+        log line with the full result payload for each failed node so a
+        Jenkins log reader can find the bad path quickly. Non-dict category
+        values (e.g. the legacy ``TODO`` list, if a future caller adds one)
+        are skipped silently.
+
+        Args:
+            results: Output of an encryption validator: a mapping of
+                ``category -> {node_ip -> result_dict}``.
+        """
+        for category, node_results in results.items():
+            if not isinstance(node_results, dict):
+                continue
+            counts = {"passed": 0, "failed": 0, "skipped": 0, "todo": 0}
+            for node_ip, result in node_results.items():
+                status = (result or {}).get("status")
+                if status in counts:
+                    counts[status] += 1
+                if status == "failed":
+                    self.log.error(
+                        f"[{category}] encryption validation FAILED on "
+                        f"{node_ip}: {result}"
+                    )
+            self.log.info(
+                f"[{category}] passed={counts['passed']}, "
+                f"failed={counts['failed']}, skipped={counts['skipped']}, "
+                f"todo={counts['todo']}"
+            )
 
     def tearDown(self):
         super(BaseSecondaryIndexingTests, self).tearDown()

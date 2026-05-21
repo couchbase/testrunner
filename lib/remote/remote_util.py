@@ -247,7 +247,7 @@ class RemoteMachineShellConnection(KeepRefs):
             exit(1)
 
     @not_for_capella
-    def __init__(self, serverInfo, exit_on_failure=True):
+    def __init__(self, serverInfo, exit_on_failure=True, verbose=True):
         # This makes it easy to find places where SSH is being used because a stack trace can be printed
         if CbServer.capella_run:
             raise Exception("no SSH allowed in Capella")
@@ -274,14 +274,15 @@ class RemoteMachineShellConnection(KeepRefs):
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        self._verbose = verbose
         self.ssh_connect_with_retries(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password,
-                                      serverInfo.ssh_key, exit_on_failure)
+                                      serverInfo.ssh_key, exit_on_failure, verbose=verbose)
 
         """ self.info.distribution_type.lower() == "ubuntu" """
         self.cmd_ext = ""
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
         self.msi = False
-        self.extract_remote_info()
+        self.extract_remote_info(verbose=verbose)
         os_type = self.info.distribution_type.lower()
         if os_type == "windows":
             self.cmd_ext = ".exe"
@@ -305,15 +306,16 @@ class RemoteMachineShellConnection(KeepRefs):
 
     def ssh_connect_with_retries(self, ip, ssh_username, ssh_password, ssh_key,
                                  exit_on_failure = False, max_attempts_connect = 5,
-                                 backoff_time = 30):
+                                 backoff_time = 30, verbose=True):
         # Retries with exponential backoff delay
         attempt = 0
         is_ssh_ok = False
         while not is_ssh_ok and attempt < max_attempts_connect:
             attempt += 1
-            log.info(
-                "SSH Connecting to {} with username:{}, attempt#{} of {}".format(
-                    ip, ssh_username, attempt, max_attempts_connect))
+            if verbose:
+                log.info(
+                    "SSH Connecting to {} with username:{}, attempt#{} of {}".format(
+                        ip, ssh_username, attempt, max_attempts_connect))
             try:
                 if self.remote and ssh_key == '':
                     self._ssh_client.connect(
@@ -349,7 +351,8 @@ class RemoteMachineShellConnection(KeepRefs):
                 log.error("No exit on failure, raise exception")
                 raise Exception(error_msg)
         else:
-            log.info("SSH Connected to {} as {}".format(ip, ssh_username))
+            if verbose:
+                log.info("SSH Connected to {} as {}".format(ip, ssh_username))
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
@@ -3671,10 +3674,11 @@ class RemoteMachineShellConnection(KeepRefs):
         return (output)
 
     def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600, get_exit_code=False, get_pty=False):
+        effective_debug = debug and getattr(self, '_verbose', True)
         if getattr(self, "info", None) is None and info is not None :
             self.info = info
         else:
-            self.extract_remote_info()
+            self.extract_remote_info(verbose=effective_debug)
 
         if "iptables -F" in command and self.info.distribution_type == "CBL-Mariner/Linux":
             msg = "iptables -F is disabled on Mariner Linux"
@@ -3686,7 +3690,7 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.use_sudo:
             command = "sudo " + command
 
-        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout, get_exit_code=get_exit_code, get_pty=get_pty)
+        return self.execute_command_raw(command, debug=effective_debug, use_channel=use_channel, timeout=timeout, get_exit_code=get_exit_code, get_pty=get_pty)
 
     def reconnect_if_inactive(self):
         """
@@ -3911,7 +3915,7 @@ class RemoteMachineShellConnection(KeepRefs):
         RemoteMachineShellConnection.disconnections += 1
         self._ssh_client.close()
 
-    def extract_remote_info(self):
+    def extract_remote_info(self, verbose=True):
         # initialize params
         os_distro = "linux"
         os_version = "default"
@@ -3991,8 +3995,9 @@ class RemoteMachineShellConnection(KeepRefs):
                             os_version = os_shortname_dict[os_name] + " " + os_version
                         if os_distro:
                             is_linux_distro = True
-                        log.info("os_distro: " + os_distro + ", os_version: " + os_version +
-                                 ", is_linux_distro: " + str(is_linux_distro))
+                        if verbose:
+                            log.info("os_distro: " + os_distro + ", os_version: " + os_version +
+                                     ", is_linux_distro: " + str(is_linux_distro))
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -4043,8 +4048,9 @@ class RemoteMachineShellConnection(KeepRefs):
                         file.close()
                         # now remove this file
                         os.remove(filename)
-                        log.info("os_distro: " + os_distro + ", os_version: " + os_version +
-                                 ", is_linux_distro: " + str(is_linux_distro))
+                        if verbose:
+                            log.info("os_distro: " + os_distro + ", os_version: " + os_version +
+                                     ", is_linux_distro: " + str(is_linux_distro))
                         break
             """ for centos 7 or rhel8 """
             for name in filenames:
@@ -4161,8 +4167,9 @@ class RemoteMachineShellConnection(KeepRefs):
             info.hostname = self.get_hostname()
             info.domain = self.get_domain()
             self.info = info
-            log.info("extract_remote_info-->distribution_type: " + info.distribution_type + ", "
-                    "distribution_version: " + info.distribution_version)
+            if verbose:
+                log.info("extract_remote_info-->distribution_type: " + info.distribution_type + ", "
+                        "distribution_version: " + info.distribution_version)
             return info
 
     def get_extended_windows_info(self):

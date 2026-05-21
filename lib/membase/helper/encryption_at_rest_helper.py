@@ -109,18 +109,22 @@ class EncryptionUtil:
             test_obj.log_encryption_at_rest_id = encryption_result['log_encryption_at_rest_id']
         if 'audit_encryption_at_rest_id' in encryption_result and encryption_result['audit_encryption_at_rest_id'] is not None:
             test_obj.audit_encryption_at_rest_id = encryption_result['audit_encryption_at_rest_id']
+        if 'other_encryption_at_rest_id' in encryption_result and encryption_result['other_encryption_at_rest_id'] is not None:
+            test_obj.other_encryption_at_rest_id = encryption_result['other_encryption_at_rest_id']
 
     def setup_encryption_at_rest(self, cluster_master, bypass_encryption_func,
                                  create_KMIP_secret=False, enable_encryption_at_rest=False,
                                  enable_config_encryption_at_rest=False, enable_log_encryption_at_rest=False,
-                                 enable_audit_encryption_at_rest=False, secret_rotation_interval=None,
+                                 enable_audit_encryption_at_rest=False, enable_other_encryption_at_rest=False,
+                                 secret_rotation_interval=None,
                                  kmip_key_uuid=None, client_certs_path=None, KMIP_pkcs8_file_name=None,
                                  KMIP_cert_file_name=None, private_key_passphrase=None, kmip_host_name=None,
                                  KMIP_for_config_encryption=False, config_dekLifetime=None,
                                  config_dekRotationInterval=None, KMIP_for_log_encryption=False,
                                  log_dekLifetime=None, log_dekRotationInterval=None,
                                  KMIP_for_audit_encryption=False, audit_dekLifetime=None,
-                                 audit_dekRotationInterval=None):
+                                 audit_dekRotationInterval=None, KMIP_for_other_encryption=False,
+                                 other_dekLifetime=None, other_dekRotationInterval=None):
         result = {}
         rest = RestConnection(cluster_master)
         bypass_encryption_func()
@@ -130,7 +134,7 @@ class EncryptionUtil:
                 name=EncryptionUtil.generate_random_name("kmip"),
                 secret_type="kmip-aes-key-256",
                 usage=["KEK-encryption", "bucket-encryption", "config-encryption", "log-encryption",
-                       "audit-encryption"],
+                       "audit-encryption", "other-encryption"],
                 caSelection="useSysAndCbCa", reqTimeoutMs=5000, encryptionApproach="useGet",
                 encryptWith="nodeSecretManager", encryptWithKeyId=-1,
                 activeKey={"kmipId": kmip_key_uuid},
@@ -179,15 +183,13 @@ class EncryptionUtil:
                 config_encryption_at_rest_id = result.get('KMIP_id')
             result['config_encryption_at_rest_id'] = config_encryption_at_rest_id
             self.log.info("Config encryption at rest ID: {0}".format(config_encryption_at_rest_id))
-            valid_params = {
-                "config.encryptionMethod": "encryptionKey",
-                "config.encryptionKeyId": config_encryption_at_rest_id
+            config_rest_params = {
+                "encryptionMethod": "encryptionKey",
+                "encryptionKeyId": config_encryption_at_rest_id,
+                "dekLifetime": config_dekLifetime if config_dekLifetime is not None else 31536000,
+                "dekRotationInterval": config_dekRotationInterval if config_dekRotationInterval is not None else 2592000
             }
-            if config_dekLifetime is not None:
-                valid_params["config.dekLifetime"] = config_dekLifetime
-            if config_dekRotationInterval is not None:
-                valid_params["config.dekRotationInterval"] = config_dekRotationInterval
-            status, response = rest.configure_encryption_at_rest(valid_params)
+            status, response = rest.configure_config_encryption_at_rest(config_rest_params)
             self.log.info("Config encryption at rest status: {0}".format(status))
             if not status:
                 raise Exception("Failed to enable config encryption values: {0}".format(response))
@@ -211,15 +213,13 @@ class EncryptionUtil:
                 log_encryption_at_rest_id = result.get('KMIP_id')
             result['log_encryption_at_rest_id'] = log_encryption_at_rest_id
             self.log.info("Log encryption at rest ID: {0}".format(log_encryption_at_rest_id))
-            valid_params = {
-                "log.encryptionMethod": "encryptionKey",
-                "log.encryptionKeyId": log_encryption_at_rest_id
+            log_rest_params = {
+                "encryptionMethod": "encryptionKey",
+                "encryptionKeyId": log_encryption_at_rest_id,
+                "dekLifetime": log_dekLifetime if log_dekLifetime is not None else 31536000,
+                "dekRotationInterval": log_dekRotationInterval if log_dekRotationInterval is not None else 2592000
             }
-            if log_dekLifetime is not None:
-                valid_params["log.dekLifetime"] = log_dekLifetime
-            if log_dekRotationInterval is not None:
-                valid_params["log.dekRotationInterval"] = log_dekRotationInterval
-            status, response = rest.configure_encryption_at_rest(valid_params)
+            status, response = rest.configure_log_encryption_at_rest(log_rest_params)
             self.log.info("Log encryption at rest status: {0}".format(status))
             if not status:
                 raise Exception("Failed to set valid log encryption values: {0}".format(response))
@@ -243,17 +243,45 @@ class EncryptionUtil:
                 audit_encryption_at_rest_id = result.get('KMIP_id')
             result['audit_encryption_at_rest_id'] = audit_encryption_at_rest_id
             self.log.info("Audit encryption at rest ID: {0}".format(audit_encryption_at_rest_id))
-            valid_params = {
-                "audit.encryptionMethod": "encryptionKey",
-                "audit.encryptionKeyId": audit_encryption_at_rest_id
+            audit_rest_params = {
+                "encryptionMethod": "encryptionKey",
+                "encryptionKeyId": audit_encryption_at_rest_id,
+                "dekLifetime": audit_dekLifetime if audit_dekLifetime is not None else 31536000,
+                "dekRotationInterval": audit_dekRotationInterval if audit_dekRotationInterval is not None else 2592000
             }
-            if audit_dekLifetime is not None:
-                valid_params["audit.dekLifetime"] = audit_dekLifetime
-            if audit_dekRotationInterval is not None:
-                valid_params["audit.dekRotationInterval"] = audit_dekRotationInterval
-            status, response = rest.configure_encryption_at_rest(valid_params)
+            status, response = rest.configure_audit_encryption_at_rest(audit_rest_params)
             self.log.info("Audit encryption at rest status: {0}".format(status))
             if not status:
                 raise Exception("Failed to set valid Audit encryption values: {0}".format(response))
+
+        if enable_other_encryption_at_rest:
+            self.log.info("Initializing other encryption at rest")
+            other_params = EncryptionUtil.create_secret_params(
+                name=EncryptionUtil.generate_random_name("OtherEncryptionSecret"),
+                usage=["other-encryption"],
+                rotationIntervalInSeconds=secret_rotation_interval
+            )
+            self.log.info("Other encryption params: {}".format(other_params))
+            status, response = rest.create_secret(other_params)
+            if not status:
+                raise Exception("Failed to create other encryption at rest secret. Response: {0}".format(response))
+            response_dict = json.loads(response)
+            other_encryption_at_rest_id = response_dict.get('id')
+            if other_encryption_at_rest_id is None and not KMIP_for_other_encryption:
+                raise Exception("Other encryption at rest secret created but no ID returned. Response: {0}".format(response))
+            if KMIP_for_other_encryption:
+                other_encryption_at_rest_id = result.get('KMIP_id')
+            result['other_encryption_at_rest_id'] = other_encryption_at_rest_id
+            self.log.info("Other encryption at rest ID: {0}".format(other_encryption_at_rest_id))
+            other_rest_params = {
+                "encryptionMethod": "encryptionKey",
+                "encryptionKeyId": other_encryption_at_rest_id,
+                "dekLifetime": other_dekLifetime if other_dekLifetime is not None else 31536000,
+                "dekRotationInterval": other_dekRotationInterval if other_dekRotationInterval is not None else 2592000
+            }
+            status, response = rest.configure_other_encryption_at_rest(other_rest_params)
+            self.log.info("Other encryption at rest status: {0}".format(status))
+            if not status:
+                raise Exception("Failed to set other encryption values: {0}".format(response))
 
         return result

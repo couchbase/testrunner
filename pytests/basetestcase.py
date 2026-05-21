@@ -145,6 +145,16 @@ class OnPremBaseTestCase(unittest.TestCase):
             "enable_audit_encryption_at_rest", False)
         self.audit_encryption_at_rest_id = self.input.param(
             "audit_encryption_at_rest_id", False)
+        self.enable_other_encryption_at_rest = self.input.param(
+            "enable_other_encryption_at_rest", False)
+        self.other_encryption_at_rest_id = self.input.param(
+            "other_encryption_at_rest_id", None)
+        self.KMIP_for_other_encryption = self.input.param(
+            "KMIP_for_other_encryption", False)
+        self.other_dekLifetime = self.input.param(
+            "other_dekLifetime", CbServer.encryption_at_rest_dek_lifetime_interval)
+        self.other_dekRotationInterval = self.input.param(
+            "other_dekRotationInterval", CbServer.encryption_at_rest_dek_rotation_interval)
         self.log_encryption_at_rest_id = self.input.param(
             "log_encryption_at_rest_id", False)
         self.secret_rotation_interval = self.input.param(
@@ -521,7 +531,11 @@ class OnPremBaseTestCase(unittest.TestCase):
                 log_dekRotationInterval=self.log_dekRotationInterval,
                 KMIP_for_audit_encryption=self.KMIP_for_audit_encryption,
                 audit_dekLifetime=self.audit_dekLifetime,
-                audit_dekRotationInterval=self.audit_dekRotationInterval
+                audit_dekRotationInterval=self.audit_dekRotationInterval,
+                enable_other_encryption_at_rest=self.enable_other_encryption_at_rest,
+                KMIP_for_other_encryption=self.KMIP_for_other_encryption,
+                other_dekLifetime=self.other_dekLifetime,
+                other_dekRotationInterval=self.other_dekRotationInterval
             )
             # Set the returned IDs back to self
             self.encryption_util.set_encryption_ids(self, encryption_result)
@@ -534,6 +548,8 @@ class OnPremBaseTestCase(unittest.TestCase):
                 self.log.info("log_encryption_at_rest_id set to: {0}".format(self.log_encryption_at_rest_id))
             if hasattr(self, 'audit_encryption_at_rest_id'):
                 self.log.info("audit_encryption_at_rest_id set to: {0}".format(self.audit_encryption_at_rest_id))
+            if hasattr(self, 'other_encryption_at_rest_id'):
+                self.log.info("other_encryption_at_rest_id set to: {0}".format(self.other_encryption_at_rest_id))
 
             if self.dgm_run:
                 self.quota = 256

@@ -30,6 +30,18 @@ from membase.api.rest_client import RestConnection
 from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 
 
+# Maps self.gsi_type strings to the three canonical engine names accepted by
+# validate_engine_encryption().  The dispatcher only speaks 'moi', 'plasma',
+# 'bhive'; any other string raises ValueError there.
+_GSI_TYPE_TO_ENGINE = {
+    "memory_optimized": "moi",
+    "moi": "moi",
+    "plasma": "plasma",
+    "forestdb": "plasma",   # legacy alias used in conf files
+    "bhive": "bhive",
+}
+
+
 class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
     UUID_PATTERN = re.compile(
         r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -548,15 +560,22 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 f"using header key identifiers {expected_header_key_ids}..."
             )
         
-        encryption_results = self.validate_file_encryption(
-            index_nodes, expected_key_id=expected_header_key_ids
+        engine = _GSI_TYPE_TO_ENGINE.get(self.gsi_type)
+        if engine is None:
+            raise ValueError(
+                f"Unsupported gsi_type: {self.gsi_type!r}. "
+                f"Expected one of {list(_GSI_TYPE_TO_ENGINE)}"
+            )
+        encryption_results = self.validate_engine_encryption(
+            engine, index_nodes, expected_key_id=expected_header_key_ids
         )
-        
+
         all_failed_files = []
         validation_passed = True
-        
+        _SKIP_CATEGORIES = {"_overall", "_helper_error", "TODO"}
+
         for category, results in encryption_results.items():
-            if category == "TODO":
+            if category in _SKIP_CATEGORIES:
                 continue
             if isinstance(results, dict):
                 for node, result in results.items():
@@ -814,10 +833,16 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 f"in-use key ids {expected_header_key_ids} in encrypted file headers for "
                 f"encrypted buckets: {encrypted_bucket_names}..."
             )
-            encryption_results = self.validate_file_encryption(
-                index_nodes,
+            engine = _GSI_TYPE_TO_ENGINE.get(self.gsi_type)
+            if engine is None:
+                raise ValueError(
+                    f"Unsupported gsi_type: {self.gsi_type!r}. "
+                    f"Expected one of {list(_GSI_TYPE_TO_ENGINE)}"
+                )
+            encryption_results = self.validate_engine_encryption(
+                engine, index_nodes,
                 expected_key_id=expected_header_key_ids,
-                encrypted_bucket_names=encrypted_bucket_names
+                encrypted_bucket_names=encrypted_bucket_names,
             )
             
             # Track overall validation status
@@ -825,11 +850,16 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             validation_passed = True
             
             # Log summary of results
+            # Skip internal keys added by the orchestrator (_overall, _helper_error)
+            # and any todo stubs — they are not per-node result dicts.
+            _SKIP_CATEGORIES = {"_overall", "_helper_error", "TODO"}
             for category, results in encryption_results.items():
-                if category == "TODO":
+                if category in _SKIP_CATEGORIES:
                     continue
                 if isinstance(results, dict):
                     for node, result in results.items():
+                        if not isinstance(result, dict):
+                            continue
                         status = result.get("status", "unknown")
                         if status == "passed":
                             # Check if there are any failed files even in passed results
@@ -863,7 +893,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                     self.log.error(f"[STEP 10]   Node: {node}, File: {file_path}")
                 self.log.error("=" * 60)
                 raise Exception(f"File encryption validation failed: {len(all_failed_files)} files are not encrypted")
-
+            
             if not validation_passed:
                 raise Exception("File encryption validation reported one or more failures")
             
@@ -1476,4 +1506,166 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_force_reencryption")
         self.log.info(f"Successfully dropped DEKs and re-encrypted data with new DEKs (KEK ID: {key_id})")
+        self.log.info("=" * 80)
+
+    def test_gsi_log_encryption_files_encrypted(self):
+        """
+        Validate that indexer_stats.log, projector_stats.log, and the
+        request-handler cache files under @2i/cache are encrypted with the
+        cluster-level log-encryption secret.
+
+        Requires ``enable_log_encryption_at_rest=True`` so basetestcase.py
+        provisions a log-encryption key. Bucket encryption is optional —
+        this test only asserts on log-encryption-governed files.
+
+        Steps:
+          1. Verify index nodes and that log encryption is enabled
+          2. Create a bucket (encrypted if enable_encryption_at_rest=True)
+          3. Load documents + create indexes so stats logs and request-handler
+             cache files get written
+          4. Run SELECT queries so the request-handler cache is populated
+          5. Wait briefly to let stats flush to disk
+          6. Call validate_log_encryption_files_encrypted
+        """
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_gsi_log_encryption_files_encrypted")
+        self.log.info("=" * 80)
+
+        # ========== STEP 1: Verify prerequisites ==========
+        try:
+            self.log.info("[STEP 1] Verifying index nodes and log-encryption setup...")
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            self.assertGreaterEqual(len(index_nodes), 2,
+                f"Need at least 2 index nodes, found {len(index_nodes)}")
+            if not getattr(self, "enable_log_encryption_at_rest", False):
+                self.skipTest("Log encryption at rest not enabled. "
+                              "Set enable_log_encryption_at_rest=True")
+            self.log.info(
+                f"[STEP 1] PASSED - {len(index_nodes)} index nodes, "
+                f"log_encryption_at_rest_id={getattr(self, 'log_encryption_at_rest_id', None)}"
+            )
+        except Exception as e:
+            self.log.error(f"[STEP 1] FAILED: {str(e)}")
+            raise
+
+        # ========== STEP 2: Create bucket ==========
+        bucket_name = self.test_bucket
+        try:
+            self.log.info(f"[STEP 2] Creating bucket '{bucket_name}' "
+                          f"(encryption={bool(self.enable_encryption_at_rest)})...")
+            self._create_bucket_with_encryption(
+                bucket_name, enable_encryption=bool(self.enable_encryption_at_rest)
+            )
+            self.log.info(f"[STEP 2] PASSED - Bucket '{bucket_name}' created")
+        except Exception as e:
+            self.log.error(f"[STEP 2] FAILED: {str(e)}")
+            raise
+
+        # ========== STEP 3: Configure indexer snapshot intervals ==========
+        try:
+            self.log.info("[STEP 3] Setting indexer snapshot settings...")
+            for index_node in index_nodes:
+                rest = RestConnection(index_node)
+                rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
+                rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
+            self.log.info("[STEP 3] PASSED - Indexer snapshot settings configured")
+        except Exception as e:
+            self.log.error(f"[STEP 3] FAILED: {str(e)}")
+            raise
+
+        # ========== STEP 4: Load documents and create indexes ==========
+        select_queries = set()
+        try:
+            self.log.info(f"[STEP 4] Loading {self.num_of_docs_per_collection} docs and creating indexes...")
+            gen_create = SDKDataLoader(
+                num_ops=self.num_of_docs_per_collection,
+                percent_create=100,
+                percent_update=0,
+                percent_delete=0,
+                scope="_default",
+                collection="_default",
+                json_template=self.json_template,
+                output=True,
+                username=self.username,
+                password=self.password
+            )
+            tasks = self.data_ops_javasdk_loader_in_batches(
+                sdk_data_loader=gen_create,
+                batch_size=10**4,
+                dataset=self.json_template
+            )
+            for task in tasks:
+                task.result()
+
+            namespace = f"default:{bucket_name}._default._default"
+            prefix = 'log_ear_' + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+            query_definitions = self.gsi_util_obj.get_index_definition_list(
+                dataset=self.json_template,
+                prefix=prefix,
+                skip_primary=False
+            )
+            select_queries.update(
+                self.gsi_util_obj.get_select_queries(
+                    definition_list=query_definitions,
+                    namespace=namespace
+                )
+            )
+            deploy_nodes = [f"{node.ip}:{self.node_port}" for node in index_nodes]
+            queries = self.gsi_util_obj.get_create_index_list(
+                definition_list=query_definitions,
+                namespace=namespace,
+                num_replica=self.num_index_replica,
+                deploy_node_info=deploy_nodes,
+                defer_build=self.defer_build
+            )
+            query_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.gsi_util_obj.create_gsi_indexes(
+                create_queries=queries,
+                database=namespace,
+                query_node=query_node
+            )
+            self.wait_until_indexes_online(timeout=1200, defer_build=self.defer_build)
+            self.log.info(f"[STEP 4] PASSED - Indexes online, {len(select_queries)} select queries collected")
+        except Exception as e:
+            self.log.error(f"[STEP 4] FAILED: {str(e)}")
+            raise
+
+        # ========== STEP 5: Exercise request-handler cache via scans ==========
+        try:
+            self.log.info(f"[STEP 5] Running {len(select_queries)} SELECT queries to populate request-handler cache...")
+            self._run_and_validate_scans(
+                select_queries, expected_doc_count=self.num_of_docs_per_collection
+            )
+            self.log.info("[STEP 5] PASSED - Scans completed")
+        except Exception as e:
+            self.log.error(f"[STEP 5] FAILED: {str(e)}")
+            raise
+
+        # ========== STEP 6: Wait for stats to flush ==========
+        flush_wait = int(self.input.param("stats_flush_wait", 60))
+        self.sleep(flush_wait,
+                   f"Waiting {flush_wait}s for indexer/projector stats logs "
+                   f"and request-handler cache to flush to disk")
+
+        # ========== STEP 7: Validate log-encryption files ==========
+        try:
+            expected_key_id = getattr(self, "log_encryption_at_rest_id", None)
+            expected_header_key_ids = None
+            if expected_key_id not in (None, False, ""):
+                expected_header_key_ids = self._get_expected_header_key_ids(expected_key_id)
+            self.log.info(
+                f"[STEP 7] Validating log-encryption files with expected key IDs "
+                f"{expected_header_key_ids} (raw={expected_key_id})..."
+            )
+            self.validate_log_encryption_files_encrypted(
+                index_nodes, expected_key_id=expected_header_key_ids
+            )
+            self.log.info("[STEP 7] PASSED - Log-encryption file validation completed")
+        except Exception as e:
+            self.log.error(f"[STEP 7] FAILED: {str(e)}")
+            raise
+
+        # ========== TEST COMPLETE ==========
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_gsi_log_encryption_files_encrypted")
         self.log.info("=" * 80)

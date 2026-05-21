@@ -3321,16 +3321,88 @@ class RestConnection(object):
         status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
         return status, json_parsed
 
+    def force_log_encryption_at_rest(self):
+        """
+        POST :: controller/forceEncryptionAtRest/log
+        Force immediate encryption of all log files using the currently active DEK.
+        """
+        api = self.baseUrl + 'controller/forceEncryptionAtRest/log'
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
+        return status, json_parsed
+
+    def configure_config_encryption_at_rest(self, params):
+        """
+        POST :: /settings/security/encryptionAtRest/config
+        """
+        api = self.baseUrl + 'settings/security/encryptionAtRest/config'
+        json_params = json.dumps(params)
+        headers = self._create_headers_encoded_prepared()
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        return status, json_parsed
+
+    def disable_config_encryption(self):
+        """
+        POST :: /settings/security/encryptionAtRest/config
+        """
+        return self.configure_config_encryption_at_rest({"encryptionMethod": "disabled"})
+
+    def configure_audit_encryption_at_rest(self, params):
+        """
+        POST :: /settings/security/encryptionAtRest/audit
+        """
+        api = self.baseUrl + 'settings/security/encryptionAtRest/audit'
+        json_params = json.dumps(params)
+        headers = self._create_headers_encoded_prepared()
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        return status, json_parsed
+
+    def disable_audit_encryption(self):
+        """
+        POST :: /settings/security/encryptionAtRest/audit
+        """
+        return self.configure_audit_encryption_at_rest({"encryptionMethod": "disabled"})
+
+    def configure_log_encryption_at_rest(self, params):
+        """
+        POST :: settings/security/encryptionAtRest/log
+        Configure log encryption at rest. params is a dict, e.g.:
+          {"encryptionMethod": "encryptionKey", "encryptionKeyId": <id>,
+           "dekLifetime": 31536000, "dekRotationInterval": 2592000}
+        """
+        api = self.baseUrl + 'settings/security/encryptionAtRest/log'
+        json_params = json.dumps(params)
+        headers = self._create_headers_encoded_prepared()
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
+        return status, json_parsed
+
     def disable_log_encryption(self):
         """
         POST :: settings/security/encryptionAtRest/log
         Disable log encryption at rest by setting encryptionMethod to disabled.
         """
-        api = self.baseUrl + 'settings/security/encryptionAtRest/log'
-        headers = self._create_headers()
-        params = urllib.parse.urlencode({"encryptionMethod": "disabled"})
-        status, json_parsed, _ = self._http_request(api, method='POST', params=params, headers=headers)
+        return self.configure_log_encryption_at_rest({"encryptionMethod": "disabled"})
+
+    def configure_other_encryption_at_rest(self, params):
+        """
+        POST :: /settings/security/encryptionAtRest/other
+        Configure 'other' encryption at rest (e.g. enable with encryptionKey or disable).
+        params is a dict, e.g.:
+          {"encryptionMethod": "encryptionKey", "encryptionKeyId": <id>,
+           "dekLifetime": 31536000, "dekRotationInterval": 2592000}
+        """
+        api = self.baseUrl + 'settings/security/encryptionAtRest/other'
+        json_params = json.dumps(params)
+        headers = self._create_headers_encoded_prepared()
+        status, json_parsed, _ = self._http_request(api, method='POST', params=json_params, headers=headers)
         return status, json_parsed
+
+    def disable_other_encryption(self):
+        """
+        POST :: /settings/security/encryptionAtRest/other
+        Disable 'other' encryption at rest.
+        """
+        return self.configure_other_encryption_at_rest({"encryptionMethod": "disabled"})
 
     def trigger_kek_rotation(self, secret_id):
         """
@@ -4950,6 +5022,25 @@ class RestConnection(object):
         status, content, _ = self._http_request(api, "GET")
         if status:
             content = json.loads(content)
+        return status, content
+
+    def set_query_log_level(self, server, level):
+        """POST /settings/querySettings on the cluster manager (port 8091).
+        Sets the cluster-wide query service log level. Valid values:
+        'debug', 'info', 'warn', 'error', 'fatal'.
+
+        Used by the spill tests to enable DEBUG-level logging briefly so
+        per-spill log lines (`need to spill: ...`, `Sequential scan: ...
+        spill file created`, etc.) are captured to query.log during the
+        spill-triggering query, then reverted to INFO afterward."""
+        protocol = "http"
+        port = server.port
+        if CbServer.use_https:
+            protocol = "https"
+            port = str(CbServer.ssl_port_map.get(str(port), str(port)))
+        api = "%s://%s:%s/settings/querySettings" % (protocol, server.ip, port)
+        params = urllib.parse.urlencode({'queryLogLevel': level})
+        status, content, _ = self._http_request(api, method='POST', params=params)
         return status, content
 
     '''End Monitoring/Profiling Rest Calls'''
