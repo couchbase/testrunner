@@ -697,6 +697,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                     free_node_in = list(free_nodes.values())
                 self.log.info("<<<=== rebalance_in node {0} with services {1}"\
                                       .format(free_node_in, service_in[0]))
+                self._adjust_quotas_for_node(free_node_in[0])
                 rebalance = \
                        self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                                       free_node_in,
@@ -729,6 +730,38 @@ class UpgradeTests(NewUpgradeBaseTest):
                 queue.put(False)
         if rebalance_in and queue is not None:
             queue.put(True)
+
+    def _adjust_quotas_for_node(self, node):
+        """
+        Before adding a new node to the cluster, check if the cluster's combined
+        KV + FTS memory quotas exceed the new node's mcdMemoryReserved.  If they
+        do, lower the quotas (and any oversized bucket quotas) so the join succeeds.
+        This prevents the "Prepare join failed. … Total quota is Xmb … maximum
+        allowed quota for the node is Ymb" error on smaller/differently-sized nodes.
+        """
+        try:
+            node_info = RestConnection(node).get_nodes_self()
+            node_max = int(node_info.mcdMemoryReserved)
+        except Exception as ex:
+            self.log.warning("Cannot get memory info for node {}: {}".format(node.ip, ex))
+            return
+        rest = RestConnection(self.master)
+        pools = rest.get_pools_default()
+        kv_quota = pools.get('memoryQuota', 0)
+        fts_quota = pools.get('ftsMemoryQuota', 0)
+        if kv_quota + fts_quota <= node_max:
+            return
+        new_fts = min(fts_quota, 512)
+        new_kv = max(256, node_max - new_fts - 100)
+        self.log.info(
+            "Node {} mcdMemoryReserved={}MB < cluster kv+fts={}MB; "
+            "adjusting quotas: kv {} -> {}, fts {} -> {}".format(
+                node.ip, node_max, kv_quota + fts_quota,
+                kv_quota, new_kv, fts_quota, new_fts))
+        for bucket in rest.get_buckets():
+            rest.change_bucket_props(bucket, ramQuotaMB=new_kv)
+        rest.init_cluster_memoryQuota(rest.username, rest.password, new_kv)
+        rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=new_fts)
 
     def rebalance_out(self, queue=None):
         rebalance_out = False
