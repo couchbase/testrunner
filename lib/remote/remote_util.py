@@ -2470,6 +2470,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                                                % (self.nr_home_path,
                                                                   LINUX_COUCHBASE_BIN_PATH))
                 else:
+                    self._clear_dpkg_locks()
                     if force:
                         output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
                                                  .format(environment, build.name),
@@ -3206,6 +3207,7 @@ class RemoteMachineShellConnection(KeepRefs):
                         sys.exit(1)
                     self.stop_server()
                 else:
+                    self._clear_dpkg_locks()
                     if self.is_enterprise(type):
                         if product is not None and product == "cbas":
                             uninstall_cmd = "dpkg -r {0};dpkg --purge {1};" \
@@ -4478,6 +4480,20 @@ class RemoteMachineShellConnection(KeepRefs):
                 retry = retry + 1
         if not running and retry >= 3:
             sys.exit("Server not started even after 3 retries on "+self.info.ip)
+
+    def _clear_dpkg_locks(self):
+        """Kill background apt/dpkg processes and remove lock files before installing/uninstalling.
+        Mirrors the rpm lock-clearing already done for RPM-based distros."""
+        log.info("Clearing dpkg/apt locks on {0}".format(self.ip))
+        self.execute_command(
+            "kill -9 $(lsof /var/lib/dpkg/lock-frontend 2>/dev/null | awk 'NR>1{print $2}') 2>/dev/null; "
+            "killall -9 unattended-upgrades apt apt-get 2>/dev/null; "
+            "true"
+        )
+        self.execute_command(
+            "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock"
+        )
+        self.execute_command("dpkg --configure -a 2>/dev/null; true")
 
     # To be used when a calling a method with killall is used, because it's
     # not necessarily installed on the VM.

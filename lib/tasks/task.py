@@ -1057,14 +1057,14 @@ class StatsWaitTask(Task):
 
     def _get_connection(self, server):
         if server not in self.conns:
-            for i in range(3):
+            for i in range(15):
                 try:
                     self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
                     return self.conns[server]
                 except (EOFError, socket.error):
                     self.log.error("failed to create direct client, retry in 1 sec")
                     time.sleep(1)
-            self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket)
+            raise EOFError("Failed to connect to {0} after 15 retries".format(server))
         return self.conns[server]
 
     def _compare(self, cmp_type, a, b):
