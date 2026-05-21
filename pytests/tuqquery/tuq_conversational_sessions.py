@@ -138,7 +138,7 @@ class ConversationalSessionTests(QueryTests):
         self.log.info("USING AI [%s] -> generated: %s" % (
             natural_language, result.get('generated_statement', 'N/A')))
         if 'results' in result:
-            result['results'] = [self._unwrap_row(r) for r in result['results']]
+            result['results'] = [self._unwrap_row(r) for r in result['results'] if r is not None]
         return result
 
     def _unwrap_row(self, row):
@@ -560,7 +560,7 @@ class ConversationalSessionTests(QueryTests):
             self.assertEqual(len(rows), 5,
                              "TC-08-05 FAIL: Expected 5 rows, got %d" % len(rows))
             for row in rows:
-                alias = row.get('alias')
+                alias = row.get('alias') if isinstance(row, dict) else row
                 self.assertNotEqual(alias, 'TEMP_TEST',
                                     "TC-08-05 FAIL: alias='TEMP_TEST' visible after ROLLBACK — "
                                     "dirty read / isolation failure detected.")
