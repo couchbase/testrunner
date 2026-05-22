@@ -35,14 +35,20 @@ class BasicBucketAccessors(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
         self.deploy_function(body)
-        # Wait for eventing to catch up with all the update mutations
-        self.sleep(10)
-        on_update_success=self.get_stats_value(self.function_name, "execution_stats.on_update_success")
-        on_update_failure=self.get_stats_value(self.function_name, "execution_stats.on_update_failure")
+        # Poll until eventing processes all mutations (sleep(10) is insufficient for 100k+ docs)
+        expected = self.docs_per_day * self.num_docs
+        timeout = 1800
+        count = 0
+        on_update_success = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        while on_update_success != expected and count < 20:
+            self.sleep(timeout // 20, message="Waiting for on_update_success={} (current={})".format(expected, on_update_success))
+            count += 1
+            on_update_success = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        on_update_failure = self.get_stats_value(self.function_name, "execution_stats.on_update_failure")
         self.log.info("execution_stats.on_update_success: {}".format(on_update_success))
         self.log.info("execution_stats.on_update_failure: {}".format(on_update_failure))
-        if on_update_success != self.docs_per_day * self.num_docs:
-            self.fail("on_update_success is not as expected {0} , actual value {1}".format(self.docs_per_day * self.num_docs, on_update_success))
+        if on_update_success != expected:
+            self.fail("on_update_success is not as expected {0} , actual value {1}".format(expected, on_update_success))
         self.verify_doc_count_collections("default.scope0.collection1", self.docs_per_day * self.num_docs)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection1", 0)
@@ -53,14 +59,20 @@ class BasicBucketAccessors(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0")
         body = self.create_save_function_body(self.function_name, self.handler_code, src_binding=True)
         self.deploy_function(body)
-        # Wait for eventing to catch up with all the update mutations
-        self.sleep(10)
-        on_update_success=self.get_stats_value(self.function_name, "execution_stats.on_update_success")
-        on_update_failure=self.get_stats_value(self.function_name, "execution_stats.on_update_failure")
+        # Poll until eventing processes all mutations (sleep(10) is insufficient for 100k+ docs)
+        expected = self.docs_per_day * self.num_docs
+        timeout = 1800
+        count = 0
+        on_update_success = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        while on_update_success != expected and count < 20:
+            self.sleep(timeout // 20, message="Waiting for on_update_success={} (current={})".format(expected, on_update_success))
+            count += 1
+            on_update_success = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        on_update_failure = self.get_stats_value(self.function_name, "execution_stats.on_update_failure")
         self.log.info("execution_stats.on_update_success: {}".format(on_update_success))
         self.log.info("execution_stats.on_update_failure: {}".format(on_update_failure))
-        if on_update_success != self.docs_per_day * self.num_docs:
-            self.fail("on_update_success is not as expected {0}, actual value {1}".format(self.docs_per_day * self.num_docs, on_update_success))
+        if on_update_success != expected:
+            self.fail("on_update_success is not as expected {0}, actual value {1}".format(expected, on_update_success))
         self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs * 2)
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
         self.verify_doc_count_collections("default.scope0.collection0", 0)

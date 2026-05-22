@@ -85,8 +85,21 @@ class EventingEncryptionAtRest(EventingBaseTest):
         return body
 
     def _trigger_more_mutations(self):
+        # Capture baseline before loading so we can detect actual processing,
+        # not just rely on the destination count (which stays constant for updates).
+        before = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
         self.load_data_to_collection(self.num_docs, "src_bucket._default._default")
-        self.verify_doc_count_collections("dst_bucket._default._default", self.num_docs)
+        expected = before + self.num_docs
+        poll_count = 0
+        current = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        while current < expected and poll_count < 20:
+            self.sleep(15, "Waiting for mutations to be processed ({}/{})".format(current, expected))
+            poll_count += 1
+            current = self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        if current < expected:
+            raise Exception(
+                "Mutations not processed: current={} expected={}".format(current, expected)
+            )
 
     def _eventing_log_dir(self, bucket_name, scope_name):
         bucket_uuid = "b_" + self.rest.fetch_bucket_uuid(bucket_name)

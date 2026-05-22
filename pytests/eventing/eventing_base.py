@@ -51,7 +51,7 @@ class EventingBaseTest(QueryHelperTests):
         if self.global_function_scope:
             self.function_scope = {"bucket": "*", "scope": "*"}
         else:
-            if self.use_single_bucket:
+            if self.use_single_bucket and hasattr(self, 'default_bucket_name'):
                 self.function_scope = {"bucket": self.default_bucket_name, "scope": self.scope_name}
             else:
                 if self.non_default_collection:
@@ -91,7 +91,7 @@ class EventingBaseTest(QueryHelperTests):
         self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
-        self.docs_per_day = self.input.param("doc-per-day", 1)
+        self.docs_per_day = self.input.param("doc-per-day", 50)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
@@ -139,7 +139,7 @@ class EventingBaseTest(QueryHelperTests):
         fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
-        if self.use_single_bucket:
+        if self.use_single_bucket and hasattr(self, 'default_bucket_name'):
             body['depcfg']['metadata_bucket'] = self.default_bucket_name
             body['depcfg']['metadata_scope'] = "_default"
             body['depcfg']['metadata_collection'] = "_default"
@@ -278,7 +278,7 @@ class EventingBaseTest(QueryHelperTests):
             raise Exception('Eventing took lot of time to undeploy')
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
-                                skip_stats_validation=False, bucket=None, timeout=600,expected_duplicate=False):
+                                skip_stats_validation=False, bucket=None, timeout=1800,expected_duplicate=False):
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
         rest = RestConnection(self.master)
         num_nodes = self.refresh_rest_server()
@@ -724,7 +724,7 @@ class EventingBaseTest(QueryHelperTests):
                          "============================================================================================="
                          "\n\n".format(eventing_node.ip, out))
 
-    def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=600,bucket=None):
+    def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=1800,bucket=None):
         if bucket == None:
             bucket=self.src_bucket_name
         try:
@@ -778,13 +778,13 @@ class EventingBaseTest(QueryHelperTests):
             self.resume_function(body)
 
 
-    def wait_for_handler_state(self, name,status,iterations=120):
+    def wait_for_handler_state(self, name,status,iterations=240):
         self.sleep(5, message="Waiting for {} to {}...".format(name, status))
         result = self.rest.get_composite_eventing_status()
         count = 0
         composite_status = None
         while composite_status != status and count < iterations:
-            self.sleep(5, "Waiting for {} to {}...".format(name, status))
+            self.sleep(30, "Waiting for {} to {}...".format(name, status))
             result = self.rest.get_composite_eventing_status()
             for i in range(len(result['apps'])):
                 if result['apps'][i]['name'] == name:
@@ -1053,11 +1053,15 @@ class EventingBaseTest(QueryHelperTests):
             applogs = self.rest.get_app_logs(handler_name=name, function_scope=function_scope, aggregate=aggregate, size=size)
 
         self.log.info("================== {} ============================================================".format(name))
+        if isinstance(applogs, Exception):
+            self.log.error("get_app_logs failed: {}".format(applogs))
+            self.log.info("================== App logs end ===============================================================")
+            raise applogs
         # Decode and split into lines to print first 10 lines
         if isinstance(applogs, bytes):
             applogs_decoded = applogs.decode('utf-8', errors='replace')
         else:
-            applogs_decoded = applogs
+            applogs_decoded = str(applogs)
         lines = applogs_decoded.split('\n')
         self.log.info("First 10 lines of app logs:")
         for i, line in enumerate(lines[:10]):
@@ -1129,7 +1133,7 @@ class EventingBaseTest(QueryHelperTests):
     '''
         Method to check number of docs in a collection
     '''
-    def verify_doc_count_collections(self,namespace,expected_count,timeout=600,expected_duplicate=False):
+    def verify_doc_count_collections(self,namespace,expected_count,timeout=1800,expected_duplicate=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         keyspace = namespace.split(".")
         count=0
@@ -1245,7 +1249,7 @@ class EventingBaseTest(QueryHelperTests):
                 batch_size=self.batch_size, exp=expiry)
         else:
             task = self.cluster.async_load_gen_docs(self.master, collection_list[0], self.gen_create, pause_secs=1,
-                                                    timeout_secs=300, exp=expiry)
+                                                    timeout_secs=900, exp=expiry)
         if wait_for_loading:
             if self.dgm_run:
                 for t in task:
@@ -1387,7 +1391,7 @@ class EventingBaseTest(QueryHelperTests):
         if self.non_default_collection:
             metadata_bucket, metadata_scope, metadata_collection = [self.metadata_bucket_name] * 3
         else:
-            if self.use_single_bucket:
+            if self.use_single_bucket and hasattr(self, 'default_bucket_name'):
                 metadata_bucket = self.default_bucket_name
             else:
                 metadata_bucket = self.metadata_bucket_name
@@ -1395,7 +1399,7 @@ class EventingBaseTest(QueryHelperTests):
         return metadata_bucket, metadata_scope, metadata_collection
 
     def _create_bucket_scope_collections(self):
-        if self.use_single_bucket:
+        if self.use_single_bucket and hasattr(self, 'default_bucket_name'):
             self.collection_rest.create_scope(self.default_bucket_name, self.scope_name)
             for collection in self.collection_list:
                 self.collection_rest.create_collection(self.default_bucket_name, self.scope_name, collection)

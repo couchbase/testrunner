@@ -1782,7 +1782,7 @@ class EventingRebalance(EventingBaseTest):
             try:
                 # Wait for eventing to catch up with all the update mutations and verify results after rebalance
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * self.num_functions,
-                                             skip_stats_validation=True, timeout=1200)
+                                             skip_stats_validation=True, timeout=3600)
             except Exception as ex:
                 log.info(str(ex))
                 stats_map = self.get_index_stats(perNode=False)

@@ -138,11 +138,9 @@ class EventingOndeploy(EventingBaseTest):
         '''
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP)
         self.deploy_function(body)
-        # drop function scope
+        # drop function scope — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.src_bucket_name)
-        self.wait_for_handler_state(body['appname'], "undeployed")
-        # Delete the function
-        self.delete_function(body)
+        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
 
     def test_eventing_ondeploy_dropping_metadata_keyspace_when_handler_is_deployed(self):
         '''
@@ -150,8 +148,6 @@ class EventingOndeploy(EventingBaseTest):
         '''
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ONDEPLOY.ONDEPLOY_BASIC_BUCKET_OP)
         self.deploy_function(body)
-        # drop metadata keyspace
+        # drop metadata keyspace — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.metadata_bucket_name)
-        self.wait_for_handler_state(body['appname'], "undeployed")
-        # Delete the function
-        self.delete_function(body)
+        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])

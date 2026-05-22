@@ -403,8 +403,18 @@ class EventingLifeCycle(EventingBaseTest):
         self.deploy_function(body)
         #enable debugger
         self.rest.enable_eventing_debugger()
-        # Start eventing debugger
-        out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
+        # Start eventing debugger — ABO functions can take a moment to register
+        # the debugger endpoint after deploy; retry a few times before failing.
+        out1 = None
+        for attempt in range(5):
+            try:
+                out1 = self.rest.start_eventing_debugger(self.function_name, self.function_scope)
+                break
+            except Exception as e:
+                log.info("start_eventing_debugger attempt {0} failed: {1}".format(attempt + 1, e))
+                self.sleep(10)
+        if out1 is None:
+            self.fail("Could not start eventing debugger after 5 attempts")
         log.info(" Started eventing debugger : {0}".format(out1))
         # do some mutations
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

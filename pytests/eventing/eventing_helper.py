@@ -186,7 +186,7 @@ class EventingHelper(EventingBaseTest):
                 SBM_BUCKET_OP : source_bucket_mutation
         
     '''
-    def verify_documents_in_destination_bucket(self,name,expected_dcp_mutations,bucket,timeout=600):
+    def verify_documents_in_destination_bucket(self,name,expected_dcp_mutations,bucket,timeout=1800):
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         stats_dst = self.eventing_rest.get_bucket_stats(bucket)

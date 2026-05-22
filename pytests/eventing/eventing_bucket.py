@@ -500,9 +500,15 @@ class EventingBucket(EventingBaseTest):
         else:
             self.verify_doc_count_collections("dst_bucket._default._default", self.docs_per_day * self.num_docs)
         self.undeploy_and_delete_function(body)
-        countMap = self.get_buckets_itemCount()
-        finalDoc = countMap["metadata"]
-        assert int(finalDoc) == 0
+        # Poll until eventing asynchronously clears the metadata bucket (up to 300s)
+        finalDoc = None
+        for _ in range(20):
+            countMap = self.get_buckets_itemCount()
+            finalDoc = countMap["metadata"]
+            if int(finalDoc) == 0:
+                break
+            self.sleep(15, "Waiting for metadata cleanup, current count: {}".format(finalDoc))
+        assert int(finalDoc) == 0, "Metadata bucket not cleaned up after undeploy, count: {}".format(finalDoc)
 
     def test_source_bucket_mutation_with_read_access(self):
         # load some data

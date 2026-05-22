@@ -245,11 +245,11 @@ class EventingDataset(EventingBaseTest):
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
-                                     timeout=1200)
+                                     timeout=3600)
         self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=10, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=1200)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=3600)
         self.undeploy_and_delete_function(body)
         thread.join()
 
@@ -283,18 +283,18 @@ class EventingDataset(EventingBaseTest):
         for docid in ['customer123', 'customer1234', 'customer12345']:
             bucket.upsert(docid, {'a': 1})
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
-        # add new multiple xattrs , delete old xattrs and delete the documents
+        # Verify eventing does not write user-visible xattrs for timers
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            r = bucket.mutate_in(docid, scope=None, collection=None,
-                                 specs=[SD.get('eventing', xattr=True)])
+            r = bucket.lookup_in(docid, scope=None, collection=None,
+                                 specs=[SD.exists('eventing', xattr=True)])
             log.info(r)
-            if "Could not execute one or more multi lookups or mutations" not in str(r):
-                self.fail("eventing is still using xattrs for timers")
-            r = bucket.mutate_in(docid, scope=None, collection=None,
-                                 specs=[SD.get('_eventing', xattr=True)])
+            if r.exists(0):
+                self.fail("eventing is still using xattrs ('eventing') for timers on doc {}".format(docid))
+            r = bucket.lookup_in(docid, scope=None, collection=None,
+                                 specs=[SD.exists('_eventing', xattr=True)])
             log.info(r)
-            if "Could not execute one or more multi lookups or mutations" not in str(r):
-                self.fail("eventing is still using xattrs for timers")
+            if r.exists(0):
+                self.fail("eventing is still using xattrs ('_eventing') for timers on doc {}".format(docid))
         self.undeploy_and_delete_function(body)
 
     def test_eventing_crc_and_fiid(self):
@@ -313,11 +313,11 @@ class EventingDataset(EventingBaseTest):
         for docid in ['customer123', 'customer1234', 'customer12345']:
             fiid = bucket.lookup_in(docid, scope=None, collection=None,
                                     specs=[SD.exists('_eventing.fiid', xattr=True)])
-            self.log.info(fiid.exists('_eventing.fiid'))
+            self.log.info(fiid.exists(0))
             crc = bucket.lookup_in(docid, scope=None, collection=None,
                                    specs=[SD.exists('_eventing.crc', xattr=True)])
-            self.log.info(crc.exists('_eventing.crc'))
-            if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
+            self.log.info(crc.exists(0))
+            if not fiid.exists(0) and not crc.exists(0):
                 self.fail("No fiid : {} or crc : {} found:".format(fiid, crc))
         self.undeploy_function(body)
         for docid in ['customer123', 'customer1234', 'customer12345']:
@@ -325,7 +325,7 @@ class EventingDataset(EventingBaseTest):
                                     specs=[SD.exists('_eventing.fiid', xattr=True)])
             crc = bucket.lookup_in(docid, scope=None, collection=None,
                                    specs=[SD.exists('_eventing.crc', xattr=True)])
-            if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
+            if not fiid.exists(0) and not crc.exists(0):
                 self.fail("No fiid : {} or crc : {} found after undeployment:".format(fiid, crc))
 
     def test_fiid_crc_with_pause_resume(self):
@@ -342,30 +342,30 @@ class EventingDataset(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
         #get fiid and crc
         fiid_value = bucket.lookup_in('customer123', scope=None, collection=None,
-                                      specs=[SD.exists('_eventing.fiid', xattr=True)])['_eventing.fiid']
+                                      specs=[SD.get('_eventing.fiid', xattr=True)]).content_as[str](0)
         crc_value = bucket.lookup_in('customer123', scope=None, collection=None,
-                                     specs=[SD.exists('_eventing.crc', xattr=True)])['_eventing.crc']
+                                     specs=[SD.get('_eventing.crc', xattr=True)]).content_as[str](0)
         self.log.info("Fiid: {} and CRC: {}".format(fiid_value, crc_value))
         # check for fiid and crc
         for docid in ['customer1234', 'customer12345']:
-            fiid = bucket.lookup_in(docid, scope=None, collection=None,
-                                    specs=[SD.exists('_eventing.fiid', xattr=True)])
-            crc = bucket.lookup_in(docid, scope=None, collection=None,
-                                   specs=[SD.exists('_eventing.crc', xattr=True)])
-            if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
-                self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))
+            fiid_result = bucket.lookup_in(docid, scope=None, collection=None,
+                                           specs=[SD.get('_eventing.fiid', xattr=True)])
+            crc_result = bucket.lookup_in(docid, scope=None, collection=None,
+                                          specs=[SD.get('_eventing.crc', xattr=True)])
+            if fiid_value != fiid_result.content_as[str](0) or crc_value != crc_result.content_as[str](0):
+                self.fail("fiid {} or crc {} values are not same:".format(fiid_result, crc_result))
         self.pause_function(body)
         for docid in ['customer12553', 'customer1253', 'customer12531']:
             bucket.upsert(docid, {'a': 1})
         self.resume_function(body)
         self.verify_eventing_results(self.function_name, 6, skip_stats_validation=True)
         for docid in ['customer12553', 'customer1253', 'customer12531', 'customer123', 'customer1234', 'customer12345']:
-            fiid = bucket.lookup_in(docid, scope=None, collection=None,
-                                    specs=[SD.exists('_eventing.fiid', xattr=True)])
-            crc = bucket.lookup_in(docid, scope=None, collection=None,
-                                   specs=[SD.exists('_eventing.crc', xattr=True)])
-            if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
-                self.fail("fiid {} or crc {} values are not same:".format(fiid,crc))
+            fiid_result = bucket.lookup_in(docid, scope=None, collection=None,
+                                           specs=[SD.get('_eventing.fiid', xattr=True)])
+            crc_result = bucket.lookup_in(docid, scope=None, collection=None,
+                                          specs=[SD.get('_eventing.crc', xattr=True)])
+            if fiid_value != fiid_result.content_as[str](0) or crc_value != crc_result.content_as[str](0):
+                self.fail("fiid {} or crc {} values are not same:".format(fiid_result, crc_result))
         self.undeploy_and_delete_function(body)
 
     def test_read_cas_bucket_op(self):

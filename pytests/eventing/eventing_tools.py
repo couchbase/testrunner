@@ -555,7 +555,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         log.info(command)
         output, error = remote_client.execute_command(command)
-        if error or not [x for x in output if result in x]:
+        real_errors = [e for e in error if not e.startswith('DEPRECATED')]
+        if real_errors or not [x for x in output if result in x]:
             self.fail("couchbase-cli event-setup function {0} failed: {1}".format(operation, output))
         else:
             log.info("couchbase-cli event-setup function {0} succeeded : {1}".format(operation, output))

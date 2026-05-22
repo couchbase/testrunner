@@ -93,13 +93,18 @@ class EventingAnalytics(EventingBaseTest):
         cbas_rest.execute_statement_on_cbas("CREATE DATAVERSE `travel-sample`.`inventory`", None)
         cbas_rest.execute_statement_on_cbas("CREATE ANALYTICS COLLECTION `travel-sample`.`inventory`.`airline` ON `travel-sample`.`inventory`.`airline`", None)
         cbas_rest.execute_statement_on_cbas("CONNECT LINK Local", None)
-        self.sleep(15, "Waiting for analytics to ingest travel-sample data")
-        # Verify analytics returns data before deploying any handler
-        result = cbas_rest.execute_statement_on_cbas("SELECT COUNT(*) AS cnt FROM `travel-sample`.`inventory`.`airline`", None)
-        if isinstance(result, bytes):
-            result = result.decode("utf-8")
-        parsed = json.loads(result)
-        count = parsed["results"][0]["cnt"]
+        # Poll until analytics ingests at least one doc (up to 300s)
+        count = 0
+        poll_count = 0
+        while count == 0 and poll_count < 20:
+            self.sleep(15, "Waiting for analytics to ingest travel-sample data")
+            result = cbas_rest.execute_statement_on_cbas(
+                "SELECT COUNT(*) AS cnt FROM `travel-sample`.`inventory`.`airline`", None)
+            if isinstance(result, bytes):
+                result = result.decode("utf-8")
+            parsed = json.loads(result)
+            count = parsed["results"][0]["cnt"]
+            poll_count += 1
         log.info("Analytics airline collection has %s docs" % count)
         self.assertTrue(count > 0, "Analytics airline collection has 0 docs — ingestion failed")
 

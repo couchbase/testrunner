@@ -233,7 +233,10 @@ class EventingRBACSupport(EventingBaseTest):
         except Exception as e:
             self.log.info(e)
             assert "ERR_APP_ALREADY_DEPLOYED" in str(e) and "another function with same name is already deployed" in str(e), True
-        self.undeploy_and_delete_function(body)
+            self.undeploy_and_delete_function(body)
+            return
+        # Re-saving an existing function resets it to undeployed state; skip undeploy.
+        self.delete_function(body)
 
     def test_dropping_function_scope_when_handler_is_deployed_or_paused(self):
         body = self.create_save_function_body(self.function_name, self.handler_code)

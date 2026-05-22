@@ -512,11 +512,9 @@ class EventingJWTAuth(EventingBaseTest):
         self.setup_jwt_config()
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=self.jwt_token)
         self.deploy_function(body, jwt_token=self.jwt_token)
-        # Drop function scope
+        # Drop function scope — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.src_bucket_name)
-        self.wait_for_handler_state(body['appname'], "undeployed")
-        # Delete the function
-        self.delete_function(body, jwt_token=self.jwt_token)
+        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
 
 
     def test_eventing_jwt_dropping_metadata_keyspace_when_handler_is_deployed(self):
@@ -528,11 +526,9 @@ class EventingJWTAuth(EventingBaseTest):
         self.setup_jwt_config()
         body = self.create_save_function_body(self.function_name, self.handler_code, jwt_token=self.jwt_token)
         self.deploy_function(body, jwt_token=self.jwt_token)
-        # Drop metadata keyspace
+        # Drop metadata keyspace — eventing internally undeploys and deletes the function
         self.rest.delete_bucket(self.metadata_bucket_name)
-        self.wait_for_handler_state(body['appname'], "undeployed")
-        # Delete the function
-        self.delete_function(body, jwt_token=self.jwt_token)
+        self.wait_for_handler_internal_undeployment_and_deletion(body['appname'])
 
     def test_jwt_permitted_users_and_user_groups(self):
         '''

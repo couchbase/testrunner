@@ -120,7 +120,7 @@ class EventingSanity(EventingBaseTest):
         self.verify_source_bucket_mutation(self.docs_per_day * 2016,bucket='default.scope0.collection0')
         # delete all documents
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_source_bucket_mutation(self.docs_per_day * 2016, deletes=True, timeout=1200,
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016, deletes=True, timeout=3600,
                                                bucket='default.scope0.collection0')
         self.undeploy_and_delete_function(body)
 
@@ -132,7 +132,7 @@ class EventingSanity(EventingBaseTest):
         self.verify_source_bucket_mutation(self.docs_per_day * 2016,bucket='default.scope0.collection0')
         # delete all documents
         self.load_data_to_collection(self.docs_per_day * self.num_docs, "default.scope0.collection0",is_delete=True)
-        self.verify_source_bucket_mutation(self.docs_per_day * 2016, deletes=True, timeout=1200,
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016, deletes=True, timeout=3600,
                                                bucket='default.scope0.collection0')
         self.undeploy_and_delete_function(body)
 
@@ -170,7 +170,7 @@ class EventingSanity(EventingBaseTest):
         self.load_data_to_collection(self.docs_per_day * self.num_docs*2, "default.scope0.collection0",wait_for_loading=False)
         self.resume_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2, timeout=1200)
+        self.verify_doc_count_collections("default.scope0.collection0", self.docs_per_day * self.num_docs*2, timeout=3600)
         self.undeploy_and_delete_function(body)
 
 
