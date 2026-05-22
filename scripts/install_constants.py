@@ -62,8 +62,14 @@ DEFAULT_NONROOT_INSTALL_DIR = {"LINUX_DISTROS": "/home/nonroot/cb/opt/couchbase/
                        "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server",
                        "LINUX_DISTROS_EA": "/home/nonroot/cb/opt/enterprise-analytics/"}
 
-CB_NON_PACKAGE_INSTALLER_URL = "https://packages.couchbase.com/cb-non-package-installer/cb-non-package-installer"
+CB_NON_PACKAGE_INSTALLER_BASE_URL = "https://packages.couchbase.com/cb-non-package-installer/cb-non-package-installer"
+CB_NON_PACKAGE_INSTALLER_URL = CB_NON_PACKAGE_INSTALLER_BASE_URL
 CB_NON_PACKAGE_INSTALLER_NAME = "cb-non-package-installer"
+# Download the non-package installer using curl (present on distros like RHEL 10
+# where wget is not installed by default and a nonroot user cannot install it),
+# falling back to wget when curl is unavailable. Args: download_dir, name, url
+CB_NON_PACKAGE_INSTALLER_DOWNLOAD_CMD = \
+    "cd {0}; curl -s -L --fail -o {1} {2} || wget -q -O {1} {2}"
 
 DEFAULT_CLI_PATH = \
     {
@@ -272,6 +278,9 @@ NON_ROOT_CMDS = {
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
             "rm -rf " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb ",
+        "pre_install_as_root":
+            "DEBIAN_FRONTEND=noninteractive apt-get update -y && "
+            "DEBIAN_FRONTEND=noninteractive apt-get install -y lsb-base",
         "pre_install": "kill -9 `lsof -ti:4369`;" +
                        "kill -9 `lsof -ti:8091`;" +
                        "kill -9 `lsof -ti:21100`;" +
@@ -281,13 +290,17 @@ NON_ROOT_CMDS = {
                        "kill -9 `lsof -ti:21250`;" +
                        "kill -9 `lsof -ti:21350`;",
         "install":
-            "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
+            "mkdir -p " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
-            "./{} --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+            "./{} --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/ > /dev/null && echo 1 || echo 0",
         "post_install":
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/; "
-            "./bin/couchbase-server --start",
-        "post_install_retry": "./bin/couchbase-server --start",
+            "./bin/couchbase-server --start; "
+            "sleep 5; curl -s -o /dev/null http://localhost:8091 && echo 1 || echo 0",
+        "post_install_retry":
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/; "
+            "./bin/couchbase-server --start; "
+            "sleep 5; curl -s -o /dev/null http://localhost:8091 && echo 1 || echo 0",
         "init": None,
         "cleanup": "ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
@@ -342,14 +355,16 @@ NON_ROOT_CMDS = {
             "rm -rf " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb ",
         "install":
             # cb-non-package-installer requires empty dir to extract files to
-            "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
+            "mkdir -p " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
-            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
+            "./cb-non-package-installer --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/ > /dev/null && echo 1 || echo 0",
         "suse_install":
-            "mkdir " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
+            "mkdir -p " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb;"
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; "
-            "./{} --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/",
-        "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/bin/couchbase-server --start",
+            "./{} --install --package buildpath --install-location " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/ > /dev/null && echo 1 || echo 0",
+        "post_install":
+            NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "cb/opt/couchbase/bin/couchbase-server --start; "
+            "sleep 5; curl -s -o /dev/null http://localhost:8091 && echo 1 || echo 0",
         "post_install_retry": None,
         "init": None,
         "cleanup": "rm -f *-diag.zip; ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
@@ -377,8 +392,8 @@ NON_ROOT_MANUAL_CMDS = {
             "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
         "post_install":
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
-            "./bin/couchbase-server -- -noinput -detached",
-        "post_install_retry": "./bin/couchbase-server -- -noinput -detached",
+            "./bin/couchbase-server --start",
+        "post_install_retry": "./bin/couchbase-server --start",
         "init": None,
         "cleanup": "ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
@@ -437,7 +452,7 @@ NON_ROOT_MANUAL_CMDS = {
             "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; "
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
             "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
-        "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server \-- -noinput -detached",
+        "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server --start",
         "post_install_retry": None,
         "init": None,
         "cleanup": "rm -f *-diag.zip; ls -td " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
