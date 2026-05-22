@@ -261,25 +261,31 @@ class XDCRDifferTest(XDCRNewBaseTest):
 
     def _verify_magic_bytes(self, file_path, expected_magic=None):
         """Verify magic bytes at start of encrypted file.
-        Encrypted files have a leading null byte before the magic string
-        "Couchbase Encrypted". Uses xxd to safely read binary header as hex,
-        then converts to ASCII for comparison. This avoids UTF-8 decode errors.
+        Reads binary header directly via SFTP/remote cat instead of xxd.
+        Uses only Python builtins — no xxd dependency.
         """
         expected_magic = expected_magic or self.MAGIC_BYTES
-        cmd = f"xxd -l 30 -p {file_path} 2>/dev/null"
+
+        # Read raw bytes remotely — dd is available on every Linux system
+        cmd = f"dd if={file_path} bs=1 count=30 2>/dev/null | base64"
         output, _ = self.src_master_shell.execute_command(cmd)
-        if output:
-            hex_str = ''.join(output).strip()
-            try:
-                raw_bytes = bytes.fromhex(hex_str)
-                actual = raw_bytes.decode('ascii', errors='replace')
-                if expected_magic in actual:
-                    return True, expected_magic
-                printable = ''.join(c if c.isprintable() else '.' for c in actual)
-                return False, printable
-            except (ValueError, UnicodeDecodeError) as e:
-                return False, f"hex parse error: {str(e)}"
-        return False, None
+
+        if not output:
+            return False, None
+
+        try:
+            import base64
+            raw_bytes = base64.b64decode(''.join(output).strip())
+            actual = raw_bytes.decode('ascii', errors='replace')
+
+            if expected_magic in actual:
+                return True, expected_magic
+
+            printable = ''.join(c if c.isprintable() else '.' for c in actual)
+            return False, printable
+
+        except Exception as e:
+            return False, f"parse error: {str(e)}"
 
     def _verify_magic_bytes_any_file(self, directory, expected_magic=None):
         """Verify magic bytes in at least one .enc file in the given directory.
