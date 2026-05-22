@@ -118,8 +118,8 @@ else
     ${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i /tmp/testexec_reformat.$$.ini -p ${os} -o /tmp/testexec.$$.ini -k '{'${UPDATE_INI_VALUES}'}'
     #${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i ${iniFile} -p ${os} -o /tmp/testexec.$$.ini
   else
-    echo ${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i /tmp/testexec_reformat.$$.ini -p ${os} -o /tmp/testexec.$$.ini
-    ${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i /tmp/testexec_reformat.$$.ini -p ${os} -o /tmp/testexec.$$.ini
+    echo ${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i /tmp/testexec_reformat.$$.ini -p ${os} -o /tmp/testexec.$$.ini -k '{'${UPDATE_INI_VALUES}'}'
+    ${py_executable}  scripts/populateIni.py -s ${servers} -d ${addPoolServerId} -a ${addPoolServers} -i /tmp/testexec_reformat.$$.ini -p ${os} -o /tmp/testexec.$$.ini -k '{'${UPDATE_INI_VALUES}'}'
   fi
 fi
 
@@ -209,7 +209,11 @@ if [ $status -ne 0 ]; then
 fi
 
 desc2=`echo $descriptor | awk '{split($0,r,"-");print r[1],r[2]}'`
-${py_executable} scripts/ssh.py -i /tmp/testexec.$$.ini "iptables -F"
+if [ -f /tmp/testexec_root.$$.ini ]; then
+    ${py_executable} scripts/ssh.py -i /tmp/testexec_root.$$.ini "iptables -F"
+else
+    ${py_executable} scripts/ssh.py -i /tmp/testexec.$$.ini "iptables -F"
+fi
 
 echo "Need to set ALLOW_HTP back to True to do git pull branch"
 sed -i 's/ALLOW_HTP.*/ALLOW_HTP = True/' lib/testconstants.py
