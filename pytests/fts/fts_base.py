@@ -2459,6 +2459,8 @@ class CouchbaseCluster:
                 nodes_to_add.append(node_to_add)
                 node_services.append(node_service)
                 node_num = node_num + 1
+            if self.__use_hostname and nodes_to_add:
+                self.__hostnames.update(NodeHelper.rename_nodes(nodes_to_add))
             try:
                 self.__clusterop.async_rebalance(
                     self.__nodes,
