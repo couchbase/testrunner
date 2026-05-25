@@ -3,7 +3,7 @@ from lib.couchbase_helper.documentgenerator import BlobGenerator
 from pytests.xdcr.xdcrnewbasetests import XDCRNewBaseTest, FloatingServers, REPL_PARAM, XDCR_PARAM, NodeHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.membase.api.on_prem_rest_client import RestConnection
-from lib.membase.api.exception import XDCRException
+from membase.api.exception import XDCRException
 from pytests.xdcr.tenK_collection_helper import TenKCollectionHelper
 import threading
 import random
