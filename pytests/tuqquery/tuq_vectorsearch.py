@@ -8,7 +8,7 @@ from membase.api.rest_client import RestConnection
 from couchbase.auth import PasswordAuthenticator
 from couchbase.cluster import Cluster
 from couchbase.options import ClusterOptions
-from lib.vector.vector import SiftVector as sift, FAISSVector as faiss
+from lib.vector.vector import SiftVector as sift, FAISSVector as faiss, CohereVector as cohere
 from lib.vector.vector import SparseVector as sparse
 from lib.vector.vector import LoadVector, QueryVector, UtilVector, IndexVector
 
@@ -25,7 +25,8 @@ class VectorSearchTests(QueryTests):
         self.use_base64 = self.input.param("use_base64", False)
         self.use_bigendian = self.input.param("use_bigendian", False)
         self.distance = self.input.param("distance", "L2")
-        self.description = self.input.param("description", "IVF,SQ8")
+        desc = self.input.test_params.get("description", "IVF,SQ8")
+        self.description = ",".join(desc) if isinstance(desc, list) else desc
         self.nprobes = self.input.param("nprobes", 3)
         self.dimension = self.input.param("dimension", 128)
         self.query_count = self.input.param("query_count", 10)
@@ -39,7 +40,13 @@ class VectorSearchTests(QueryTests):
         auth = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
         self.database = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(auth))
         # Get dataset
-        if self.vector_type == "dense":
+        if 'RaBitQ' in self.description:
+            cohere_vec = cohere()
+            cohere_vec.download_and_prepare()
+            self.xb = cohere_vec.read_base()
+            self.xq = cohere_vec.read_query()
+            self.gt = cohere_vec.read_groundtruth()
+        elif self.vector_type == "dense":
             sift().download_sift()
             self.xb = sift().read_base()
             self.xq = sift().read_query()
@@ -51,8 +58,8 @@ class VectorSearchTests(QueryTests):
             self.gt = sparse().read_groundtruth()
         else:
             self.fail(f"Invalid vector type: {self.vector_type}")
-        # Extend dimension beyond 128
-        if self.dimension > 128:
+        # Extend dimension beyond 128 (only for SIFT-based data, not pre-dimensioned datasets like Cohere)
+        if self.dimension > 128 and 'RaBitQ' not in self.description:
             add_dimension = self.dimension - 128
             xq_add = np.ones((len(self.xq), add_dimension), "float32")
             xb_add = np.ones((len(self.xb), add_dimension), "float32")
@@ -64,8 +71,9 @@ class VectorSearchTests(QueryTests):
         super(VectorSearchTests, self).suite_setUp()
         threads = []
         self.log.info("Start loading vector data")
+        _vector_type = 'cohere' if 'RaBitQ' in self.description else self.vector_type
         for i in range(0, self.xb.shape[0], 1000): # load in batches of 1000 docs per thread
-            thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian, self.vector_type))
+            thread = threading.Thread(target=LoadVector().load_batch_documents,args=(self.database, self.xb[i:i+1000], i, self.use_xattr, self.use_base64, self.use_bigendian, _vector_type))
             threads.append(thread)
         # Start threads
         for i in range(len(threads)):

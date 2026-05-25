@@ -246,6 +246,106 @@ class SparseVector(object):
             D = np.fromfile(f, dtype="float32", count=n * d).reshape(n, d)
         return I, D
 
+class CohereVector(object):
+    """
+    Downloads Cohere/beir-embed-english-v3 (scifact corpus, 1024-dim)
+    from HuggingFace, computes FAISS brute-force ground truth, and saves as .fvecs/.ivecs
+    so subsequent runs skip re-downloading.
+    """
+    DATASET_REPO = "Cohere/beir-embed-english-v3"
+    SUBSET = "scifact"
+    DIM = 1024
+    TOP_K = 100
+
+    def __init__(self):
+        self.dataset_location = "/data/cohere"
+        if not os.path.exists(self.dataset_location):
+            self.dataset_location = "./data/cohere"
+        os.makedirs(self.dataset_location, exist_ok=True)
+
+    def _fvecs_path(self, name):
+        return os.path.join(self.dataset_location, f"cohere_{name}.fvecs")
+
+    def _ivecs_path(self, name):
+        return os.path.join(self.dataset_location, f"cohere_{name}.ivecs")
+
+    def _write_fvecs(self, fp, data):
+        data = data.astype('float32')
+        n, d = data.shape
+        with open(fp, 'wb') as f:
+            for v in data:
+                np.array([d], dtype='int32').tofile(f)
+                v.tofile(f)
+
+    def _write_ivecs(self, fp, data):
+        data = data.astype('int32')
+        n, d = data.shape
+        with open(fp, 'wb') as f:
+            for v in data:
+                np.array([d], dtype='int32').tofile(f)
+                v.tofile(f)
+
+    def _read_fvecs(self, fp):
+        a = np.fromfile(fp, dtype='int32')
+        d = a[0]
+        return a.reshape(-1, d + 1)[:, 1:].copy().view('float32')
+
+    def _read_ivecs(self, fp):
+        a = np.fromfile(fp, dtype='int32')
+        d = a[0]
+        return a.reshape(-1, d + 1)[:, 1:].copy()
+
+    def _download_parquet(self, split):
+        from huggingface_hub import hf_hub_download
+        import pyarrow.parquet as pq
+        filename = f"{self.SUBSET}/corpus/0000.parquet" if split == "corpus" else f"{self.SUBSET}/queries/test.parquet"
+        path = hf_hub_download(
+            repo_id=self.DATASET_REPO,
+            filename=filename,
+            repo_type="dataset"
+        )
+        table = pq.read_table(path, columns=["emb"])
+        emb = np.array(table["emb"].to_pylist(), dtype="float32")
+        return emb
+
+    def download_and_prepare(self):
+        base_path = self._fvecs_path("base")
+        query_path = self._fvecs_path("query")
+        gt_path = self._ivecs_path("groundtruth")
+
+        if os.path.exists(base_path) and os.path.exists(query_path) and os.path.exists(gt_path):
+            return
+
+        print("Downloading Cohere scifact corpus embeddings...")
+        xb = self._download_parquet("corpus")
+        print(f"Corpus: {xb.shape}")
+
+        print("Downloading Cohere scifact query embeddings...")
+        xq = self._download_parquet("queries")
+        print(f"Queries: {xq.shape}")
+
+        print("Computing ground truth with FAISS brute-force...")
+        index = faiss.IndexFlatL2(self.DIM)
+        index.add(xb)
+        _, gt = index.search(xq, self.TOP_K)
+        gt = gt.astype('int32')
+        print(f"Ground truth shape: {gt.shape}")
+
+        self._write_fvecs(base_path, xb)
+        self._write_fvecs(query_path, xq)
+        self._write_ivecs(gt_path, gt)
+        print("Cohere dataset saved.")
+
+    def read_base(self):
+        return self._read_fvecs(self._fvecs_path("base"))
+
+    def read_query(self):
+        return self._read_fvecs(self._fvecs_path("query"))
+
+    def read_groundtruth(self):
+        return self._read_ivecs(self._ivecs_path("groundtruth"))
+
+
 class SiftVector(object):
     def __init__(self):
         self.dataset = "siftsmall"
@@ -324,6 +424,21 @@ class LoadVector(object):
         """
         cb = cluster.bucket(bucket)
         cb_coll = cb.scope(scope).collection(collection)
+        if vector_type == 'cohere':
+            documents = {}
+            for idx, x in enumerate(docs):
+                key = f"cohere_{idx+batch}"
+                documents[key] = {
+                    "id": idx + batch,
+                    "size": 8,
+                    "brand": "nike",
+                    vector_field: x.tolist()
+                }
+            try:
+                cb_coll.upsert_multi(documents)
+            except Exception as e:
+                print(e)
+            return
         documents = {}
         for is1, size in enumerate(cfg["sizes"]):
             for ib, brand in enumerate(cfg["brands"]):
