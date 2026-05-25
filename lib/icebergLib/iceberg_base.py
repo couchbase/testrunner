@@ -14,7 +14,8 @@ class IcebergBase:
 
     def __init__(self, aws_access_key=None, aws_secret_key=None, aws_session_token=None,
                  gcs_credentials=None, catalog_type=None, aws_region=None, database_name=None,
-                 table_name=None, iceberg_bucket=None, gcs_project_id=None, gcs_bucket_location=None):
+                 table_name=None, iceberg_bucket=None, gcs_project_id=None, gcs_bucket_location=None,
+                 nessie_server=None, nessie_uri=None):
         # Common
         self.database_name = database_name or "icebergdb"
         self.table_name = table_name or "hotel"
@@ -33,6 +34,10 @@ class IcebergBase:
 
         # S3 Tables
         self.s3_table_bucket_arn = None
+
+        # Nessie
+        self.nessie_server = nessie_server
+        self.nessie_uri = nessie_uri or (f"http://{nessie_server}:19120/iceberg" if nessie_server else None)
 
         # GCP BigLake
         self.gcs_project_id = gcs_project_id or os.environ.get("GCS_PROJECT_ID")

@@ -3,6 +3,8 @@ STANDARD_BUCKET_PORT = 11217
 COUCHBASE_SINGLE_DEFAULT_INI_PATH = "/opt/couchbase/etc/couchdb/default.ini"
 MEMBASE_DATA_PATH = "/opt/membase/var/lib/membase/data/"
 COUCHBASE_DATA_PATH = "/opt/couchbase/var/lib/couchbase/data/"
+GCS_REMOTE_CREDS_PATH = "/opt/couchbase/var/lib/couchbase/gcs_credentials.json"
+GCS_SYSTEMD_OVERRIDE_DIR = "/etc/systemd/system/couchbase-server.service.d"
 
 CB_VERSION_NAME = {"0.0": "master",
                    "6.0": "alice",

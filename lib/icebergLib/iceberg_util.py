@@ -2,10 +2,13 @@
 # The JVM calls InetAddress.getLocalHost() which fails on hosts with unresolvable hostnames
 # We must set environment variables AND add hostname to /etc/hosts or use Java properties
 import os
+import re
 import socket
 import subprocess
 import time
 import gc
+from pyspark.sql import functions as F
+from pyspark.sql.types import StructType, StructField, ArrayType
 
 def _get_local_ip():
     """Get local IP address, fallback to 127.0.0.1 if resolution fails."""
@@ -157,13 +160,17 @@ class IcebergUtil:
                 print("Clearing SparkContext._gateway...")
                 try:
                     SparkContext._gateway.shutdown()
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Warning: Error shutting down SparkContext._gateway: {e}")
                 SparkContext._gateway = None
             if SparkContext._jvm is not None:
                 SparkContext._jvm = None
             # Clear active context reference
             if SparkContext._active_spark_context is not None:
+                try:
+                    SparkContext._active_spark_context.stop()
+                except Exception as e:
+                    print(f"Warning: Error stopping SparkContext._active_spark_context: {e}")
                 SparkContext._active_spark_context = None
         except Exception as e:
             print(f"Warning: Error clearing Py4J gateway: {e}")
@@ -189,9 +196,9 @@ class IcebergUtil:
         import os
         
         try:
-            # Find Java processes related to Spark
+            # Find Java/Spark processes (PySpark spawns a 'java' process for the JVM)
             result = subprocess.run(
-                ["pgrep", "-f", "SparkSubmit|spark-submit|pyspark"],
+                ["pgrep", "-f", "SparkSubmit|spark-submit|pyspark|org.apache.spark|py4j"],
                 capture_output=True,
                 text=True
             )
@@ -214,12 +221,45 @@ class IcebergUtil:
         except Exception as e:
             print(f"Warning: Error killing orphan processes: {e}")
 
-    def create_iceberg_table(self, catalog_type, data, partitioned_field=[], schema=None, filter_by=None, infer_schema=True):
+    def create_iceberg_table(self, catalog_type, data, partitioned_field=[], schema=None, filter_by=None, infer_schema=True, write_format="parquet"):
         """Create an Iceberg table with provided data."""
         if infer_schema and schema is None and isinstance(data, list) and data and isinstance(data[0], dict):
             schema = self.infer_schema_from_list(data)
 
         df = self.spark.createDataFrame(data, schema=schema)
+
+        # BigLake does not support field names with special characters — sanitize them
+        if catalog_type == "BIGLAKE_METASTORE":
+            def sanitize_col_name(name, seen):
+                base = re.sub(r'[^a-zA-Z0-9_]', '_', name)
+                candidate = base
+                i = 1
+                while candidate in seen:
+                    candidate = f"{base}_{i}"
+                    i += 1
+                seen.add(candidate)
+                return candidate
+            seen = set()
+            for col_name in df.columns:
+                safe_name = sanitize_col_name(col_name, seen)
+                if safe_name != col_name:
+                    df = df.withColumnRenamed(col_name, safe_name)
+            # Also sanitize nested struct fields via schema casting
+            def sanitize_schema(schema):
+                seen_fields = set()
+                fields = []
+                for field in schema.fields:
+                    safe_name = sanitize_col_name(field.name, seen_fields)
+                    if isinstance(field.dataType, StructType):
+                        fields.append(StructField(safe_name, sanitize_schema(field.dataType), field.nullable))
+                    elif isinstance(field.dataType, ArrayType) and isinstance(field.dataType.elementType, StructType):
+                        fields.append(StructField(safe_name, ArrayType(sanitize_schema(field.dataType.elementType), field.dataType.containsNull), field.nullable))
+                    else:
+                        fields.append(StructField(safe_name, field.dataType, field.nullable))
+                return StructType(fields)
+            safe_schema = sanitize_schema(df.schema)
+            df = df.sparkSession.createDataFrame(df.rdd, safe_schema)
+
         df.printSchema()
 
         if filter_by:
@@ -227,14 +267,32 @@ class IcebergUtil:
             df = df.filter(filter_by)
 
         table_path = f"{catalog_type}.{self.state.database_name}.{self.state.table_name}"
-        writer = df.writeTo(table_path).using("iceberg").tableProperty(
-            "format-version", "2").tableProperty("write-format", "parquet")
+        if catalog_type == "BIGLAKE_METASTORE":
+            writer = df.writeTo(table_path).using("iceberg").tableProperty("write-format", write_format)
+        else:
+            writer = df.writeTo(table_path).using("iceberg").tableProperty(
+                "format-version", "2").tableProperty("write-format", write_format)
 
         if partitioned_field:
             print(f"Partitioning by field: {partitioned_field}")
             writer = writer.partitionedBy(*partitioned_field)
 
-        writer.createOrReplace()
+        if catalog_type == "BIGLAKE_METASTORE":
+            # BigLake REST catalog does not support createOrReplace — drop and recreate
+            try:
+                self.spark.sql(f"DROP TABLE IF EXISTS {table_path}")
+            except Exception as e:
+                print(f"Warning: Failed to drop table {table_path} before recreate (may not exist yet): {e}")
+            writer.create()
+        elif catalog_type in ["NESSIE_REST", "NESSIE"]:
+            # Nessie requires the namespace to exist before createOrReplace
+            try:
+                self.spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {catalog_type}.{self.state.database_name}")
+            except Exception as e:
+                print(f"Warning: Failed to create namespace {catalog_type}.{self.state.database_name}: {e}")
+            writer.createOrReplace()
+        else:
+            writer.createOrReplace()
         print(f"Data successfully written to Iceberg Table via {catalog_type}!")
 
     def infer_spark_type(self, value: Any) -> DataType:
@@ -282,14 +340,18 @@ class IcebergUtil:
             if hasattr(SparkContext, '_gateway') and SparkContext._gateway is not None:
                 try:
                     SparkContext._gateway.shutdown()
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"Warning: Error shutting down SparkContext._gateway: {e}")
                 SparkContext._gateway = None
-            
+
             if hasattr(SparkContext, '_jvm'):
                 SparkContext._jvm = None
-            
-            if hasattr(SparkContext, '_active_spark_context'):
+
+            if hasattr(SparkContext, '_active_spark_context') and SparkContext._active_spark_context is not None:
+                try:
+                    SparkContext._active_spark_context.stop()
+                except Exception as e:
+                    print(f"Warning: Error stopping SparkContext._active_spark_context: {e}")
                 SparkContext._active_spark_context = None
             
             # Clear SparkSession references
@@ -306,6 +368,23 @@ class IcebergUtil:
         """Create a Spark session configured for the specified catalog type."""
         # Aggressively stop any existing Spark session to ensure fresh configuration
         self._stop_spark_session_safely()
+
+        # Wait until no active session exists (getOrCreate would return old session otherwise)
+        max_wait = 30
+        start = time.time()
+        while True:
+            try:
+                active = SparkSession.getActiveSession()
+                if active is None:
+                    break
+                print("Waiting for old Spark session to fully terminate...")
+                active.stop()
+            except Exception:
+                break
+            if time.time() - start > max_wait:
+                raise RuntimeError("Spark session still active after timeout; aborting to avoid stale config")
+            time.sleep(2)
+            gc.collect()
         
         # Retry logic for session creation (in case JVM needs time to fully terminate)
         max_retries = 3
@@ -344,9 +423,27 @@ class IcebergUtil:
     
     def _create_spark_session_internal(self, catalog_type=None):
         """Internal method to actually create the Spark session."""
+        # Force clear any cached session so getOrCreate() always creates a fresh one
+        try:
+            if SparkSession._instantiatedSession is not None:
+                SparkSession._instantiatedSession.stop()
+                SparkSession._instantiatedSession = None
+        except Exception as e:
+            print(f"Warning: Could not clear _instantiatedSession: {e}")
+        try:
+            from pyspark import SparkContext
+            if SparkContext._active_spark_context is not None:
+                try:
+                    SparkContext._active_spark_context.stop()
+                except Exception as e:
+                    print(f"Warning: Error stopping SparkContext._active_spark_context: {e}")
+                SparkContext._active_spark_context = None
+        except Exception as e:
+            print(f"Warning: Error clearing SparkContext references: {e}")
+
         builder = (
             SparkSession.builder
-            .appName("Load data into the Catalog for testing Iceberg")
+            .appName(f"IcebergTest-{catalog_type}")
             .config("spark.driver.host", "127.0.0.1")
             .config("spark.driver.bindAddress", "127.0.0.1")
             .config("spark.local.ip", "127.0.0.1")
@@ -357,6 +454,7 @@ class IcebergUtil:
             .config("spark.sql.files.maxPartitionBytes", "134217728")
             .config("spark.memory.fraction", "0.8")
             .config("spark.memory.storageFraction", "0.3")
+            .config("spark.task.maxFailures", "1")
             .config(
                 "spark.jars.packages",
                 "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,"
@@ -387,20 +485,35 @@ class IcebergUtil:
                 .config(f"spark.sql.catalog.{catalog_type}.client.region", self.state.iceberg_region)
             )
         elif catalog_type == "BIGLAKE_METASTORE":
+            # Ensure GOOGLE_APPLICATION_CREDENTIALS is set so google.auth.default() works
+            if self.state.gcs_credentials and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(self.state.gcs_credentials)
+            gcp_token = self.state.gcp_access_token()
             builder = (
                 builder
                 .config(f"spark.sql.catalog.{catalog_type}.type", "rest")
                 .config(f"spark.sql.catalog.{catalog_type}.uri", "https://biglake.googleapis.com/iceberg/v1/restcatalog")
                 .config(f"spark.sql.catalog.{catalog_type}.warehouse", self.state.gcs_bucket_path)
                 .config(f"spark.sql.catalog.{catalog_type}.header.x-goog-user-project", self.state.gcs_project_id)
-                .config(f"spark.sql.catalog.{catalog_type}.header.Authorization", f"Bearer {self.state.gcp_access_token()}")
+                .config(f"spark.sql.catalog.{catalog_type}.header.Authorization", f"Bearer {gcp_token}")
                 .config(f"spark.sql.catalog.{catalog_type}.io-impl", "org.apache.iceberg.gcp.gcs.GCSFileIO")
                 .config(f"spark.sql.catalog.{catalog_type}.rest-metrics-reporting-enabled", "false")
                 .config("spark.sql.defaultCatalog", catalog_type)
             )
+        elif catalog_type in ["NESSIE_REST", "NESSIE"]:
+            # Both NESSIE and NESSIE_REST use the native Nessie API (/api/v2) for Spark
+            nessie_api_uri = f"http://{self.state.nessie_server}:19120/api/v2"
+            builder = (
+                builder
+                .config(f"spark.sql.catalog.{catalog_type}.type", "nessie")
+                .config(f"spark.sql.catalog.{catalog_type}.uri", nessie_api_uri)
+                .config(f"spark.sql.catalog.{catalog_type}.warehouse", self.state.s3_warehouse_path)
+                .config(f"spark.sql.catalog.{catalog_type}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+                .config(f"spark.sql.catalog.{catalog_type}.s3.region", self.state.iceberg_region)
+            )
         else:
             raise ValueError(
-                f"Unsupported catalog_type: {catalog_type}. Use 'AWS_GLUE', 'AWS_GLUE_REST', 'S3_TABLES' or 'BIGLAKE_METASTORE'.")
+                f"Unsupported catalog_type: {catalog_type}. Use 'AWS_GLUE', 'AWS_GLUE_REST', 'S3_TABLES', 'BIGLAKE_METASTORE', 'NESSIE_REST' or 'NESSIE'.")
 
         self.spark = builder.getOrCreate()
         return self.spark
@@ -536,12 +649,40 @@ class IcebergUtil:
             data: List of dictionaries to append
             infer_schema: Whether to infer schema from data
         """
+        from pyspark.sql.types import ArrayType, StringType, StructType
         schema = None
         if infer_schema and isinstance(data, list) and data and isinstance(data[0], dict):
             schema = self.infer_schema_from_list(data)
-        
-        df = self.spark.createDataFrame(data, schema=schema)
+
         table_path = f"{self.state.catalog_type}.{self.state.database_name}.{self.state.table_name}"
+
+        # When infer_schema is disabled, use existing table schema to avoid
+        # inference failures for empty arrays/null-heavy payloads.
+        if schema is None and not infer_schema:
+            try:
+                schema = self.spark.table(table_path).schema
+            except Exception:
+                schema = None
+
+        # If inferred schema has empty-list fields (ArrayType(StringType)), patch from table schema
+        if schema is not None:
+            try:
+                table_schema = self.spark.table(table_path).schema
+                table_field_map = {f.name.lower(): f for f in table_schema.fields}
+                fixed = []
+                for field in schema.fields:
+                    tfield = table_field_map.get(field.name.lower())
+                    if (tfield and isinstance(field.dataType, ArrayType)
+                            and isinstance(field.dataType.elementType, StringType)
+                            and not isinstance(tfield.dataType.elementType, StringType)):
+                        fixed.append(tfield)
+                    else:
+                        fixed.append(field)
+                schema = StructType(fixed)
+            except Exception:
+                pass
+
+        df = self.spark.createDataFrame(data, schema=schema)
         df.writeTo(table_path).append()
         print(f"Appended {len(data)} rows to {table_path}")
 
