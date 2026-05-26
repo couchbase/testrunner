@@ -196,14 +196,6 @@ fi
 desc2=`echo $descriptor | awk '{split($0,r,"-");print r[1],r[2]}'`
 ${py_executable} scripts/ssh.py -i /tmp/testexec.$$.ini "iptables -F"
 
-echo "Need to set ALLOW_HTP back to True to do git pull branch"
-sed -i 's/ALLOW_HTP.*/ALLOW_HTP = True/' lib/testconstants.py
-
-## cherrypick the gerrit request if it was defined
-if [ "$cherrypick" != "None" ]; then
-     sh -c "$cherrypick"
-fi
-
 ## Setup for java sdk client
 git submodule init
 git submodule update --init --force --remote
