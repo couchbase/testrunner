@@ -3036,7 +3036,7 @@ class CouchbaseCluster:
                 "No such remote cluster found with name: {0}".format(
                     remote_cluster_name))
 
-    def wait_for_flusher_empty(self, timeout=60):
+    def wait_for_flusher_empty(self, timeout=300):
         """Wait for disk queue to completely flush.
         """
         tasks = []
@@ -3216,7 +3216,7 @@ class CouchbaseCluster:
             task.result(timeout)
         self.__meta_data_verified = True
 
-    def wait_for_dcp_queue_drain(self, timeout=180):
+    def wait_for_dcp_queue_drain(self, timeout=600):
         """Wait for ep_dcp_xdcr_items_remaining to reach 0.
         @return: True if reached 0 else False.
         """
@@ -3251,7 +3251,7 @@ class CouchbaseCluster:
                 return False
         return True
 
-    def wait_for_outbound_mutations(self, timeout=180):
+    def wait_for_outbound_mutations(self, timeout=600):
         """Wait for Outbound mutations to reach 0.
         @return: True if mutations reached to 0 else False.
         """
@@ -3593,9 +3593,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._create_default_bucket = self._input.param("default_bucket", True)
         self._rdirection = self._input.param("rdirection",
                             REPLICATION_DIRECTION.UNIDIRECTION)
-        self._num_items = self._input.param("items", 1000)
+        self._num_items = self._input.param("items", 100000)
         self._value_size = self._input.param("value_size", 512)
-        self._poll_timeout = self._input.param("poll_timeout", 120)
+        self._poll_timeout = self._input.param("poll_timeout", 600)
         self._perc_upd = self._input.param("upd", 30)
         self._perc_del = self._input.param("del", 30)
         self._upd_clusters = self._input.param("update", [])
@@ -3609,9 +3609,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._warmup = self._input.param("warm", "").split('-')
         self._rebalance = self._input.param("rebalance", "").split('-')
         self._failover = self._input.param("failover", "").split('-')
-        self._wait_timeout = self._input.param("timeout", 60)
+        self._wait_timeout = self._input.param("timeout", 300)
         self._disable_compaction = self._input.param("disable_compaction", "").split('-')
-        self._item_count_timeout = self._input.param("item_count_timeout", 300)
+        self._item_count_timeout = self._input.param("item_count_timeout", 900)
         self._checkpoint_interval = self._input.param("checkpoint_interval", 60)
         self._optimistic_threshold = self._input.param("optimistic_threshold", 256)
         self._compression_type = self._input.param("compression_type", "")
@@ -4947,7 +4947,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                     "%d collections still missing on dest" % (timeout, len(missing)))
         return False
 
-    def _wait_for_replication_to_catchup(self, timeout=300, fetch_bucket_stats_by="minute", exclude_paths=[]):
+    def _wait_for_replication_to_catchup(self, timeout=1200, fetch_bucket_stats_by="minute", exclude_paths=[]):
 
         _count1 = _count2 = 0
         for cb_cluster in self.__cb_clusters:

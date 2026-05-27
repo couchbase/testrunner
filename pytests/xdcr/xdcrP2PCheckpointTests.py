@@ -35,7 +35,7 @@ class XDCRP2PCheckpointTests(XDCRNewBaseTest):
         
         # Get test parameters
         self.checkpoint_interval = self._input.param("checkpoint_interval", 120) if self._input else 120
-        self.num_items = self._input.param("items", 1000) if self._input else 1000
+        self.num_items = self._input.param("items", 100000) if self._input else 100000
         self.bucket_name = self._input.param("default_bucket_name", "default") if self._input else "default"
         
         self.log.info(f"Using checkpoint interval: {self.checkpoint_interval} seconds")

@@ -1710,7 +1710,7 @@ class XDCRCNGTopologyTests(CNGXDCRBaseTest):
 
     def test_cng_topology_mesh(self):
         """Full mesh: every cluster has a CNG ref to every other cluster."""
-        items = self._input.param("items", 1000)
+        items = self._input.param("items", 100000)
         cluster_names = ["C1", "C2", "C3"]
 
         edges = self._topology.build_mesh(cluster_names)

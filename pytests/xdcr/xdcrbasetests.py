@@ -295,7 +295,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.bucket_priority = 'high'
         else:
             self.bucket_priority = None
-        self.num_items = self._input.param("items", 1000)
+        self.num_items = self._input.param("items", 100000)
         self._value_size = self._input.param("value_size", 256)
         self._dgm_run = self._input.param("dgm_run", False)
         self.active_resident_threshold = int(self._input.param("active_resident_threshold", 0))
@@ -303,7 +303,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.rep_type = self._input.param("replication_type", "xmem")
 
         self._poll_interval = self._input.param(XDCRConstants.INPUT_PARAM_POLL_INTERVAL, 5)
-        self._poll_timeout = self._input.param(XDCRConstants.INPUT_PARAM_POLL_TIMEOUT, 120)
+        self._poll_timeout = self._input.param(XDCRConstants.INPUT_PARAM_POLL_TIMEOUT, 600)
 
         self.init_parameters_extended()
 
@@ -317,7 +317,7 @@ class XDCRBaseTest(unittest.TestCase):
 
         self.case_number = self._input.param("case_number", 0)
         self._expires = self._input.param("expires", 0)
-        self.wait_timeout = self._input.param("timeout", 60)
+        self.wait_timeout = self._input.param("timeout", 300)
         self._percent_update = self._input.param("upd", 30)
         self._percent_delete = self._input.param("del", 30)
         self._warmup = self._input.param("warm", None)
@@ -1416,7 +1416,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             ClusterOperationHelper.flushctl_set(master, "exp_pager_stime", val, bucket)
             self.log.info("wait for expiry pager to run on all these nodes")
 
-    def _wait_flusher_empty(self, master, servers, timeout=120):
+    def _wait_flusher_empty(self, master, servers, timeout=600):
         tasks = []
         buckets = self._get_cluster_buckets(master)
         self.assertTrue(buckets, "No buckets received from the server {0} for verification".format(master.ip))
@@ -1459,7 +1459,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
 
     # CBQE-1695 Wait for replication_changes_left (outbound mutations) to be 0.
-    def __wait_for_outbound_mutations_zero(self, master_node, timeout=180):
+    def __wait_for_outbound_mutations_zero(self, master_node, timeout=600):
         self.log.info("Waiting for Outbound mutation to be zero on cluster node: %s" % master_node.ip)
         buckets = self._get_cluster_buckets(master_node)
         curr_time = time.time()
