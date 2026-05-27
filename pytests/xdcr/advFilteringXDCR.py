@@ -2,6 +2,9 @@ import random
 import time
 import traceback
 import logging
+import shutil
+import subprocess
+import multiprocessing
 
 from lib.membase.api.rest_client import RestConnection
 from scripts.edgyjson.main import JSONDoc
@@ -71,23 +74,121 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         server_shell.disconnect()
         self.log.info(f"Data loaded into {bucket}.{scope}.{collection} successfully")
         
-    def load_binary_docs_using_cbc_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000):        
-        import subprocess
-        import multiprocessing
-        num_cores = multiprocessing.cpu_count()
-        cmd = "cbc-pillowfight -U couchbase://{0}/{1} -I {2} -m {5} -M {5} -B {3}  " \
-              "-t {5} --rate-limit={6} --populate-only".format(server, bucket, items, batch, docsize, num_cores // 2,
-                                                               rate_limit)
-        cmd += " -u Administrator -P password"
-        self.log.info("Executing '{0}'...".format(cmd))
-        rc = subprocess.call(cmd, shell=True)
-        if rc != 0:
-            cmd = "cbc-pillowfight -U couchbase://{0}/{1} -I {2} -m {5} -M {5} -B {3}  " \
-                  "-t {5} --rate-limit={6} --populate-only".format(server, bucket, items, batch, docsize, num_cores // 2,
-                                                                   rate_limit)
-            rc = subprocess.call(cmd, shell=True)
+    def load_binary_docs_using_cbc_pillowfight(self, server, items, bucket, batch=1000, docsize=100, rate_limit=100000):
+        """Load binary (non-JSON) docs with cbc-pillowfight.
+
+        Prefers a cbc-pillowfight already on the testrunner host's PATH (original behavior).
+        If it is not installed locally - or the local run fails - falls back to the binary
+        bundled with Couchbase Server at /opt/couchbase/bin/cbc-pillowfight, run over SSH on
+        the cluster node (couchbase://localhost). The bundled binary always ships with a
+        server install, so the load no longer breaks with "cbc-pillowfight: not found" on
+        CI workers that lack the libcouchbase tools.
+
+        :param server: cluster node IP string (as passed by load_data) or a node object.
+        """
+        server_ip = server if isinstance(server, str) else server.ip
+
+        if shutil.which("cbc-pillowfight"):
+            # -t = worker threads, kept >= 1 on single-core hosts.
+            threads = max(1, multiprocessing.cpu_count() // 2)
+            # argv list + shell=False (default): no shell parsing, so an IPv6/bracketed
+            # server_ip or any odd ini value can't be glob-expanded, word-split, or injected.
+            # -m/-M use docsize (same as the bundled path - both paths load the same size docs).
+            cmd = [
+                "cbc-pillowfight",
+                "-U", f"couchbase://{server_ip}/{bucket}",
+                "-I", str(items),
+                "-m", str(docsize), "-M", str(docsize),
+                "-B", str(batch),
+                "-t", str(threads),
+                f"--rate-limit={rate_limit}",
+                "--populate-only",
+                "-u", "Administrator", "-P", "password",
+            ]
+            self.log.info("Executing local cbc-pillowfight: '{0}'...".format(" ".join(cmd)))
+            rc = subprocess.call(cmd)
             if rc != 0:
-                self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
+                self.log.warning(f"Local cbc-pillowfight exited {rc}; retrying once...")
+                rc = subprocess.call(cmd)
+            if rc == 0:
+                self.log.info(f"Loaded {items} binary docs into {bucket} via local cbc-pillowfight")
+                return
+            self.log.warning(
+                f"Local cbc-pillowfight failed (rc={rc}); falling back to bundled "
+                f"/opt/couchbase/bin/cbc-pillowfight (docs may be re-populated)")
+        else:
+            self.log.info(
+                "cbc-pillowfight not on testrunner host PATH; using bundled /opt/couchbase/bin/cbc-pillowfight on cluster node")
+
+        self._load_binary_docs_with_bundled_pillowfight(
+            self._resolve_load_node(server), items, bucket, batch=batch, docsize=docsize, rate_limit=rate_limit)
+
+    def _resolve_load_node(self, server):
+        """Return a cluster node object for a load target.
+
+        Accepts None (-> source master), a node object (returned as-is), or an IP string
+        (matched against source/destination cluster nodes). Fails the test if an IP matches
+        no known cluster node, rather than silently loading the wrong cluster.
+
+        node.ip is read verbatim from the ini, so an IPv6 literal may or may not be bracketed
+        ([fd00::1] vs fd00::1). Both the target and node.ip are normalized before comparing so
+        the two forms still match (and so stripping doesn't regress the already-bracketed case).
+        """
+        if server is None:
+            return self.src_master
+        if not isinstance(server, str):
+            return server
+        target = self._strip_ipv6_brackets(server)
+        for cluster in (self.src_cluster, self.dest_cluster):
+            for node in cluster.get_nodes():
+                if self._strip_ipv6_brackets(node.ip) == target:
+                    return node
+        # Fail loud rather than silently loading a different cluster: a wrong-cluster load
+        # would surface later as a confusing doc-count mismatch in verify_results.
+        self.fail(f"Could not resolve a cluster node for load target IP {server}")
+
+    @staticmethod
+    def _strip_ipv6_brackets(ip):
+        """Strip surrounding brackets from an IPv6 literal ([fd00::1] -> fd00::1)."""
+        if isinstance(ip, str) and ip.startswith("[") and ip.endswith("]"):
+            return ip[1:-1]
+        return ip
+
+    def _load_binary_docs_with_bundled_pillowfight(self, node, items, bucket, batch=1000, docsize=100, rate_limit=100000):
+        """Load binary docs via /opt/couchbase/bin/cbc-pillowfight over SSH on the cluster node.
+
+        Uses the cbc-pillowfight bundled with Couchbase Server (always present) against
+        couchbase://localhost, mirroring load_docs_with_pillowfight in this file.
+
+        Plain exec (no use_channel) is used on purpose. For root or non-root Linux SSH this
+        takes the separate-stream branch in execute_command_raw, giving a real exit code and
+        stderr to report on failure. The use_channel/PTY path instead merges stderr into
+        stdout and returns an empty ``error`` list, so passing use_channel here would blank
+        out the diagnostic. NOTE: the PTY branch is also taken when RemoteMachineShellConnection
+        sets use_sudo=True - but that only happens for an "Administrator" user (forced False on
+        Windows), never for the root/non-root Linux nodes this XDCR suite runs against; if that
+        ever changes, switch to asserting on output contents instead of exit_code/error.
+        """
+        cmd = (f"/opt/couchbase/bin/cbc-pillowfight -u Administrator -P password "
+               f"-U couchbase://localhost/{bucket} -I {items} -m {docsize} -M {docsize} "
+               f"-B {batch} --rate-limit={rate_limit} --populate-only")
+        self.log.info("Executing bundled cbc-pillowfight: '{0}' on {1}...".format(cmd, node.ip))
+        output, error = [], []
+        for attempt in range(1, 3):
+            server_shell = RemoteMachineShellConnection(node)
+            output, error, exit_code = server_shell.execute_command(cmd, get_exit_code=True)
+            server_shell.disconnect()
+            if output:
+                self.log.info(f"cbc-pillowfight output: {output}")
+            if exit_code == 0:
+                self.log.info(f"Loaded {items} binary docs into {bucket} on {node.ip} via bundled cbc-pillowfight")
+                return
+            self.log.warning(
+                f"Bundled cbc-pillowfight exited {exit_code} (attempt {attempt}/2) on {node.ip}: "
+                f"stderr={error} stdout={output}")
+        self.fail(
+            f"Exception running cbc-pillowfight on {node.ip}: non-zero exit code. "
+            f"stderr={error} stdout={output}")
 
     def load_conditional_xattrs(self, num_docs, server, bucket):
         num_xattr_docs = 50 if num_docs > 50 else num_docs
@@ -113,22 +214,27 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
             if not cb:
                 logging.error("Connection error\n" + traceback.format_exc())
 
+        # Fail with the real cause here; otherwise cb.mutate_in below throws AttributeError
+        # on None and load_data's except masks it as a generic "Errors encountered" message.
+        if not cb:
+            self.fail(f"load_conditional_xattrs: could not establish an SDK connection to {server}")
+
         for val in range(0, num_xattr_docs):
             dockey = str(val)
             dockey = dockey.zfill(20)
 
             # Distribute xattrs between even and odd docs
             if val % 2 == 0:
-                cb.mutate_in(dockey, SD.upsert("boolxattr", {"foo": True}, xattr=True, create_parents=True))
-                cb.mutate_in(dockey, SD.upsert("xattr1", False, xattr=True, create_parents=True))
-                cb.mutate_in(dockey, SD.upsert("xattr2", "binary-doc1", xattr=True, create_parents=True))
+                cb.mutate_in(dockey, [SD.upsert("boolxattr", {"foo": True}, xattr=True, create_parents=True)])
+                cb.mutate_in(dockey, [SD.upsert("xattr1", False, xattr=True, create_parents=True)])
+                cb.mutate_in(dockey, [SD.upsert("xattr2", "binary-doc1", xattr=True, create_parents=True)])
             else:
-                cb.mutate_in(dockey, SD.upsert("boolxattr", {"foo": False}, xattr=True, create_parents=True))                     
+                cb.mutate_in(dockey, [SD.upsert("boolxattr", {"foo": False}, xattr=True, create_parents=True)])                     
                 cb.mutate_in(dockey,
-                            SD.upsert("xattr2", {'field1': val, 'field2': val * val}, xattr=True, create_parents=True))
-                cb.mutate_in(dockey, SD.upsert('xattr3', {'field1': {'sub_field1a': val, 'sub_field1b': val * val},
+                            [SD.upsert("xattr2", {'field1': val, 'field2': val * val}, xattr=True, create_parents=True)])
+                cb.mutate_in(dockey, [SD.upsert('xattr3', {'field1': {'sub_field1a': val, 'sub_field1b': val * val},
                                                         'field2': {'sub_field2a': 2 * val, 'sub_field2b': 2 * val * val}},
-                                            xattr=True, create_parents=True))
+                                            xattr=True, create_parents=True)])
                 
         logging.info("Added xattrs to {0} docs".format(num_xattr_docs))
 
@@ -156,10 +262,18 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
 
     def verify_results(self):
         rdirection = self._input.param("rdirection", "unidirection")
+        if not self.src_cluster.wait_for_outbound_mutations():
+            self.log.warning("Outbound mutations did not drain to 0 on the source cluster "
+                             "within the wait timeout; proceeding to the doc-count check "
+                             "(a mismatch may be unreplicated backlog, not a filtering error)")
         replications = self.src_rest.get_replications()
         self.verify_filtered_items(self.src_master, self.dest_master, replications)
         if rdirection == "bidirection":
             self.load_data(self.dest_master.ip)
+            if not self.dest_cluster.wait_for_outbound_mutations():
+                self.log.warning("Outbound mutations did not drain to 0 on the destination "
+                                 "cluster within the wait timeout; proceeding to the doc-count "
+                                 "check (a mismatch may be unreplicated backlog, not filtering)")
             replications = self.dest_rest.get_replications()
             self.verify_filtered_items(self.dest_master, self.src_master, replications, skip_index=True)
 
