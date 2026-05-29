@@ -1,11 +1,14 @@
 import json
 import time
 import urllib.parse
+import shutil
+import subprocess
 from random import randint
 import threading
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from membase.api.rest_client import RestConnection
+from remote.remote_util import RemoteMachineShellConnection
 from xdcr.xdcrnewbasetests import XDCRNewBaseTest
 
 
@@ -240,6 +243,125 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                         
                         self.log.info(f"Conflict logging settings verified for {bucket_name}@{cluster_name}") 
     
+    @staticmethod
+    def _strip_ipv6_brackets(ip):
+        """Strip surrounding brackets from an IPv6 literal ([fd00::1] -> fd00::1)."""
+        if isinstance(ip, str) and ip.startswith("[") and ip.endswith("]"):
+            return ip[1:-1]
+        return ip
+
+    def _run_pillowfight(self, node, bucket, pf_opts, label, timeout_secs=None):
+        """Run cbc-pillowfight against `bucket` on a cluster `node`.
+
+        Prefers a cbc-pillowfight already on the testrunner host's PATH
+        (couchbase://node.ip) - original behavior. If it is not installed locally,
+        or the local run fails, falls back to the binary bundled with Couchbase
+        Server at /opt/couchbase/bin/cbc-pillowfight, run over SSH on the node
+        (couchbase://localhost). The bundled binary always ships with a server
+        install, so conflict generation no longer breaks with
+        "cbc-pillowfight: not found" on CI workers that lack the libcouchbase tools.
+
+        :param node: cluster node object (e.g. self.src_master).
+        :param pf_opts: list of pillowfight option tokens (no -U/-u/-P), e.g.
+            ["-I", "1000", "-m", "100"].
+        :param label: short tag for log lines (e.g. "source high-volume").
+        :param timeout_secs: if set, pillowfight runs for at most this many seconds
+            and a clean timeout counts as success (timed rate-measurement path).
+        :return: True on success.
+        """
+        username = node.rest_username
+        password = node.rest_password
+
+        if shutil.which("cbc-pillowfight"):
+            # argv list + shell=False (default): no shell parsing, so an IPv6/bracketed
+            # node.ip or odd ini value can't be glob-expanded, word-split, or injected.
+            cmd = ["cbc-pillowfight",
+                   "-U", f"couchbase://{self._strip_ipv6_brackets(node.ip)}/{bucket}",
+                   *pf_opts, "-u", username, "-P", password]
+            self.log.info(f"Executing local cbc-pillowfight [{label}]: {' '.join(cmd)}")
+            for attempt in range(1, 3):
+                try:
+                    result = subprocess.run(cmd, check=False, capture_output=True, timeout=timeout_secs)
+                except subprocess.TimeoutExpired:
+                    self.log.info(f"Local cbc-pillowfight [{label}] ran for {timeout_secs}s and was stopped")
+                    return True
+                except FileNotFoundError:
+                    break  # binary vanished between which() and run(); use bundled fallback
+                if result.returncode == 0:
+                    self.log.info(f"Loaded docs into {bucket} via local cbc-pillowfight [{label}]")
+                    return True
+                self.log.warning(f"Local cbc-pillowfight [{label}] exited {result.returncode} "
+                                 f"(attempt {attempt}/2): {result.stderr.decode('utf-8', 'replace')}")
+            self.log.warning(f"Local cbc-pillowfight [{label}] failed; falling back to bundled "
+                             f"/opt/couchbase/bin/cbc-pillowfight over SSH")
+        else:
+            self.log.info(f"cbc-pillowfight not on testrunner host PATH; using bundled "
+                          f"/opt/couchbase/bin/cbc-pillowfight over SSH on cluster node [{label}]")
+
+        return self._run_bundled_pillowfight(node, bucket, pf_opts, label, timeout_secs=timeout_secs)
+
+    def _run_bundled_pillowfight(self, node, bucket, pf_opts, label, timeout_secs=None):
+        """Run /opt/couchbase/bin/cbc-pillowfight over SSH on `node` (couchbase://localhost).
+
+        Uses the cbc-pillowfight bundled with Couchbase Server (always present),
+        mirroring load_docs_with_pillowfight in advFilteringXDCR. Plain exec (no
+        use_channel) is used on purpose so execute_command returns a real exit code
+        and stderr to report on failure. Returns True on success.
+        """
+        username = node.rest_username
+        password = node.rest_password
+        pf_args = " ".join(pf_opts)
+        cmd = (f"/opt/couchbase/bin/cbc-pillowfight -u {username} -P {password} "
+               f"-U couchbase://localhost/{bucket} {pf_args}")
+        ssh_timeout = 600
+        if timeout_secs:
+            # Self-terminate the long-running load on the node; rc 124 (timeout) is success.
+            cmd = f"timeout {int(timeout_secs)} {cmd}"
+            ssh_timeout = int(timeout_secs) + 60
+        self.log.info(f"Executing bundled cbc-pillowfight [{label}] on {node.ip}: {cmd}")
+        output, error = [], []
+        for attempt in range(1, 3):
+            shell = RemoteMachineShellConnection(node)
+            try:
+                output, error, exit_code = shell.execute_command(cmd, get_exit_code=True, timeout=ssh_timeout)
+            finally:
+                shell.disconnect()
+            if output:
+                self.log.info(f"cbc-pillowfight [{label}] output: {output}")
+            if exit_code == 0 or (timeout_secs and exit_code == 124):
+                self.log.info(f"Loaded docs into {bucket} on {node.ip} via bundled cbc-pillowfight [{label}]")
+                return True
+            self.log.warning(f"Bundled cbc-pillowfight [{label}] exited {exit_code} "
+                             f"(attempt {attempt}/2) on {node.ip}: stderr={error} stdout={output}")
+        self.log.error(f"Bundled cbc-pillowfight [{label}] failed on {node.ip}: stderr={error} stdout={output}")
+        return False
+
+    def _run_pillowfight_on_both(self, bucket, pf_opts, label):
+        """Run cbc-pillowfight against `bucket` on source and destination in parallel.
+
+        Each side independently falls back to the bundled binary over SSH (see
+        _run_pillowfight). Returns True only if both sides succeed.
+        """
+        results = {}
+
+        def _run(side, node):
+            results[side] = self._run_pillowfight(node, bucket, pf_opts, f"{side} {label}")
+
+        threads = [
+            threading.Thread(target=_run, args=("source", self.src_master)),
+            threading.Thread(target=_run, args=("destination", self.dest_master)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        if not results.get("source"):
+            self.log.error(f"Source {label} pillowfight failed for bucket {bucket}")
+        if not results.get("destination"):
+            self.log.error(f"Destination {label} pillowfight failed for bucket {bucket}")
+        return all(results.get(side) for side in ("source", "destination"))
+
     def _create_conflicts_with_pillowfight(self):
         """
         Create conflicts using cbc-pillowfight tool for reliable conflict generation
@@ -258,70 +380,16 @@ class ConflictLoggingTests(XDCRNewBaseTest):
             bucket_names = ["default"]
         
         self.log.info(f"Creating conflicts with cbc-pillowfight for buckets: {bucket_names}")
-        
-        # Get server credentials for authentication with cbc-pillowfight
-        src_rest = RestConnection(self.src_master)
-        dest_rest = RestConnection(self.dest_master)
-        username = self.src_master.rest_username
-        password = self.src_master.rest_password
-        
+
         # Run cbc-pillowfight on both clusters for each bucket
+        pf_opts = ["-I", "1000", "-m", "100", "-M", "100", "-c", "10", "-t", "4", "-B", "100"]
         success = True
         for bucket_name in bucket_names:
-            # Run pillowfight against source cluster
-            src_cmd = f"cbc-pillowfight -U couchbase://{self.src_master.ip}/{bucket_name} -u {username} -P {password} " \
-                    f"-I 1000 -m 100 -M 100 -c 10 -t 4 -B 100"
-                    
-            # Run pillowfight against destination cluster
-            dest_cmd = f"cbc-pillowfight -U couchbase://{self.dest_master.ip}/{bucket_name} -u {username} -P {password} " \
-                     f"-I 1000 -m 100 -M 100 -c 10 -t 4 -B 100"
-            
-            # Execute commands in parallel
-            import subprocess
-            import threading
-            
-            src_result = None
-            dest_result = None
-            
-            def run_src_cmd():
-                nonlocal src_result
-                try:
-                    src_result = subprocess.run(src_cmd, shell=True, check=False, capture_output=True)
-                    self.log.info(f"Source pillowfight command completed with status: {src_result.returncode}")
-                except Exception as e:
-                    self.log.error(f"Error running source pillowfight command: {e}")
-            
-            def run_dest_cmd():
-                nonlocal dest_result
-                try:
-                    dest_result = subprocess.run(dest_cmd, shell=True, check=False, capture_output=True)
-                    self.log.info(f"Destination pillowfight command completed with status: {dest_result.returncode}")
-                except Exception as e:
-                    self.log.error(f"Error running destination pillowfight command: {e}")
-            
-            # Start threads
-            src_thread = threading.Thread(target=run_src_cmd)
-            dest_thread = threading.Thread(target=run_dest_cmd)
-            
-            src_thread.start()
-            dest_thread.start()
-            
-            # Wait for both to finish
-            src_thread.join()
-            dest_thread.join()
-            
-            # Check if both commands were successful
-            if src_result and src_result.returncode != 0:
-                self.log.error(f"Source pillowfight failed: {src_result.stderr.decode('utf-8')}")
+            if not self._run_pillowfight_on_both(bucket_name, pf_opts, "conflicts"):
                 success = False
-                
-            if dest_result and dest_result.returncode != 0:
-                self.log.error(f"Destination pillowfight failed: {dest_result.stderr.decode('utf-8')}")
-                success = False
-            
-            if success:
+            elif success:
                 self.log.info(f"Successfully created potential conflicts for bucket {bucket_name}")
-            
+    
         # Wait for replication to catch up
         self.log.info("Waiting for replication to catch up...")
         
@@ -778,65 +846,15 @@ class ConflictLoggingTests(XDCRNewBaseTest):
             bucket_names = ["default"]
         
         self.log.info(f"Creating high-volume conflicts for buckets: {bucket_names}")
-        
-        # Get server credentials for authentication with cbc-pillowfight
-        username = self.src_master.rest_username
-        password = self.src_master.rest_password
-        
-        # Run cbc-pillowfight with high number of operations
+
+        # Run cbc-pillowfight with high number of operations on both clusters in parallel
+        pf_opts = ["-I", str(num_docs), "-m", "200", "-M", "2000",
+                   "-c", "10", "-t", str(num_threads), "-B", "500"]
         success = True
         for bucket_name in bucket_names:
-            # Run pillowfight against source cluster with higher throughput
-            src_cmd = f"cbc-pillowfight -U couchbase://{self.src_master.ip}/{bucket_name} -u {username} -P {password} " \
-                    f"-I {num_docs} -m 200 -M 2000 -c 10 -t {num_threads} -B 500"
-                    
-            # Run pillowfight against destination cluster with higher throughput
-            dest_cmd = f"cbc-pillowfight -U couchbase://{self.dest_master.ip}/{bucket_name} -u {username} -P {password} " \
-                     f"-I {num_docs} -m 200 -M 2000 -c 10 -t {num_threads} -B 500"
-            
-            # Execute commands in parallel
-            import subprocess
-            import threading
-            
-            src_result = None
-            dest_result = None
-            
-            def run_src_cmd():
-                nonlocal src_result
-                try:
-                    src_result = subprocess.run(src_cmd, shell=True, check=False, capture_output=True)
-                    self.log.info(f"Source high-volume pillowfight completed with status: {src_result.returncode}")
-                except Exception as e:
-                    self.log.error(f"Error running source high-volume pillowfight command: {e}")
-            
-            def run_dest_cmd():
-                nonlocal dest_result
-                try:
-                    dest_result = subprocess.run(dest_cmd, shell=True, check=False, capture_output=True)
-                    self.log.info(f"Destination high-volume pillowfight completed with status: {dest_result.returncode}")
-                except Exception as e:
-                    self.log.error(f"Error running destination high-volume pillowfight command: {e}")
-            
-            # Start threads
-            src_thread = threading.Thread(target=run_src_cmd)
-            dest_thread = threading.Thread(target=run_dest_cmd)
-            
-            src_thread.start()
-            dest_thread.start()
-            
-            # Wait for both to finish
-            src_thread.join()
-            dest_thread.join()
-            
-            # Check if both commands were successful
-            if src_result and src_result.returncode != 0:
-                self.log.error(f"Source high-volume pillowfight failed: {src_result.stderr.decode('utf-8')}")
+            if not self._run_pillowfight_on_both(bucket_name, pf_opts, "high-volume"):
                 success = False
-                
-            if dest_result and dest_result.returncode != 0:
-                self.log.error(f"Destination high-volume pillowfight failed: {dest_result.stderr.decode('utf-8')}")
-                success = False
-        
+
         # Wait for replication to catch up
         self.log.info("Waiting for replication to catch up...")
         
@@ -921,35 +939,27 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         # Generate conflicts for a fixed duration
         test_duration = 60  # seconds
         start_time = time.time()
-        
-        # Use cbc-pillowfight to generate conflicts
-        username = self.src_master.rest_username
-        password = self.src_master.rest_password
-        
-        # Run pillowfight against both clusters simultaneously
-        src_cmd = f"cbc-pillowfight -U couchbase://{self.src_master.ip}/{bucket_name} -u {username} -P {password} " \
-                f"-I 50000 -m 100 -M 100 -c 50 -t 8 -B 100 --sequential"
-                
-        dest_cmd = f"cbc-pillowfight -U couchbase://{self.dest_master.ip}/{bucket_name} -u {username} -P {password} " \
-                 f"-I 50000 -m 100 -M 100 -c 50 -t 8 -B 100 --sequential"
-        
-        import subprocess
-        import threading
-        
-        # Start pillowfight on source cluster
-        src_process = subprocess.Popen(src_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Start pillowfight on destination cluster
-        dest_process = subprocess.Popen(dest_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Wait for test duration
+
+        # Run pillowfight against both clusters simultaneously for test_duration; each side
+        # self-terminates after the timeout (local subprocess timeout / remote `timeout`).
+        pf_opts = ["-I", "50000", "-m", "100", "-M", "100",
+                   "-c", "50", "-t", "8", "-B", "100", "--sequential"]
         self.log.info(f"Running conflict generation test for {test_duration} seconds...")
-        time.sleep(test_duration)
-        
-        # Terminate processes
-        src_process.terminate()
-        dest_process.terminate()
-        
+        results = {}
+
+        def _run(side, node):
+            results[side] = self._run_pillowfight(node, bucket_name, pf_opts,
+                                                  f"{side} rate-measure", timeout_secs=test_duration)
+
+        threads = [
+            threading.Thread(target=_run, args=("source", self.src_master)),
+            threading.Thread(target=_run, args=("destination", self.dest_master)),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
         end_time = time.time()
         actual_duration = end_time - start_time
         
