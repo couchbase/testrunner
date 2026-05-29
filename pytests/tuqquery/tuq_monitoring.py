@@ -892,112 +892,116 @@ class QueryMonitoringTests(QueryTests):
     '''Check that you can change the maximum number of entries that system:completed requests keeps at one time.'''
 
     def test_retention_config(self):
-        for server in self.servers[:self.nodes_init]:
-            self.rest.set_completed_requests_max_entries(server, 4000)
-        num_entries = 10
-        # Change the retention setting to only hold the amount of queries specified by num_entries
-        for server in self.servers[:self.nodes_init]:
-            response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
-            result = json.loads(content)
-            self.assertEqual(result['completed-limit'], num_entries)
-    
-        # Run more than num_entries(10) queries. No explicit duration comment here, so keep each query > 1 second.
-        for _ in range(num_entries * 2):
+        try:
+            for server in self.servers[:self.nodes_init]:
+                self.rest.set_completed_requests_max_entries(server, 4000)
+            num_entries = 10
+            # Change the retention setting to only hold the amount of queries specified by num_entries
+            for server in self.servers[:self.nodes_init]:
+                response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
+                result = json.loads(content)
+                self.assertEqual(result['completed-limit'], num_entries)
+        
+            # Run more than num_entries(10) queries. No explicit duration comment here, so keep each query > 1 second.
+            for _ in range(num_entries * 2):
+                self._run_monitoring_sleep_query()
+
+            time.sleep(1)
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 10)
+
+            # negative should disable the limit
+            num_entries = -1
+            for server in self.servers[:self.nodes_init]:
+                response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
+                result = json.loads(content)
+                self.assertEqual(result['completed-limit'], num_entries)
+
+            for _ in range(100):
+                self._run_monitoring_sleep_query()
+
+            time.sleep(1)
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 110)
+
+            # 0 should disable logging
+            num_entries = 0
+            for server in self.servers[:self.nodes_init]:
+                response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
+                result = json.loads(content)
+                self.assertEqual(result['completed-limit'], num_entries)
+
             self._run_monitoring_sleep_query()
 
-        time.sleep(1)
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 10)
-
-        # negative should disable the limit
-        num_entries = -1
-        for server in self.servers[:self.nodes_init]:
-            response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
-            result = json.loads(content)
-            self.assertEqual(result['completed-limit'], num_entries)
-
-        for _ in range(100):
-            self._run_monitoring_sleep_query()
-
-        time.sleep(1)
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 110)
-
-        # 0 should disable logging
-        num_entries = 0
-        for server in self.servers[:self.nodes_init]:
-            response, content = self.rest.set_completed_requests_max_entries(server, num_entries)
-            result = json.loads(content)
-            self.assertEqual(result['completed-limit'], num_entries)
-
-        self._run_monitoring_sleep_query()
-
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 110)
-        for server in self.servers:
-            self.rest.set_completed_requests_max_entries(server, 4000)
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 110)
+        finally:
+            for server in self.servers:
+                self.rest.set_completed_requests_max_entries(server, 4000)
 
     '''Check that you can change the min duration a query has to run for to be stored in system:completed_requests'''
 
     def test_collection_config(self):
-        for server in self.servers[:self.nodes_init]:
-            self.rest.set_completed_requests_collection_duration(server, 1000)
-        # Test the default setting of 1 second
-        self.run_cbq_query('select * from system:active_requests')
-        self._run_monitoring_sleep_query()
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 1)
-        # Wipe the completed logs for the next test
-        self.run_cbq_query('delete from system:completed_requests')
+        try:
+            for server in self.servers[:self.nodes_init]:
+                self.rest.set_completed_requests_collection_duration(server, 1000)
+            # Test the default setting of 1 second
+            self.run_cbq_query('select * from system:active_requests')
+            self._run_monitoring_sleep_query()
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 1)
+            # Wipe the completed logs for the next test
+            self.run_cbq_query('delete from system:completed_requests')
 
-        # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 3.5 seconds.
-        min_duration = 3500
-        # Change the collection setting
-        for server in self.servers[:self.nodes_init]:
-            response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
+            # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 3.5 seconds.
+            min_duration = 3500
+            # Change the collection setting
+            for server in self.servers[:self.nodes_init]:
+                response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
+                result = json.loads(content)
+                self.assertEqual(result['completed-threshold'], min_duration)
+            # Construct sleep queries that run for 5 seconds.
+            self._run_monitoring_sleep_query(5000)
+            self._run_monitoring_sleep_query(5000)
+            # Run a query that runs for a normal amount of time ~1.5 seconds
+            self._run_monitoring_sleep_query()
+            self._run_monitoring_sleep_query()
+
+            # Only the queries run for longer than 3.5 seconds should show up.
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 2)
+            # Wipe the completed logs for the next test
+            self.run_cbq_query('delete from system:completed_requests')
+
+            # Check 1 millisecond, basically any query should show up here
+            min_duration = 1
+            for server in self.servers[:self.nodes_init]:
+                response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
+                result = json.loads(content)
+                self.assertEqual(result['completed-threshold'], min_duration)
+
+            self.run_cbq_query('select * from system:active_requests')
+            self._run_monitoring_sleep_query()
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 2)
+
+            # Disable logging
+            min_duration = -1
+            # Change the collection setting
+            for server in self.servers[:self.nodes_init]:
+                response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
             result = json.loads(content)
-            self.assertEqual(result['completed-threshold'], min_duration)
-        # Construct sleep queries that run for 5 seconds.
-        self._run_monitoring_sleep_query(5000)
-        self._run_monitoring_sleep_query(5000)
-        # Run a query that runs for a normal amount of time ~1.5 seconds
-        self._run_monitoring_sleep_query()
-        self._run_monitoring_sleep_query()
+            self.assertTrue(result['completed-threshold'] == min_duration)
+            self.run_cbq_query('delete from system:completed_requests')
+            self._run_monitoring_sleep_query()
+            self._run_monitoring_sleep_query()
 
-        # Only the queries run for longer than 3.5 seconds should show up.
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 2)
-        # Wipe the completed logs for the next test
-        self.run_cbq_query('delete from system:completed_requests')
-
-        # Check 1 millisecond, basically any query should show up here
-        min_duration = 1
-        for server in self.servers[:self.nodes_init]:
-            response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
-            result = json.loads(content)
-            self.assertEqual(result['completed-threshold'], min_duration)
-
-        self.run_cbq_query('select * from system:active_requests')
-        self._run_monitoring_sleep_query()
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 2)
-
-        # Disable logging
-        min_duration = -1
-        # Change the collection setting
-        for server in self.servers[:self.nodes_init]:
-            response, content = self.rest.set_completed_requests_collection_duration(server, min_duration)
-        result = json.loads(content)
-        self.assertTrue(result['completed-threshold'] == min_duration)
-        self.run_cbq_query('delete from system:completed_requests')
-        self._run_monitoring_sleep_query()
-        self._run_monitoring_sleep_query()
-
-        # No queries should appear
-        result = self.run_cbq_query('select * from system:completed_requests')
-        self.assertEqual(result['metrics']['resultCount'], 0)
-
-        self.rest.set_completed_requests_collection_duration(self.master, 1000)
+            # No queries should appear
+            result = self.run_cbq_query('select * from system:completed_requests')
+            self.assertEqual(result['metrics']['resultCount'], 0)
+        finally:
+            for server in self.servers:
+                self.rest.set_completed_requests_collection_duration(server, 1000)
 
     # This helper executes the JS UDF above, which busy-waits for delay_ms milliseconds
     # so the monitoring tests can deterministically control query duration. If no
