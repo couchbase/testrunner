@@ -994,6 +994,10 @@ class BaseSecondaryIndexingTests(QueryTests):
     def validate_shard_seggregation(self, shard_index_map):
         bhive_indexes = self.get_all_bhive_index_names()
         composite_indexes = self.get_all_composite_index_names()
+        
+        self.log.info(f"BHIVE indexes: {bhive_indexes}")
+        self.log.info(f"Composite indexes: {composite_indexes}")
+        
         for shard, indices in shard_index_map.items():
             categories_found = set()
 
@@ -1004,9 +1008,10 @@ class BaseSecondaryIndexingTests(QueryTests):
                     categories_found.add('vector')
                 else:
                     categories_found.add('scalar')
+                    self.log.info(f"Index '{index}' classified as scalar (not in bhive or composite lists)")
 
             # To check if exactly more than one category is found for this shard
-            self.assertEqual(len(categories_found), 1, f"More than category of index found for the shard specific shard {indices}. The shard mapping to index is {shard_index_map}")
+            self.assertEqual(len(categories_found), 1, f"More than one category of index found for the shard. Categories: {categories_found}, Indexes: {indices}. The shard mapping to index is {shard_index_map}")
 
     def get_shards_index_map(self):
         index_node = self.get_nodes_from_services_map(service_type="index")
@@ -4232,14 +4237,27 @@ class BaseSecondaryIndexingTests(QueryTests):
         return bhive_index
 
     def get_all_composite_index_names(self):
-        """Returns a list of all composite indexes in the cluster
+        """Returns a list of all composite vector indexes in the cluster.
+        
+        Composite vector indexes are plasma-based indexes that contain vector fields.
+        Identified by:
+        - Dense composite: 'similarity' and 'dimension' in definition
+        - Sparse composite: 'SPARSE VECTOR' in definition
+        
+        Note: BHIVE indexes have indexType 'Hyperscale Vector Index', not 'plasma',
+        so they are naturally excluded by the indexType check.
         """
         composite_index = []
         index_node = self.get_nodes_from_services_map(service_type="index")
         rest = RestConnection(index_node)
         index_metadata = rest.get_indexer_metadata()['status']
         for index in index_metadata:
-            if 'definition' in index and index['indexType'] == "plasma" and ('VECTOR' not in index['definition'][:14]) and ('similarity' in index['definition'] and 'dimension' in index['definition'] and 'similarity' in index['definition']) :
+            if 'definition' not in index or index['indexType'] != "plasma":
+                continue
+            definition = index['definition']
+            is_dense_composite = 'similarity' in definition and 'dimension' in definition
+            is_sparse_composite = 'SPARSE VECTOR' in definition.upper()
+            if is_dense_composite or is_sparse_composite:
                 composite_index.append(index['name'])
         return composite_index
 

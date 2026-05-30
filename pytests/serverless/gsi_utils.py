@@ -2640,7 +2640,7 @@ class GSIUtils(object):
         """
         definitions_list = []
         sparse_vecfield = "`sparse`"
-        description = "IVF1024"
+        description = "IVF"
 
         # Load random sparse vector from JSONL file for querying
         sample_sparse_vec, title = self.get_random_sparse_vectors_from_jsonl(count=1, dataset="MSMARCOSiftEmbeddingProduct")
@@ -2711,7 +2711,7 @@ class GSIUtils(object):
         """
         definitions_list = []
         sparse_vecfield = "`sparse`"
-        description = "IVF1024"
+        description = "IVF"
 
         # Load random sparse vector from JSONL file for querying
         sample_sparse_vec, title = self.get_random_sparse_vectors_from_jsonl(count=1, dataset="MSMARCOSiftEmbeddingProduct")
