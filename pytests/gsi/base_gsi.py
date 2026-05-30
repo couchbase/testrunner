@@ -5408,6 +5408,25 @@ class BaseSecondaryIndexingTests(QueryTests):
             shell.execute_command('pkill stress')
             shell.execute_command('pkill iotop')
 
+    def _kill_indexer_on_all_nodes(self, step_prefix=""):
+        """
+        Kill indexer process on all index nodes.
+
+        Args:
+            step_prefix: Prefix for logging
+        """
+        try:
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            self.log.info(f"{step_prefix}Killing indexer process on {len(index_nodes)} index nodes...")
+
+            for index_node in index_nodes:
+                self.log.info(f"{step_prefix}Killing indexer on node {index_node.ip}...")
+                self._kill_all_processes_index(index_node)
+
+            self.log.info(f"{step_prefix}Indexer process killed on all {len(index_nodes)} index nodes")
+        except Exception as e:
+            self.log.warning(f"{step_prefix}Failed to kill indexer on some nodes: {str(e)}")
+
     def fill_up_disk(self, disk_fill_percent=10):
         self.log.info("Will check the disk usage on all indexer nodes")
         nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)

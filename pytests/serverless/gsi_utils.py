@@ -3302,7 +3302,7 @@ class GSIUtils(object):
                     skip_primary=skip_primary,
                     limit=limit)
             elif is_sparse:
-                # Sparse vector indexes - DOT product only, IVF1024
+                # Sparse vector indexes - DOT product only, IVF
                 if bhive_index:
                     definition_list = self.generate_msmarco_embedding_product_sparse_vector_index_defintion_bhive(
                         index_name_prefix=prefix,
