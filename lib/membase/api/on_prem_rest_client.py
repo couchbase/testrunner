@@ -2482,6 +2482,27 @@ class RestConnection(object):
             json_parsed = content
         return status, json_parsed
 
+    def get_fts_in_use_encryption_keys(self):
+        """
+        GET :: :8094/api/encryption/GetInUseKeys
+
+        Returns the DEKs currently in use by the Search (FTS) service, grouped by
+        datatype. Mirrors the GSI/Query in-use-keys endpoints. Sample response:
+            {
+              "other": [""],
+              "service_bucket <bucket-uuid>": ["<dek-uuid>"],
+              "service_bucket <bucket-uuid>": []
+            }
+        An empty-string ("") entry means unencrypted data is present for that datatype.
+        """
+        api = self.fts_baseUrl + 'api/encryption/GetInUseKeys'
+        status, content, header = self._http_request(api)
+        try:
+            json_parsed = json.loads(content)
+        except (TypeError, ValueError):
+            json_parsed = content
+        return status, json_parsed
+
 
     def get_index_aggregate_metadata(self):
         api = self.index_baseUrl + 'getIndexMetadata'
