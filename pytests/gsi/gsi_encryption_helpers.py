@@ -2,9 +2,13 @@
 """GSI-focused encryption-at-rest helpers extracted from the shared EAR facade."""
 
 import json
+import random
 import re
 import shlex
+import string
+import time
 
+from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import LINUX_COUCHBASE_LOGS_PATH, WIN_COUCHBASE_LOGS_PATH
 from membase.api.rest_client import RestConnection
@@ -2205,30 +2209,99 @@ class GSIEncryptionHelpers:
 
     def verify_gsi_metadata_repo_encrypted(self, index_nodes, expected_key_id=None):
         """
-        Placeholder for ``@2i/metadata_repo_v2/*.wal`` and ``*.sstable`` checks.
+        Verify that metadata_repo_v2 wal and sstable files contain the expected key ID.
 
-        The spec for these files is still being finalized — it is not yet
-        confirmed whether they carry the encryption header or only embed the
-        key ID in the body. Returning a structured ``status=todo`` result
-        keeps the category visible in the orchestrator output without failing
-        any test; replace the body with the real check once the spec lands.
+        Searches for the key ID string in:
+          - ``@2i/metadata_repo_v2/wal/wal.*``  (WAL files)
+          - ``@2i/metadata_repo_v2/kvstore-*/rev-*/*/sstable.*.data``  (SSTable files)
+
+        Uses ``grep -ac`` to search the full file body (binary-as-text) for the
+        key ID string. A non-zero match count indicates the file is encrypted
+        with that key.
 
         Args:
             index_nodes: List of index server objects.
-            expected_key_id: Currently unused (preserved for forward
-                compatibility with the eventual implementation).
+            expected_key_id: Key ID string or int to grep for in each file. Required.
 
         Returns:
-            dict: ``{node_ip: {"status": "todo", "reason": str}}``
+            dict: ``{node_ip: {"status": "pass"/"fail"/"skipped",
+                               "wal_files_checked": int,
+                               "sstable_files_checked": int,
+                               "failed_files": list[str]}}``
         """
-        _ = expected_key_id
-        self.log.info(
-            "TODO: metadata_repo_v2 *.wal / *.sstable encryption check not yet "
-            "implemented (spec pending)."
-        )
-        return {node.ip: {"status": "todo",
-                          "reason": "metadata_repo encryption spec pending"}
-                for node in index_nodes}
+        if expected_key_id is None:
+            raise ValueError("verify_gsi_metadata_repo_encrypted: expected_key_id is required")
+
+        key_id_str = str(expected_key_id)
+        results = {}
+
+        for node in index_nodes:
+            self.log.info(f"[metadata_repo] Checking node {node.ip} for key_id={key_id_str}")
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                rest = RestConnection(node)
+                storage_dir = f"{rest.get_index_path()}/@2i"
+                metadata_dir = f"{storage_dir}/metadata_repo_v2"
+
+                # Find WAL files
+                wal_cmd = f"find {metadata_dir}/wal -maxdepth 1 -type f 2>/dev/null"
+                wal_out, _ = shell.execute_command(wal_cmd)
+                wal_files = [f.strip() for f in wal_out if f.strip()]
+
+                # Find SSTable files
+                sst_cmd = f"find {metadata_dir} -type f -name 'sstable.*.data' 2>/dev/null"
+                sst_out, _ = shell.execute_command(sst_cmd)
+                sst_files = [f.strip() for f in sst_out if f.strip()]
+
+                all_files = wal_files + sst_files
+                if not all_files:
+                    self.log.warning(
+                        f"[metadata_repo] Node {node.ip}: no wal/sstable files found under {metadata_dir}"
+                    )
+                    results[node.ip] = {
+                        "status": "skipped",
+                        "reason": f"no wal/sstable files found under {metadata_dir}",
+                        "wal_files_checked": 0,
+                        "sstable_files_checked": 0,
+                        "failed_files": [],
+                    }
+                    continue
+
+                failed_files = []
+                for fpath in all_files:
+                    # grep -ac: binary-as-text, count matching lines; exit 0 if >=1 match
+                    grep_cmd = f"grep -ac '{key_id_str}' {fpath} 2>/dev/null"
+                    grep_out, _ = shell.execute_command(grep_cmd)
+                    count_str = ''.join(grep_out).strip()
+                    try:
+                        count = int(count_str)
+                    except ValueError:
+                        count = 0
+                    if count == 0:
+                        failed_files.append(fpath)
+                        self.log.warning(
+                            f"[metadata_repo] Node {node.ip}: key_id '{key_id_str}' NOT found in {fpath}"
+                        )
+                    else:
+                        self.log.debug(
+                            f"[metadata_repo] Node {node.ip}: key_id '{key_id_str}' found in {fpath} ({count} lines)"
+                        )
+
+                status = "pass" if not failed_files else "fail"
+                self.log.info(
+                    f"[metadata_repo] Node {node.ip}: {status} — "
+                    f"wal={len(wal_files)}, sstable={len(sst_files)}, failed={len(failed_files)}"
+                )
+                results[node.ip] = {
+                    "status": status,
+                    "wal_files_checked": len(wal_files),
+                    "sstable_files_checked": len(sst_files),
+                    "failed_files": failed_files,
+                }
+            finally:
+                shell.disconnect()
+
+        return results
 
     def verify_storage_stats_rest(self, index_nodes, expected_key_id=None,
                                   encrypted_bucket_names=None,
@@ -2597,3 +2670,744 @@ class GSIEncryptionHelpers:
                     f"(showing up to 5): {violations[:5]}"
                 )
         return results
+
+    def _install_tools(self):
+        """
+        Ensure xxd is installed on every cluster node. Called once from suite_setUp.
+
+        xxd ships in vim-common on Debian/Ubuntu and in vim-common (or vim-enhanced)
+        on RHEL/CentOS/Fedora. The check is skipped for nodes where xxd is already
+        present so repeated suite runs are fast.
+        """
+        for node in self.servers:
+            shell = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                info = shell.extract_remote_info()
+                distro = (info.distribution_type or "").lower()
+
+                out, _ = shell.execute_command("which xxd 2>/dev/null")
+                if out and out[0].strip():
+                    self.log.info(f"xxd already present on {node.ip}: {out[0].strip()}")
+                    continue
+
+                self.log.info(f"Installing xxd on {node.ip} (distro={distro})")
+                if "ubuntu" in distro or "debian" in distro:
+                    install_out, _ = shell.execute_command(
+                        "apt-get install -y xxd 2>&1"
+                    )
+                elif any(d in distro for d in ("centos", "rhel", "fedora", "amazon")):
+                    install_out, _ = shell.execute_command(
+                        "yum install -y vim-common 2>&1 || dnf install -y vim-common 2>&1"
+                    )
+                else:
+                    install_out, _ = shell.execute_command(
+                        "apt-get install -y xxd 2>&1 || yum install -y vim-common 2>&1"
+                    )
+                self.log.info(f"Install output on {node.ip}: {' '.join(install_out or [])}")
+
+                verify_out, _ = shell.execute_command("which xxd 2>/dev/null")
+                if verify_out and verify_out[0].strip():
+                    self.log.info(f"xxd installed successfully on {node.ip}: {verify_out[0].strip()}")
+                else:
+                    self.log.warning(f"xxd installation may have failed on {node.ip}")
+            finally:
+                shell.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# EAR test-suite base mixin
+# ---------------------------------------------------------------------------
+
+# Maps self.gsi_type strings to the three canonical engine names accepted by
+# validate_engine_encryption().  The dispatcher only speaks 'moi', 'plasma',
+# 'bhive'; any other string raises ValueError there.
+_GSI_TYPE_TO_ENGINE = {
+    "memory_optimized": "moi",
+    "moi": "moi",
+    "plasma": "plasma",
+    "forestdb": "plasma",   # legacy alias used in conf files
+    "bhive": "bhive",
+}
+
+
+class GSIEncryptionAtRestBase:
+    """
+    Mixin providing shared helper methods for GSI Encryption at Rest test suites.
+
+    Consumed by GSIEncryptionAtRestRebalance and GSIEncryptionAtRestStaticTopology, both of
+    which also inherit BaseSecondaryIndexingTests so that self.* attributes such
+    as self.rest, self.master, self.cluster, etc. are available at runtime.
+    """
+
+    UUID_PATTERN = re.compile(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    )
+
+    def validate_bucket_encryption(self, bucket_name):
+        bucket_info = self.rest.get_bucket_json(bucket_name)
+        encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
+        self.log.info(f"Bucket '{bucket_name}' encryptionAtRestKeyId: {encryption_key_id}")
+
+        if encryption_key_id is None or encryption_key_id == -1:
+            raise Exception(f"Bucket '{bucket_name}' does not have encryption at rest enabled")
+
+        if hasattr(self, 'encryption_at_rest_id') and self.encryption_at_rest_id is not None and encryption_key_id != self.encryption_at_rest_id:
+            raise Exception(f"Bucket encryption key id {encryption_key_id} does not match expected {self.encryption_at_rest_id}")
+
+        self.log.info(f"Bucket '{bucket_name}' encryption at rest validation passed")
+
+    def prepare_namespaces(self, bucket_name):
+        self.namespaces = []
+
+        if self.use_default_collection_only:
+            namespace = f"default:{bucket_name}._default._default"
+            self.namespaces.append(namespace)
+            self.log.info(f"Using default collection namespace: {namespace}")
+        else:
+            self.prepare_collection_for_indexing(
+                num_scopes=self.num_scopes,
+                num_collections=self.num_collections,
+                num_of_docs_per_collection=self.num_of_docs_per_collection,
+                json_template=self.json_template,
+                bucket_name=bucket_name
+            )
+
+        return self.namespaces
+
+    def build_deferred_indexes(self, namespace, deferred_definitions):
+        if deferred_definitions:
+            build_query = self.gsi_util_obj.get_build_indexes_query(
+                definition_list=deferred_definitions,
+                namespace=namespace
+            )
+            self.log.info(f"Building deferred indexes: {build_query}")
+            self.run_cbq_query(query=build_query)
+
+    def capture_scan_stats(self):
+        stats_before = {}
+        stats_map = self.get_index_stats(perNode=True)
+
+        for node in stats_map:
+            for keyspace in stats_map[node]:
+                for index_name in stats_map[node][keyspace]:
+                    if index_name not in stats_before:
+                        stats_before[index_name] = 0
+                    if 'num_requests' in stats_map[node][keyspace][index_name]:
+                        stats_before[index_name] += stats_map[node][keyspace][index_name]['num_requests']
+
+        return stats_before
+
+    def run_and_validate_scans(self, select_queries, expected_doc_count):
+        self.log.info(f"Running {len(select_queries)} scan queries for validation")
+
+        for query in select_queries:
+            self.log.info(f"Running scan query: {query[:100]}...")
+            result = self.run_cbq_query(query=query, scan_consistency='request_plus')
+
+            self.assertIn('results', result, f"No results returned for scan query: {query[:100]}")
+
+            result_count = len(result.get('results', []))
+            if result_count > 0:
+                self.log.info(f"Scan query returned {result_count} results")
+            else:
+                self.log.info(f"Scan query completed (no results returned)")
+
+    def validate_scan_stats_increment(self, stats_before):
+        stats_after = self.get_index_stats(perNode=True)
+
+        stats_after_agg = {}
+        for node in stats_after:
+            for keyspace in stats_after[node]:
+                for index_name in stats_after[node][keyspace]:
+                    if index_name not in stats_after_agg:
+                        stats_after_agg[index_name] = 0
+                    if 'num_requests' in stats_after[node][keyspace][index_name]:
+                        stats_after_agg[index_name] += stats_after[node][keyspace][index_name]['num_requests']
+
+        total_before = sum(stats_before.values())
+        total_after = sum(stats_after_agg.values())
+
+        self.assertGreater(total_after, total_before,
+            f"Total num_requests did not increase after scans (before={total_before}, after={total_after})")
+
+        self.log.info(f"Total num_requests: before={total_before}, after={total_after}")
+        self.log.info(f"Scan activity validated across {len(stats_after_agg)} indexes")
+
+    def create_bucket_with_encryption(self, bucket_name, enable_encryption=True):
+        self.bucket_params = self._create_bucket_params(
+            server=self.master,
+            size=self.bucket_size,
+            replicas=self.num_replicas,
+            bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy,
+            lww=self.lww
+        )
+        self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
+        self.buckets = self.rest.get_buckets()
+
+        if enable_encryption:
+            if hasattr(self, 'encryption_at_rest_id') and self.encryption_at_rest_id is not None:
+                self.log.info(f"Enabling encryption at rest on bucket '{bucket_name}' with secret id {self.encryption_at_rest_id}")
+                status, response = self.rest.enable_bucket_encryption(bucket_name, self.encryption_at_rest_id)
+                if not status:
+                    raise Exception(f"Failed to enable encryption at rest on bucket {bucket_name}: {response}")
+                self.log.info(f"Encryption at rest enabled successfully on bucket '{bucket_name}'")
+            else:
+                raise Exception("encryption_at_rest_id not available. Ensure enable_encryption_at_rest=True is set in test params")
+        else:
+            self.log.info(f"Created bucket '{bucket_name}' without encryption at rest")
+
+        return bucket_name
+
+    def create_new_encryption_key(self):
+        params = EncryptionUtil.create_secret_params(
+            name=EncryptionUtil.generate_random_name("RotationKey"),
+            rotationIntervalInSeconds=self.secret_rotation_interval if hasattr(self, 'secret_rotation_interval') else 60
+        )
+        self.log.info(f"Creating new encryption key with params: {params}")
+        status, response = self.rest.create_secret(params)
+        if not status:
+            raise Exception(f"Failed to create new encryption key: {response}")
+
+        response_dict = json.loads(response)
+        new_key_id = response_dict.get('id')
+        if new_key_id is None:
+            raise Exception(f"New encryption key created but no ID returned: {response}")
+
+        self.log.info(f"Created new encryption key with ID: {new_key_id}")
+        return new_key_id
+
+    def set_bucket_dek_rotation_config(self, bucket_name, new_key_id, dek_rotation_interval=120, dek_lifetime=120):
+        self.log.info(f"Rotating bucket '{bucket_name}' encryption to key ID {new_key_id}")
+
+        self.log.info(f"Setting DEK rotation interval to {dek_rotation_interval} seconds")
+        status, response = self.rest.set_bucket_dek_rotation_interval(bucket_name, dek_rotation_interval)
+        if not status:
+            raise Exception(f"Failed to set DEK rotation interval: {response}")
+
+        self.log.info(f"Setting DEK lifetime to {dek_lifetime} seconds")
+        status, response = self.rest.set_bucket_dek_lifetime(bucket_name, dek_lifetime)
+        if not status:
+            raise Exception(f"Failed to set DEK lifetime: {response}")
+
+        self.log.info(f"Bucket '{bucket_name}' DEK rotation configured with interval={dek_rotation_interval}s, lifetime={dek_lifetime}s")
+
+    def extract_header_key_id_candidates(self, value, candidates):
+        if isinstance(value, dict):
+            for nested_key, nested_value in value.items():
+                key_lower = nested_key.lower()
+                if isinstance(nested_value, (str, int)):
+                    value_str = str(nested_value)
+                    if key_lower.endswith("id") or self.UUID_PATTERN.match(value_str):
+                        candidates.add(value_str)
+                self.extract_header_key_id_candidates(nested_value, candidates)
+        elif isinstance(value, list):
+            for item in value:
+                self.extract_header_key_id_candidates(item, candidates)
+        elif isinstance(value, str) and self.UUID_PATTERN.match(value):
+            candidates.add(value)
+
+    def get_expected_header_key_ids(self, expected_key_id):
+        if expected_key_id in [None, ""]:
+            return []
+
+        candidates = {str(expected_key_id)}
+        try:
+            status, response = self.rest.get_specific_secret(expected_key_id)
+            if not status:
+                self.log.warning(
+                    f"Failed to fetch secret details for key ID {expected_key_id}; "
+                    f"falling back to direct key ID matching"
+                )
+                return list(candidates)
+
+            if isinstance(response, bytes):
+                response = response.decode("utf-8", errors="replace")
+            response_dict = json.loads(response) if isinstance(response, str) else response
+            self.extract_header_key_id_candidates(response_dict, candidates)
+        except Exception as err:
+            self.log.warning(
+                f"Unable to resolve header key identifiers for key ID {expected_key_id}: {err}"
+            )
+
+        return sorted(candidates)
+
+    def extract_in_use_key_ids(self, value, key_ids):
+        if isinstance(value, dict):
+            for nested_key, nested_value in value.items():
+                if nested_key.lower().endswith("keyid") and nested_value not in [None, ""]:
+                    key_ids.add(str(nested_value))
+                self.extract_in_use_key_ids(nested_value, key_ids)
+        elif isinstance(value, list):
+            for item in value:
+                self.extract_in_use_key_ids(item, key_ids)
+        elif isinstance(value, (str, int)) and value not in [None, ""]:
+            value_str = str(value)
+            if self.UUID_PATTERN.match(value_str):
+                key_ids.add(value_str)
+
+    def get_indexer_in_use_key_ids(self, index_nodes):
+        key_ids = set()
+        for index_node in index_nodes:
+            rest = RestConnection(index_node)
+            status, response = rest.get_indexer_in_use_encryption_keys()
+            if not status:
+                raise Exception(
+                    f"Failed to fetch in-use encryption keys from index node {index_node.ip}: {response}"
+                )
+            self.extract_in_use_key_ids(response, key_ids)
+
+        if not key_ids:
+            raise Exception("Indexer GetInUseKeys returned no key IDs")
+
+        resolved_key_ids = sorted(key_ids)
+        self.log.info(f"Resolved in-use indexer key IDs: {resolved_key_ids}")
+        return resolved_key_ids
+
+    def get_new_indexer_in_use_key_ids(self, index_nodes, previous_key_ids):
+        current_key_ids = set(self.get_indexer_in_use_key_ids(index_nodes))
+        previous_key_ids = {str(key_id) for key_id in previous_key_ids}
+        new_key_ids = sorted(current_key_ids.difference(previous_key_ids))
+        self.log.info(
+            f"Current in-use indexer key IDs: {sorted(current_key_ids)}, "
+            f"previous key IDs: {sorted(previous_key_ids)}, new key IDs: {new_key_ids}"
+        )
+        return new_key_ids
+
+    def poll_for_new_indexer_key_ids(self, index_nodes, baseline_key_ids, timeout=300, label=""):
+        baseline = {str(k) for k in baseline_key_ids}
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            new_ids = self.get_new_indexer_in_use_key_ids(index_nodes, baseline_key_ids)
+            if new_ids:
+                self.log.info(
+                    f"{label}New indexer key IDs detected: {new_ids} "
+                    f"(baseline was {sorted(baseline)})"
+                )
+                return new_ids
+            self.sleep(15, f"{label}Waiting for new indexer key IDs (baseline: {sorted(baseline)})")
+        self.fail(
+            f"{label}No new indexer key IDs appeared within {timeout} s. "
+            f"Baseline: {sorted(baseline)}"
+        )
+
+    def verify_prerequisites(self, min_index_nodes=3, check_encryption=True, step_prefix="[STEP 1]"):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        self.log.info(f"{step_prefix} Found {len(index_nodes)} index nodes: {[n.ip for n in index_nodes]}")
+        self.assertGreaterEqual(len(index_nodes), min_index_nodes,
+            f"Need at least {min_index_nodes} index nodes, found {len(index_nodes)}")
+        if check_encryption:
+            self.assertTrue(self.enable_encryption_at_rest,
+                "Encryption at rest not enabled. Set enable_encryption_at_rest=True")
+            self.assertIsNotNone(self.encryption_at_rest_id, "encryption_at_rest_id is None")
+            self.log.info(f"{step_prefix} Encryption key ID: {self.encryption_at_rest_id}")
+        self.log.info(f"{step_prefix} PASSED - Prerequisites verified")
+        return index_nodes
+
+    def set_indexer_snapshot_settings(self, index_nodes, step_prefix="[STEP 2]"):
+        for index_node in index_nodes:
+            rest = RestConnection(index_node)
+            rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
+            rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
+        self.log.info(f"{step_prefix} PASSED - Indexer snapshot settings configured")
+
+    def create_indexes_on_namespace(self, namespace, index_nodes, prefix_str,
+                                      step_prefix="[STEP]", wait_for_ready=False,
+                                      defer_build=None, randomise_replica_count=True):
+        deploy_nodes = [f"{node.ip}:{self.node_port}" for node in index_nodes]
+        query_node = self.get_nodes_from_services_map(service_type="n1ql")
+        _defer = self.defer_build if defer_build is None else defer_build
+        prefix = prefix_str + ''.join(random.choices(string.ascii_letters + string.digits, k=5))
+        query_definitions = self.gsi_util_obj.get_index_definition_list(
+            dataset=self.json_template, prefix=prefix, skip_primary=False
+        )
+        select_queries = set(self.gsi_util_obj.get_select_queries(
+            definition_list=query_definitions, namespace=namespace
+        ))
+        create_kwargs = dict(
+            definition_list=query_definitions, namespace=namespace,
+            num_replica=self.num_index_replica, deploy_node_info=deploy_nodes,
+            defer_build=_defer
+        )
+        if randomise_replica_count:
+            create_kwargs['randomise_replica_count'] = True
+        queries = self.gsi_util_obj.get_create_index_list(**create_kwargs)
+        self.gsi_util_obj.create_gsi_indexes(
+            create_queries=queries, database=namespace, query_node=query_node
+        )
+        if wait_for_ready:
+            self.wait_until_indexes_online(timeout=1200, defer_build=_defer)
+        suffix = " in Ready state" if wait_for_ready else ""
+        self.log.info(f"{step_prefix} PASSED - Created {len(queries)} indexes{suffix}")
+        return select_queries
+
+    def restart_index_nodes(self, index_nodes):
+        """Rolling restart of all indexer nodes one at a time."""
+        for node in index_nodes:
+            self.log.info(f"[RESTART] Stopping indexer on node {node.ip}...")
+            remote = RemoteMachineShellConnection(node)
+            remote.stop_server()
+            self.sleep(20, f"Waiting after stopping {node.ip}")
+            self.log.info(f"[RESTART] Starting indexer on node {node.ip}...")
+            remote.start_server()
+            remote.disconnect()
+            self.sleep(20, f"Waiting for {node.ip} to come back up")
+        self.log.info("[RESTART] All index nodes restarted. Waiting for indexes to be online...")
+        self.wait_until_indexes_online(timeout=1200)
+        self.log.info("[RESTART] All indexes back online after restart")
+
+    def run_scan_validation(self, select_queries, validate_item_count=False, expected_doc_count=None):
+        if expected_doc_count is None:
+            expected_doc_count = self.num_of_docs_per_collection
+        stats_before = self.capture_scan_stats()
+        self.run_and_validate_scans(select_queries, expected_doc_count=expected_doc_count)
+        self.validate_scan_stats_increment(stats_before)
+        if validate_item_count:
+            self.item_count_related_validations()
+
+    def validate_mixed_bucket_encrypted_keys(self, index_nodes, encrypted_bucket_names, timeout=300, step_prefix=""):
+        """
+        Validate in-use encryption keys for a mixed-bucket setup (some encrypted, some not).
+
+        Replaces normal file-level validation when encrypt_all_buckets=False and
+        bucket_count >= 2. The unencrypted bucket's service_bucket entries will
+        naturally have no keys, so the standard _wait_for_empty_service_bucket_keys_cleared
+        check would never converge. Instead this method:
+
+          1. Resolves the UUID for each encrypted bucket via build_bucket_key_map.
+          2. Polls get_indexer_in_use_encryption_keys on all index nodes for up to
+             `timeout` seconds (default 300 s / 5 min).
+          3. On every poll, checks only the {service_bucket <uuid>} entries that
+             belong to an encrypted bucket.
+          4. If any such entry has an empty key ID, keeps waiting.
+          5. Once all encrypted-bucket service_bucket entries have non-empty key IDs
+             on every index node, returns (validation passed).
+          6. If the deadline is reached without convergence, calls self.fail() so the
+             test is marked as a hard failure.
+        """
+        self.log.info(
+            f"{step_prefix}Mixed-bucket validation: polling in-use keys for encrypted "
+            f"buckets {encrypted_bucket_names} (timeout={timeout}s)..."
+        )
+
+        # Step 1 — resolve encrypted bucket UUIDs from the first index node.
+        bucket_key_map = self._build_bucket_key_map_safe(index_nodes, encrypted_bucket_names)
+        encrypted_uuids = set()
+        for bucket_name, info in bucket_key_map.items():
+            uuid = info.get("uuid", "")
+            if uuid:
+                encrypted_uuids.add(uuid.lower())
+            else:
+                self.log.warning(
+                    f"{step_prefix}Could not resolve UUID for encrypted bucket '{bucket_name}' — "
+                    f"it will be skipped in key validation"
+                )
+
+        if not encrypted_uuids:
+            self.fail(
+                f"{step_prefix}No UUIDs resolved for encrypted buckets {encrypted_bucket_names}; "
+                f"cannot validate in-use keys"
+            )
+
+        self.log.info(f"{step_prefix}Resolved encrypted bucket UUIDs: {sorted(encrypted_uuids)}")
+
+        # Step 2-5 — poll until all encrypted-bucket service_bucket entries are non-empty.
+        deadline = time.time() + timeout
+        poll_interval = 15
+        while time.time() < deadline:
+            found_empty = False
+            for index_node in index_nodes:
+                rest = RestConnection(index_node)
+                status, response = rest.get_indexer_in_use_encryption_keys()
+                if not status:
+                    self.log.warning(
+                        f"{step_prefix}Could not fetch in-use keys from {index_node.ip}: {response}; retrying..."
+                    )
+                    found_empty = True
+                    break
+                for bucket_key, key_list in response.items():
+                    if not bucket_key.startswith("{service_bucket"):
+                        continue
+                    # Extract the UUID from the "{service_bucket <uuid>}" tag.
+                    inner = bucket_key.strip("{} ")
+                    parts = inner.split()
+                    if len(parts) < 2:
+                        continue
+                    entry_uuid = parts[1].lower()
+                    if entry_uuid not in encrypted_uuids:
+                        continue
+                    if any(k == "" for k in key_list):
+                        self.log.info(
+                            f"{step_prefix}Encrypted bucket UUID {entry_uuid} still has an empty "
+                            f"key in {bucket_key} on {index_node.ip} — waiting for DEK to populate..."
+                        )
+                        found_empty = True
+                        break
+                if found_empty:
+                    break
+
+            if not found_empty:
+                self.log.info(
+                    f"{step_prefix}All encrypted-bucket service_bucket entries have non-empty "
+                    f"key IDs on all index nodes — validation passed"
+                )
+                return
+
+            time.sleep(poll_interval)
+
+        # Step 6 — hard failure after timeout.
+        self.fail(
+            f"{step_prefix}Encrypted-bucket service_bucket entries still had empty key IDs after "
+            f"{timeout}s. Encrypted bucket UUIDs checked: {sorted(encrypted_uuids)}"
+        )
+
+    def get_bucket_name(self, bucket):
+        """
+        Return a bucket name from REST bucket objects, dicts, or strings.
+        """
+        if isinstance(bucket, str):
+            return bucket
+        if isinstance(bucket, dict):
+            return bucket.get("name") or bucket.get("bucket") or bucket.get("bucketName")
+        return getattr(bucket, "name", None) or getattr(bucket, "bucket", None) or str(bucket)
+
+    def is_bucket_encryption_enabled(self, bucket_name):
+        """
+        Check whether bucket encryption is currently enabled.
+        """
+        bucket_info = self.rest.get_bucket_json(bucket_name)
+        encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
+        return encryption_key_id not in [None, -1, "-1"]
+
+    def get_current_encrypted_bucket_names(self, bucket_names=None):
+        """
+        Return only buckets that currently have encryption enabled.
+        """
+        if bucket_names is None:
+            bucket_names = [self.get_bucket_name(bucket) for bucket in self.rest.get_buckets()]
+
+        encrypted_bucket_names = []
+        for bucket_name in bucket_names:
+            if not bucket_name:
+                continue
+            if self.is_bucket_encryption_enabled(bucket_name):
+                encrypted_bucket_names.append(bucket_name)
+            else:
+                self.log.info(
+                    f"Skipping bucket '{bucket_name}' for file encryption validation; encryption is disabled"
+                )
+
+        return encrypted_bucket_names
+
+    def validate_file_encryption_with_key(self, index_nodes, expected_key_id=None, step_prefix="",
+                                            encrypted_bucket_names=None, raise_on_failure=False):
+        """
+        Validate file encryption on disk and optionally check for expected key IDs in headers.
+
+        Args:
+            index_nodes: List of index nodes to validate
+            expected_key_id: Optional expected encryption key ID(s) in file headers.
+                             Can be a single key ID, list/tuple/set of key IDs, or None.
+            step_prefix: Prefix for logging steps (e.g., "[STEP 10] ")
+            encrypted_bucket_names: Optional list of bucket names that should be encrypted.
+                                    Used for more targeted validation logging.
+            raise_on_failure: If True, raises an exception on validation failure.
+                              If False, returns False on failure. Default: False.
+
+        Returns:
+            bool: True if validation passed, False otherwise
+
+        Raises:
+            Exception: If raise_on_failure=True and validation fails
+        """
+        encrypted_bucket_names = self.get_current_encrypted_bucket_names(encrypted_bucket_names)
+        if not encrypted_bucket_names:
+            self.log.info(f"{step_prefix}No encryption-enabled buckets found; skipping file encryption validation")
+            return True
+
+        if expected_key_id is None:
+            expected_header_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+            self.log.info(
+                f"{step_prefix}Validating file encryption on disk with in-use key IDs "
+                f"{expected_header_key_ids}..."
+            )
+        elif isinstance(expected_key_id, (list, tuple, set)):
+            expected_header_key_ids = [str(key_id) for key_id in expected_key_id if key_id not in [None, ""]]
+            self.log.info(
+                f"{step_prefix}Validating file encryption with expected key IDs {expected_header_key_ids}..."
+            )
+        else:
+            expected_header_key_ids = self.get_expected_header_key_ids(expected_key_id)
+            self.log.info(
+                f"{step_prefix}Validating file encryption with expected key ID {expected_key_id} "
+                f"using header key identifiers {expected_header_key_ids}..."
+            )
+
+        self.log.info(f"{step_prefix}Encrypted buckets to validate: {encrypted_bucket_names}")
+
+        engine = _GSI_TYPE_TO_ENGINE.get(self.gsi_type)
+        if engine is None:
+            raise ValueError(
+                f"Unsupported gsi_type: {self.gsi_type!r}. "
+                f"Expected one of {list(_GSI_TYPE_TO_ENGINE)}"
+            )
+
+        encryption_results = self.validate_engine_encryption(
+            engine, index_nodes,
+            expected_key_id=expected_header_key_ids,
+            encrypted_bucket_names=encrypted_bucket_names,
+        )
+
+        all_failed_files = []
+        validation_passed = True
+        _SKIP_CATEGORIES = {"_overall", "_helper_error", "TODO"}
+
+        for category, results in encryption_results.items():
+            if category in _SKIP_CATEGORIES:
+                continue
+            if isinstance(results, dict):
+                for node, result in results.items():
+                    if not isinstance(result, dict):
+                        continue
+                    status = result.get("status", "unknown")
+                    if status == "passed":
+                        failed_files = result.get("failed_files", [])
+                        if failed_files:
+                            self.log.warning(
+                                f"{step_prefix}{category} on {node}: PASSED with "
+                                f"{len(failed_files)} unencrypted files"
+                            )
+                            for file_path, details in failed_files:
+                                self.log.error(
+                                    f"{step_prefix}UNENCRYPTED FILE on {node}: {file_path} - {details}"
+                                )
+                                all_failed_files.append((node, file_path, details))
+                        else:
+                            self.log.info(
+                                f"{step_prefix}{category} on {node}: PASSED - All files encrypted"
+                            )
+                    elif status == "failed":
+                        validation_passed = False
+                        self.log.error(
+                            f"{step_prefix}{category} on {node}: FAILED - "
+                            f"{result.get('reason', 'unknown')}"
+                        )
+                        failed_files = result.get("failed_files", [])
+                        if failed_files:
+                            self.log.error(
+                                f"{step_prefix}=== UNENCRYPTED FILES on {node} "
+                                f"({len(failed_files)} files) ==="
+                            )
+                            for file_path, details in failed_files:
+                                self.log.error(f"{step_prefix}UNENCRYPTED FILE: {file_path}")
+                                self.log.error(f"{step_prefix}  Details: {details}")
+                                all_failed_files.append((node, file_path, details))
+                    elif status == "skipped":
+                        self.log.warning(
+                            f"{step_prefix}{category} on {node}: SKIPPED - "
+                            f"{result.get('reason', 'unknown')}"
+                        )
+
+        if all_failed_files:
+            self.log.error("=" * 60)
+            self.log.error(
+                f"{step_prefix}SUMMARY: Found {len(all_failed_files)} UNENCRYPTED FILES:"
+            )
+            for node, file_path, details in all_failed_files:
+                self.log.error(f"{step_prefix}  Node: {node}, File: {file_path}")
+            self.log.error("=" * 60)
+            if raise_on_failure:
+                raise Exception(
+                    f"File encryption validation failed: {len(all_failed_files)} files are not encrypted"
+                )
+            return False
+
+        if not validation_passed:
+            if raise_on_failure:
+                raise Exception("File encryption validation reported one or more failures")
+            return False
+
+        self.log.info(f"{step_prefix}File encryption validation completed successfully")
+        return True
+
+    def validate_files_not_encrypted(self, index_nodes, bucket_name, timeout=300, poll_interval=15, step_prefix=""):
+        """
+        Poll index nodes until all index files for bucket_name are confirmed NOT encrypted.
+
+        Resolves the bucket UUID, then on each poll SSHes to every index node,
+        finds all files under @2i whose path contains the bucket UUID, and checks
+        each file's magic bytes via verify_file_encryption_magic_bytes. Polling
+        continues while any file still carries the encryption header. After timeout
+        seconds without full convergence, self.fail() is called.
+
+        Args:
+            index_nodes: List of index nodes to check.
+            bucket_name: Bucket whose index files must be plaintext.
+            timeout: Max seconds to wait (default 300 / 5 min).
+            poll_interval: Seconds between polls (default 15).
+            step_prefix: Log prefix string.
+        """
+        self.log.info(
+            f"{step_prefix}Polling until all index files for bucket '{bucket_name}' "
+            f"are decrypted (timeout={timeout}s)..."
+        )
+
+        bucket_key_map = self._build_bucket_key_map_safe(index_nodes, [bucket_name])
+        bucket_uuid = (bucket_key_map.get(bucket_name) or {}).get("uuid", "")
+        if not bucket_uuid:
+            self.fail(
+                f"{step_prefix}Could not resolve UUID for bucket '{bucket_name}' — "
+                f"cannot locate index files on disk"
+            )
+
+        self.log.info(f"{step_prefix}Bucket '{bucket_name}' UUID: {bucket_uuid}")
+        deadline = time.time() + timeout
+
+        while time.time() < deadline:
+            still_encrypted = []
+            for node in index_nodes:
+                rest = RestConnection(node)
+                index_path = rest.get_index_path()
+                storage_dir = f"{index_path}/@2i"
+                shell = RemoteMachineShellConnection(node, verbose=False)
+                try:
+                    out, _ = shell.execute_command(
+                        f"find {storage_dir} -type f 2>/dev/null | grep -i '{bucket_uuid}'"
+                    )
+                finally:
+                    shell.disconnect()
+
+                files = [l.strip() for l in out if l.strip()]
+                if not files:
+                    self.log.info(
+                        f"{step_prefix}{node.ip}: no index files found for UUID {bucket_uuid} — "
+                        f"treating as decrypted"
+                    )
+                    continue
+
+                for fpath in files:
+                    is_enc, details = self.gsi_encryption_helper.verify_file_encryption_magic_bytes(
+                        node, fpath
+                    )
+                    if is_enc:
+                        still_encrypted.append((node.ip, fpath))
+                        self.log.info(f"{step_prefix}{node.ip}: file still encrypted: {fpath}")
+
+            if not still_encrypted:
+                self.log.info(
+                    f"{step_prefix}All index files for bucket '{bucket_name}' "
+                    f"(UUID={bucket_uuid}) are plaintext — force decryption complete"
+                )
+                return
+
+            self.log.info(
+                f"{step_prefix}{len(still_encrypted)} file(s) still encrypted, "
+                f"waiting {poll_interval}s before retry..."
+            )
+            time.sleep(poll_interval)
+
+        self.fail(
+            f"{step_prefix}Index files for bucket '{bucket_name}' (UUID={bucket_uuid}) "
+            f"were still encrypted after {timeout}s. Force decryption did not complete in time."
+        )

@@ -34,7 +34,7 @@ python3 testrunner.py -i b/resources/7-nodes-index-template.ini -c conf/gsi/gsi_
 | Recovery | `recovery_gsi.py`, `plasma_recovery.py` | Index recovery from node failures, disk flush, rebalance, DGM |
 | Restore | `backup_and_restore.py` | Full backup/restore using cbbackupmgr or REST API |
 | Replicas | `gsi_replica_indexes.py`, `gsi_alter_index_replicas.py` | Index replicas and failover with replicas |
-| Encryption | `gsi_encryption_at_rest.py`, `gsi_n2nencryption.py` | Encryption at rest and node-to-node encryption tests |
+| Encryption | `gsi_encryption_at_rest_static_topology.py`, `gsi_encryption_at_rest_rebalance.py`, `gsi_n2nencryption.py` | Encryption at rest (static topology), encryption at rest (rebalance/cluster topology scenarios), and node-to-node encryption tests |
 | Vector | `bhive_e2e_tests.py` (120KB), `composite_vector_index.py` (292KB) | BHIVE chaos/e2e, composite vector + scalar indexing |
 
 **Configuration files:** `conf/gsi/` has 104+ test suite conf files (including `bhive-*.conf` for BHIVE chaos tests and `vector-*.conf` for composite vector indexes) |

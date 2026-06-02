@@ -1,5 +1,5 @@
 """
-gsi_encryption_at_rest.py: Tests for GSI with Encryption at Rest enabled
+gsi_encryption_at_rest_rebalance.py: Tests for GSI Encryption at Rest under rebalance and cluster topology changes
 
 Tests validate index creation, scans, and encryption configuration for various storage
 types (MOI and Plasma) with encryption at rest enabled on buckets.
@@ -18,7 +18,6 @@ __git_user__ = "pavan-couchbase"
 __created_on__ = "16/04/26"
 """
 
-import json
 import random
 import re
 import string
@@ -26,45 +25,29 @@ import threading
 import time
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition, RANGE_SCAN_TEMPLATE
-from .base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
-from lib.membase.helper.encryption_at_rest_helper import EncryptionUtil
+from .gsi_encryption_helpers import GSIEncryptionAtRestBase, _GSI_TYPE_TO_ENGINE
+from .base_gsi import BaseSecondaryIndexingTests
 
 
-# Maps self.gsi_type strings to the three canonical engine names accepted by
-# validate_engine_encryption().  The dispatcher only speaks 'moi', 'plasma',
-# 'bhive'; any other string raises ValueError there.
-_GSI_TYPE_TO_ENGINE = {
-    "memory_optimized": "moi",
-    "moi": "moi",
-    "plasma": "plasma",
-    "forestdb": "plasma",   # legacy alias used in conf files
-    "bhive": "bhive",
-}
-
-
-class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
-    UUID_PATTERN = re.compile(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-    )
-
+class GSIEncryptionAtRestRebalance(GSIEncryptionAtRestBase, BaseSecondaryIndexingTests):
     """
     Test class for GSI operations with Encryption at Rest enabled.
-    
+
     Tests validate:
     - Encryption at rest configuration on buckets
     - Index creation with various types and replica counts on different storage types
     - Scan operations and result validation
     - Index stats verification (num_requests)
-    
+
     Supported storage types:
     - memory_optimized (MOI) - in-memory indexes
     - forestdb (Plasma) - persistent indexes
     """
     
     def setUp(self):
-        super(GSIEncryptionAtRest, self).setUp()
-        self.log.info("==============  GSIEncryptionAtRest setup has started ==============")
+        super(GSIEncryptionAtRestRebalance, self).setUp()
+        self.log.info("==============  GSIEncryptionAtRestRebalance setup has started ==============")
         self.rest.delete_all_buckets()
         self.bucket_count = self.input.param("bucket_count", 1)
         self.num_scopes = self.input.param("num_scopes", 1)
@@ -82,103 +65,25 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.num_indexes_per_type = None  # 0 means all available
         self.failure_detected = False
         self.test_failures = []
-        self.log.info("==============  GSIEncryptionAtRest setup has completed ==============")
+        self.log.info("==============  GSIEncryptionAtRestRebalance setup has completed ==============")
 
     def tearDown(self):
-        self.log.info("==============  GSIEncryptionAtRest tearDown has started ==============")
-        super(GSIEncryptionAtRest, self).tearDown()
-        self.log.info("==============  GSIEncryptionAtRest tearDown has completed ==============")
+        self.log.info("==============  GSIEncryptionAtRestRebalance tearDown has started ==============")
+        super(GSIEncryptionAtRestRebalance, self).tearDown()
+        self.log.info("==============  GSIEncryptionAtRestRebalance tearDown has completed ==============")
 
     def suite_tearDown(self):
-        self.log.info("==============  GSIEncryptionAtRest suite_tearDown has started ==============")
-        super(GSIEncryptionAtRest, self).suite_tearDown()
-        self.log.info("==============  GSIEncryptionAtRest suite_tearDown has completed ==============")
+        self.log.info("==============  GSIEncryptionAtRestRebalance suite_tearDown has started ==============")
+        super(GSIEncryptionAtRestRebalance, self).suite_tearDown()
+        self.log.info("==============  GSIEncryptionAtRestRebalance suite_tearDown has completed ==============")
 
     def suite_setUp(self):
-        self.log.info("==============  GSIEncryptionAtRest suite_setUp has started ==============")
-        super(GSIEncryptionAtRest, self).suite_setUp()
-        self.log.info("==============  GSIEncryptionAtRest suite_setUp has completed ==============")
+        self.log.info("==============  GSIEncryptionAtRestRebalance suite_setUp has started ==============")
+        super(GSIEncryptionAtRestRebalance, self).suite_setUp()
+        GSIEncryptionHelpers._install_tools()
+        self.log.info("==============  GSIEncryptionAtRestRebalance suite_setUp has completed ==============")
 
-    def _create_encrypted_bucket(self):
-        """
-        Create bucket and enable encryption at rest using the encryption_at_rest_id
-        generated by basetestcase.py (via enable_encryption_at_rest=True param).
-        
-        Returns:
-            str: Name of the created bucket
-        """
-        bucket_name = self.test_bucket
-        self.bucket_params = self._create_bucket_params(
-            server=self.master, 
-            size=self.bucket_size,
-            replicas=self.num_replicas, 
-            bucket_type=self.bucket_type,
-            enable_replica_index=self.enable_replica_index,
-            eviction_policy=self.eviction_policy, 
-            lww=self.lww
-        )
-        self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        
-        # Enable encryption at rest on the bucket using the secret id from base class
-        if hasattr(self, 'encryption_at_rest_id') and self.encryption_at_rest_id is not None:
-            self.log.info(f"Enabling encryption at rest on bucket '{bucket_name}' with secret id {self.encryption_at_rest_id}")
-            status, response = self.rest.enable_bucket_encryption(bucket_name, self.encryption_at_rest_id)
-            if not status:
-                raise Exception(f"Failed to enable encryption at rest on bucket {bucket_name}: {response}")
-            self.log.info(f"Encryption at rest enabled successfully on bucket '{bucket_name}'")
-        else:
-            raise Exception("encryption_at_rest_id not available. Ensure enable_encryption_at_rest=True is set in test params")
-        
-        return bucket_name
-
-    def _validate_bucket_encryption(self, bucket_name):
-        """
-        Validate that the bucket has encryption at rest enabled with the correct key id.
-        
-        Args:
-            bucket_name: Name of the bucket to validate
-        """
-        bucket_info = self.rest.get_bucket_json(bucket_name)
-        encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
-        self.log.info(f"Bucket '{bucket_name}' encryptionAtRestKeyId: {encryption_key_id}")
-        
-        if encryption_key_id is None or encryption_key_id == -1:
-            raise Exception(f"Bucket '{bucket_name}' does not have encryption at rest enabled")
-        
-        if hasattr(self, 'encryption_at_rest_id') and self.encryption_at_rest_id is not None and encryption_key_id != self.encryption_at_rest_id:
-            raise Exception(f"Bucket encryption key id {encryption_key_id} does not match expected {self.encryption_at_rest_id}")
-        
-        self.log.info(f"Bucket '{bucket_name}' encryption at rest validation passed")
-
-    def _prepare_namespaces(self, bucket_name):
-        """
-        Prepare namespaces based on test parameters.
-        
-        Args:
-            bucket_name: Name of the bucket
-            
-        Returns:
-            list: List of namespace strings
-        """
-        self.namespaces = []
-        
-        if self.use_default_collection_only:
-            # Use default scope and collection
-            namespace = f"default:{bucket_name}._default._default"
-            self.namespaces.append(namespace)
-            self.log.info(f"Using default collection namespace: {namespace}")
-        else:
-            # Create custom scopes and collections
-            self.prepare_collection_for_indexing(
-                num_scopes=self.num_scopes,
-                num_collections=self.num_collections,
-                num_of_docs_per_collection=self.num_of_docs_per_collection,
-                json_template=self.json_template,
-                bucket_name=bucket_name
-            )
-        
-        return self.namespaces
+    # ---- shared helpers live in GSIEncryptionAtRestBase ----
 
     def _is_vector_index_definition(self, index_definition):
         """
@@ -297,481 +202,6 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         self.log.info(f"Created {len(create_queries)} indexes with num_replica={self.num_index_replica}")
         return select_queries, create_queries, deferred_definitions
 
-    def _build_deferred_indexes(self, namespace, deferred_definitions):
-        """
-        Build deferred indexes.
-        
-        Args:
-            namespace: Namespace string for index creation
-            deferred_definitions: List of deferred index definitions
-        """
-        if deferred_definitions:
-            build_query = self.gsi_util_obj.get_build_indexes_query(
-                definition_list=deferred_definitions,
-                namespace=namespace
-            )
-            self.log.info(f"Building deferred indexes: {build_query}")
-            self.run_cbq_query(query=build_query)
-
-    def _capture_scan_stats(self):
-        """
-        Capture current scan stats for all indexes.
-        
-        Returns:
-            dict: Dictionary of index name to num_requests before scans
-        """
-        stats_before = {}
-        stats_map = self.get_index_stats(perNode=True)
-        
-        for node in stats_map:
-            for keyspace in stats_map[node]:
-                for index_name in stats_map[node][keyspace]:
-                    if index_name not in stats_before:
-                        stats_before[index_name] = 0
-                    if 'num_requests' in stats_map[node][keyspace][index_name]:
-                        stats_before[index_name] += stats_map[node][keyspace][index_name]['num_requests']
-        
-        return stats_before
-
-    def _run_and_validate_scans(self, select_queries, expected_doc_count):
-        """
-        Run scan queries and validate results.
-        
-        Args:
-            select_queries: Set of select query strings
-            expected_doc_count: Expected number of documents in results
-        """
-        self.log.info(f"Running {len(select_queries)} scan queries for validation")
-        
-        for query in select_queries:
-            self.log.info(f"Running scan query: {query[:100]}...")
-            result = self.run_cbq_query(query=query, scan_consistency='request_plus')
-            
-            # Validate result is returned
-            self.assertIn('results', result, f"No results returned for scan query: {query[:100]}")
-            
-            # Log result count
-            result_count = len(result.get('results', []))
-            if result_count > 0:
-                self.log.info(f"Scan query returned {result_count} results")
-            else:
-                self.log.info(f"Scan query completed (no results returned)")
-
-    def _validate_scan_stats_increment(self, stats_before):
-        """
-        Validate that num_requests increased after scans.
-        
-        Args:
-            stats_before: Stats captured before scans
-        """
-        stats_after = self.get_index_stats(perNode=True)
-        
-        # Aggregate stats after scans
-        stats_after_agg = {}
-        for node in stats_after:
-            for keyspace in stats_after[node]:
-                for index_name in stats_after[node][keyspace]:
-                    if index_name not in stats_after_agg:
-                        stats_after_agg[index_name] = 0
-                    if 'num_requests' in stats_after[node][keyspace][index_name]:
-                        stats_after_agg[index_name] += stats_after[node][keyspace][index_name]['num_requests']
-        
-        # Check that at least some indexes show increased scan activity
-        total_before = sum(stats_before.values())
-        total_after = sum(stats_after_agg.values())
-        
-        self.assertGreater(total_after, total_before,
-            f"Total num_requests did not increase after scans (before={total_before}, after={total_after})")
-        
-        self.log.info(f"Total num_requests: before={total_before}, after={total_after}")
-        self.log.info(f"Scan activity validated across {len(stats_after_agg)} indexes")
-
-    def _create_bucket_with_encryption(self, bucket_name, enable_encryption=True):
-        """
-        Create a bucket with optional encryption at rest.
-        
-        Args:
-            bucket_name: Name of the bucket to create
-            enable_encryption: Whether to enable encryption at rest
-            
-        Returns:
-            str: Name of the created bucket
-        """
-        self.bucket_params = self._create_bucket_params(
-            server=self.master, 
-            size=self.bucket_size,
-            replicas=self.num_replicas, 
-            bucket_type=self.bucket_type,
-            enable_replica_index=self.enable_replica_index,
-            eviction_policy=self.eviction_policy, 
-            lww=self.lww
-        )
-        self.cluster.create_standard_bucket(name=bucket_name, port=11222, bucket_params=self.bucket_params)
-        self.buckets = self.rest.get_buckets()
-        
-        if enable_encryption:
-            if hasattr(self, 'encryption_at_rest_id') and self.encryption_at_rest_id is not None:
-                self.log.info(f"Enabling encryption at rest on bucket '{bucket_name}' with secret id {self.encryption_at_rest_id}")
-                status, response = self.rest.enable_bucket_encryption(bucket_name, self.encryption_at_rest_id)
-                if not status:
-                    raise Exception(f"Failed to enable encryption at rest on bucket {bucket_name}: {response}")
-                self.log.info(f"Encryption at rest enabled successfully on bucket '{bucket_name}'")
-            else:
-                raise Exception("encryption_at_rest_id not available. Ensure enable_encryption_at_rest=True is set in test params")
-        else:
-            self.log.info(f"Created bucket '{bucket_name}' without encryption at rest")
-        
-        return bucket_name
-
-    def _create_new_encryption_key(self):
-        """
-        Create a new encryption secret/key for key rotation.
-        
-        Returns:
-            int: The new encryption key ID
-        """
-        params = EncryptionUtil.create_secret_params(
-            name=EncryptionUtil.generate_random_name("RotationKey"),
-            rotationIntervalInSeconds=self.secret_rotation_interval if hasattr(self, 'secret_rotation_interval') else 60
-        )
-        self.log.info(f"Creating new encryption key with params: {params}")
-        status, response = self.rest.create_secret(params)
-        if not status:
-            raise Exception(f"Failed to create new encryption key: {response}")
-        
-        response_dict = json.loads(response)
-        new_key_id = response_dict.get('id')
-        if new_key_id is None:
-            raise Exception(f"New encryption key created but no ID returned: {response}")
-        
-        self.log.info(f"Created new encryption key with ID: {new_key_id}")
-        return new_key_id
-
-    def _rotate_bucket_encryption_key(self, bucket_name, new_key_id, dek_rotation_interval=120, dek_lifetime=120):
-        """
-        Rotate the encryption key for a bucket to a new key using DEK rotation.
-        
-        This sets up automatic DEK rotation by:
-        1. Setting the DEK rotation interval
-        2. Setting the DEK lifetime
-        
-        Args:
-            bucket_name: Name of the bucket
-            new_key_id: The new encryption key ID to use
-            dek_rotation_interval: DEK rotation interval in seconds (default: 120)
-            dek_lifetime: DEK lifetime in seconds (default: 120)
-        """
-        self.log.info(f"Rotating bucket '{bucket_name}' encryption to key ID {new_key_id}")
-        
-        # Set DEK rotation interval
-        self.log.info(f"Setting DEK rotation interval to {dek_rotation_interval} seconds")
-        status, response = self.rest.set_bucket_dek_rotation_interval(bucket_name, dek_rotation_interval)
-        if not status:
-            raise Exception(f"Failed to set DEK rotation interval: {response}")
-        
-        # Set DEK lifetime
-        self.log.info(f"Setting DEK lifetime to {dek_lifetime} seconds")
-        status, response = self.rest.set_bucket_dek_lifetime(bucket_name, dek_lifetime)
-        if not status:
-            raise Exception(f"Failed to set DEK lifetime: {response}")
-        
-        self.log.info(f"Bucket '{bucket_name}' DEK rotation configured with interval={dek_rotation_interval}s, lifetime={dek_lifetime}s")
-
-    def _extract_header_key_id_candidates(self, value, candidates):
-        """
-        Extract header-visible key identifiers from nested secret metadata.
-        """
-        if isinstance(value, dict):
-            for nested_key, nested_value in value.items():
-                key_lower = nested_key.lower()
-                if isinstance(nested_value, (str, int)):
-                    value_str = str(nested_value)
-                    if key_lower.endswith("id") or self.UUID_PATTERN.match(value_str):
-                        candidates.add(value_str)
-                self._extract_header_key_id_candidates(nested_value, candidates)
-        elif isinstance(value, list):
-            for item in value:
-                self._extract_header_key_id_candidates(item, candidates)
-        elif isinstance(value, str) and self.UUID_PATTERN.match(value):
-            candidates.add(value)
-
-    def _get_expected_header_key_ids(self, expected_key_id):
-        """
-        Resolve the key identifiers that can appear in encrypted file headers.
-        """
-        if expected_key_id in [None, ""]:
-            return []
-
-        candidates = {str(expected_key_id)}
-        try:
-            status, response = self.rest.get_specific_secret(expected_key_id)
-            if not status:
-                self.log.warning(
-                    f"Failed to fetch secret details for key ID {expected_key_id}; "
-                    f"falling back to direct key ID matching"
-                )
-                return list(candidates)
-
-            if isinstance(response, bytes):
-                response = response.decode("utf-8", errors="replace")
-            response_dict = json.loads(response) if isinstance(response, str) else response
-            self._extract_header_key_id_candidates(response_dict, candidates)
-        except Exception as err:
-            self.log.warning(
-                f"Unable to resolve header key identifiers for key ID {expected_key_id}: {err}"
-            )
-
-        return sorted(candidates)
-
-    def _extract_in_use_key_ids(self, value, key_ids):
-        """
-        Extract key IDs from the indexer GetInUseKeys response.
-        """
-        if isinstance(value, dict):
-            for nested_key, nested_value in value.items():
-                if nested_key.lower().endswith("keyid") and nested_value not in [None, ""]:
-                    key_ids.add(str(nested_value))
-                self._extract_in_use_key_ids(nested_value, key_ids)
-        elif isinstance(value, list):
-            for item in value:
-                self._extract_in_use_key_ids(item, key_ids)
-        elif isinstance(value, (str, int)) and value not in [None, ""]:
-            value_str = str(value)
-            if self.UUID_PATTERN.match(value_str):
-                key_ids.add(value_str)
-
-    def _get_indexer_in_use_key_ids(self, index_nodes):
-        """
-        Query all index nodes and return the union of in-use key IDs.
-        """
-        key_ids = set()
-        for index_node in index_nodes:
-            rest = RestConnection(index_node)
-            status, response = rest.get_indexer_in_use_encryption_keys()
-            if not status:
-                raise Exception(
-                    f"Failed to fetch in-use encryption keys from index node {index_node.ip}: {response}"
-                )
-            self._extract_in_use_key_ids(response, key_ids)
-
-        if not key_ids:
-            raise Exception("Indexer GetInUseKeys returned no key IDs")
-
-        resolved_key_ids = sorted(key_ids)
-        self.log.info(f"Resolved in-use indexer key IDs: {resolved_key_ids}")
-        return resolved_key_ids
-
-    def _get_new_indexer_in_use_key_ids(self, index_nodes, previous_key_ids):
-        """
-        Query current in-use key IDs and return only the newly introduced IDs.
-        """
-        current_key_ids = set(self._get_indexer_in_use_key_ids(index_nodes))
-        previous_key_ids = {str(key_id) for key_id in previous_key_ids}
-        new_key_ids = sorted(current_key_ids.difference(previous_key_ids))
-        self.log.info(
-            f"Current in-use indexer key IDs: {sorted(current_key_ids)}, "
-            f"previous key IDs: {sorted(previous_key_ids)}, new key IDs: {new_key_ids}"
-        )
-        return new_key_ids
-
-    def _poll_for_new_indexer_key_ids(self, index_nodes, baseline_key_ids, timeout=300, label=""):
-        """
-        Poll GetInUseKeys until key IDs appear that were not in baseline_key_ids.
-        Returns sorted list of new IDs. Raises AssertionError after timeout.
-        """
-        baseline = {str(k) for k in baseline_key_ids}
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            new_ids = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_key_ids)
-            if new_ids:
-                self.log.info(
-                    f"{label}New indexer key IDs detected: {new_ids} "
-                    f"(baseline was {sorted(baseline)})"
-                )
-                return new_ids
-            self.sleep(15, f"{label}Waiting for new indexer key IDs (baseline: {sorted(baseline)})")
-        self.fail(
-            f"{label}No new indexer key IDs appeared within {timeout} s. "
-            f"Baseline: {sorted(baseline)}"
-        )
-
-    def _get_bucket_name(self, bucket):
-        """
-        Return a bucket name from REST bucket objects, dicts, or strings.
-        """
-        if isinstance(bucket, str):
-            return bucket
-        if isinstance(bucket, dict):
-            return bucket.get("name") or bucket.get("bucket") or bucket.get("bucketName")
-        return getattr(bucket, "name", None) or getattr(bucket, "bucket", None) or str(bucket)
-
-    def _is_bucket_encryption_enabled(self, bucket_name):
-        """
-        Check whether bucket encryption is currently enabled.
-        """
-        bucket_info = self.rest.get_bucket_json(bucket_name)
-        encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
-        return encryption_key_id not in [None, -1, "-1"]
-
-    def _get_current_encrypted_bucket_names(self, bucket_names=None):
-        """
-        Return only buckets that currently have encryption enabled.
-        """
-        if bucket_names is None:
-            bucket_names = [self._get_bucket_name(bucket) for bucket in self.rest.get_buckets()]
-
-        encrypted_bucket_names = []
-        for bucket_name in bucket_names:
-            if not bucket_name:
-                continue
-            if self._is_bucket_encryption_enabled(bucket_name):
-                encrypted_bucket_names.append(bucket_name)
-            else:
-                self.log.info(f"Skipping bucket '{bucket_name}' for file encryption validation; encryption is disabled")
-
-        return encrypted_bucket_names
-
-    def _validate_file_encryption_with_key(self, index_nodes, expected_key_id=None, step_prefix="",
-                                            encrypted_bucket_names=None, raise_on_failure=False):
-        """
-        Validate file encryption on disk and optionally check for expected key IDs in headers.
-        
-        Args:
-            index_nodes: List of index nodes to validate
-            expected_key_id: Optional expected encryption key ID(s) in file headers.
-                             Can be a single key ID, list/tuple/set of key IDs, or None.
-            step_prefix: Prefix for logging steps (e.g., "[STEP 10] ")
-            encrypted_bucket_names: Optional list of bucket names that should be encrypted.
-                                    Used for more targeted validation logging.
-            raise_on_failure: If True, raises an exception on validation failure.
-                              If False, returns False on failure. Default: False.
-            
-        Returns:
-            bool: True if validation passed, False otherwise
-            
-        Raises:
-            Exception: If raise_on_failure=True and validation fails
-        """
-        encrypted_bucket_names = self._get_current_encrypted_bucket_names(encrypted_bucket_names)
-        if not encrypted_bucket_names:
-            self.log.info(f"{step_prefix}No encryption-enabled buckets found; skipping file encryption validation")
-            return True
-
-        # Determine expected header key IDs
-        if expected_key_id is None:
-            expected_header_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
-            self.log.info(
-                f"{step_prefix}Validating file encryption on disk with in-use key IDs "
-                f"{expected_header_key_ids}..."
-            )
-        elif isinstance(expected_key_id, (list, tuple, set)):
-            expected_header_key_ids = [str(key_id) for key_id in expected_key_id if key_id not in [None, ""]]
-            self.log.info(
-                f"{step_prefix}Validating file encryption with expected key IDs {expected_header_key_ids}..."
-            )
-        else:
-            expected_header_key_ids = self._get_expected_header_key_ids(expected_key_id)
-            self.log.info(
-                f"{step_prefix}Validating file encryption with expected key ID {expected_key_id} "
-                f"using header key identifiers {expected_header_key_ids}..."
-            )
-        
-        self.log.info(f"{step_prefix}Encrypted buckets to validate: {encrypted_bucket_names}")
-        
-        # Get the storage engine
-        engine = _GSI_TYPE_TO_ENGINE.get(self.gsi_type)
-        if engine is None:
-            raise ValueError(
-                f"Unsupported gsi_type: {self.gsi_type!r}. "
-                f"Expected one of {list(_GSI_TYPE_TO_ENGINE)}"
-            )
-        
-        # Run encryption validation
-        encryption_results = self.validate_engine_encryption(
-            engine, index_nodes,
-            expected_key_id=expected_header_key_ids,
-            encrypted_bucket_names=encrypted_bucket_names,
-        )
-        
-        # Track overall validation status
-        all_failed_files = []
-        validation_passed = True
-        
-        # Skip internal keys added by the orchestrator
-        _SKIP_CATEGORIES = {"_overall", "_helper_error", "TODO"}
-        
-        for category, results in encryption_results.items():
-            if category in _SKIP_CATEGORIES:
-                continue
-            if isinstance(results, dict):
-                for node, result in results.items():
-                    if not isinstance(result, dict):
-                        continue
-                    status = result.get("status", "unknown")
-                    if status == "passed":
-                        # Check if there are any failed files even in passed results
-                        failed_files = result.get("failed_files", [])
-                        if failed_files:
-                            self.log.warning(
-                                f"{step_prefix}{category} on {node}: PASSED with "
-                                f"{len(failed_files)} unencrypted files"
-                            )
-                            for file_path, details in failed_files:
-                                self.log.error(
-                                    f"{step_prefix}UNENCRYPTED FILE on {node}: {file_path} - {details}"
-                                )
-                                all_failed_files.append((node, file_path, details))
-                        else:
-                            self.log.info(
-                                f"{step_prefix}{category} on {node}: PASSED - All files encrypted"
-                            )
-                    elif status == "failed":
-                        validation_passed = False
-                        self.log.error(
-                            f"{step_prefix}{category} on {node}: FAILED - "
-                            f"{result.get('reason', 'unknown')}"
-                        )
-                        # Explicitly list all failed files
-                        failed_files = result.get("failed_files", [])
-                        if failed_files:
-                            self.log.error(
-                                f"{step_prefix}=== UNENCRYPTED FILES on {node} "
-                                f"({len(failed_files)} files) ==="
-                            )
-                            for file_path, details in failed_files:
-                                self.log.error(f"{step_prefix}UNENCRYPTED FILE: {file_path}")
-                                self.log.error(f"{step_prefix}  Details: {details}")
-                                all_failed_files.append((node, file_path, details))
-                    elif status == "skipped":
-                        self.log.warning(
-                            f"{step_prefix}{category} on {node}: SKIPPED - "
-                            f"{result.get('reason', 'unknown')}"
-                        )
-        
-        # Final summary of all unencrypted files
-        if all_failed_files:
-            self.log.error("=" * 60)
-            self.log.error(
-                f"{step_prefix}SUMMARY: Found {len(all_failed_files)} UNENCRYPTED FILES:"
-            )
-            for node, file_path, details in all_failed_files:
-                self.log.error(f"{step_prefix}  Node: {node}, File: {file_path}")
-            self.log.error("=" * 60)
-            
-            if raise_on_failure:
-                raise Exception(
-                    f"File encryption validation failed: {len(all_failed_files)} files are not encrypted"
-                )
-            return False
-        
-        if not validation_passed:
-            if raise_on_failure:
-                raise Exception("File encryption validation reported one or more failures")
-            return False
-        
-        self.log.info(f"{step_prefix}File encryption validation completed successfully")
-        return True
-
     # ========================================================================
     # Rebalance Test Helper Methods
     # ========================================================================
@@ -802,7 +232,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             
             encryption_status = "encrypted" if enable_encryption else "non-encrypted"
             self.log.info(f"Creating {encryption_status} bucket '{bucket_name}'...")
-            self._create_bucket_with_encryption(bucket_name, enable_encryption=enable_encryption)
+            self.create_bucket_with_encryption(bucket_name, enable_encryption=enable_encryption)
             bucket_names.append(bucket_name)
             if enable_encryption:
                 encrypted_bucket_names.append(bucket_name)
@@ -1061,24 +491,6 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         self.run_cbq_query(query=build_query, server=query_node)
         self.log.info(f"Build indexes query executed for namespace {namespace}")
 
-    def _verify_prerequisites(self, min_index_nodes=3, step_prefix="[STEP 1]"):
-        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        self.log.info(f"{step_prefix} Found {len(index_nodes)} index nodes: {[n.ip for n in index_nodes]}")
-        self.assertGreaterEqual(len(index_nodes), min_index_nodes,
-            f"Need at least {min_index_nodes} index nodes, found {len(index_nodes)}")
-        if not self.enable_encryption_at_rest:
-            self.skipTest("Encryption at rest not enabled. Set enable_encryption_at_rest=True")
-        self.assertIsNotNone(self.encryption_at_rest_id, "encryption_at_rest_id is None")
-        self.log.info(f"{step_prefix} Encryption key ID: {self.encryption_at_rest_id}")
-        self.log.info(f"{step_prefix} PASSED - Prerequisites verified")
-        return index_nodes
-
-    def _set_indexer_snapshot_settings(self, index_nodes, step_prefix="[STEP 2]"):
-        rest = RestConnection(index_nodes[0])
-        rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
-        rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
-        self.log.info(f"{step_prefix} PASSED - Indexer snapshot settings configured")
-
     def _enable_shard_rebalance_if_file_mode(self, step_prefix="[STEP 3]"):
         if self.rebalance_mode == "file":
             self.log.info(f"{step_prefix} Enabling shard-based rebalance for file mode...")
@@ -1182,7 +594,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             bucket_names = [bucket_names]
 
         current_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-        baseline_key_ids = self._get_indexer_in_use_key_ids(current_index_nodes)
+        baseline_key_ids = self.get_indexer_in_use_key_ids(current_index_nodes)
         self.log.info(f"{step_label}Baseline in-use key IDs before rotation: {baseline_key_ids}")
 
         rotated_any = False
@@ -1206,7 +618,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 f"{step_label}Setting DEK rotation on bucket '{bucket_name}' "
                 f"with interval={key_rotation_interval}s"
             )
-            self._rotate_bucket_encryption_key(
+            self.set_bucket_dek_rotation_config(
                 bucket_name, encryption_key_id,
                 dek_rotation_interval=key_rotation_interval,
                 dek_lifetime=key_rotation_interval
@@ -1218,7 +630,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 key_rotation_wait_time,
                 f"{step_label}Waiting {key_rotation_wait_time}s for index key rotation to occur"
             )
-            new_key_ids = self._get_indexer_in_use_key_ids(current_index_nodes)
+            new_key_ids = self.get_indexer_in_use_key_ids(current_index_nodes)
             self.log.info(f"{step_label}Key rotation completed. New key IDs: {new_key_ids}")
 
         return rotated_any
@@ -1331,8 +743,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             # Validate file encryption
             self.log.info("Validating file encryption after rebalance...")
             updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            expected_key_ids = self._get_indexer_in_use_key_ids(updated_index_nodes)
-            validation_passed = self._validate_file_encryption_with_key(
+            expected_key_ids = self.get_indexer_in_use_key_ids(updated_index_nodes)
+            validation_passed = self.validate_file_encryption_with_key(
                 updated_index_nodes,
                 expected_key_id=expected_key_ids,
                 step_prefix="[POST-REBALANCE] ",
@@ -1372,16 +784,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         
         # ========== STEP 1: Verify index nodes ==========
         try:
-            self.log.info("[STEP 1] Verifying index node availability...")
-            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            self.log.info(f"[STEP 1] Found {len(index_nodes)} index nodes: {[node.ip for node in index_nodes]}")
-            self.assertGreaterEqual(len(index_nodes), 2,
-                f"Need at least 2 index nodes, found {len(index_nodes)}")
-            self.log.info("[STEP 1] PASSED - Index node verification successful")
+            index_nodes = self.verify_prerequisites(min_index_nodes=2, check_encryption=False)
         except Exception as e:
             self.log.error(f"[STEP 1] FAILED - Index node verification failed: {str(e)}")
-            raise
-        
+            raise        
         # ========== STEP 2: Log storage type ==========
         self.log.info(f"[STEP 2] Storage engine: gsi_type={self.gsi_type}")
         self.log.info("[STEP 2] PASSED - Storage type confirmed")
@@ -1407,7 +813,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 encrypt_this_bucket = self.encrypt_all_buckets or (i == 0)
                 self.log.info(f"[STEP 4.{i+1}] Creating bucket '{bucket_name}' with encryption={encrypt_this_bucket}")
                 
-                self._create_bucket_with_encryption(bucket_name, enable_encryption=encrypt_this_bucket)
+                self.create_bucket_with_encryption(bucket_name, enable_encryption=encrypt_this_bucket)
                 bucket_names.append(bucket_name)
                 if encrypt_this_bucket:
                     encrypted_bucket_names.append(bucket_name)
@@ -1433,16 +839,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         
         # ========== STEP 5: Set indexer snapshot settings ==========
         try:
-            self.log.info("[STEP 5] Setting indexer snapshot settings for MOI...")
-            for index_node in index_nodes:
-                rest = RestConnection(index_node)
-                rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
-                rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
-            self.log.info("[STEP 5] PASSED - Indexer snapshot settings configured (persisted_snapshot.moi.interval=60000, persisted_snapshot_init_build.moi.interval=60000)")
+            self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 5]")
         except Exception as e:
             self.log.error(f"[STEP 5] FAILED - Indexer settings configuration failed: {str(e)}")
-            raise
-        
+            raise        
         # ========== STEP 6: Load documents and create indexes ==========
         select_queries = set()
         try:
@@ -1541,13 +941,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.info(f"[STEP 8] Running {len(select_queries)} SELECT queries for all indexes after encryption...")
             
             # Capture scan stats before queries
-            stats_before = self._capture_scan_stats()
-            
-            # Run and validate all select queries
-            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
-            
-            # Validate scan stats increased
-            self._validate_scan_stats_increment(stats_before)
+            self.run_scan_validation(select_queries)
             
             self.log.info(f"[STEP 8] PASSED - All {len(select_queries)} SELECT queries executed successfully with encryption enabled")
         except Exception as e:
@@ -1566,7 +960,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         # ========== STEP 10: Validate file encryption on disk ==========
         try:
             self.log.info("[STEP 10] Validating file encryption on disk...")
-            self._validate_file_encryption_with_key(
+            self.validate_file_encryption_with_key(
                 index_nodes,
                 expected_key_id=None,  # Will auto-fetch in-use key IDs
                 step_prefix="[STEP 10] ",
@@ -1578,6 +972,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 10] FAILED - File encryption validation failed: {str(e)}")
             raise
         
+        self.restart_index_nodes(index_nodes)
+
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_sanity")
@@ -1614,17 +1010,17 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         self.log.info("=" * 80)
         
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites(min_index_nodes=2)
+        index_nodes = self.verify_prerequisites(min_index_nodes=2)
         key1_id = self.encryption_at_rest_id
 
         # ========== STEP 2: Set indexer snapshot settings ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
 
         # ========== STEP 3: Create bucket with encryption using key1 ==========
         bucket_name = self.test_bucket
         try:
             self.log.info(f"[STEP 3] Creating bucket '{bucket_name}' with encryption key1 ({key1_id})...")
-            self._create_bucket_with_encryption(bucket_name, enable_encryption=True)
+            self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
             
             # Verify bucket encryption
             bucket_info = self.rest.get_bucket_json(bucket_name)
@@ -1643,7 +1039,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 f"[STEP 3b] Pinning DEK rotation interval to {STABLE_INTERVAL_S} s "
                 f"({STABLE_INTERVAL_S // 60} min) to prevent rotation during setup..."
             )
-            self._rotate_bucket_encryption_key(
+            self.set_bucket_dek_rotation_config(
                 bucket_name, key1_id,
                 dek_rotation_interval=STABLE_INTERVAL_S,
                 dek_lifetime=STABLE_INTERVAL_S
@@ -1727,22 +1123,17 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 6] FAILED: {str(e)}")
             raise
 
-        baseline_in_use_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
+        baseline_in_use_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
         
         # ========== STEP 7: Run baseline validations with key1 ==========
         try:
             self.log.info("[STEP 7] Running baseline validations with key1...")
             
             # Run scan queries
-            stats_before = self._capture_scan_stats()
-            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
-            self._validate_scan_stats_increment(stats_before)
-            
-            # Validate item counts
-            self.item_count_related_validations()
+            self.run_scan_validation(select_queries, validate_item_count=True)
             
             # Validate file encryption with key1
-            validation_passed = self._validate_file_encryption_with_key(
+            validation_passed = self.validate_file_encryption_with_key(
                 index_nodes, expected_key_id=baseline_in_use_key_ids, step_prefix="[STEP 7] ",
                 encrypted_bucket_names=[bucket_name]
             )
@@ -1757,7 +1148,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         # ========== STEP 8: Create new encryption key (key2) ==========
         try:
             self.log.info("[STEP 8] Creating new encryption key (key2)...")
-            key2_id = self._create_new_encryption_key()
+            key2_id = self.create_new_encryption_key()
             self.log.info(f"[STEP 8] PASSED - Created key2 with ID: {key2_id}")
         except Exception as e:
             self.log.error(f"[STEP 8] FAILED: {str(e)}")
@@ -1769,7 +1160,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 f"[STEP 9] Reducing DEK rotation interval to {ROTATION_INTERVAL_S} s "
                 f"({ROTATION_INTERVAL_S // 60} min) to trigger first DEK rotation..."
             )
-            self._rotate_bucket_encryption_key(
+            self.set_bucket_dek_rotation_config(
                 bucket_name, key2_id,
                 dek_rotation_interval=ROTATION_INTERVAL_S,
                 dek_lifetime=ROTATION_INTERVAL_S
@@ -1784,14 +1175,14 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.info(
                 "[STEP 10] Polling GetInUseKeys for new indexer key IDs (timeout 300 s)..."
             )
-            new_in_use_key_ids = self._poll_for_new_indexer_key_ids(
+            new_in_use_key_ids = self.poll_for_new_indexer_key_ids(
                 index_nodes, baseline_in_use_key_ids, timeout=300, label="[STEP 10] "
             )
             self.log.info(
                 f"[STEP 10] New key IDs detected: {new_in_use_key_ids}. "
                 f"Immediately pinning DEK rotation interval back to {STABLE_INTERVAL_S} s..."
             )
-            self._rotate_bucket_encryption_key(
+            self.set_bucket_dek_rotation_config(
                 bucket_name, key2_id,
                 dek_rotation_interval=STABLE_INTERVAL_S,
                 dek_lifetime=STABLE_INTERVAL_S
@@ -1831,26 +1222,24 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         # ========== STEP 11: Rerun validations with key2 ==========
         try:
             self.log.info("[STEP 11] Rerunning validations after key rotation...")
-            new_in_use_key_ids_again = self._get_new_indexer_in_use_key_ids(index_nodes, baseline_in_use_key_ids)
+            new_in_use_key_ids_again = self.get_new_indexer_in_use_key_ids(index_nodes, baseline_in_use_key_ids)
             self.log.info(f"Double checking keys in use just before validation {new_in_use_key_ids_again}")
             # Validate file encryption with key2
-            validation_passed = self._validate_file_encryption_with_key(
+            validation_passed = self.validate_file_encryption_with_key(
                 index_nodes, expected_key_id=new_in_use_key_ids, step_prefix="[STEP 11] ",
                 encrypted_bucket_names=[bucket_name]
             )
             if not validation_passed:
                 raise Exception("File encryption validation failed after key rotation to key2")
             # Run scan queries again
-            stats_before = self._capture_scan_stats()
-            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
-            self._validate_scan_stats_increment(stats_before)
-            # Validate item counts
-            self.item_count_related_validations()
+            self.run_scan_validation(select_queries, validate_item_count=True)
             self.log.info("[STEP 11] PASSED - Post-rotation validations completed with key2")
         except Exception as e:
             self.log.error(f"[STEP 11] FAILED: {str(e)}")
             raise
         
+        self.restart_index_nodes(index_nodes)
+
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_key_rotation")
@@ -1887,41 +1276,22 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         
         # ========== STEP 1: Verify prerequisites ==========
         try:
-            self.log.info("[STEP 1] Verifying prerequisites...")
-            
-            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            self.log.info(f"[STEP 1] Found {len(index_nodes)} index nodes")
-            self.assertGreaterEqual(len(index_nodes), 2, f"Need at least 2 index nodes, found {len(index_nodes)}")
-            
-            if not self.enable_encryption_at_rest:
-                self.skipTest("Encryption at rest not enabled. Set enable_encryption_at_rest=True")
-            
-            key_id = self.encryption_at_rest_id
-            self.log.info(f"[STEP 1] Encryption key ID: {key_id}")
-            self.assertIsNotNone(key_id, "encryption_at_rest_id is None")
-            
-            self.log.info("[STEP 1] PASSED - Prerequisites verified")
+            index_nodes = self.verify_prerequisites(min_index_nodes=2)
         except Exception as e:
             self.log.error(f"[STEP 1] FAILED: {str(e)}")
             raise
-        
+        key_id = self.encryption_at_rest_id        
         # ========== STEP 2: Set indexer snapshot settings ==========
         try:
-            self.log.info("[STEP 2] Setting indexer snapshot settings...")
-            for index_node in index_nodes:
-                rest = RestConnection(index_node)
-                rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
-                rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
-            self.log.info("[STEP 2] PASSED - Indexer snapshot settings configured")
+            self.set_indexer_snapshot_settings(index_nodes)
         except Exception as e:
             self.log.error(f"[STEP 2] FAILED: {str(e)}")
-            raise
-        
+            raise        
         # ========== STEP 3: Create bucket with encryption ==========
         bucket_name = self.test_bucket
         try:
             self.log.info(f"[STEP 3] Creating bucket '{bucket_name}' with encryption...")
-            self._create_bucket_with_encryption(bucket_name, enable_encryption=True)
+            self.create_bucket_with_encryption(bucket_name, enable_encryption=True)
             
             bucket_info = self.rest.get_bucket_json(bucket_name)
             encryption_key_id = bucket_info.get('encryptionAtRestKeyId', None)
@@ -1939,7 +1309,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 f"[STEP 3b] Pinning DEK rotation interval to {STABLE_INTERVAL_S} s "
                 f"({STABLE_INTERVAL_S // 60} min) to prevent background rotation during setup..."
             )
-            self._rotate_bucket_encryption_key(
+            self.set_bucket_dek_rotation_config(
                 bucket_name, key_id,
                 dek_rotation_interval=STABLE_INTERVAL_S,
                 dek_lifetime=STABLE_INTERVAL_S
@@ -2023,19 +1393,15 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 6] FAILED: {str(e)}")
             raise
 
-        baseline_in_use_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
+        baseline_in_use_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
         
         # ========== STEP 7: Run baseline validations ==========
         try:
             self.log.info("[STEP 7] Running baseline validations before re-encryption...")
             
-            stats_before = self._capture_scan_stats()
-            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
-            self._validate_scan_stats_increment(stats_before)
+            self.run_scan_validation(select_queries, validate_item_count=True)
             
-            self.item_count_related_validations()
-            
-            validation_passed = self._validate_file_encryption_with_key(
+            validation_passed = self.validate_file_encryption_with_key(
                 index_nodes, expected_key_id=baseline_in_use_key_ids, step_prefix="[STEP 7] ",
                 encrypted_bucket_names=[bucket_name]
             )
@@ -2082,14 +1448,14 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.info(
                 "[STEP 10] Polling GetInUseKeys for new indexer key IDs (timeout 300 s)..."
             )
-            new_in_use_key_ids = self._poll_for_new_indexer_key_ids(
+            new_in_use_key_ids = self.poll_for_new_indexer_key_ids(
                 index_nodes, baseline_in_use_key_ids, timeout=300, label="[STEP 10] "
             )
             self.log.info(
                 f"[STEP 10] New key IDs detected: {new_in_use_key_ids}. "
                 f"Immediately pinning DEK rotation interval back to {STABLE_INTERVAL_S} s..."
             )
-            self._rotate_bucket_encryption_key(
+            self.set_bucket_dek_rotation_config(
                 bucket_name, key_id,
                 dek_rotation_interval=STABLE_INTERVAL_S,
                 dek_lifetime=STABLE_INTERVAL_S
@@ -2133,14 +1499,9 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.info("[STEP 12] Rerunning validations after re-encryption...")
             
             # Run scan queries again
-            stats_before = self._capture_scan_stats()
-            self._run_and_validate_scans(select_queries, expected_doc_count=self.num_of_docs_per_collection)
-            self._validate_scan_stats_increment(stats_before)
+            self.run_scan_validation(select_queries, validate_item_count=True)
             
-            # Validate item counts
-            self.item_count_related_validations()
-            
-            validation_passed = self._validate_file_encryption_with_key(
+            validation_passed = self.validate_file_encryption_with_key(
                 index_nodes, expected_key_id=new_in_use_key_ids, step_prefix="[STEP 12] ",
                 encrypted_bucket_names=[bucket_name]
             )
@@ -2152,6 +1513,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.error(f"[STEP 12] FAILED: {str(e)}")
             raise
         
+        self.restart_index_nodes(index_nodes)
+
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_gsi_encryption_at_rest_force_reencryption")
@@ -2204,7 +1567,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         try:
             self.log.info(f"[STEP 2] Creating bucket '{bucket_name}' "
                           f"(encryption={bool(self.enable_encryption_at_rest)})...")
-            self._create_bucket_with_encryption(
+            self.create_bucket_with_encryption(
                 bucket_name, enable_encryption=bool(self.enable_encryption_at_rest)
             )
             self.log.info(f"[STEP 2] PASSED - Bucket '{bucket_name}' created")
@@ -2214,16 +1577,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
 
         # ========== STEP 3: Configure indexer snapshot intervals ==========
         try:
-            self.log.info("[STEP 3] Setting indexer snapshot settings...")
-            for index_node in index_nodes:
-                rest = RestConnection(index_node)
-                rest.set_index_settings({"indexer.settings.persisted_snapshot.moi.interval": 60000})
-                rest.set_index_settings({"indexer.settings.persisted_snapshot_init_build.moi.interval": 60000})
-            self.log.info("[STEP 3] PASSED - Indexer snapshot settings configured")
+            self.set_indexer_snapshot_settings(index_nodes, step_prefix="[STEP 3]")
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {str(e)}")
             raise
-
         # ========== STEP 4: Load documents and create indexes ==========
         select_queries = set()
         try:
@@ -2283,7 +1640,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         # ========== STEP 5: Exercise request-handler cache via scans ==========
         try:
             self.log.info(f"[STEP 5] Running {len(select_queries)} SELECT queries to populate request-handler cache...")
-            self._run_and_validate_scans(
+            self.run_and_validate_scans(
                 select_queries, expected_doc_count=self.num_of_docs_per_collection
             )
             self.log.info("[STEP 5] PASSED - Scans completed")
@@ -2302,7 +1659,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             expected_key_id = getattr(self, "log_encryption_at_rest_id", None)
             expected_header_key_ids = None
             if expected_key_id not in (None, False, ""):
-                expected_header_key_ids = self._get_expected_header_key_ids(expected_key_id)
+                expected_header_key_ids = self.get_expected_header_key_ids(expected_key_id)
             self.log.info(
                 f"[STEP 7] Validating log-encryption files with expected key IDs "
                 f"{expected_header_key_ids} (raw={expected_key_id})..."
@@ -2314,6 +1671,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 7] FAILED: {str(e)}")
             raise
+
+        self.restart_index_nodes(index_nodes)
 
         # ========== TEST COMPLETE ==========
         self.log.info("=" * 80)
@@ -2354,10 +1713,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         shard_rebalance_enabled = False
 
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites()
+        index_nodes = self.verify_prerequisites()
 
         # ========== STEP 2: Set indexer snapshot settings ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
 
         # ========== STEP 3: Enable shard-based rebalance if file mode ==========
         shard_rebalance_enabled = self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 3]")
@@ -2470,8 +1829,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             if not self.encrypt_all_buckets:
                 self.log.info("[STEP 7] Skipping file encryption validation — mixed encryption scenario")
             else:
-                expected_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
-                validation_passed = self._validate_file_encryption_with_key(
+                expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+                validation_passed = self.validate_file_encryption_with_key(
                     index_nodes,
                     expected_key_id=expected_key_ids,
                     step_prefix="[STEP 7] ",
@@ -2670,8 +2029,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 self.log.info("[STEP 10] Skipping file encryption validation — mixed encryption scenario")
             else:
                 final_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                expected_key_ids = self._get_indexer_in_use_key_ids(final_index_nodes)
-                validation_passed = self._validate_file_encryption_with_key(
+                expected_key_ids = self.get_indexer_in_use_key_ids(final_index_nodes)
+                validation_passed = self.validate_file_encryption_with_key(
                     final_index_nodes,
                     expected_key_id=expected_key_ids,
                     step_prefix="[STEP 10] ",
@@ -2740,10 +2099,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         shard_rebalance_enabled = False
 
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites()
+        index_nodes = self.verify_prerequisites()
 
         # ========== STEP 2: Set indexer snapshot settings ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
 
         # ========== STEP 3: Enable shard-based rebalance if file mode ==========
         shard_rebalance_enabled = self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 3]")
@@ -2850,8 +2209,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             if not self.encrypt_all_buckets:
                 self.log.info("[STEP 7] Skipping file encryption validation — mixed encryption scenario")
             else:
-                expected_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
-                validation_passed = self._validate_file_encryption_with_key(
+                expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+                validation_passed = self.validate_file_encryption_with_key(
                     index_nodes,
                     expected_key_id=expected_key_ids,
                     step_prefix="[STEP 7] ",
@@ -3090,8 +2449,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 self.log.info("[STEP 12] Skipping file encryption validation — mixed encryption scenario")
             else:
                 final_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                expected_key_ids = self._get_indexer_in_use_key_ids(final_index_nodes)
-                validation_passed = self._validate_file_encryption_with_key(
+                expected_key_ids = self.get_indexer_in_use_key_ids(final_index_nodes)
+                validation_passed = self.validate_file_encryption_with_key(
                     final_index_nodes,
                     expected_key_id=expected_key_ids,
                     step_prefix="[STEP 12] ",
@@ -3188,10 +2547,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         failed_over_node = None
 
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites()
+        index_nodes = self.verify_prerequisites()
 
         # ========== STEP 2: Set indexer snapshot settings ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
 
         # ========== STEP 3: Enable shard-based rebalance if file mode ==========
         shard_rebalance_enabled = self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 3]")
@@ -3208,7 +2567,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             # Identify encrypted vs non-encrypted bucket
             encrypted_bucket = bucket_names[0]
             non_encrypted_bucket = bucket_names[1]
-            encrypted_bucket_names = self._get_current_encrypted_bucket_names(bucket_names)
+            encrypted_bucket_names = self.get_current_encrypted_bucket_names(bucket_names)
             
             # Validate encryption states
             bucket_info = self.rest.get_bucket_json(encrypted_bucket)
@@ -3390,7 +2749,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 self.assertNotEqual(encryption_key_id, -1, f"Bucket '{non_encrypted_bucket}' should have encryption enabled")
                 self.log.info(f"[STEP 9.2] Bucket '{non_encrypted_bucket}' encryption enabled with key {encryption_key_id}")
 
-                encrypted_bucket_names = self._get_current_encrypted_bucket_names(bucket_names)
+                encrypted_bucket_names = self.get_current_encrypted_bucket_names(bucket_names)
                 self.log.info(f"[STEP 9] Updated encrypted_bucket_names after toggle: {encrypted_bucket_names}")
 
                 self.log.info("[STEP 9] PASSED - Encryption states toggled successfully")
@@ -3429,7 +2788,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 self.log.info(f"[STEP 11] Triggering index key rotation (wait={key_rotation_wait_time}s)...")
 
                 current_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-                baseline_key_ids = self._get_indexer_in_use_key_ids(current_index_nodes)
+                baseline_key_ids = self.get_indexer_in_use_key_ids(current_index_nodes)
                 self.log.info(f"[STEP 11] Baseline in-use key IDs: {baseline_key_ids}")
 
                 # Target the currently-encrypted bucket (updated in STEP 9 after toggle)
@@ -3445,7 +2804,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                             f"[STEP 11a] Pinning DEK rotation interval to {STABLE_INTERVAL_S}s "
                             f"on bucket '{rotation_bucket}'..."
                         )
-                        self._rotate_bucket_encryption_key(
+                        self.set_bucket_dek_rotation_config(
                             rotation_bucket, current_key_id,
                             dek_rotation_interval=STABLE_INTERVAL_S,
                             dek_lifetime=STABLE_INTERVAL_S
@@ -3457,7 +2816,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                             f"[STEP 11b] Setting DEK rotation interval to {ROTATION_INTERVAL_S}s "
                             f"to trigger first rotation..."
                         )
-                        self._rotate_bucket_encryption_key(
+                        self.set_bucket_dek_rotation_config(
                             rotation_bucket, current_key_id,
                             dek_rotation_interval=ROTATION_INTERVAL_S,
                             dek_lifetime=ROTATION_INTERVAL_S
@@ -3470,7 +2829,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                             f"[STEP 11c] Waiting {key_rotation_wait_time}s for index key rotation to occur"
                         )
 
-                        new_key_ids = self._get_indexer_in_use_key_ids(current_index_nodes)
+                        new_key_ids = self.get_indexer_in_use_key_ids(current_index_nodes)
                         self.log.info(f"[STEP 11] PASSED - Key rotation triggered. New key IDs: {new_key_ids}")
                     else:
                         self.log.warning(
@@ -3553,7 +2912,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 except Exception as toggle_err:
                     self.log.warning(f"[STEP 12.b] Toggle enable failed: {toggle_err}")
 
-                encrypted_bucket_names = self._get_current_encrypted_bucket_names(bucket_names)
+                encrypted_bucket_names = self.get_current_encrypted_bucket_names(bucket_names)
                 self.log.info(
                     f"[STEP 12] Updated encrypted_bucket_names after mid-rebalance toggle: {encrypted_bucket_names}"
                 )
@@ -3575,7 +2934,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 self.log.info("[STEP 13.5] Post-recovery encryption toggle + swap rebalance...")
 
                 # Determine current encryption state for each bucket
-                current_encrypted = set(self._get_current_encrypted_bucket_names(bucket_names))
+                current_encrypted = set(self.get_current_encrypted_bucket_names(bucket_names))
                 current_non_encrypted = [b for b in bucket_names if b not in current_encrypted]
                 self.log.info(
                     f"[STEP 13.5] Current encrypted: {sorted(current_encrypted)}, "
@@ -3601,7 +2960,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                         self.log.info(f"[STEP 13.5.b] Encryption enabled on '{bucket}'")
 
                 self.sleep(5, "[STEP 13.5] Waiting for encryption state changes to take effect")
-                encrypted_bucket_names = self._get_current_encrypted_bucket_names(bucket_names)
+                encrypted_bucket_names = self.get_current_encrypted_bucket_names(bucket_names)
                 self.log.info(f"[STEP 13.5] Updated encrypted_bucket_names after toggle: {encrypted_bucket_names}")
 
                 # Perform swap rebalance (remove last index node, add one spare)
@@ -3731,10 +3090,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         bucket2_name = None
 
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites()
+        index_nodes = self.verify_prerequisites()
 
         # ========== STEP 2: Set indexer snapshot settings and enable shard rebalance ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
         shard_rebalance_enabled = self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 2]")
 
         # ========== STEP 3: Create 2 encrypted buckets ==========
@@ -3744,12 +3103,12 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             # Create bucket1 with encryption
             bucket1_name = f"{self.test_bucket}_rotation"
             self.log.info(f"[STEP 3.1] Creating encrypted bucket '{bucket1_name}'...")
-            self._create_bucket_with_encryption(bucket1_name, enable_encryption=True)
+            self.create_bucket_with_encryption(bucket1_name, enable_encryption=True)
             
             # Create bucket2 with encryption (using a new key for expiry testing)
             bucket2_name = f"{self.test_bucket}_expiry"
             self.log.info(f"[STEP 3.2] Creating encrypted bucket '{bucket2_name}'...")
-            self._create_bucket_with_encryption(bucket2_name, enable_encryption=True)
+            self.create_bucket_with_encryption(bucket2_name, enable_encryption=True)
             
             # Load documents into both buckets
             for bucket_name in [bucket1_name, bucket2_name]:
@@ -3863,8 +3222,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                     raise
 
             # Validate file encryption (only for encrypted buckets)
-            expected_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
-            validation_passed = self._validate_file_encryption_with_key(
+            expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+            validation_passed = self.validate_file_encryption_with_key(
                 index_nodes,
                 expected_key_id=expected_key_ids,
                 step_prefix="[STEP 6] ",
@@ -3883,7 +3242,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             self.log.info("[STEP 7] Configuring concurrent key rotation and expiry...")
             
             # Capture baseline key IDs
-            baseline_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
+            baseline_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
             self.log.info(f"[STEP 7] Baseline in-use key IDs: {baseline_key_ids}")
             
             # Configure key rotation for bucket1
@@ -3892,7 +3251,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             if bucket1_key_id is not None and bucket1_key_id != -1:
                 self.log.info(f"[STEP 7.1] Setting DEK rotation on bucket '{bucket1_name}' "
                               f"with interval={key_rotation_interval}s")
-                self._rotate_bucket_encryption_key(
+                self.set_bucket_dek_rotation_config(
                     bucket1_name, bucket1_key_id,
                     dek_rotation_interval=key_rotation_interval,
                     dek_lifetime=key_expiry_interval_for_rotated_keys
@@ -3904,7 +3263,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             if bucket2_key_id is not None and bucket2_key_id != -1:
                 self.log.info(f"[STEP 7.2] Setting DEK expiry on bucket '{bucket2_name}' "
                               f"with interval={key_expiry_interval}s")
-                self._rotate_bucket_encryption_key(
+                self.set_bucket_dek_rotation_config(
                     bucket2_name, bucket2_key_id,
                     dek_rotation_interval=key_expiry_interval,
                     dek_lifetime=key_expiry_interval
@@ -3991,8 +3350,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
 
             # Validate file encryption with updated keys (only for encrypted buckets)
             updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            expected_key_ids = self._get_indexer_in_use_key_ids(updated_index_nodes)
-            validation_passed = self._validate_file_encryption_with_key(
+            expected_key_ids = self.get_indexer_in_use_key_ids(updated_index_nodes)
+            validation_passed = self.validate_file_encryption_with_key(
                 updated_index_nodes,
                 expected_key_id=expected_key_ids,
                 step_prefix="[STEP 9] ",
@@ -4087,9 +3446,9 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 11] Running final encryption validation...")
             final_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            expected_key_ids = self._get_indexer_in_use_key_ids(final_index_nodes)
+            expected_key_ids = self.get_indexer_in_use_key_ids(final_index_nodes)
 
-            validation_passed = self._validate_file_encryption_with_key(
+            validation_passed = self.validate_file_encryption_with_key(
                 final_index_nodes,
                 expected_key_id=expected_key_ids,
                 step_prefix="[STEP 11] ",
@@ -4166,10 +3525,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         self.log.info("=" * 80)
 
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites()
+        index_nodes = self.verify_prerequisites()
 
         # ========== STEP 2: Set indexer snapshot settings ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
 
         # ========== STEP 3: Enable shard-based rebalance if file mode ==========
         shard_rebalance_enabled = self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 3]")
@@ -4189,7 +3548,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 binfo = self.rest.get_bucket_json(bname)
                 kek_id = binfo.get('encryptionAtRestKeyId')
                 if kek_id and kek_id != -1:
-                    self._rotate_bucket_encryption_key(
+                    self.set_bucket_dek_rotation_config(
                         bname, kek_id,
                         dek_rotation_interval=STABLE_INTERVAL_S,
                         dek_lifetime=STABLE_INTERVAL_S
@@ -4259,7 +3618,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             raise
 
         # ========== STEP 7: Baseline scans + encryption validation ==========
-        baseline_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
+        baseline_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
         try:
             self.log.info("[STEP 7] Running baseline scans and file encryption validation...")
             query_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -4274,7 +3633,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             if not self.encrypt_all_buckets:
                 self.log.info("[STEP 7] Skipping file encryption validation — mixed encryption scenario")
             else:
-                validation_passed = self._validate_file_encryption_with_key(
+                validation_passed = self.validate_file_encryption_with_key(
                     index_nodes,
                     expected_key_id=baseline_key_ids,
                     step_prefix="[STEP 7] ",
@@ -4366,7 +3725,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                                 raise Exception(
                                     f"trigger_data_reencryption failed on '{bname}': {response}")
                             self.log.info(f"[DEK drop] Re-encryption triggered on '{bname}': {response}")
-                        dek_drop_result['new_key_ids'] = self._poll_for_new_indexer_key_ids(
+                        dek_drop_result['new_key_ids'] = self.poll_for_new_indexer_key_ids(
                             index_nodes, baseline_key_ids, timeout=600, label="[DEK drop] "
                         )
                     except Exception as ex:
@@ -4458,7 +3817,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                 self.sleep(120, "[STEP 9] Waiting 2 minutes for indexer recovery")
                 self.wait_until_indexes_online(timeout=600)
 
-                new_key_ids = self._poll_for_new_indexer_key_ids(
+                new_key_ids = self.poll_for_new_indexer_key_ids(
                     index_nodes, baseline_key_ids, timeout=300, label="[STEP 9] "
                 )
                 self.log.info(f"[STEP 9] PASSED - System stabilized; new DEK key IDs: {new_key_ids}")
@@ -4521,7 +3880,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                             self.log.info(f"[DEK drop] Re-encryption triggered on '{bname}': {response}")
                         # Poll using nodes that survive failover (all except the one being failed over)
                         surviving_nodes = [n for n in index_nodes if n.ip != failed_over_node.ip]
-                        dek_drop_result['new_key_ids'] = self._poll_for_new_indexer_key_ids(
+                        dek_drop_result['new_key_ids'] = self.poll_for_new_indexer_key_ids(
                             surviving_nodes, baseline_key_ids, timeout=600, label="[DEK drop] "
                         )
                     except Exception as ex:
@@ -4602,7 +3961,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                         raise Exception(f"trigger_data_reencryption failed on '{bname}': {response}")
                     self.log.info(f"[STEP 9] Re-encryption triggered on '{bname}': {response}")
 
-                new_key_ids = self._poll_for_new_indexer_key_ids(
+                new_key_ids = self.poll_for_new_indexer_key_ids(
                     surviving_nodes, baseline_key_ids, timeout=300, label="[STEP 9] "
                 )
                 self.log.info(f"[STEP 9] PASSED - DEKs dropped; new key IDs: {new_key_ids}")
@@ -4641,7 +4000,7 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                         raise Exception(f"trigger_data_reencryption failed on '{bname}': {response}")
                     self.log.info(f"[STEP 8] Re-encryption triggered on '{bname}': {response}")
 
-                new_key_ids = self._poll_for_new_indexer_key_ids(
+                new_key_ids = self.poll_for_new_indexer_key_ids(
                     index_nodes, baseline_key_ids, timeout=300, label="[STEP 8] "
                 )
                 self.log.info(f"[STEP 8] PASSED - DEKs dropped; new key IDs: {new_key_ids}")
@@ -4741,8 +4100,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
             else:
                 final_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
                 expected_key_ids = new_key_ids if new_key_ids \
-                    else self._get_indexer_in_use_key_ids(final_index_nodes)
-                validation_passed = self._validate_file_encryption_with_key(
+                    else self.get_indexer_in_use_key_ids(final_index_nodes)
+                validation_passed = self.validate_file_encryption_with_key(
                     final_index_nodes,
                     expected_key_id=expected_key_ids,
                     step_prefix="[FINAL-D] ",
@@ -4811,10 +4170,10 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
         shard_rebalance_enabled = False
 
         # ========== STEP 1: Verify prerequisites ==========
-        index_nodes = self._verify_prerequisites()
+        index_nodes = self.verify_prerequisites()
 
         # ========== STEP 2: Set indexer snapshot settings ==========
-        self._set_indexer_snapshot_settings(index_nodes)
+        self.set_indexer_snapshot_settings(index_nodes)
 
         # ========== STEP 3: Enable shard-based rebalance if file mode ==========
         shard_rebalance_enabled = self._enable_shard_rebalance_if_file_mode(step_prefix="[STEP 3]")
@@ -4908,8 +4267,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                     self.log.warning(f"[STEP 7] Baseline scan failed: {str(e)}")
                     raise
 
-            expected_key_ids = self._get_indexer_in_use_key_ids(index_nodes)
-            validation_passed = self._validate_file_encryption_with_key(
+            expected_key_ids = self.get_indexer_in_use_key_ids(index_nodes)
+            validation_passed = self.validate_file_encryption_with_key(
                 index_nodes,
                 expected_key_id=expected_key_ids,
                 step_prefix="[STEP 7] ",
@@ -4966,8 +4325,8 @@ class GSIEncryptionAtRest(BaseSecondaryIndexingTests):
                     raise
 
             updated_index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
-            expected_key_ids = self._get_indexer_in_use_key_ids(updated_index_nodes)
-            validation_passed = self._validate_file_encryption_with_key(
+            expected_key_ids = self.get_indexer_in_use_key_ids(updated_index_nodes)
+            validation_passed = self.validate_file_encryption_with_key(
                 updated_index_nodes,
                 expected_key_id=expected_key_ids,
                 step_prefix="[STEP 9] ",

@@ -3356,6 +3356,19 @@ class RestConnection(object):
         status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
         return status, json_parsed
 
+    def force_bucket_encryption_at_rest(self, bucket):
+        """
+        POST :: controller/forceEncryptionAtRest/bucket/<bucket>
+        Force immediate re-encryption of all existing index files for the given bucket
+        using the currently active DEK. Useful after enabling encryption on a bucket
+        that already has index files on disk, to encrypt those pre-existing files
+        without waiting for normal compaction to rewrite them.
+        """
+        api = self.baseUrl + 'controller/forceEncryptionAtRest/bucket/' + str(bucket)
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
+        return status, json_parsed
+
     def configure_config_encryption_at_rest(self, params):
         """
         POST :: /settings/security/encryptionAtRest/config
