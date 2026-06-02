@@ -23,13 +23,12 @@ import hashlib
 import itertools
 import json
 import os
-import random
 import re
-import string
 import threading
 import time
 
 from couchbase_helper.query_definitions import QueryDefinition
+from lib.membase.api.rest_client import RestConnection
 from pytests.gsi.base_gsi import BaseSecondaryIndexingTests
 from pytests.tuqquery.n1ql_encryption_helpers import N1QLEncryptionHelpers
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -2002,6 +2001,97 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"rlstream file sizes at end: {rlstream_sizes}"
             )
 
+     # -------------------------------------------------------------------------
+    # FTS scan-backfill helpers
+    # -------------------------------------------------------------------------
+
+    def _build_fts_collection_index_payload(self, index_name, bucket, scope, collection):
+        """Build a minimal collection-scoped FTS index payload with dynamic
+        mapping. Indexes every field of every document in
+        `<scope>.<collection>` so any text query against a populated field
+        returns hits."""
+        type_key = f"{scope}.{collection}"
+        return {
+            "name": index_name,
+            "type": "fulltext-index",
+            "sourceType": "couchbase",
+            "sourceName": bucket,
+            "sourceParams":  {
+                "scopeParams": {
+                    "name": scope,
+                    "collections": [{"name": collection}],
+                },
+            },
+            "planParams": {
+                "maxPartitionsPerPIndex": 1024,
+                "indexPartitions": 1,
+            },
+            "params": {
+                "doc_config": {
+                    "mode": "scope.collection.type_field",
+                    "type_field": "type",
+                },
+                "mapping": {
+                    "analysis": {},
+                    "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "default_mapping": {
+                        "enabled": False,
+                        "dynamic": True,
+                    },
+                    "default_type": "_default",
+                    "index_dynamic": True,
+                    "store_dynamic": False,
+                    "type_field": "_type",
+                    "types": {
+                        type_key: {
+                            "enabled": True,
+                            "dynamic": True,
+                            "default_analyzer": "standard",
+                        }
+                    },
+                },
+                "store": {
+                    "indexType": "scorch",
+                    "kvStoreName": "",
+                },
+            },
+        }
+
+    def _wait_for_fts_index_ready(self, index_name, bucket, scope, expected_docs,
+                                   timeout=600, label=""):
+        """Poll the FTS index doc count until it reaches `expected_docs` or
+        times out. Uses `rest.get_fts_index_doc_count` which hits
+        `<fts>/api/index/<name>/count`."""
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        fts_rest = RestConnection(fts_nodes[0])
+        indexed = fts_rest.get_fts_index_doc_count(
+            name=index_name, bucket=bucket, scope=scope)
+        deadline = time.time() + timeout
+        indexed = 0
+        while time.time() < deadline:
+            try:
+                indexed = fts_rest.get_fts_index_doc_count(
+                    name=index_name, bucket=bucket, scope=scope
+                )
+            except Exception as e:
+                self.log.warning(f"{label}get_fts_index_doc_count raised: {e}")
+                indexed = 0
+            if indexed >= expected_docs:
+                self.log.info(
+                    f"{label}FTS index '{index_name}' indexed {indexed}/{expected_docs} docs"
+                )
+                return indexed
+            self.log.info(
+                f"{label}FTS index '{index_name}' progress: {indexed}/{expected_docs}"
+            )
+            time.sleep(5)
+        raise AssertionError(
+            f"{label}FTS index '{index_name}' did not index {expected_docs} docs "
+            f"within {timeout}s (last count: {indexed})"
+        )
+
     # -------------------------------------------------------------------------
     # Tests
     # -------------------------------------------------------------------------
@@ -3563,7 +3653,6 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         try:
             self.log.info("[STEP 5] Logging Round 1 FFDC file states (informational, race window)...")
-            node_map = {node.ip: node for node in query_nodes}
             for node in query_nodes:
                 log_path = self.encryption_helper.get_log_path(node)
                 shell = RemoteMachineShellConnection(node, verbose=False)
@@ -4285,7 +4374,6 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 "[STEP 9] Verifying ALL current rlstream.* files are encrypted "
                 "(no partial-write survivors)..."
             )
-            node_map = {node.ip: node for node in query_nodes}
             failures = []
             copied_files = []
             for node in query_nodes:
@@ -7710,4 +7798,352 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         self.log.info("=" * 80)
         self.log.info("TEST PASSED: test_query_scan_backfill_files_encrypted")
+        self.log.info("=" * 80)
+
+
+
+    def test_fts_search_backfill_files_encrypted(self):
+        """
+        Verify FTS scan-backfill files written by the query service's n1fty
+        response handler are encrypted at rest, and that SEARCH() results are
+        identical with BUCKET encryption at rest enabled vs disabled.
+
+        n1fty buffers FTS hits in memory while streaming them from the FTS
+        service back to the query engine. When the consumer drains the buffer
+        slower than it fills (large `size`, small `scan_cap`), the surplus is
+        spilled to disk inside `queryTmpSpaceDir` — the same directory used
+        by GSI scan-backfill and the seq-scan spill paths. These backfill
+        files share the bucket KEK with the GSI scan-backfill files, so the
+        same watcher / snapshot / encryption-validation helpers apply.
+
+        Steps:
+        1.  Prerequisites — bucket KEK id captured
+        2.  Bucket + collection loaded with N Hotel docs
+        3.  Create dynamic collection-level FTS index; wait for indexing
+        4.  Capture queryTmpSpaceDir + query nodes
+        --- ENCRYPTION OFF RUN ---
+        5.  Disable bucket encryption at rest
+        6.  Run SEARCH() with from=0,size=10000,scan_cap=10 → baseline hash
+        --- ENCRYPTION ON RUN ---
+        7.  Re-enable bucket encryption at rest
+        8.  Capture expected key IDs (the bucket KEK id)
+        9.  Start remote spill-file watcher
+        10. Run SEARCH() in background with scan_cap=10
+        11. Stop watcher; validate snapshotted backfill files are
+            encrypted (warn-only if zero captured)
+        12. Compare baseline vs encrypted result hashes
+        13. Cleanup
+        """
+        self.log.info("=" * 80)
+        self.log.info("STARTING TEST: test_fts_search_backfill_files_encrypted")
+        self.log.info("=" * 80)
+
+        num_docs = self.input.param("num_fts_backfill_docs", 10000)
+        scan_cap = self.input.param("fts_backfill_scan_cap", 10)
+        search_size = self.input.param("fts_search_size", 10000)
+        fts_index_name = self.input.param("fts_backfill_index_name", "ix_fts_backfill")
+
+        # ========== STEP 1: Verify prerequisites ==========
+        try:
+            self.log.info("[STEP 1] Verifying bucket encryption at rest prerequisites...")
+            if not getattr(self, "enable_encryption_at_rest", False):
+                self.skipTest(
+                    "Bucket encryption at rest not enabled. "
+                    "Set enable_encryption_at_rest=True in the conf row."
+                )
+            kek_id = getattr(self, "encryption_at_rest_id", None)
+            self.assertIsNotNone(
+                kek_id,
+                "self.encryption_at_rest_id is None — base class did not set up a KEK"
+            )
+            fts_nodes = self.get_nodes_from_services_map(
+                service_type="fts", get_all_nodes=True
+            )
+            self.assertTrue(
+                fts_nodes,
+                "No FTS service nodes in cluster — add 'fts' to services_init"
+            )
+            self.log.info(
+                f"[STEP 1] PASSED - bucket encryption KEK id: {kek_id}, "
+                f"fts nodes: {[n.ip for n in fts_nodes]}"
+            )
+        except Exception as e:
+            self.log.error(f"[STEP 1] FAILED: {e}")
+            raise
+
+        snap_dir = None
+        fts_index_created = False
+        scope_name = f"{self.scope_prefix}_1"
+        collection_name = f"{self.collection_prefix}_1"
+        try:
+            # ========== STEP 2: Bucket + collection + Hotel data ==========
+            try:
+                self.log.info(f"[STEP 2] Creating bucket and loading {num_docs} Hotel docs...")
+                self.bucket_params = self._create_bucket_params(
+                    server=self.master,
+                    size=self.bucket_size,
+                    replicas=self.num_replicas,
+                    bucket_type=self.bucket_type,
+                    enable_replica_index=self.enable_replica_index,
+                    eviction_policy=self.eviction_policy,
+                    lww=self.lww
+                )
+                self.cluster.create_standard_bucket(
+                    name=self.test_bucket, port=11222, bucket_params=self.bucket_params
+                )
+                self.sleep(10, "Waiting after bucket creation")
+
+                self.prepare_collection_for_indexing(
+                    num_scopes=1,
+                    num_collections=1,
+                    num_of_docs_per_collection=num_docs,
+                    json_template="Hotel",
+                    bucket_name=self.test_bucket
+                )
+                self.assertTrue(len(self.namespaces) > 0, "No namespaces created")
+                namespace = self.namespaces[0]
+                self.log.info(
+                    f"[STEP 2] PASSED - namespace: {namespace} "
+                    f"(scope={scope_name}, collection={collection_name})"
+                )
+            except Exception as e:
+                self.log.error(f"[STEP 2] FAILED: {e}")
+                raise
+
+            # ========== STEP 3: Create FTS index over the collection ==========
+            try:
+                self.log.info(
+                    f"[STEP 3] Creating FTS index '{fts_index_name}' over "
+                    f"{self.test_bucket}.{scope_name}.{collection_name}..."
+                )
+                payload = self._build_fts_collection_index_payload(
+                    index_name=fts_index_name,
+                    bucket=self.test_bucket,
+                    scope=scope_name,
+                    collection=collection_name,
+                )
+                status, _ = self.rest.create_fts_index(
+                    index_name=fts_index_name,
+                    params=payload,
+                    bucket=self.test_bucket,
+                    scope=scope_name,
+                )
+                self.assertTrue(status, "FTS index creation failed")
+                fts_index_created = True
+                self._wait_for_fts_index_ready(
+                    index_name=fts_index_name,
+                    bucket=self.test_bucket,
+                    scope=scope_name,
+                    expected_docs=num_docs,
+                    label="[STEP 3] ",
+                )
+                self.log.info("[STEP 3] PASSED - FTS index ready")
+            except Exception as e:
+                self.log.error(f"[STEP 3] FAILED: {e}")
+                raise
+
+            # ========== STEP 4: Capture queryTmpSpaceDir + query nodes ==========
+            try:
+                self.log.info("[STEP 4] Capturing queryTmpSpaceDir + query nodes...")
+                status, query_settings = self.rest.get_query_settings(self.master)
+                self.assertTrue(status, f"querySettings fetch failed: {query_settings}")
+                spill_dir = query_settings.get("queryTmpSpaceDir") or query_settings.get("tmpSpaceDir")
+                self.assertIsNotNone(
+                    spill_dir,
+                    f"Could not find queryTmpSpaceDir in querySettings: {query_settings}"
+                )
+                query_nodes = self.get_nodes_from_services_map(
+                    service_type="n1ql", get_all_nodes=True
+                )
+                self.log.info(f"[STEP 4] PASSED - tmp directory: {spill_dir}")
+            except Exception as e:
+                self.log.error(f"[STEP 4] FAILED: {e}")
+                raise
+
+            # Build a SEARCH() query against the collection. match_all returns
+            # every indexed document, so size=10000 over a 10k-doc collection
+            # is guaranteed to return 10k hits — driving the n1fty response
+            # buffer past `scan_cap=10` and forcing backfill to disk.
+            search_request = {
+                "query": {"match_all": {}},
+                "from": 0,
+                "size": search_size,
+            }
+            search_query = (
+                f"SELECT meta().id AS id FROM {namespace} "
+                f"WHERE SEARCH({collection_name}, {json.dumps(search_request)})"
+            )
+            scan_params = {"scan_cap": scan_cap}
+
+            def _hash_results(rows):
+                ordered = sorted(rows, key=lambda r: r.get("id"))
+                return hashlib.sha256(
+                    json.dumps(ordered, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+
+            # ---------- ENCRYPTION OFF: baseline run ----------
+            # ========== STEP 5: Disable encryption ==========
+            try:
+                self.log.info("[STEP 5] Disabling bucket encryption at rest for baseline run...")
+                self._disable_bucket_encryption_at_rest(self.test_bucket, label="[STEP 5] ")
+                self.log.info("[STEP 5] PASSED")
+            except Exception as e:
+                self.log.error(f"[STEP 5] FAILED: {e}")
+                raise
+
+            # ========== STEP 6: Baseline SEARCH ==========
+            try:
+                self._set_query_log_level("debug", label="[STEP 6] ")
+                self.log.info(
+                    f"[STEP 6] Baseline SEARCH (encryption off), scan_cap={scan_cap}: {search_query}"
+                )
+                baseline_result = self.run_cbq_query(
+                    query=search_query, query_params=scan_params
+                )
+                self._set_query_log_level("info", label="[STEP 6] ")
+                self.assertEqual(
+                    baseline_result.get("status"), "success",
+                    f"Baseline SEARCH failed: {baseline_result}"
+                )
+                baseline_rows = baseline_result.get("results", [])
+                baseline_hash = _hash_results(baseline_rows)
+                self.assertEqual(
+                    len(baseline_rows), num_docs,
+                    f"Baseline SEARCH returned {len(baseline_rows)} hits, "
+                    f"expected {num_docs} — index may not be fully populated"
+                )
+                self.log.info(
+                    f"[STEP 6] PASSED - hash={baseline_hash} rows={len(baseline_rows)}"
+                )
+            except Exception as e:
+                self.log.error(f"[STEP 6] FAILED: {e}")
+                raise
+
+            # ---------- ENCRYPTION ON: validated run ----------
+            # ========== STEP 7: Re-enable encryption ==========
+            try:
+                self.log.info("[STEP 7] Re-enabling bucket encryption at rest...")
+                self._enable_bucket_encryption_at_rest(self.test_bucket, kek_id, label="[STEP 7] ")
+                self.log.info("[STEP 7] PASSED")
+            except Exception as e:
+                self.log.error(f"[STEP 7] FAILED: {e}")
+                raise
+
+            # ========== STEP 8: Capture expected key IDs ==========
+            try:
+                self.log.info("[STEP 8] Capturing expected encryption key IDs...")
+                expected_key_ids = [str(kek_id)]
+                self.log.info(f"[STEP 8] PASSED - key IDs: {expected_key_ids}")
+            except Exception as e:
+                self.log.error(f"[STEP 8] FAILED: {e}")
+                raise
+
+            # ========== STEP 9: Start watcher ==========
+            # n1fty's response handler writes backfill files into the same
+            # queryTmpSpaceDir used by GSI scan-backfill. The exact filename
+            # prefix is not contractually fixed, so leave file_prefix empty
+            # to capture any new file in the directory.
+            try:
+                self.log.info("[STEP 9] Starting remote spill-file watcher on every query node...")
+                snap_dir = self._start_remote_spill_watcher(
+                    query_nodes, spill_dir, label="[STEP 9] ", file_prefix=""
+                )
+                self.log.info(f"[STEP 9] PASSED - snapshot directory: {snap_dir}")
+            except Exception as e:
+                self.log.error(f"[STEP 9] FAILED: {e}")
+                raise
+
+            # ========== STEP 10: Run SEARCH in background ==========
+            scan_result_container = {}
+            try:
+                self._set_query_log_level("debug", label="[STEP 10] ")
+                self.log.info("[STEP 10] Launching background SEARCH...")
+
+                def _run_search():
+                    try:
+                        scan_result_container["result"] = self.run_cbq_query(
+                            query=search_query, query_params=scan_params
+                        )
+                    except Exception as ex:
+                        scan_result_container["error"] = ex
+                        self.log.warning(f"[STEP 10] Background SEARCH raised: {ex}")
+
+                bg_thread = threading.Thread(
+                    target=_run_search, daemon=True, name="bg-fts-backfill-search"
+                )
+                bg_thread.start()
+                self.log.info("[STEP 10] PASSED")
+            except Exception as e:
+                self.log.error(f"[STEP 10] FAILED: {e}")
+                raise
+
+            # ========== STEP 11: Wait, stop watcher, validate snapshots ==========
+            try:
+                self.log.info("[STEP 11] Waiting for background SEARCH to finish...")
+                bg_thread.join(timeout=900)
+                self._set_query_log_level("info", label="[STEP 11] ")
+                self.assertFalse(
+                    bg_thread.is_alive(),
+                    "[STEP 11] Background SEARCH did not finish within 900 s"
+                )
+                if "error" in scan_result_container:
+                    raise scan_result_container["error"]
+                encrypted_result = scan_result_container.get("result", {})
+                self.assertEqual(
+                    encrypted_result.get("status"), "success",
+                    f"Encrypted SEARCH failed: {encrypted_result}"
+                )
+
+                self._stop_remote_spill_watcher(
+                    query_nodes, snap_dir, label="[STEP 11] "
+                )
+                self._assert_remote_spill_snapshots_encrypted(
+                    query_nodes, snap_dir, expected_key_ids, label="[STEP 11] "
+                )
+                self.log.info("[STEP 11] PASSED")
+            except Exception as e:
+                self.log.error(f"[STEP 11] FAILED: {e}")
+                raise
+
+            # ========== STEP 12: Compare result hashes ==========
+            try:
+                self.log.info("[STEP 12] Comparing encrypted-run result hash to baseline...")
+                encrypted_rows = encrypted_result.get("results", [])
+                encrypted_hash = _hash_results(encrypted_rows)
+                self.assertEqual(
+                    encrypted_hash, baseline_hash,
+                    f"SEARCH result hash diverged with encryption: "
+                    f"baseline={baseline_hash} ({len(baseline_rows)} rows) vs "
+                    f"encrypted={encrypted_hash} ({len(encrypted_rows)} rows). "
+                    f"Encryption at rest must not alter SEARCH semantics."
+                )
+                self.log.info(
+                    f"[STEP 12] PASSED - result hashes match: {encrypted_hash} "
+                    f"({len(encrypted_rows)} rows)"
+                )
+            except Exception as e:
+                self.log.error(f"[STEP 12] FAILED: {e}")
+                raise
+        finally:
+            # ========== STEP 13: Cleanup ==========
+            if snap_dir:
+                self.log.info("[STEP 13] Cleaning up snapshot dirs on every node...")
+                self._cleanup_remote_spill_snapshots(query_nodes, snap_dir)
+            if fts_index_created:
+                try:
+                    self.log.info(f"[STEP 13] Deleting FTS index '{fts_index_name}'...")
+                    self.rest.delete_fts_index(
+                        name=fts_index_name,
+                        bucket=self.test_bucket,
+                        scope=scope_name,
+                    )
+                except Exception as e:
+                    self.log.warning(f"[STEP 13] Failed to delete FTS index: {e}")
+            try:
+                self._enable_bucket_encryption_at_rest(self.test_bucket, kek_id, label="[STEP 13] ")
+            except Exception as e:
+                self.log.warning(f"[STEP 13] Defensive encryption re-enable failed: {e}")
+
+        self.log.info("=" * 80)
+        self.log.info("TEST PASSED: test_fts_search_backfill_files_encrypted")
         self.log.info("=" * 80)

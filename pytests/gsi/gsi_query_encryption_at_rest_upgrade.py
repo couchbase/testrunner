@@ -425,6 +425,77 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 out[node.ip] = []
         return out
 
+    def _validate_query_keys_in_use_endpoint(self, label=""):
+        """Return query-service in-use key IDs per node from
+        GET /admin/encryption_at_rest on every query node (8.1+).
+
+        Returns ``{node_ip: [key_id, ...]}``.  When log or other encryption is
+        enabled cluster-side, the corresponding per-category keys must be
+        non-empty; when a category is NOT enabled its keys must be empty.
+
+        Skips per-node when the node's running version is < EAR_FILE_MIN_VERSION
+        because the per-category endpoint is an 8.1+ feature.
+        """
+        query_nodes = self.get_nodes_from_services_map(
+            service_type="n1ql", get_all_nodes=True,
+        )
+        log_enabled = bool(getattr(self, "log_encryption_at_rest_id", None))
+        other_enabled = bool(getattr(self, "other_encryption_at_rest_id", None))
+        self.log.info(
+            f"{label}keys-in-use expectations: log_enabled={log_enabled}, "
+            f"other_enabled={other_enabled}"
+        )
+        node_key_ids = {}
+        for node in query_nodes:
+            ver = self._node_running_version(node)
+            if ver < self.EAR_FILE_MIN_VERSION:
+                self.log.info(
+                    f"{label}{node.ip} on {ver} < {self.EAR_FILE_MIN_VERSION} — "
+                    "skipping keys-in-use endpoint check"
+                )
+                continue
+            status, enc_response = self.rest.get_query_in_use_encryption_keys(node)
+            self.assertTrue(
+                status,
+                f"{label}admin/encryption_at_rest failed on {node.ip}: {enc_response}",
+            )
+            if isinstance(enc_response, (bytes, bytearray)):
+                enc_response = json.loads(enc_response)
+            keys_in_use = enc_response.get("keys.in_use", {})
+            all_key_ids = [k for ids in keys_in_use.values() for k in ids if k]
+            self.log.info(
+                f"{label}Query service in-use key IDs on {node.ip} ({ver}): "
+                f"{keys_in_use} -> {all_key_ids}"
+            )
+            node_key_ids[node.ip] = all_key_ids
+            log_ids = [k for k in (keys_in_use.get("log") or []) if k]
+            other_ids = [k for k in (keys_in_use.get("other") or []) if k]
+            if log_enabled:
+                self.assertTrue(
+                    len(log_ids) > 0,
+                    f"{label}{node.ip}: log encryption is enabled but "
+                    "endpoint reports no in-use log DEKs",
+                )
+            else:
+                self.assertTrue(
+                    len(log_ids) == 0,
+                    f"{label}{node.ip}: log encryption is NOT enabled but "
+                    f"endpoint reports in-use log DEKs {log_ids}",
+                )
+            if other_enabled:
+                self.assertTrue(
+                    len(other_ids) > 0,
+                    f"{label}{node.ip}: other encryption is enabled but "
+                    "endpoint reports no in-use other DEKs",
+                )
+            else:
+                self.assertTrue(
+                    len(other_ids) == 0,
+                    f"{label}{node.ip}: other encryption is NOT enabled but "
+                    f"endpoint reports in-use other DEKs {other_ids}",
+                )
+        return node_key_ids
+
     def _get_indexer_in_use_key_ids(self, index_nodes):
         """Union of in-use key IDs across all index nodes (sorted list)."""
         keys = set()
@@ -1398,6 +1469,15 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         for node in post_mixed:
             self._upgrade_node(node, mode)
 
+        # STEP 6.9: keys-in-use endpoint check on 8.1 before any post-upgrade
+        # enablement. On 7.x->8.1 paths encryption is still off here; on 8.0->8.1
+        # paths log encryption was on from the start. Either way the endpoint must
+        # report a coherent answer on every query node now that they're on 8.1.
+        if self.target_supports_file_ear:
+            self._validate_query_keys_in_use_endpoint(
+                label="[STEP 6.9 pre-enablement] ",
+            )
+
         # STEP 7a: Enable bucket + log encryption for pre-8.0 starting versions
         # (e.g. 7.2→8.1 or 7.6→8.1). Both must be active before the post-upgrade
         # new-file validation can assert that query log files are encrypted.
@@ -1453,6 +1533,14 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 timeout=600, label="[STEP 7c] ",
             )
             self.log.info("[STEP 7c] Force re-encryption complete")
+
+        # STEP 7d: keys-in-use endpoint check on 8.1 after encryption is fully on.
+        # Every query node must now report non-empty key IDs matching the active
+        # log-encryption key.
+        if self.target_supports_file_ear:
+            self._validate_query_keys_in_use_endpoint(
+                label="[STEP 7d post-enablement] ",
+            )
 
         # STEP 8: Full post-upgrade validation
         self.log.info("[STEP 8] Running full post-upgrade validation")

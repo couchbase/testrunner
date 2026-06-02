@@ -46,6 +46,11 @@ class GSIEncryptionHelpers:
     )
     _IDENT_RE = re.compile(r"`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*)")
     _NAME_BLOCKLIST = {"", "default", "_default", "meta", "id", "self"}
+    _BUCKET_KEY_TAG_RE = re.compile(
+        r"^\{service_bucket\s+"
+        r"([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+        r"\}$"
+    )
 
 
     def __init__(self, log):

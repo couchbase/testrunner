@@ -113,6 +113,7 @@ class QueryTests(BaseTestCase):
     def tearDown(self):
         if not self.capella_run:
             self.check_gsi_logs_for_panic()
+            self.check_gsi_logs_for_corruption()
         if hasattr(self, 'n1ql_helper'):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
                 self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -213,9 +214,6 @@ class QueryTests(BaseTestCase):
     def generate_ops(self, docs_per_day, start=0, method=None):
         gen_docs_map = {}
         for key in list(self.ops_dist_map.keys()):
-            isShuffle = False
-            if key == "update":
-                isShuffle = True
             if self.dataset != "bigdata":
                 gen_docs_map[key] = method(docs_per_day=self.ops_dist_map[key]["end"],
                                            start=self.ops_dist_map[key]["start"])
@@ -352,3 +350,41 @@ class QueryTests(BaseTestCase):
                     fail_test = True
         if fail_test:
             raise Exception("Panic seen in projector/indexer")
+
+    def check_gsi_logs_for_corruption(self):
+        """ Checks for corruption/fatal errors in indexer logs only
+        """
+        self.generate_map_nodes_out_dist()
+        fail_test = False
+        indexers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        strings_to_monitor = ["Storage corrupted and unrecoverable", "corruption", "fatal"]
+        if not indexers:
+            return None
+        for server in indexers:
+            if server in self.nodes_out_list:
+                continue
+            shell = RemoteMachineShellConnection(server)
+            try:
+                status, log_dir = RestConnection(server).diag_eval(
+                    'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                if not status:
+                    self.log.warning(f'diag_eval failed on {server.ip}: {log_dir}')
+                    continue
+                indexer_log = str(log_dir) + '/indexer.log*'
+                for string in strings_to_monitor:
+                    if string == "fatal":
+                        cmd = "zgrep -i \"{0}\" {1} | grep -iv \"fatal remote\" | wc -l".format(string, indexer_log)
+                    else:
+                        cmd = "zgrep -i \"{0}\" {1} | wc -l".format(string, indexer_log)
+                    count, err = shell.execute_command(cmd)
+                    if isinstance(count, list):
+                        count = int(count[0])
+                    else:
+                        count = int(count)
+                    if count > 0:
+                        self.log.info("===== {0} OBSERVED IN INDEXER LOGS ON SERVER {1}=====".format(string, server.ip))
+                        fail_test = True
+            finally:
+                shell.disconnect()
+        if fail_test:
+            raise Exception("Corruption/fatal error seen in indexer logs")
