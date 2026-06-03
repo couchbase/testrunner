@@ -1,5 +1,10 @@
 #!/bin/bash
 
+cleanup_workspace() {
+  # Remove any installers downloaded locally
+  rm -rf *.deb *.rpm *.msi
+}
+
 support_ver="6.5"
 small_ver=${version_number:0:3}
 host_ip=$(hostname -I | awk '{print $1}')
@@ -190,6 +195,7 @@ if [ $status -ne 0 ]; then
       ${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --install_failure || true
     fi
   fi
+  cleanup_workspace
   exit 1
 fi
 
@@ -248,3 +254,5 @@ if [ ${rerun_job} == true ]; then
   echo "${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --run_params=${parameters}"
   ${py_executable} scripts/rerun_jobs.py ${version_number} --executor_jenkins_job --run_params=${parameters} || true
 fi
+
+cleanup_workspace
