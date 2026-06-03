@@ -140,7 +140,7 @@ def get_servers_cloud(options, descriptor, how_many, is_addl_pool, os_version,
         ssh_key_path = OS.environ.get("AWS_SSH_KEY")
         return cloud_provision.aws_get_servers(
             descriptor, how_many, os_version, type, ssh_key_path,
-            options.architecture), None
+            options.architecture, gpu_count=int(options.gpu_count)), None
     elif options.serverType == GCP:
         ssh_key_path = OS.environ.get("GCP_SSH_KEY")
         return cloud_provision.gcp_get_servers(
@@ -573,6 +573,10 @@ def main():
     parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
     parser.add_option('--job_params', dest='job_params', default=None)
     parser.add_option('--architecture', dest='architecture', default=DEFAULT_ARCHITECTURE)
+    parser.add_option('--gpu-count', dest='gpu_count', default=0,
+                      help='Number of GPU-enabled nodes to provision (AWS only). '
+                           'These nodes are appended at the end of the returned list '
+                           'so they map to the F slot(s) in cluster=D,D,D,D,F confs.')
     parser.add_option('--capella_url', dest='capella_url', default=None)
     parser.add_option('--capella_user', dest='capella_user', default=None)
     parser.add_option('--capella_password', dest='capella_password', default=None)
