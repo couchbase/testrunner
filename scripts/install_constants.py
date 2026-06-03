@@ -80,7 +80,7 @@ DEFAULT_NONROOT_CLI_PATH = \
         "WINDOWS_SERVER": DEFAULT_NONROOT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
     }
 
-WGET_CMD = "cd {0}; wget -Nq -O {1} {2}"
+WGET_CMD = "cd {0}; wget -q -O {1} {2}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 LOCAL_BUILD_SIZE_CMD = "cd {} && wc -c {}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
@@ -459,9 +459,9 @@ WAIT_TIMES = {
     "deb": {
         "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
+        "install": (20, "Waiting {0}s for install to complete on {1}..", 600),
         "pre_install": (0, "No need to wait after pre install commands", 0),
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 300),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
 
     },
@@ -483,9 +483,9 @@ WAIT_TIMES = {
     "rpm": {
         "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
+        "install": (20, "Waiting {0}s for install to complete on {1}..", 600),
         "pre_install": (0, "No need to wait after pre install commands", 0),
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 300),
         "pre_install": (20, "Waiting {0}s to remove previous yum repo on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }

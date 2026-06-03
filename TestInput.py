@@ -516,6 +516,12 @@ class TestInputParser():
                         server.internal_ip = config.get(section, option)
                     if option == 'services':
                         server.services = config.get(section, option)
+                    if option == 'data_path':
+                        server.data_path = config.get(section, option)
+                    if option == 'index_path':
+                        server.index_path = config.get(section, option)
+                    if option == 'cbas_path':
+                        server.cbas_path = config.get(section, option)
                     if option == 'n1ql_port':
                         server.n1ql_port = config.get(section, option)
                     if option == 'index_port':
