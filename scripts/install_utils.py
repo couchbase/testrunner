@@ -9,7 +9,7 @@ from couchbase_helper.cluster import Cluster
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from remote.remote_util import RemoteMachineShellConnection
 from membase.api.on_prem_rest_client import RestHelper
 from membase.api.rest_client import RestConnection
 import install_constants
@@ -188,7 +188,65 @@ class NodeHelper:
             self.node.ssh_username = "nonroot"
             self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
 
+    def disable_unattended_upgrades(self, grace=120):
+        """Stop and disable apt-daily timers + unattended-upgrades on deb hosts
+        so they don't race with our install. Waits up to `grace` seconds for any
+        in-flight upgrade to exit on its own; SIGKILLs it after that and recovers
+        dpkg state via `dpkg --configure -a`. No-op on non-deb."""
+        if self.info.deliverable_type != "deb":
+            return
+        log.info("Disabling unattended-upgrades on {0}".format(self.ip))
+        stop_cmd = (
+            "systemctl stop apt-daily.timer apt-daily-upgrade.timer "
+            "unattended-upgrades.service 2>/dev/null; "
+            "systemctl disable apt-daily.timer apt-daily-upgrade.timer "
+            "unattended-upgrades.service 2>/dev/null; "
+            "true"
+        )
+        try:
+            self.shell.execute_command(stop_cmd, debug=self.params["debug_logs"])
+        except Exception as e:
+            log.warning("disable_unattended_upgrades(stop): {0} on {1}".format(e, self.ip))
+
+        iters = max(1, grace // 5)
+        wait_cmd = (
+            "for i in $(seq 1 {0}); do "
+            "  pgrep -f unattended-upgr >/dev/null 2>&1 || exit 0; "
+            "  sleep 5; "
+            "done; exit 1"
+        ).format(iters)
+        try:
+            self.shell.execute_command(wait_cmd, debug=self.params["debug_logs"])
+        except Exception as e:
+            log.warning("disable_unattended_upgrades(wait): {0} on {1}".format(e, self.ip))
+
+        recover_cmd = (
+            "flag=clean; "
+            "if pgrep -f unattended-upgr >/dev/null 2>&1; then "
+            "  pkill -9 -f unattended-upgr 2>/dev/null; "
+            "  sleep 2; flag=killed; "
+            "fi; "
+            "if fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1 "
+            "   || pgrep -x dpkg >/dev/null 2>&1; then "
+            "  echo dpkg-busy; exit 1; "
+            "fi; "
+            "rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
+            "      /var/cache/apt/archives/lock; "
+            "DEBIAN_FRONTEND=noninteractive dpkg --configure -a 2>/dev/null; "
+            "echo $flag"
+        )
+        try:
+            o, _ = self.shell.execute_command(recover_cmd, debug=self.params["debug_logs"])
+        except Exception as e:
+            log.warning("disable_unattended_upgrades(recover): {0} on {1}".format(e, self.ip))
+            return
+        if any("killed" in line for line in (o or [])):
+            log.warning("Force-killed unattended-upgr on {0} and recovered dpkg state".format(self.ip))
+        else:
+            log.info("unattended-upgr exited cleanly on {0}".format(self.ip))
+
     def pre_install_cb(self):
+        self.disable_unattended_upgrades()
         if self.actions_dict[self.info.deliverable_type]["pre_install"]:
             cmd = self.actions_dict[self.info.deliverable_type]["pre_install"]
             duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["pre_install"]
@@ -235,6 +293,36 @@ class NodeHelper:
             except Exception as e:
                 log.warning("Could not set vm swappiness/THP.Exception {0} occurred on {1} ".format(e, self.ip))
 
+    def wait_for_apt_lock_free(self, timeout=300):
+        """On deb-based hosts, block until apt/dpkg is idle so `dpkg -i`
+        doesn't race with cloud-init's unattended-upgrades. No-op on
+        non-deb hosts. Logs but does not raise on timeout — the caller's
+        install loop will surface the real failure."""
+        if self.info.deliverable_type != "deb":
+            return
+        iterations = max(1, timeout // 5)
+        cmd = (
+            "if ! command -v fuser >/dev/null 2>&1; then echo apt-busy; exit 1; fi; "
+            "for i in $(seq 1 {0}); do "
+            "  if ! fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock "
+            "       >/dev/null 2>&1 "
+            "     && ! pgrep -f unattended-upgr >/dev/null 2>&1; then "
+            "    echo apt-idle; exit 0; "
+            "  fi; "
+            "  sleep 5; "
+            "done; echo apt-busy"
+        ).format(iterations)
+        log.info("Waiting up to {0}s for apt/dpkg to be idle on {1}".format(timeout, self.ip))
+        try:
+            o, _ = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+        except Exception as e:
+            log.warning("wait_for_apt_lock_free: {0} on {1}".format(e, self.ip))
+            return
+        if any("apt-idle" in line for line in (o or [])):
+            log.info("apt/dpkg is idle on {0}".format(self.ip))
+        else:
+            log.warning("apt/dpkg still busy on {0} after {1}s".format(self.ip, timeout))
+
     def install_cb(self):
         self.pre_install_cb()
         self.set_vm_swappiness_and_thp()
@@ -274,6 +362,9 @@ class NodeHelper:
                 cmd_debug = cmd_d.replace("buildpath",
                                           self.build.debug_path)
             duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["install"]
+            # Stop apt/dpkg from racing with our install. Cheap on non-deb (no-op).
+            self.wait_for_apt_lock_free(timeout=300)
+            installed = False
             start_time = time.time()
             while time.time() < start_time + timeout:
                 try:
@@ -282,12 +373,20 @@ class NodeHelper:
                         log.warning("Setting install status to failed due to {}".format(e))
                         self.install_success = False
                     if o == ['1']:
+                        installed = True
                         break
-                    self.wait_for_completion(duration, event)
+                    if _is_apt_lock_error(e):
+                        log.warning("apt/dpkg lock contention on {0}, waiting for it to clear before retry".format(self.ip))
+                        self.wait_for_apt_lock_free(timeout=180)
+                    else:
+                        self.wait_for_completion(duration, event)
                 except Exception as e:
                     log.warning("install_cb: Exception {0} occurred on {1}, retrying..".format(e,
                                                                                          self.ip))
                     self.wait_for_completion(duration, event)
+            if not installed:
+                log.error("install_cb: install command never returned success on {0} after {1}s. Marking node as install-failed.".format(self.ip, timeout))
+                self.install_success = False
             if cmd_debug is not None and self.build.debug_build_present:
                 start_time = time.time()
                 while time.time() < start_time + timeout:
@@ -937,16 +1036,19 @@ def __copy_thread(src_path, dest_path, node):
 
 def _copy_to_nodes(node_helpers, debug=False):
     copy_threads = []
+    # SCP source is on the dispatcher (where check_and_retry_download_binary_local
+    # just wrote it — under $WORKSPACE or /tmp/). Destination is /tmp/ on the
+    # remote node (build.name is the file's basename).
+    local_dir = _get_local_download_dir()
     for node_helper in node_helpers:
         if debug:
-            src_path = node_helper.build.debug_path
+            src_path = local_dir + node_helper.build.debug_name
+            dst_path = __get_download_dir(node_helper, disregard_skip_local_download=True) + node_helper.build.debug_name
+            node_helper.build.debug_path = dst_path
         else:
-            src_path = node_helper.build.path
-        dst_path = \
-            __get_download_dir(node_helper,
-                               disregard_skip_local_download=True) \
-            + node_helper.build.name
-        node_helper.build.path = dst_path
+            src_path = local_dir + node_helper.build.name
+            dst_path = __get_download_dir(node_helper, disregard_skip_local_download=True) + node_helper.build.name
+            node_helper.build.path = dst_path
         # don't copy if the file already exists and size matches
         if check_file_size(node_helper, debug):
             continue
@@ -1165,19 +1267,24 @@ def install_tools(node_helpers):
         node_helper.shell.execute_command(f"rm {download_dir}/{node_helper.admin_tools_name}")
 
 def check_and_retry_download_binary_local(node):
-    log.info("Downloading build binary to {0}..".format(node.build.path))
+    # The build's path attribute is the *remote* destination (still /tmp/<name>).
+    # Locally on the dispatcher we write to $WORKSPACE (or /tmp/ if not set) so
+    # parallel Jenkins jobs don't race on the same file path.
+    local_dir = _get_local_download_dir()
+    local_build_path = local_dir + node.build.name
+    local_debug_path = local_dir + node.build.debug_name if node.build.debug_build_present else None
+    log.info("Downloading build binary to {0}..".format(local_build_path))
     if node.build.debug_build_present:
-        log.info("Downloading debug binary to {0}..".format(
-            node.build.debug_path))
+        log.info("Downloading debug binary to {0}..".format(local_debug_path))
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
         "download_binary"]
-    cmd = install_constants.WGET_CMD.format(__get_download_dir(node),
+    cmd = install_constants.WGET_CMD.format(local_dir,
                                             node.build.name,
                                             node.build.url)
     cmd_debug = None
     if node.build.debug_build_present:
         cmd_debug = install_constants.WGET_CMD.format(
-            __get_download_dir(node),
+            local_dir,
             node.build.debug_name,
             node.build.debug_url)
     start_time = time.time()
@@ -1185,7 +1292,7 @@ def check_and_retry_download_binary_local(node):
         try:
             log.info("Executing cmd on local : {}".format(cmd))
             exit_code = _execute_local(cmd, timeout)
-            if exit_code == 0 and os.path.exists(node.build.path):
+            if exit_code == 0 and os.path.exists(local_build_path):
                 break
             time.sleep(duration)
         except Exception as e:
@@ -1193,7 +1300,7 @@ def check_and_retry_download_binary_local(node):
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout,
-                                                                                        node.build.path))
+                                                                                        local_build_path))
     if node.build.debug_build_present:
         # Download debug info build
         start_time = time.time()
@@ -1202,8 +1309,7 @@ def check_and_retry_download_binary_local(node):
                 exit_code_debug = 1
                 if cmd_debug:
                     exit_code_debug = _execute_local(cmd_debug, timeout)
-                if exit_code_debug == 0 and os.path.exists(
-                        node.build.debug_path):
+                if exit_code_debug == 0 and os.path.exists(local_debug_path):
                     break
                 time.sleep(duration)
             except Exception as e:
@@ -1213,7 +1319,7 @@ def check_and_retry_download_binary_local(node):
         else:
             print_result_and_exit("Unable to download debug build in "
                                   "{0}s on {1}, exiting".format(
-                timeout, node.build.debug_path))
+                timeout, local_debug_path))
 
 
 def check_file_exists(node, filepath):
@@ -1289,6 +1395,20 @@ def __get_download_dir(node, disregard_skip_local_download=False):
         return install_constants.DOWNLOAD_DIR["MACOS_VERSIONS"]
     elif os in install_constants.WINDOWS_SERVER:
         return install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"]
+
+
+def _get_local_download_dir():
+    """Directory on the dispatcher slave where the local wget writes the build.
+
+    Falls back to /tmp/ for non-Jenkins (CLI / dev) runs. Under Jenkins,
+    $WORKSPACE is per-job, so parallel jobs no longer race on the same
+    /tmp/couchbase-server-*.deb path. The remote download/install destination
+    on the target Couchbase node is still /tmp/ (see __get_download_dir).
+    """
+    workspace = os.environ.get('WORKSPACE')
+    base = workspace if workspace else '/tmp'
+    os.makedirs(base, exist_ok=True)
+    return base.rstrip('/') + '/'
 
 def __get_columnar_build_binary_name(node, is_release_build=False):
     # couchbase-columnar-enterprise_1.0.0-2056-linux_amd64.deb
@@ -1424,6 +1544,16 @@ def is_fatal_error(errors):
         for fatal_error in install_constants.FATAL_ERRORS:
             if fatal_error in line:
                 return True
+    return False
+
+def _is_apt_lock_error(errors):
+    for line in errors or []:
+        low = line.lower()
+        if ("could not get lock" in low
+                or "unable to acquire the dpkg frontend lock" in low
+                or "dpkg lock" in low
+                or "dpkg/lock-frontend" in low):
+            return True
     return False
 
 def init_clusters(timeout=60, retries=3):
