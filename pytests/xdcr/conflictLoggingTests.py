@@ -1,15 +1,24 @@
 import json
 import time
-import urllib.parse
 import shutil
 import subprocess
-from random import randint
 import threading
 
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from xdcr.xdcrnewbasetests import XDCRNewBaseTest
+from xdcr.xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
+
+NodeHelper.raise_fd_soft_limit()
+
+CLOG_PAUSE_THRESHOLD_KEY = "cLogPauseReplThreshold"
+CLOG_MONITOR_DURATION_KEY = "cLogMonitorDuration"
+CLOG_AUTOPAUSE_ERR_MSGS = ("autopaused", "exceeded the configured threshold")
+MAX_MONITOR_DURATION = 2592000
+INT_MAX = 2147483647
+AUTOPAUSE_POLL_INTERVAL = 5
+ERROR_API_POLL_INTERVAL = 10
+CONFLICT_KEY_PREFIX = "clog_conflict_"
 
 
 class ConflictLoggingTests(XDCRNewBaseTest):
@@ -18,8 +27,15 @@ class ConflictLoggingTests(XDCRNewBaseTest):
     Tests the ability to log conflicts to specified collections.
     """
     
+    def suite_setUp(self):        
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def setUp(self):
         super(ConflictLoggingTests, self).setUp()
+        NodeHelper.raise_fd_soft_limit(self.log)
         self.src_cluster = self.get_cb_cluster_by_name("C1")
         self.src_master = self.src_cluster.get_master_node()
         self.dest_cluster = self.get_cb_cluster_by_name("C2")
@@ -38,7 +54,21 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         
         # Parse conflict logging parameters
         self.conflict_logging_params = self._parse_conflict_logging_params()
-        
+
+        # Cache of RestConnection per node ip. RestConnection.__init__ does a
+        # pools/default connectivity GET (and opens a socket) every construction;
+        # the pause/error poll loops query per replication every few seconds, so
+        # reuse avoids a redundant round-trip and connection churn per poll.
+        self._rest_cache = {}
+
+    def _rest_for(self, node):
+        """Return a cached RestConnection for `node` (keyed by ip)."""
+        rest = self._rest_cache.get(node.ip)
+        if rest is None:
+            rest = RestConnection(node)
+            self._rest_cache[node.ip] = rest
+        return rest
+
     def _parse_conflict_logging_params(self):
         """
         Parse conflict logging parameters directly from test_params.
@@ -110,8 +140,6 @@ class ConflictLoggingTests(XDCRNewBaseTest):
             replication: XDCReplication object
             settings: Dictionary with conflict logging settings
         """
-        src_cluster = replication.get_src_cluster()
-        
         # API expects a single JSON object (map), not an array
         conflict_settings_json = json.dumps(settings)
         self.log.info(f"Setting conflict logging (per-replication): {conflict_settings_json}")
@@ -902,7 +930,7 @@ class ConflictLoggingTests(XDCRNewBaseTest):
         
         # Get all conflict logging collections
         conflict_collections = []
-        for cluster_name, settings in self.conflict_logging_params.get(bucket_name, {}).items():
+        for settings in self.conflict_logging_params.get(bucket_name, {}).values():
             collection_path = settings.get('collection')
             
             if collection_path:
@@ -1197,6 +1225,493 @@ class ConflictLoggingTests(XDCRNewBaseTest):
                 )
                 
                 self.log.info(f"Total conflict logs in {bucket_name}.{scope_name}.{collection_name}: {collection_count}")
-                
+
                 # Assert we have conflict logs
-                self.assertGreater(collection_count, 0, "Expected conflict logs to be generated during rebalance") 
+                self.assertGreater(collection_count, 0, "Expected conflict logs to be generated during rebalance")
+
+    def _get_all_replications(self):
+        """Return every XDCReplication object across all configured clusters.
+
+        Fails fast when none are found. An empty list means XDCR setup did not
+        create any replication; without this guard the auto-pause helpers would
+        silently no-op - `_set_clog_pause_settings` would apply nothing and
+        `_is_any_replication_paused` would always return False, letting the
+        "no auto-pause" tests pass vacuously without validating anything.
+        """
+        replications = []
+        for cluster in self.get_cb_clusters():
+            for remote_cluster in cluster.get_remote_clusters():
+                replications.extend(remote_cluster.get_replications())
+        if not replications:
+            self.fail("No XDCR replications found across any cluster; XDCR setup likely "
+                      "failed. Cannot validate conflict-logging auto-pause without an "
+                      "active replication.")
+        return replications
+
+    def _set_clog_pause_settings(self, threshold, duration, replication=None):
+        """
+        Set cLogPauseReplThreshold and cLogMonitorDuration on one or all replications.
+
+        Raises on REST error so validation/negative tests can assert rejection.
+        """
+        settings = {CLOG_PAUSE_THRESHOLD_KEY: threshold,
+                    CLOG_MONITOR_DURATION_KEY: duration}
+        replications = [replication] if replication is not None else self._get_all_replications()
+        for repl in replications:
+            src_bucket = repl.get_src_bucket().name
+            dst_bucket = repl.get_dest_bucket().name
+            src_master = repl.get_src_cluster().get_master_node()
+            self.log.info(f"Setting auto-pause settings on {repl.get_repl_id()}: {settings}")
+            RestConnection(src_master).set_xdcr_params(src_bucket, dst_bucket, settings)
+
+    def _get_clog_pause_settings(self, replication):
+        """Read back the two auto-pause settings for a replication as a dict."""
+        src_bucket = replication.get_src_bucket().name
+        dst_bucket = replication.get_dest_bucket().name
+        src_master = replication.get_src_cluster().get_master_node()
+        rest = RestConnection(src_master)
+        return {
+            CLOG_PAUSE_THRESHOLD_KEY: rest.get_xdcr_param(src_bucket, dst_bucket, CLOG_PAUSE_THRESHOLD_KEY),
+            CLOG_MONITOR_DURATION_KEY: rest.get_xdcr_param(src_bucket, dst_bucket, CLOG_MONITOR_DURATION_KEY),
+        }
+
+    def _apply_clog_pause_from_params(self):
+        """Apply clog_pause_threshold / clog_monitor_duration test params to all replications."""
+        threshold = self._input.param("clog_pause_threshold", 0)
+        duration = self._input.param("clog_monitor_duration", 0)
+        self._set_clog_pause_settings(threshold, duration)
+        return threshold, duration
+
+    def _is_any_replication_paused(self):
+        """Return True if any replication currently reports pauseRequested."""
+        for repl in self._get_all_replications():
+            src_bucket = repl.get_src_bucket().name
+            dst_bucket = repl.get_dest_bucket().name
+            src_master = repl.get_src_cluster().get_master_node()
+            paused = self._rest_for(src_master).is_replication_paused(src_bucket, dst_bucket)
+            if str(paused).lower() == "true":
+                self.log.info(f"Replication {repl.get_repl_id()} is paused")
+                return True
+        return False
+
+    def _wait_until_replications_resumed(self, timeout=60):
+        """Poll until no replication reports pauseRequested.
+
+        Conflict generation manually pauses then resumes the replications, and
+        auto-pause sets the SAME pauseRequested flag. Without confirming the
+        manual resume actually took effect, a lingering manual pause would be
+        mistaken for auto-pause by `_wait_for_autopause` (false positive) or trip
+        `_assert_no_autopause` (false failure). Establishing an unpaused baseline
+        here means any subsequent paused state is a genuine auto-pause.
+
+        Non-fatal: a timeout most likely means auto-pause already fired (the
+        flag never cleared), which the caller's own auto-pause check confirms.
+        """
+        start = time.time()
+        while time.time() - start < timeout:
+            if not self._is_any_replication_paused():
+                self.log.info(f"Replications confirmed resumed (unpaused baseline) after "
+                              f"{time.time() - start:.1f}s")
+                return True
+            self.sleep(AUTOPAUSE_POLL_INTERVAL)
+        self.log.warning(f"Replications still report paused {timeout}s after manual resume; "
+                         f"proceeding (auto-pause may have already fired)")
+        return False
+
+    def _wait_for_autopause(self, timeout=120):
+        """Poll pauseRequested until any replication is paused or timeout."""
+        self.log.info(f"Waiting up to {timeout}s for replication auto-pause...")
+        start = time.time()
+        while time.time() - start < timeout:
+            if self._is_any_replication_paused():
+                self.log.info(f"Auto-pause detected after {time.time() - start:.1f}s")
+                return True
+            self.sleep(AUTOPAUSE_POLL_INTERVAL)
+        self.log.warning(f"No auto-pause observed after {timeout}s")
+        return False
+
+    def _assert_no_autopause(self, observe_secs):
+        """Fail if any replication becomes paused within observe_secs."""
+        self.log.info(f"Observing {observe_secs}s to confirm no auto-pause...")
+        start = time.time()
+        while time.time() - start < observe_secs:
+            if self._is_any_replication_paused():
+                self.fail(f"Replication auto-paused unexpectedly after {time.time() - start:.1f}s")
+            self.sleep(AUTOPAUSE_POLL_INTERVAL)
+        self.log.info("No auto-pause observed, as expected")
+
+    def _get_xdcr_errors(self, cluster):
+        """Collect error + warning strings from the XDCR tasks API
+        (/pools/default/tasks) for every replication on the cluster's master -
+        the same source the UI "XDCR Errors" panel renders.
+
+        Each entry is normalised to a string (goxdcr returns either plain strings
+        or ``{"time": ..., "errorMsg": ...}`` dicts, so the message is extracted
+        from the dict when present).
+        """
+        rest = self._rest_for(cluster.get_master_node())
+        errors = []
+        for repl in rest.get_replications():
+            for field in ("errors", "warnings"):
+                entries = repl.get(field)
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if isinstance(entry, dict):
+                        errors.append(str(entry.get("errorMsg") or entry.get("msg") or entry))
+                    else:
+                        errors.append(str(entry))
+        return errors
+
+    @staticmethod
+    def _normalize_err(text):
+        """Lowercase and strip hyphens so 'autopaused' and 'auto-paused' compare equal."""
+        return text.lower().replace("-", "")
+
+    def _wait_for_autopause_error(self, cluster, timeout=120):
+        """
+        Poll the XDCR errors API for the auto-pause reason message.
+
+        Logs every error/warning seen each poll so a miss is debuggable, and
+        matches the reason case- and hyphen-insensitively.
+
+        Returns (found: bool, message: str or None).
+        """
+        self.log.info(f"Waiting up to {timeout}s for auto-pause reason in XDCR errors API...")
+        candidates = [self._normalize_err(m) for m in CLOG_AUTOPAUSE_ERR_MSGS]
+        start = time.time()
+        while time.time() - start < timeout:
+            errs = self._get_xdcr_errors(cluster)
+            self.log.info(f"XDCR errors API returned {len(errs)} error/warning entries: {errs}")
+            for err_str in errs:
+                norm = self._normalize_err(err_str)
+                if any(c in norm for c in candidates):
+                    self.log.info(f"Auto-pause reason found in errors API: {err_str}")
+                    return True, err_str
+            self.sleep(ERROR_API_POLL_INTERVAL)
+        self.log.warning(f"Auto-pause reason not found in errors API after {timeout}s")
+        return False, None
+
+    def _clog_exclude_paths(self):
+        """Conflict-log collection paths to exclude from replication catch-up doc counts."""
+        exclude_paths = []
+        for bucket_name, bucket_params in self.conflict_logging_params.items():
+            for cluster_name, settings in bucket_params.items():
+                collection_path = settings.get('collection')
+                if not collection_path:
+                    continue
+                if '.' in collection_path:
+                    scope_name, collection_name = collection_path.split('.')
+                else:
+                    scope_name, collection_name = '_default', collection_path
+                exclude_paths.append(f"{cluster_name}.{bucket_name}.{scope_name}.{collection_name}")
+        return exclude_paths
+
+    def _generate_conflicts_no_wait(self, num_items=2000, threads=8, rate_limit=None,
+                                    key_prefix=CONFLICT_KEY_PREFIX):
+        """
+        Create GUARANTEED true conflicts by pausing both replications, writing the
+        same keys independently on each cluster, then resuming. Does NOT wait for
+        replication catch-up (the pipeline may auto-pause mid-flight).
+
+        Why pause/resume instead of a plain concurrent load: writing the same keys
+        on a RUNNING (warm) pipeline is racy - a key written on the source can
+        replicate to the destination before the destination's own write lands,
+        producing last-writer-wins with no divergence and ZERO conflicts. This is
+        exactly why the live-update test's second phase never paused: by then the
+        pipeline was warm and the concurrent writes did not diverge. Pausing both
+        replications first isolates the clusters, so the same-key writes on each
+        side are guaranteed independent; resuming then forces XDCR to detect every
+        one as a true conflict, regardless of pipeline warmth.
+
+        Both sides use the same ``--key-prefix`` so the keyspaces overlap;
+        ``key_prefix`` lets a multi-phase test use a fresh batch per phase.
+
+        Delegates to the robust ``_run_pillowfight_on_both`` (local cbc-pillowfight
+        with SSH fallback to the bundled binary), so a missing binary / auth
+        failure surfaces in the logs instead of silently generating no conflicts.
+        """
+        if self._replication_direction != "bidirection":
+            self.log.info("Skipping conflict creation in unidirectional setup")
+            return
+
+        pf_opts = ["-I", str(num_items), "-m", "100", "-M", "100",
+                   "-c", "10", "-t", str(threads), "-B", "100",
+                   "--key-prefix", key_prefix]
+        if rate_limit:
+            pf_opts += ["--rate-limit", str(rate_limit)]
+
+        # Isolate the clusters so same-key writes on each side are independent and
+        # cannot be reconciled by in-flight replication.
+        self.log.info("Pausing both replications to isolate clusters for deterministic "
+                      "conflict generation")
+        self.src_cluster.pause_all_replications_by_id(verify=False)
+        self.dest_cluster.pause_all_replications_by_id(verify=False)
+        try:
+            bucket_names = list(self.conflict_logging_params.keys()) or ["default"]
+            for bucket_name in bucket_names:
+                self.log.info(f"Generating conflicts on bucket {bucket_name} with overlapping "
+                              f"keys [{key_prefix}*], {num_items} items x {threads} threads on "
+                              f"each (isolated) cluster; pillowfight opts={pf_opts}")
+                ok = self._run_pillowfight_on_both(bucket_name, pf_opts, "conflicts")
+                if ok:
+                    self.log.info(f"Divergent load completed on both clusters for bucket "
+                                  f"{bucket_name}")
+                else:
+                    self.log.warning(f"Divergent load did not succeed on both clusters for "
+                                     f"bucket {bucket_name}; conflict generation may be incomplete")
+        finally:
+            self.log.info("Resuming both replications; XDCR will now detect the conflicts")
+            self.src_cluster.resume_all_replications_by_id(verify=False)
+            self.dest_cluster.resume_all_replications_by_id(verify=False)
+
+        # Confirm the manual resume cleared the pause BEFORE any auto-pause check, so a
+        # lingering manual pause is never mistaken for an auto-pause. Only on the success
+        # path - on a load exception the finally above still resumes and the error propagates.
+        self._wait_until_replications_resumed()
+
+    def test_clog_pause_settings_validation(self):
+        """
+        Validate accepted ranges and rejection of out-of-range / non-integer values for
+        cLogPauseReplThreshold ([0, INT_MAX]) and cLogMonitorDuration ([0, 2592000]).
+        """
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+
+        replication = self._get_all_replications()[0]
+
+        # Accepted boundary combinations must all be accepted by the server.
+        accepted = [(0, 0), (1, 1), (INT_MAX, MAX_MONITOR_DURATION)]
+        for threshold, duration in accepted:
+            try:
+                self._set_clog_pause_settings(threshold, duration, replication=replication)
+            except Exception as e:
+                self.log.error(f"Valid settings ({threshold},{duration}) rejected: {e}")
+                self.fail(f"Valid clog pause settings ({threshold},{duration}) rejected: {e}")
+
+            # Read-back only for NON-default (non-zero) values. get_xdcr_param falls back to
+            # the global internalSettings when a per-replication value equals the global
+            # default (0), so a (0,0) read-back would not reflect the per-replication set
+            # and could even KeyError if the global key is absent on the build.
+            if threshold != 0 and duration != 0:
+                settings = self._get_clog_pause_settings(replication)
+                self.assertEqual(int(settings[CLOG_PAUSE_THRESHOLD_KEY]), threshold,
+                                 f"Threshold not persisted for ({threshold},{duration})")
+                self.assertEqual(int(settings[CLOG_MONITOR_DURATION_KEY]), duration,
+                                 f"Duration not persisted for ({threshold},{duration})")
+
+        # Out-of-range / non-integer values must be rejected by the server.
+        rejected = [
+            (-1, 30),                        # negative threshold
+            (10, -1),                        # negative duration
+            (10, MAX_MONITOR_DURATION + 1),  # duration above max
+            ("abc", 30),                     # non-integer threshold
+            (10, "xyz"),                     # non-integer duration
+        ]
+        for threshold, duration in rejected:
+            rejected_ok = False
+            try:
+                self._set_clog_pause_settings(threshold, duration, replication=replication)
+            except Exception as e:
+                rejected_ok = True
+                self.log.info(f"Rejected invalid settings ({threshold},{duration}) as expected: {e}")
+            if not rejected_ok:
+                self.fail(f"Invalid clog pause settings ({threshold},{duration}) were accepted")
+
+    def test_clog_autopause_on_threshold_breach(self):
+        """
+        Conflicts exceeding cLogPauseReplThreshold within cLogMonitorDuration must auto-pause
+        the replication and surface the reason via the XDCR errors API.
+        """
+        autopause_timeout = self._input.param("autopause_timeout", 180)
+
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+        self._verify_conflict_logging_settings()
+
+        threshold, duration = self._apply_clog_pause_from_params()
+        self.assertGreater(threshold, 0, "clog_pause_threshold must be > 0 for this test")
+        self.assertGreater(duration, 0, "clog_monitor_duration must be > 0 for this test")
+
+        # Deterministic divergent load (pause -> load same keys on each cluster ->
+        # resume) guarantees conflicts >> threshold. The pause state is the reliable
+        # signal: with a low threshold the pipeline auto-pauses before conflict-log
+        # docs ever flush to the collection, so doc count cannot gate this test.
+        self._generate_conflicts_no_wait(num_items=self._num_items)
+
+        self.assertTrue(self._wait_for_autopause(timeout=autopause_timeout),
+                        "Replication was not auto-paused after conflicts exceeded threshold")
+
+        found, message = self._wait_for_autopause_error(self.src_cluster, timeout=autopause_timeout)
+        self.assertTrue(found, "Auto-pause reason not surfaced in XDCR errors API")
+        self.log.info(f"Auto-pause reason: {message}")
+
+    def test_clog_default_hibernation_unchanged(self):
+        """
+        With both settings = 0 (default), the legacy hibernation path applies: the replication
+        must NOT be auto-paused even under heavy conflict load (the two fault-tolerance
+        mechanisms are mutually exclusive).
+        """
+        observe_secs = self._input.param("observe_secs", 90)
+
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+
+        threshold, duration = self._apply_clog_pause_from_params()
+        self.assertEqual(threshold, 0, "clog_pause_threshold must be 0 for default hibernation test")
+        self.assertEqual(duration, 0, "clog_monitor_duration must be 0 for default hibernation test")
+
+        self._generate_conflicts_no_wait(num_items=self._num_items, threads=16)
+        self._assert_no_autopause(observe_secs)
+
+    def test_clog_pause_settings_live_update(self):
+        """
+        Settings must update live on a running pipeline: a high threshold tolerates conflicts
+        (no pause), then lowering the threshold on the same replication must trigger auto-pause.
+        """
+        autopause_timeout = self._input.param("autopause_timeout", 180)
+        observe_secs = self._input.param("observe_secs", 60)
+        low_threshold = self._input.param("clog_pause_threshold", 1)
+        duration = self._input.param("clog_monitor_duration", 30)
+        high_threshold = self._input.param("clog_high_threshold", INT_MAX)
+
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+
+        # Phase 1: high threshold -> conflicts must not pause the replication.
+        self._set_clog_pause_settings(high_threshold, duration)
+        self._generate_conflicts_no_wait(num_items=self._num_items,
+                                         key_prefix=CONFLICT_KEY_PREFIX + "p1_")
+        self._assert_no_autopause(observe_secs)
+
+        # Phase 2: lower the threshold, then generate a FRESH batch of conflicts.
+        # _generate_conflicts_no_wait pauses+resumes the replications, which both
+        # (a) isolates the clusters so the same-key writes diverge deterministically
+        # and (b) restarts the pipeline so the newly-lowered threshold is picked up.
+        # A fresh key prefix avoids reusing phase 1's already-converged docs.
+        self._set_clog_pause_settings(low_threshold, duration)
+        self._generate_conflicts_no_wait(num_items=self._num_items,
+                                         key_prefix=CONFLICT_KEY_PREFIX + "p2_")
+
+        self.assertTrue(self._wait_for_autopause(timeout=autopause_timeout),
+                        "Replication did not auto-pause after live-updating to a low threshold")
+        found, _ = self._wait_for_autopause_error(self.src_cluster, timeout=autopause_timeout)
+        self.assertTrue(found, "Auto-pause reason not surfaced in XDCR errors API after live update")
+
+    def test_clog_window_reset(self):
+        """
+        A sustained conflict rate that stays below cLogPauseReplThreshold in every 1s cycle must
+        never trip auto-pause across multiple cLogMonitorDuration windows, because the running
+        sum resets at the start of each window.
+
+        Timing note: this test is rate-sensitive. It uses a deliberately high threshold and a
+        rate-limited pillowfight drip so the per-cycle conflict volume stays provably below the
+        threshold while the load runs for longer than several windows.
+        """
+        duration = self._input.param("clog_monitor_duration", 10)
+        threshold = self._input.param("clog_pause_threshold", 1000)
+        rate_limit = self._input.param("clog_rate_limit", 50)  # ops/sec per cluster, << threshold
+        observe_secs = self._input.param("observe_secs", duration * 3)
+
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+
+        self._set_clog_pause_settings(threshold, duration)
+
+        # Rate-limited, steady conflict drip well under the per-cycle threshold. Launch it in
+        # the background so it runs *concurrently* with the observation window spanning several
+        # cLogMonitorDuration windows. No single cycle's running sum should breach the threshold.
+        # Both clusters use the shared key prefix so the drip produces real (overlapping-key)
+        # conflicts, and timeout_secs self-terminates each pillowfight at the end of the window.
+        bucket_names = list(self.conflict_logging_params.keys()) or ["default"]
+        drip_secs = observe_secs + duration
+        num_items = rate_limit * drip_secs
+        pf_opts = ["-I", str(num_items), "-m", "100", "-M", "100", "-c", "10", "-t", "2",
+                   "-B", "100", "--rate-limit", str(rate_limit), "--key-prefix", CONFLICT_KEY_PREFIX]
+        self.log.info(f"Starting rate-limited conflict drip: {rate_limit} ops/sec/cluster for "
+                      f"~{drip_secs}s, threshold={threshold}, monitor_duration={duration}s; "
+                      f"pillowfight opts={pf_opts}")
+        threads = []
+        if self._replication_direction == "bidirection":
+            for bucket_name in bucket_names:
+                for node in (self.src_master, self.dest_master):
+                    t = threading.Thread(
+                        target=self._run_pillowfight,
+                        args=(node, bucket_name, pf_opts, f"window-reset drip {node.ip}"),
+                        kwargs={"timeout_secs": drip_secs}, daemon=True)
+                    t.start()
+                    threads.append(t)
+        try:
+            self._assert_no_autopause(observe_secs)
+        finally:
+            for t in threads:
+                t.join(timeout=drip_secs)
+
+    def test_clog_resume_after_autopause(self):
+        """
+        After an auto-pause fires, the replication can be resumed and resumes replicating
+        (data catches up once the conflict pressure is removed).
+        """
+        autopause_timeout = self._input.param("autopause_timeout", 180)
+
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+
+        self._apply_clog_pause_from_params()
+        self._generate_conflicts_no_wait(num_items=self._num_items)
+
+        self.assertTrue(self._wait_for_autopause(timeout=autopause_timeout),
+                        "Replication was not auto-paused")
+
+        # Resume and confirm the replication is running again. resume_all_replications is a
+        # CouchbaseCluster method; in a bidirectional setup both clusters may have an
+        # auto-paused replication, so resume both sides.
+        self.src_cluster.resume_all_replications(verify=True)
+        self.dest_cluster.resume_all_replications(verify=True)
+        self.assertFalse(self._is_any_replication_paused(),
+                         "Replication still paused after resume")
+
+        # Once resumed, replication should catch up (excluding conflict-log collections).
+        super(ConflictLoggingTests, self)._wait_for_replication_to_catchup(
+            timeout=600,
+            fetch_bucket_stats_by="minute",
+            exclude_paths=self._clog_exclude_paths())
+
+    def test_clog_autopause_during_rebalance(self):
+        """
+        Auto-pause must still fire when a conflict burst occurs during a source-cluster rebalance.
+        """
+        autopause_timeout = self._input.param("autopause_timeout", 240)
+
+        self._create_scopes_and_collections()
+        self.setup_xdcr_and_load()
+        self._setup_conflict_logging()
+
+        self._apply_clog_pause_from_params()
+
+        rebalance_task = self._start_rebalance(self.src_cluster)
+        if not rebalance_task:
+            # The conf entry promises "during rebalance"; without a spare node we cannot
+            # honor that, so skip rather than give false confidence as a plain auto-pause run.
+            self.skipTest("No free node available to start a source-cluster rebalance")
+
+        self._generate_conflicts_no_wait(num_items=self._num_items, threads=16)
+
+        paused = self._wait_for_autopause(timeout=autopause_timeout)
+
+        if rebalance_task:
+            self.log.info("Waiting for rebalance to complete...")
+            try:
+                rebalance_task.result()
+            except Exception as e:
+                self.log.warning(f"Rebalance ended with: {e}")
+
+        self.assertTrue(paused, "Replication was not auto-paused during/after rebalance")
+        found, _ = self._wait_for_autopause_error(self.src_cluster, timeout=autopause_timeout)
+        self.assertTrue(found, "Auto-pause reason not surfaced in XDCR errors API")
