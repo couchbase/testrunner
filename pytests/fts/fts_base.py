@@ -15,6 +15,7 @@ import subprocess
 import threading
 import time
 import unittest
+import urllib.parse
 from statistics import mean
 
 import boto3
@@ -4662,6 +4663,157 @@ class _ScanPlusHashMap:
     def size(self):
         with self._lock:
             return len(self._map)
+
+
+class UDFHelper:
+    """Helper for UDF (custom-script query) FTS tests — MB-65018."""
+
+    UDF_INDEX = "udf_index"
+
+    UDF_INDEX_DEF = {
+        "type": "fulltext-index",
+        "name": "udf_index",
+        "sourceType": "gocbcore",
+        "sourceName": "default",
+        "params": {
+            "doc_config": {"mode": "type_field", "type_field": "type"},
+            "mapping": {
+                "default_analyzer": "standard",
+                "default_mapping": {
+                    "dynamic": False,
+                    "enabled": True,
+                    "properties": {
+                        "type":                 {"enabled": True, "fields": [{"index": True, "name": "type",                 "store": True,  "type": "text"}]},
+                        "name":                 {"enabled": True, "fields": [{"index": True, "name": "name",                 "store": True,  "type": "text"}]},
+                        "city":                 {"enabled": True, "fields": [{"index": True, "name": "city",                 "store": True,  "type": "text"}]},
+                        "price_per_night":      {"enabled": True, "fields": [{"index": True, "name": "price_per_night",      "store": True,  "type": "number"}]},
+                        "rating":               {"enabled": True, "fields": [{"index": True, "name": "rating",               "store": True,  "type": "number"}]},
+                        "description":          {"enabled": True, "fields": [{"index": True, "name": "description",          "store": True,  "type": "text"}]},
+                        "abv":                  {"enabled": True, "fields": [{"index": True, "name": "abv",                  "store": True,  "type": "number"}]},
+                        "brewery":              {"enabled": True, "fields": [{"index": True, "name": "brewery",              "store": True,  "type": "text"}]},
+                        "cancellationPolicy":   {"enabled": True, "fields": [{"index": True, "name": "cancellationPolicy",   "store": True,  "type": "text"}]},
+                        "available":            {"enabled": True, "fields": [{"index": True, "name": "available",            "store": True,  "type": "boolean"}]},
+                        "amenities":            {"enabled": True, "fields": [{"index": True, "name": "amenities",            "store": True,  "type": "text"}]},
+                        "distanceFromCenterKm": {"enabled": True, "fields": [{"index": True, "name": "distanceFromCenterKm", "store": True,  "type": "number"}]},
+                        "country":              {"enabled": True, "fields": [{"index": True, "name": "country",              "store": True,  "type": "text"}]},
+                        "indexed_only":         {"enabled": True, "fields": [{"index": True, "name": "indexed_only",         "store": False, "type": "text"}]},
+                    },
+                },
+                "default_type": "_default",
+                "index_dynamic": False,
+                "store_dynamic": False,
+            },
+            "store": {"indexType": "scorch", "segmentVersion": 15},
+        },
+        "planParams": {"maxPartitionsPerPIndex": 1024, "indexPartitions": 1, "numReplicas": 0},
+    }
+
+    def __init__(self, test):
+        self._test = test
+
+    def _cluster(self):
+        return getattr(self._test, '_cb_cluster', None) or getattr(self._test, 'cb_cluster', None)
+
+    def _input(self):
+        return getattr(self._test, '_input', None) or getattr(self._test, 'input', None)
+
+    def _udf_req(self, base_url, path, method="GET", body=None, form=False):
+        node = self._input().servers[0]
+        rest = RestConnection(node)
+        url = f"{base_url}/{path}"
+        ct = "application/x-www-form-urlencoded" if form else "application/json"
+        params = urllib.parse.urlencode(body) if form else (json.dumps(body) if body is not None else '')
+        headers = rest._create_headers()
+        headers['Content-Type'] = ct
+        _, content, response = rest._http_request(url, method, params, headers=headers)
+        status = int(response['status'])
+        try:
+            payload = json.loads(content) if content and content.strip() else {}
+        except (ValueError, TypeError):
+            payload = {'raw': content.decode() if isinstance(content, bytes) else str(content)}
+        return status, payload
+
+    def _fts(self, path, method="GET", body=None):
+        nodes = self._cluster().get_fts_nodes()
+        if not nodes:
+            raise RuntimeError('No FTS nodes available for UDF requests')
+        for node in nodes:
+            try:
+                status, resp = self._udf_req(f'http://{node.ip}:8094', path, method, body)
+                if status != 0:
+                    return status, resp
+            except ServerUnavailableException:
+                self._test.log.warning(f"FTS node {node.ip} unreachable, trying next")
+        return 0, {'error': 'No reachable FTS node'}
+
+    # UDF toggle
+
+    def _enable_udf(self):
+        s, r = self._fts("api/managerOptions", "PUT", {"customScriptQueriesEnabled": "true"})
+        self._test.log.info(f"UDF enable status={s}")
+        if s != 200:
+            self._test.log.warning(f"UDF enable may have failed: status={s} resp={r}")
+
+    def _disable_udf(self):
+        s, r = self._fts("api/managerOptions", "PUT", {"customScriptQueriesEnabled": "false"})
+        self._test.log.info(f"UDF disable status={s}")
+        if s != 200:
+            self._test.log.warning(f"UDF disable may have failed: status={s} resp={r}")
+
+    def _fts_index_path(self, suffix="", bucket="default", scope="_default"):
+        bucket_enc = urllib.parse.quote(bucket, safe='')
+        scope_enc = urllib.parse.quote(scope, safe='')
+        index_enc = urllib.parse.quote(self.UDF_INDEX, safe='')
+        base = f"api/bucket/{bucket_enc}/scope/{scope_enc}/index/{index_enc}"
+        return f"{base}/{suffix}" if suffix else base
+
+    # Query
+
+    def _udf_query(self, query_body):
+        s, r = self._fts(self._fts_index_path("query"), "POST", query_body)
+        if s != 200:
+            return 0, r.get("error") or r.get("status") or str(r)
+        if r.get('errors'):
+            return 0, f"partial_errors: {r['errors']}"
+        return r.get("total_hits", 0), None
+
+    # Setup
+
+    def _load_udf_docs(self, docs, bucket="default"):
+        master = self._cluster().get_master_node()
+        kv_base = f"http://{master.ip}:8091"
+        errors = 0
+        for key, doc in docs.items():
+            s, r = self._udf_req(
+                kv_base,
+                f"pools/default/buckets/{bucket}/docs/{urllib.parse.quote(key, safe='')}",
+                "POST", {"value": json.dumps(doc)}, form=True,
+            )
+            if s not in (200, 201):
+                errors += 1
+                self._test.log.warning(f"Doc load failed key={key} status={s} resp={r}")
+        self._test.log.info(f"Loaded {len(docs) - errors}/{len(docs)} docs into bucket '{bucket}'")
+        if errors == len(docs):
+            self._test.fail(f"All {len(docs)} UDF docs failed to load into bucket '{bucket}'")
+
+    def _create_udf_index(self, bucket="default"):
+        idx = copy.deepcopy(self.UDF_INDEX_DEF)
+        idx["sourceName"] = bucket
+        self._fts(self._fts_index_path(bucket=bucket), "DELETE")
+        s, r = self._fts(self._fts_index_path(bucket=bucket), "PUT", idx)
+        self._test.log.info(f"UDF index create status={s}")
+        if s not in (200, 201):
+            self._test.fail(f"UDF index creation failed: status={s} resp={r}")
+
+    def _wait_udf_index(self, expected_count, timeout=120):
+        start = time.time()
+        while time.time() - start < timeout:
+            s, r = self._fts(self._fts_index_path("count"))
+            if s == 200 and r.get("count", 0) >= expected_count:
+                return
+            self._test.log.info(f"Indexing: {r.get('count', 0)}/{expected_count} status={s}")
+            time.sleep(5)
+        self._test.log.warning(f"Index count did not reach {expected_count} in {timeout}s")
 
 
 class FTSBaseTest(unittest.TestCase):

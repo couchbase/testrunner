@@ -1,12 +1,13 @@
 import logging
 import json
+import time
 import uuid
 
 from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from .fts_callable import FTSCallable
 from scripts.java_sdk_setup import JavaSdkSetup
-from .fts_base import CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap
+from .fts_base import CouchbaseCluster, FTSIndex, FTSBaseTest, _ScanPlusHashMap, UDFHelper
 from membase.api.rest_client import RestConnection
 from lib.collection.collections_cli_client import CollectionsCLI
 from .fts_backup_restore import FTSIndexBackupClient
@@ -87,7 +88,7 @@ class UpgradeFTS(NewUpgradeBaseTest):
 
     def _set_bleve_max_result_window(self):
         bmrw_value = 100000000
-        for node in self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True):
+        for node in (self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True) or []):
             self.log.info("updating bleve_max_result_window of node : {0}".format(node))
             rest = RestConnection(node)
             rest.set_bleve_max_result_window(bmrw_value)
@@ -1860,3 +1861,170 @@ class UpgradeFTS(NewUpgradeBaseTest):
                 if server.ip == node.ip:
                     server_set.append(server)
         return server_set
+
+    # =========================================================================
+    # Script Search: Upgrade Tests — Epic MB-65018
+    # =========================================================================
+
+    def _setup_udf_data(self):
+        """Load UDF docs and create the index. Toggle is handled by callers at each stage"""
+        from .udf_datagen.udf_datagen import generate_docs, compute_ground_truth
+        self._cb_cluster = self.cb_cluster
+        self._udf = UDFHelper(self)
+        docs = generate_docs()
+        self._udf_gt = compute_ground_truth()
+        self._udf_total = len(docs)
+        self._udf._load_udf_docs(docs)
+        self._udf._create_udf_index()
+        self._udf._wait_udf_index(self._udf_total)
+
+    def _udf_normal_query(self):
+        """Fire a plain FTS query. Returns (status, total_hits)."""
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "query": {"match": "hotel", "field": "type"},
+        })
+        return s, r.get("total_hits", 0)
+
+    def _udf_script_query(self):
+        """Fire a custom_filter (script) query. Returns (status, response_body)."""
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc, params){ return true; }",
+            }},
+        })
+        return s, r
+
+    def test_udf_online_upgrade(self):
+        """
+        Online rolling upgrade test for UDF / custom-script queries (MB-65018).
+
+        Stage 0 — pre-upgrade baseline (all nodes old version):
+            normal query → 200, script query → error (unknown query type on old version)
+        Stage 1 — upgrade one FTS node (rebalance out, install new version, rebalance in)
+        Stage 2 — mixed cluster check (one new node, one old node):
+            normal query → 200, script query → error
+            (old node: unknown type; new node: toggle OFF by default → 400)
+        Stage 3 — upgrade remaining FTS nodes
+        Stage 4 — post-upgrade check, toggle OFF (design-doc default = false):
+            normal query → 200, script query → 400 (udf_disabled)
+        Stage 5 — operator enables toggle:
+            normal query → 200, script query → 200, hits correct
+        """
+        errors = {}
+
+        fts_nodes = self.get_nodes_from_services_map(service_type="fts", get_all_nodes=True)
+        if not fts_nodes or len(fts_nodes) < 2:
+            self.fail("test_udf_online_upgrade requires >= 2 FTS nodes")
+
+        # Setup: load data and create index on pre-upgrade cluster.
+        self._setup_udf_data()
+
+        # Stage 0: pre-upgrade baseline
+        log.info("=" * 20 + " Stage 0: pre-upgrade UDF check")
+
+        s, hits = self._udf_normal_query()
+        if s != 200:
+            errors['s0_normal'] = f"normal query failed pre-upgrade: status={s}"
+        log.info(f"Stage 0: normal query status={s} hits={hits}")
+
+        s, r = self._udf_script_query()
+        if s == 200:
+            errors['s0_script'] = f"script query should fail pre-upgrade (unknown type), got 200"
+        log.info(f"Stage 0: script query status={s} (expect non-200 on pre-upgrade node)")
+
+        # Stage 1: upgrade one FTS node
+        nodes_out = [fts_nodes[0]]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+        rebalance.result()
+        upgrade_th = self._async_update(self.upgrade_to, nodes_out)
+        for th in upgrade_th:
+            th.join()
+        log.info("==== First FTS node upgraded ====")
+        self.sleep(120)
+
+        services_in = []
+        for service in list(self.services_map.keys()):
+            for node in nodes_out:
+                if "{0}:{1}".format(node.ip, node.port) in self.services_map[service]:
+                    services_in.append(service)
+        self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], nodes_out, [], services=services_in
+        ).result()
+
+        # Stage 2: mixed cluster
+        # old node: unknown query type → error
+        # new node: toggle OFF by default → 400 udf_disabled
+        # coordinator: error from at least one shard → returns error (design doc Case 3)
+        log.info("=" * 20 + " Stage 2: mixed cluster UDF check")
+
+        s, hits = self._udf_normal_query()
+        if s != 200:
+            errors['s2_normal'] = f"normal query failed in mixed cluster: status={s}"
+        log.info(f"Stage 2: normal query status={s} hits={hits}")
+
+        s, r = self._udf_script_query()
+        if s == 200:
+            errors['s2_script'] = f"script query should fail in mixed cluster, got 200"
+        log.info(f"Stage 2: script query status={s} (expect non-200, mixed cluster)")
+
+        # Stage 3: upgrade remaining FTS nodes
+        nodes_out = fts_nodes[1:]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out)
+        rebalance.result()
+        upgrade_th = self._async_update(self.upgrade_to, nodes_out)
+        for th in upgrade_th:
+            th.join()
+        log.info("==== All FTS nodes upgraded ====")
+        self.sleep(120)
+
+        services_in = []
+        for service in list(self.services_map.keys()):
+            for node in nodes_out:
+                if "{0}:{1}".format(node.ip, node.port) in self.services_map[service]:
+                    services_in.append(service)
+        self.cluster.async_rebalance(
+            self.servers[:self.nodes_init], nodes_out, [], services=services_in
+        ).result()
+
+        # Stage 4: post-upgrade, toggle OFF (default per design doc)
+        log.info("=" * 20 + " Stage 4: post-upgrade toggle OFF")
+
+        s, hits = self._udf_normal_query()
+        if s != 200:
+            errors['s4_normal'] = f"normal query failed post-upgrade: status={s}"
+        log.info(f"Stage 4: normal query status={s} hits={hits}")
+
+        s, r = self._udf_script_query()
+        if s != 400:
+            errors['s4_script'] = f"post-upgrade toggle OFF: expected 400 (udf_disabled), got {s}"
+        log.info(f"Stage 4: script query status={s} (expect 400 — toggle OFF by default)")
+
+        # Stage 5: enable toggle
+        log.info("=" * 20 + " Stage 5: enable UDF toggle")
+        self._udf._enable_udf()
+        time.sleep(3)  # propagation ~1-2s
+
+        s, hits = self._udf_normal_query()
+        if s != 200:
+            errors['s5_normal'] = f"normal query failed after toggle ON: status={s}"
+        log.info(f"Stage 5: normal query status={s} hits={hits}")
+
+        gt = self._udf_gt
+        hits_script, err_script = self._udf._udf_query({
+            "size": gt["cf_hotels"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        if err_script or hits_script != gt["cf_hotels"]:
+            errors['s5_script'] = f"script query failed after toggle ON: hits={hits_script} err={err_script}"
+        log.info(f"Stage 5: script query hits={hits_script} (expect {gt['cf_hotels']})")
+
+        if errors:
+            self.fail("test_udf_online_upgrade failed:\n" +
+                      "\n".join(f"  {k}: {v}" for k, v in errors.items()))
+        log.info("test_udf_online_upgrade PASSED")

@@ -7,12 +7,12 @@ from threading import Thread
 
 from lib import global_vars
 from lib.SystemEventLogLib.fts_service_events import SearchServiceEvents
-from .fts_base import FTSBaseTest, FTSException
-from .fts_base import NodeHelper, FloatingServers
+from .fts_base import FTSBaseTest, NodeHelper, FloatingServers, UDFHelper
 from TestInput import TestInputSingleton
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
+
 
 class MovingTopFTS(FTSBaseTest):
 
@@ -58,6 +58,16 @@ class MovingTopFTS(FTSBaseTest):
             RestConnection(self._cb_cluster.__master_node()[0]).modify_memory_quota(kv_quota=512,fts_quota=2500)
         except Exception as e:
             self.log.info(f"Error modifying memory quota: {e}")
+        if TestInputSingleton.input.param("custom_queries_enabled", False):
+            from .udf_datagen.udf_datagen import generate_docs, compute_ground_truth
+            self._udf = UDFHelper(self)
+            docs = generate_docs()
+            self._udf_gt = compute_ground_truth()
+            self._udf_total = len(docs)
+            self._udf._load_udf_docs(docs)
+            self._udf._create_udf_index()
+            self._udf._wait_udf_index(self._udf_total)
+            self._udf._enable_udf()
 
     def _get_expected_query_hits(self):
         """Return expected hits for self.query.
@@ -2362,7 +2372,6 @@ class MovingTopFTS(FTSBaseTest):
             3. cancel node removal
             4. start rebalance
         """
-        from lib.membase.api.rest_client import RestConnection, RestHelper
         rest = RestConnection(self._cb_cluster.get_master_node())
         nodes = rest.node_statuses()
         ejected_nodes = []
@@ -2411,7 +2420,6 @@ class MovingTopFTS(FTSBaseTest):
         self.sleep(10)
         self.wait_for_indexing_complete()
 
-        from lib.membase.api.rest_client import RestConnection, RestHelper
         rest = RestConnection(self._cb_cluster.get_master_node())
         nodes = rest.node_statuses()
         ejected_nodes = []
@@ -2479,7 +2487,6 @@ class MovingTopFTS(FTSBaseTest):
         non_master_nodes = list(set(self._cb_cluster.get_nodes())-
                            {self._master})
 
-        from lib.membase.api.rest_client import RestConnection, RestHelper
         rest = RestConnection(self._master)
         nodes = rest.node_statuses()
         ejected_nodes = []
@@ -2544,7 +2551,7 @@ class MovingTopFTS(FTSBaseTest):
         load_thread.start()
 
         # create index and query
-        index = self.create_index(
+        _index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
         load_thread.join()
@@ -3240,3 +3247,356 @@ class MovingTopFTS(FTSBaseTest):
             index, hashmap, stop_event, crud_threads, query_thread, drain_cond, inflight_count,
             collection=collection)
         self._scan_plus_rf_report(tag, violations, final_errors)
+    # =========================================================================
+    # UDF: Distributed / Multi-Node Tests (DN) — Epic MB-65018
+    # =========================================================================
+
+    def test_udf_dn_1(self):
+        # DN-1: UDF executes correctly on all partition nodes (P1)
+        self.log.info("DN-1: UDF scatter/gather across all partition nodes — filter type === 'hotel'")
+        gt, total = self._udf_gt, self._udf_total
+        hits, err = self._udf._udf_query({
+            "size": total,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        self.assertIsNone(err, f"DN-1: query failed: {err}")
+        self.assertEqual(hits, gt["cf_hotels"],
+                         f"DN-1: scatter/gather across partitions: expected {gt['cf_hotels']} got {hits}")
+        self.log.info(f"DN-1 PASSED — hits={hits}")
+
+    def test_udf_dn_2(self):
+        # DN-2: UDF compilation cache is per-node — both FTS nodes compile independently (P1)
+        self.log.info("DN-2: per-node compilation cache — each FTS node compiles independently")
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if len(fts_nodes) < 2:
+            self.skipTest("DN-2: need >= 2 FTS nodes")
+        unique_src = "function dn2_cache_test(doc, params){ return true; }"
+        for node in fts_nodes[:2]:
+            node_base = f"http://{node.ip}:8094"
+            s, r = self._udf._udf_req(node_base, self._udf._fts_index_path("query"), "POST", {
+                "size": 5,
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": unique_src,
+                }},
+            })
+            self.assertEqual(s, 200, f"DN-2: query failed on node {node.ip}: {r}")
+            self.assertGreater(r.get("total_hits", 0), 0,
+                               f"DN-2: no hits from node {node.ip}")
+        self.log.info("DN-2 PASSED — both FTS nodes compiled and executed UDF successfully")
+
+    def test_udf_dn_3(self):
+        # DN-3: Rebalance during active UDF queries — in-flight complete or fail gracefully (P2)
+        self.log.info("DN-3: rebalance during active UDF queries — post-rebalance query must succeed")
+        gt, total = self._udf_gt, self._udf_total
+        errors = []
+        stop_flag = threading.Event()
+        lock = threading.Lock()
+
+        def background_queries():
+            while not stop_flag.is_set():
+                h, e = self._udf._udf_query({
+                    "size": 10,
+                    "query": {"custom_filter": {
+                        "query": {"match": "hotel", "field": "type"},
+                        "fields": ["type"],
+                        "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+                    }},
+                })
+                if e:
+                    with lock:
+                        errors.append(e)
+                time.sleep(1)
+
+        t = threading.Thread(target=background_queries)
+        t.start()
+        try:
+            self.sleep(5, "background UDF queries running")
+            self._cb_cluster.rebalance_out(num_nodes=1)
+            self.sleep(10, "rebalance in progress")
+        finally:
+            stop_flag.set()
+            t.join(timeout=15)
+
+        hits, err = self._udf._udf_query({
+            "size": total,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        self.assertIsNone(err, f"DN-3: post-rebalance query failed: {err}")
+        self.assertEqual(hits, gt["cf_hotels"],
+                         f"DN-3: post-rebalance expected {gt['cf_hotels']} got {hits}")
+        if errors:
+            self.log.warning(f"DN-3: transient errors during rebalance ({len(errors)}): {errors[:3]}")
+        self.log.info(f"DN-3 PASSED — hits={hits}")
+
+    def test_udf_dn_4(self):
+        # DN-4: FTS node failover — UDF queries recover after failover (P2)
+        self.log.info("DN-4: FTS node failover — UDF queries must recover after failover and rebalance")
+        gt, total = self._udf_gt, self._udf_total
+        errors = []
+        stop_flag = threading.Event()
+        lock = threading.Lock()
+
+        def background_queries():
+            while not stop_flag.is_set():
+                h, e = self._udf._udf_query({
+                    "size": 5,
+                    "query": {"custom_score": {
+                        "query": {"match": "hotel", "field": "type"},
+                        "source": "function score(doc, params){ return 1.0; }",
+                    }},
+                })
+                if e:
+                    with lock:
+                        errors.append(e)
+                time.sleep(1)
+
+        t = threading.Thread(target=background_queries)
+        t.start()
+        try:
+            self.sleep(5, "background UDF queries running")
+            fts_nodes = self._cb_cluster.get_fts_nodes()
+            if len(fts_nodes) < 2:
+                self.skipTest("DN-4: need >= 2 FTS nodes for failover test")
+            self._cb_cluster.failover(node=fts_nodes[-1])
+            self.sleep(5, "failover in progress")
+            self._cb_cluster.rebalance_failover_nodes()
+            self.sleep(10, "recovery in progress")
+        finally:
+            stop_flag.set()
+            t.join(timeout=15)
+
+        hits, err = self._udf._udf_query({
+            "size": total,
+            "query": {"custom_filter": {
+                "query": {"match_all": {}},
+                "source": "function f(doc, params){ return true; }",
+            }},
+        })
+        self.assertIsNone(err, f"DN-4: post-failover query failed: {err}")
+        self.assertEqual(hits, gt["total"],
+                         f"DN-4: post-failover expected {gt['total']} got {hits}")
+        if errors:
+            self.log.warning(f"DN-4: transient errors during failover ({len(errors)})")
+        self.log.info(f"DN-4 PASSED — hits={hits}")
+
+    def test_udf_dn_5(self):
+        # DN-5: JS evaluator crash recovery — cluster healthy after repeated exceptions (P1)
+        self.log.info("DN-5: JS evaluator crash recovery — 5x thrown exceptions then cluster must recover")
+        gt, total = self._udf_gt, self._udf_total
+        for _ in range(5):
+            self._udf._udf_query({
+                "size": 1,
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": "function f(doc, params){ throw new Error('crash'); }",
+                }},
+            })
+        self.sleep(5, "waiting for JS evaluator recovery")
+        hits, err = self._udf._udf_query({
+            "size": total,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        self.assertIsNone(err, f"DN-5: JS evaluator did not recover: {err}")
+        self.assertEqual(hits, gt["cf_hotels"],
+                         f"DN-5: expected {gt['cf_hotels']} after crash recovery, got {hits}")
+        self.log.info(f"DN-5 PASSED — hits={hits}")
+
+    def test_udf_dn_6(self):
+        # DN-6: FTS scale-out — rebalance-in a new FTS node, verify JS evaluator initialises (P1)
+        self.log.info("DN-6: FTS scale-out — add FTS node via rebalance-in, verify UDF works on new node")
+        gt = self._udf_gt
+
+        nodes_before = set(n.ip for n in self._cb_cluster.get_fts_nodes())
+        self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+        self.sleep(10, "new FTS node settling after rebalance-in")
+
+        nodes_after = self._cb_cluster.get_fts_nodes()
+        new_nodes = [n for n in nodes_after if n.ip not in nodes_before]
+        if not new_nodes:
+            self.skipTest("DN-6: no new FTS node added (cluster may be at capacity)")
+
+        new_node = new_nodes[0]
+        self.log.info(f"DN-6: new FTS node: {new_node.ip}")
+
+        # UDF query directly on the new node — tests JS evaluator initialisation
+        node_base = f"http://{new_node.ip}:8094"
+        s, r = self._udf._udf_req(node_base, self._udf._fts_index_path("query"), "POST", {
+            "size": gt["cf_hotels"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        self.assertEqual(s, 200,
+                         f"DN-6: UDF query failed on new node {new_node.ip}: {r}")
+        self.assertGreater(r.get("total_hits", 0), 0,
+                           f"DN-6: new FTS node returned 0 hits for UDF query")
+
+        # Cluster-wide hit count must also be correct
+        hits, err = self._udf._udf_query({
+            "size": gt["cf_hotels"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        self.assertIsNone(err, f"DN-6: cluster-wide UDF query failed after scale-out: {err}")
+        self.assertEqual(hits, gt["cf_hotels"],
+                         f"DN-6: post-scale-out expected {gt['cf_hotels']} got {hits}")
+        self.log.info(f"DN-6 PASSED — new node {new_node.ip} serving UDF, total hits={hits}")
+
+    def test_udf_dn_7(self):
+        # DN-7: custom_score ordering consistent before and after rebalance (P1)
+        self.log.info("DN-7: custom_score ordering must be identical before and after rebalance")
+
+        src = "function price_score(doc, params){ var f = doc.fields || {}; return f.price_per_night || 0; }"
+
+        def get_ordered_ids():
+            s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+                "size": 5, "fields": ["price_per_night"],
+                "query": {"custom_score": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "fields": ["price_per_night"],
+                    "source": src,
+                }},
+            })
+            self.assertEqual(s, 200, f"DN-7: custom_score query failed: {r}")
+            return [h["id"] for h in r.get("hits", [])]
+
+        ids_before = get_ordered_ids()
+        self.assertGreater(len(ids_before), 0, "DN-7: no hits before rebalance")
+        self.log.info(f"DN-7: pre-rebalance top-5={ids_before}")
+
+        self._cb_cluster.rebalance_out(num_nodes=1)
+        self.sleep(10, "rebalance-out complete")
+
+        ids_after = get_ordered_ids()
+        self.assertEqual(ids_before[0], ids_after[0],
+                         f"DN-7: top result changed: before={ids_before[0]} after={ids_after[0]}")
+        self.assertEqual(ids_before, ids_after,
+                         f"DN-7: ordering changed after rebalance: before={ids_before} after={ids_after}")
+        self.log.info(f"DN-7 PASSED — custom_score ordering stable after rebalance, top={ids_after[0]}")
+
+    def test_udf_dn_8(self):
+        # DN-8: Mixed UDF state recovery — enable → failover → disable → re-join → re-enable (P2)
+        # Exercises the "Forcing Mixed UDF State" risk scenario from the test plan.
+        self.log.info("DN-8: mixed UDF state recovery — enable/failover/disable/rejoin/re-enable cycle")
+        gt = self._udf_gt
+
+        fts_nodes = self._cb_cluster.get_fts_nodes()
+        if len(fts_nodes) < 2:
+            self.skipTest("DN-8: need >= 2 FTS nodes for mixed-state test")
+
+        # Step 1: enable UDF and let it propagate
+        self._udf._enable_udf()
+        self.sleep(2, "UDF enabled — propagating to all nodes")
+
+        # Step 2: failover one node while UDF is on
+        node_to_fail = fts_nodes[-1]
+        self.log.info(f"DN-8: failing over {node_to_fail.ip} while UDF enabled")
+        self._cb_cluster.failover(node=node_to_fail)
+        self.sleep(3, "failover in progress")
+
+        # Step 3: disable UDF while that node is out
+        self._udf._disable_udf()
+        self.sleep(2, "UDF disabled with one FTS node absent")
+
+        # Step 4: re-join the failed-over node
+        self._cb_cluster.rebalance_failover_nodes()
+        self.sleep(10, "re-join rebalance complete")
+
+        # Step 5: re-enable — all nodes (including re-joined) must converge
+        self._udf._enable_udf()
+        time.sleep(3)  # extra window for re-joined node to receive config
+
+        # Step 6: every FTS node must accept UDF queries
+        failures = []
+        for node in self._cb_cluster.get_fts_nodes():
+            node_base = f"http://{node.ip}:8094"
+            s, r = self._udf._udf_req(node_base, self._udf._fts_index_path("query"), "POST", {
+                "size": 5,
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": "function f(doc, params){ return true; }",
+                }},
+            })
+            if s != 200:
+                failures.append(f"node {node.ip}: status={s} (expected 200 after re-enable)")
+            self.log.info(f"DN-8: node {node.ip} post-recovery status={s}")
+
+        # Step 7: ground-truth hit count
+        hits, err = self._udf._udf_query({
+            "size": gt["cf_hotels"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function f(doc, params){ var fld = doc.fields || {}; return fld.type === 'hotel'; }",
+            }},
+        })
+        if err or hits != gt["cf_hotels"]:
+            failures.append(f"post-recovery query: expected {gt['cf_hotels']} got {hits}, err={err}")
+
+        if failures:
+            self.fail("DN-8: mixed UDF state not fully recovered:\n" + "\n".join(failures))
+        self.log.info(f"DN-8 PASSED — all nodes consistent after mixed-state recovery, hits={hits}")
+
+    def test_udf_dn_9(self):
+        # DN-9: Swap rebalance with concurrent UDF queries — no hits lost after swap (P2)
+        self.log.info("DN-9: swap rebalance with concurrent UDF queries — hit count correct after swap")
+        gt, total = self._udf_gt, self._udf_total
+        errors = []
+        stop_flag = threading.Event()
+        lock = threading.Lock()
+
+        def background_queries():
+            while not stop_flag.is_set():
+                h, e = self._udf._udf_query({
+                    "size": 5,
+                    "query": {"custom_filter": {
+                        "query": {"match": "hotel", "field": "type"},
+                        "source": "function f(doc, params){ return true; }",
+                    }},
+                })
+                if e:
+                    with lock:
+                        errors.append(e)
+                time.sleep(1)
+
+        t = threading.Thread(target=background_queries)
+        t.start()
+        try:
+            self.sleep(3, "background UDF queries running before swap")
+            self._cb_cluster.swap_rebalance(services=["fts"])
+            self.sleep(10, "swap rebalance in progress")
+        finally:
+            stop_flag.set()
+            t.join(timeout=15)
+
+        hits, err = self._udf._udf_query({
+            "size": total,
+            "query": {"custom_filter": {
+                "query": {"match_all": {}},
+                "source": "function f(doc, params){ return true; }",
+            }},
+        })
+        self.assertIsNone(err, f"DN-9: post-swap UDF query failed: {err}")
+        self.assertEqual(hits, gt["total"],
+                         f"DN-9: post-swap expected {gt['total']} got {hits}")
+        if errors:
+            self.log.warning(f"DN-9: {len(errors)} transient error(s) during swap rebalance")
+        self.log.info(f"DN-9 PASSED — hits={hits} correct after swap rebalance")

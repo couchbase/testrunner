@@ -15,7 +15,7 @@ from TestInput import TestInputSingleton
 from tasks.task import ESRunQueryCompare
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
 from .fts_base import (FTSBaseTest, FTSIndex, INDEX_DEFAULTS, QUERY,
-                       download_from_s3, _ScanPlusHashMap, _make_vec)
+                       download_from_s3, _ScanPlusHashMap, _make_vec, UDFHelper)
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 from couchbase_helper.documentgenerator import SDKDataLoader
@@ -55,6 +55,16 @@ class StableTopFTS(FTSBaseTest):
         self.fts_target_node = None
         self.index_src=None
         self.validation_data = None
+        if TestInputSingleton.input.param("custom_queries_enabled", False):
+            from .udf_datagen.udf_datagen import generate_docs, compute_ground_truth
+            self._udf = UDFHelper(self)
+            docs = generate_docs()
+            self._udf_gt = compute_ground_truth()
+            self._udf_total = len(docs)
+            self._udf._load_udf_docs(docs)
+            self._udf._create_udf_index()
+            self._udf._wait_udf_index(self._udf_total)
+            self._udf._enable_udf()
 
     def read_from_replica_setup(self):
         #skips the validation check for random / random balanced queries
@@ -69,7 +79,7 @@ class StableTopFTS(FTSBaseTest):
         self.rfr_stats = {}
         for index in self._cb_cluster.get_indexes():
             index_name = index.name
-            index_src = index._source_name
+            _index_src = index._source_name
 
             #cfg inspection
             _,payload = RestConnection(self.fts_target_node).get_cfg_stats()
@@ -648,8 +658,8 @@ class StableTopFTS(FTSBaseTest):
         try:
             bucket = self._cb_cluster.get_bucket_by_name('default')
             collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
-            index = self.create_index(bucket, "default_index", collection_index=collection_index, _type=type,
-                                      scope=index_scope, collections=index_collections)
+            _index = self.create_index(bucket, "default_index", collection_index=collection_index, _type=type,
+                                       scope=index_scope, collections=index_collections)
             # an exception will most likely be thrown from waiting
             self.wait_for_indexing_complete()
             self.validate_index_count(
@@ -750,8 +760,8 @@ class StableTopFTS(FTSBaseTest):
         self.load_wiki(lang=self.lang)
         bucket = self._cb_cluster.get_bucket_by_name('default')
         collection_index, type, index_scope, index_collections = self.define_index_parameters_collection_related()
-        index = self.create_index(bucket, "wiki_index", collection_index=collection_index, _type=type,
-                                  scope=index_scope, collections=index_collections, analyzer=self.analyzer)
+        _index = self.create_index(bucket, "wiki_index", collection_index=collection_index, _type=type,
+                                   scope=index_scope, collections=index_collections, analyzer=self.analyzer)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True,
                                   zero_rows_ok=False)
@@ -880,8 +890,8 @@ class StableTopFTS(FTSBaseTest):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
         collection_index, tp, index_scope, index_collections = self.define_index_parameters_collection_related()
-        index = self.create_index(bucket, "default_index", collection_index=collection_index, _type=tp,
-                                  scope=index_scope, collections=index_collections)
+        _index = self.create_index(bucket, "default_index", collection_index=collection_index, _type=tp,
+                                   scope=index_scope, collections=index_collections)
         self.wait_for_indexing_complete(self._num_items//2)
 
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
@@ -1282,9 +1292,9 @@ class StableTopFTS(FTSBaseTest):
         index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
                                    "index_scope1", collection_index=True, _type="scope1.collection1",
                                    scope="scope1", collections=["collection1"])
-        index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
-                                   "index_scope2", collection_index=True, _type="scope2.collection1",
-                                   scope="scope2", collections=["collection1"])
+        _index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                    "index_scope2", collection_index=True, _type="scope2.collection1",
+                                    scope="scope2", collections=["collection1"])
 
         #load data into collections
         bucket = self._cb_cluster.get_bucket_by_name('bucket1')
@@ -1552,7 +1562,7 @@ class StableTopFTS(FTSBaseTest):
         """
         error_msg = TestInputSingleton.input.param('error_msg', '')
 
-        fail = False
+        _fail = False
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index")
@@ -2627,7 +2637,7 @@ class StableTopFTS(FTSBaseTest):
         expected_hits = int(self._input.param("expected_hits", 0))
         expected_doc_ids = self._input.param("expected_doc_ids", None)
         polygon_points = str(self._input.param("polygon_points", None))
-        geo_index = self.create_geo_index_and_load()
+        _geo_index = self.create_geo_index_and_load()
 
         query = '{"field": "geo", "polygon_points" : ' + polygon_points + '}'
 
@@ -2657,7 +2667,7 @@ class StableTopFTS(FTSBaseTest):
 
 
     def test_geo_polygon_with_holes_must_not(self):
-        geo_index = self.create_geo_index_and_load()
+        _geo_index = self.create_geo_index_and_load()
 
         query = '{"must": {"conjuncts": [{"field": "geo", "polygon_points": ' \
                 '[[-124.29807832031247, 38.01868304390075], ' \
@@ -2870,7 +2880,6 @@ class StableTopFTS(FTSBaseTest):
 
 
     def test_json_types(self):
-        import couchbase
         self.load_data()
         self.create_simple_default_index()
         master = self._cb_cluster.get_master_node()
@@ -3359,7 +3368,7 @@ class StableTopFTS(FTSBaseTest):
         self.load_data(generator=None)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         self.wait_for_indexing_complete()
-        index = self._cb_cluster.get_indexes()[0]
+        _ = self._cb_cluster.get_indexes()[0]
         query = self._input.param("query")
         import threading
         query_thread = threading.Thread(target=self._index_query_wrapper, args=(index, query))
@@ -3389,7 +3398,7 @@ class StableTopFTS(FTSBaseTest):
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         self.wait_for_indexing_complete()
         self._cb_cluster.run_n1ql_query(query=f"create primary index on default:default.{self.scope}.{self.collection}")
-        index = self._cb_cluster.get_indexes()[0]
+        _ = self._cb_cluster.get_indexes()[0]
         query = f"update default:default.{self.scope}.{self.collection} set email='mutated@gmail.com'"
         import threading
         query_thread = threading.Thread(target=self._n1ql_query_wrapper, args=[query])
@@ -3496,14 +3505,14 @@ class StableTopFTS(FTSBaseTest):
         collection_index = True
         for _type in _types:
             try:
-                index = self._cb_cluster.create_fts_index(
+                _ = self._cb_cluster.create_fts_index(
                     name='default_index',
                     source_name='default',
                     collection_index=collection_index,
                     _type=_type,
                     source_params={"includeXAttrs": True})
                 self.fail(f"FTS index is successfully created basing on non-existent kv container: {_type}")
-            except Exception as e:
+            except Exception:
                 self.log.info("Expected exception happened during fts index creation on missed kv container.")
 
     def prepare_for_score_none_fuzzy(self):
@@ -3626,13 +3635,13 @@ class StableTopFTS(FTSBaseTest):
         self.cli_client.create_collection(bucket='bucket1', scope=scope_name, collection='collection1')
         self.cli_client.create_collection(bucket='bucket1', scope=scope_name, collection='collection2')
         # create 2 indexes
-        index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
-                                   "index1", collection_index=True, _type=f"{scope_name}.collection1",
-                                   scope=scope_name, collections=["collection1"])
+        _index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                    "index1", collection_index=True, _type=f"{scope_name}.collection1",
+                                    scope=scope_name, collections=["collection1"])
         try:
-            index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
-                                       "index1", collection_index=True, _type=f"{scope_name}.collection2",
-                                       scope=scope_name, collections=["collection2"], no_check=True)
+            _index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                        "index1", collection_index=True, _type=f"{scope_name}.collection2",
+                                        scope=scope_name, collections=["collection2"], no_check=True)
         except Exception as e:
             self.log.info("Exceptin caught ::"+str(e)+"::")
             return
@@ -3662,13 +3671,13 @@ class StableTopFTS(FTSBaseTest):
         self.cli_client.create_collection(bucket='bucket1', scope="scope1", collection='collection1')
         self.cli_client.create_collection(bucket='bucket1', scope="scope2", collection='collection1')
         # create 2 indexes
-        index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
-                                   "index1", collection_index=True, _type="scope1.collection1",
-                                   scope="scope1", collections=["collection1"])
+        _index1 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                    "index1", collection_index=True, _type="scope1.collection1",
+                                    scope="scope1", collections=["collection1"])
         try:
-            index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
-                                       "index1", collection_index=True, _type="scope2.collection1",
-                                       scope="scope2", collections=["collection1"], no_check=True)
+            _index2 = self.create_index(self._cb_cluster.get_bucket_by_name('bucket1'),
+                                        "index1", collection_index=True, _type="scope2.collection1",
+                                        scope="scope2", collections=["collection1"], no_check=True)
         except Exception as e:
             self.log.info("Exception caught ::" + str(e) + "::")
             return
@@ -5867,3 +5876,1579 @@ class StableTopFTS(FTSBaseTest):
             )
         else:
             self.log.info("[scan_plus_vector] PASSED — all batches validated")
+    # =========================================================================
+    # UDF Tests — Epic MB-65018
+    # Related cases are grouped; failures collected and reported at end of each method.
+    # =========================================================================
+
+    # ── CT — Configuration / Toggle Tests ────────────────────────────────────
+
+    def test_udf_ct(self):
+        # CT-1..CT-6: toggle/configuration tests
+        failures = []
+
+        # CT-1: UDF disabled → custom_filter must fail (P0)
+        self.log.info("CT-1: UDF disabled — custom_filter must be rejected with non-200")
+        self._udf._disable_udf()
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){ return true; }",
+            }},
+        })
+        self._udf._enable_udf()
+        if s == 200:
+            failures.append(f"CT-1: expected non-200 when UDF disabled, got {s}")
+        self.log.info(f"CT-1: status={s}")
+
+        # CT-2: UDF enabled → custom_filter succeeds (P0)
+        self.log.info("CT-2: UDF enabled — custom_filter must succeed with > 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){ return true; }",
+            }},
+        })
+        if err or hits == 0:
+            failures.append(f"CT-2: expected > 0 hits when UDF enabled, got hits={hits} err={err}")
+        self.log.info(f"CT-2: hits={hits}")
+
+        # CT-3: Normal query unaffected when UDF disabled (P1)
+        self.log.info("CT-3: normal query must work even when UDF is disabled")
+        self._udf._disable_udf()
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "query": {"match": "hotel", "field": "type"},
+        })
+        self._udf._enable_udf()
+        if s != 200 or "total_hits" not in r:
+            failures.append(f"CT-3: normal query failed when UDF disabled: status={s}")
+        self.log.info(f"CT-3: total_hits={r.get('total_hits', '?')}")
+
+        # CT-4: Rapid ON/OFF/ON sequence stabilises (P2)
+        self.log.info("CT-4: rapid ON/OFF/ON toggle — final state must be enabled and functional")
+        self._udf._enable_udf()
+        s1, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){return true;}",
+            }},
+        })
+        self._udf._disable_udf()
+        s2, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){return true;}",
+            }},
+        })
+        time.sleep(2)
+        self._udf._enable_udf()
+        s3, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){return true;}",
+            }},
+        })
+        if s1 != 200:
+            failures.append(f"CT-4: first UDF query failed with {s1}")
+        if s2 == 200:
+            failures.append(f"CT-4: expected non-200 after disable, got {s2}")
+        if s3 != 200:
+            failures.append(f"CT-4: UDF query failed after re-enable: {s3}")
+        self.log.info(f"CT-4: s1={s1} s2={s2} s3={s3}")
+
+        # CT-5: New queries fail after disable; normal queries still work (P2)
+        self.log.info("CT-5: after disable, new UDF queries fail but normal queries succeed")
+        results = []
+        def run_query():
+            h, e = self._udf._udf_query({
+                "size": 20,
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": "function f(doc,params){ return true; }",
+                }},
+            })
+            results.append((h, e))
+        t = threading.Thread(target=run_query)
+        t.start()
+        time.sleep(0.05)
+        self._udf._disable_udf()
+        t.join(timeout=30)
+        s_udf, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){return true;}",
+            }},
+        })
+        s_normal, r_normal = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "query": {"match": "hotel", "field": "type"},
+        })
+        self._udf._enable_udf()
+        if s_udf == 200:
+            failures.append(f"CT-5: expected non-200 after disable, got {s_udf}")
+        if s_normal != 200:
+            failures.append(f"CT-5: normal query failed: {r_normal}")
+        self.log.info(f"CT-5: udf_status={s_udf} normal_status={s_normal}")
+
+        # CT-6: Memory overhead with UDF enabled — observational (P3)
+        self.log.info("CT-6: observational — memory overhead with UDF enabled (~160 MB per node expected)")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){return true;}",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CT-6: UDF query failed: status={s}")
+        self.log.info("CT-6: UDF flag active; memory overhead should be ~160 MB per FTS node (spec)")
+
+        if failures:
+            self.fail("test_udf_ct failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_ct PASSED — all CT sub-cases passed")
+
+    # ── CF — custom_filter Functionality ─────────────────────────────────────
+
+    def test_udf_cf_basic(self):
+        # CF-1..CF-5: basic custom_filter functionality
+        failures = []
+        gt = self._udf_gt
+
+        # CF-1: Always-true filter passes all inner-query hits (P0)
+        self.log.info("CF-1: always-true filter — inner query selects hotels, UDF returns true for all")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "type"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["type"],
+                "source": "function always_true(doc, params){ return true; }",
+            }},
+        })
+        if err or hits != gt["cf_1_always_true"]:
+            failures.append(f"CF-1: expected {gt['cf_1_always_true']} got {hits}, err={err}")
+        self.log.info(f"CF-1: hits={hits}")
+
+        # CF-2: Always-false filter drops all hits (P0)
+        self.log.info("CF-2: always-false filter — UDF returns false for all, expect 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function always_false(doc, params){ return false; }",
+            }},
+        })
+        if err or hits != 0:
+            failures.append(f"CF-2: expected 0 got {hits}, err={err}")
+        self.log.info(f"CF-2: hits={hits}")
+
+        # CF-3: Filter on cancellationPolicy === 'FREE' (P0)
+        self.log.info("CF-3: filter cancellationPolicy === 'FREE' — only hotels with FREE policy pass")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "cancellationPolicy"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["cancellationPolicy"],
+                "source": "function free_cancel(doc, params){ var f = doc.fields || {}; return f.cancellationPolicy === 'free'; }",
+            }},
+        })
+        if err or hits != gt["cf_3_free_policy"]:
+            failures.append(f"CF-3: expected {gt['cf_3_free_policy']} got {hits}, err={err}")
+        self.log.info(f"CF-3: hits={hits}")
+
+        # CF-4: Numeric comparison price_per_night > 100 (P0)
+        self.log.info("CF-4: numeric filter price_per_night > 100 — hotels above threshold pass")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "price_per_night"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night"],
+                "params": {"min_price": 100},
+                "source": "function price_filter(doc, params){ var f = doc.fields || {}; if (f.price_per_night === undefined) return false; return f.price_per_night > params.min_price; }",
+            }},
+        })
+        if err or hits != gt["cf_4_price_gt_100"]:
+            failures.append(f"CF-4: expected {gt['cf_4_price_gt_100']} got {hits}, err={err}")
+        self.log.info(f"CF-4: hits={hits}")
+
+        # CF-5: Computed arithmetic — price_per_night * stay_nights <= budget (P0)
+        self.log.info("CF-5: arithmetic filter price_per_night * stay_nights <= budget (750 for 5 nights)")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "price_per_night"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night"],
+                "params": {"stay_nights": 5, "budget": 750},
+                "source": "function budget_filter(doc, params){ var f = doc.fields || {}; var price = f.price_per_night; if (price === undefined) return false; return (price * params.stay_nights) <= params.budget; }",
+            }},
+        })
+        if err or hits != gt["cf_5_budget_750_5nights"]:
+            failures.append(f"CF-5: expected {gt['cf_5_budget_750_5nights']} got {hits}, err={err}")
+        self.log.info(f"CF-5: hits={hits}")
+
+        if failures:
+            self.fail("test_udf_cf_basic failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_cf_basic PASSED — all CF basic sub-cases passed")
+
+    def test_udf_cf_advanced(self):
+        # CF-6..CF-13: advanced custom_filter functionality
+        failures = []
+        gt = self._udf_gt
+
+        # CF-6: Boolean field filter — available === true (P1)
+        self.log.info("CF-6: boolean filter available === true — only available hotels pass")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "available"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["available"],
+                "source": "function avail_filter(doc, params){ var f = doc.fields || {}; return f.available === true; }",
+            }},
+        })
+        if err or hits != gt["cf_6_available"]:
+            failures.append(f"CF-6: expected {gt['cf_6_available']} got {hits}, err={err}")
+        self.log.info(f"CF-6: hits={hits}")
+
+        # CF-7: Multi-valued array field — amenities contains 'pool' (P1)
+        self.log.info("CF-7: array field filter amenities contains 'pool' — only hotels with pool pass")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "amenities"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["amenities"],
+                "source": "function pool_filter(doc, params){ var f = doc.fields || {}; var a = f.amenities; if (!Array.isArray(a)) a = [a]; return a.indexOf('pool') !== -1; }",
+            }},
+        })
+        if err or hits != gt["cf_7_pool_amenity"]:
+            failures.append(f"CF-7: expected {gt['cf_7_pool_amenity']} got {hits}, err={err}")
+        self.log.info(f"CF-7: hits={hits}")
+
+        # CF-8: Undefined field graceful handling — rating >= 4.0 with missing ratings (P1)
+        self.log.info("CF-8: undefined field handling — filter rating >= 4.0, missing rating returns false")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "rating"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["rating"],
+                "params": {"min_rating": 4.0},
+                "source": "function rating_filter(doc, params){ var f = doc.fields || {}; if (f.rating === undefined) return false; return f.rating >= params.min_rating; }",
+            }},
+        })
+        if err or hits != gt["cf_8_rating_4plus"]:
+            failures.append(f"CF-8: expected {gt['cf_8_rating_4plus']} got {hits}, err={err}")
+        self.log.info(f"CF-8: hits={hits}")
+
+        # CF-9: Type-based filter — brewery only (P1)
+        self.log.info("CF-9: type-based filter type === 'brewery' — only brewery docs pass")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "type"],
+            "query": {"custom_filter": {
+                "query": {"match": "brewery", "field": "type"},
+                "fields": ["type"],
+                "source": "function brewery_only(doc, params){ var f = doc.fields || {}; return f.type === 'brewery'; }",
+            }},
+        })
+        if err or hits != gt["cf_9_brewery_only"]:
+            failures.append(f"CF-9: expected {gt['cf_9_brewery_only']} got {hits}, err={err}")
+        self.log.info(f"CF-9: hits={hits}")
+
+        # CF-10: Multi-field AND logic — available AND FREE (P1)
+        self.log.info("CF-10: multi-field AND logic — available === true AND cancellationPolicy === 'FREE'")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "available", "cancellationPolicy"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["available", "cancellationPolicy"],
+                "source": "function avail_and_free(doc, params){ var f = doc.fields || {}; return f.available === true && f.cancellationPolicy === 'free'; }",
+            }},
+        })
+        if err or hits != gt["cf_10_avail_and_free"]:
+            failures.append(f"CF-10: expected {gt['cf_10_avail_and_free']} got {hits}, err={err}")
+        self.log.info(f"CF-10: hits={hits}")
+
+        # CF-11: Multi-field OR logic — available OR rating >= 4.5 (P1)
+        self.log.info("CF-11: multi-field OR logic — available === true OR rating >= 4.5")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "available", "rating"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["available", "rating"],
+                "source": "function avail_or_highrate(doc, params){ var f = doc.fields || {}; return f.available === true || f.rating >= 4.5; }",
+            }},
+        })
+        if err or hits != gt["cf_11_avail_or_rating45"]:
+            failures.append(f"CF-11: expected {gt['cf_11_avail_or_rating45']} got {hits}, err={err}")
+        self.log.info(f"CF-11: hits={hits}")
+
+        # CF-12: doc._id accessible in custom_filter — filter by key prefix (P2)
+        self.log.info("CF-12: doc._id accessible — filter by key prefix 'brewery'")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name"],
+            "query": {"custom_filter": {
+                "query": {"match_all": {}},
+                "source": "function id_filter(doc, params){ return doc._id.indexOf('brewery') === 0; }",
+            }},
+        })
+        if err or hits != gt["cf_12_brewery_id"]:
+            failures.append(f"CF-12: expected {gt['cf_12_brewery_id']} got {hits}, err={err}")
+        self.log.info(f"CF-12: hits={hits}")
+
+        # CF-13: Exclude NON_REFUNDABLE and docs without cancellationPolicy (P2)
+        self.log.info("CF-13: exclude NON_REFUNDABLE and docs without cancellationPolicy")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "cancellationPolicy"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["cancellationPolicy"],
+                "source": "function refundable_only(doc, params){ var f = doc.fields || {}; var p = f.cancellationPolicy; if (p === undefined || p === null) return false; return p !== 'non_refundable'; }",
+            }},
+        })
+        if err or hits != gt["cf_13_refundable"]:
+            failures.append(f"CF-13: expected {gt['cf_13_refundable']} got {hits}, err={err}")
+        self.log.info(f"CF-13: hits={hits}")
+
+        if failures:
+            self.fail("test_udf_cf_advanced failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_cf_advanced PASSED — all CF advanced sub-cases passed")
+
+    # ── CS — custom_score Functionality ───────────────────────────────────────
+
+    def test_udf_cs_basic(self):
+        # CS-1..CS-3: basic custom_score functionality
+        failures = []
+        gt = self._udf_gt
+
+        # CS-1: Fixed score overrides all doc scores (P0)
+        self.log.info("CS-1: fixed score 10.0 — all hotel docs must have score=10.0")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20,
+            "fields": ["name"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function fixed_score(doc, params){ return 10.0; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-1: query failed status={s}")
+        else:
+            hits = r.get("total_hits", 0)
+            if hits != gt["cf_hotels"]:
+                failures.append(f"CS-1: expected {gt['cf_hotels']} hits got {hits}")
+            wrong = [h["id"] for h in r.get("hits", []) if abs(h.get("score", 0) - 10.0) > 0.001]
+            if wrong:
+                failures.append(f"CS-1: score != 10.0 for {wrong}")
+            self.log.info(f"CS-1: total_hits={hits}")
+
+        # CS-2: Score multiplier on base score — result ≈ 2× base (P0)
+        self.log.info("CS-2: score multiplier — custom_score returns doc.score * 2, verify each hit")
+        _, base_r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20, "fields": ["name"], "query": {"match": "hotel", "field": "type"},
+        })
+        base_scores = {h["id"]: h["score"] for h in base_r.get("hits", [])}
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20,
+            "fields": ["name"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function double_score(doc, params){ return doc.score * 2; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-2: query failed status={s}")
+        else:
+            wrong = [
+                f"{h['id']}: got={h.get('score', 0):.3f} expected≈{base_scores.get(h['id'], 0) * 2:.3f}"
+                for h in r.get("hits", [])
+                if abs(h.get("score", 0) - base_scores.get(h["id"], 0) * 2) > 0.01
+            ]
+            if wrong:
+                failures.append(f"CS-2: score mismatch: {wrong}")
+            self.log.info(f"CS-2: total_hits={r.get('total_hits', '?')}")
+
+        # CS-3: Field-based score boost — abv boost for beers (P0)
+        self.log.info("CS-3: field-based score boost abv*0.05 — high-abv beer should rank higher")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10,
+            "fields": ["name", "abv"],
+            "query": {"custom_score": {
+                "query": {"match": "beer", "field": "type"},
+                "fields": ["abv"],
+                "params": {"mult": 0.05},
+                "source": "function score_abv(doc, params){ var f = doc.fields || {}; var abv = f.abv || 0; return doc.score + (abv * params.mult); }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-3: query failed status={s}")
+        else:
+            hits = r.get("total_hits", 0)
+            if hits != 5:
+                failures.append(f"CS-3: expected 5 beer hits got {hits}")
+            scores = {h["id"]: h["score"] for h in r.get("hits", [])}
+            if "beer::004" in scores and "beer::005" in scores:
+                if scores["beer::004"] <= scores["beer::005"]:
+                    failures.append(f"CS-3: high-abv beer::004 should outscore beer::005: {scores}")
+            self.log.info(f"CS-3: total_hits={hits}")
+
+        if failures:
+            self.fail("test_udf_cs_basic failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_cs_basic PASSED — all CS basic sub-cases passed")
+
+    def test_udf_cs_advanced(self):
+        # CS-4..CS-8: advanced custom_score functionality
+        failures = []
+
+        # CS-4: Score = price_per_night — deterministic ordering (P1)
+        self.log.info("CS-4: score = price_per_night — most expensive hotel must rank first")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20,
+            "fields": ["name", "price_per_night"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night"],
+                "source": "function price_as_score(doc, params){ var f = doc.fields || {}; return f.price_per_night || 0; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-4: query failed status={s}")
+        else:
+            hits_list = r.get("hits", [])
+            if not hits_list:
+                failures.append("CS-4: no hits returned")
+            else:
+                top_id = hits_list[0]["id"]
+                if top_id not in ("hotel::london_003", "hotel::paris_003"):
+                    failures.append(f"CS-4: top result should be most expensive hotel, got {top_id}")
+                self.log.info(f"CS-4: total_hits={r.get('total_hits', '?')} top={top_id}")
+
+        # CS-5: Complex multi-factor scoring (P1)
+        self.log.info("CS-5: complex multi-factor scoring combining distance and price factors")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20,
+            "fields": ["name", "price_per_night", "distanceFromCenterKm"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["distanceFromCenterKm", "price_per_night"],
+                "params": {"max_distance_km": 5.0},
+                "source": (
+                    "function hotel_score(doc, params){"
+                    "var maxD = params.max_distance_km || 5.0;"
+                    "var f = doc.fields || {};"
+                    "var dist = (f.distanceFromCenterKm !== undefined) ? f.distanceFromCenterKm : maxD;"
+                    "var price = (f.price_per_night !== undefined) ? f.price_per_night : 9999;"
+                    "var distFactor = 1.0 - Math.min(dist / maxD, 1.0);"
+                    "var priceFactor = 1.0 / (1.0 + price / 200.0);"
+                    "return doc.score * (1.0 + distFactor + priceFactor);"
+                    "}"
+                ),
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-5: query failed status={s}")
+        else:
+            hits_list = r.get("hits", [])
+            if not hits_list:
+                failures.append("CS-5: no hits returned")
+            else:
+                zero = [h["id"] for h in hits_list if h.get("score", 0) <= 0]
+                if zero:
+                    failures.append(f"CS-5: score must be > 0 for {zero}")
+                self.log.info(f"CS-5: total_hits={r.get('total_hits', '?')}")
+
+        # CS-6: Score = 0 for all documents — observational (P2)
+        self.log.info("CS-6: zero score — observational, all docs return score=0")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function zero_score(doc, params){ return 0; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-6: query failed status={s}")
+        self.log.info(f"CS-6: total_hits={r.get('total_hits')} — zero-score hits returned")
+
+        # CS-7: Negative score — query completes without crash (P2)
+        self.log.info("CS-7: negative score — observational, query must complete without crash")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function neg_score(doc, params){ return -1.0; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-7: query failed status={s}")
+        self.log.info(f"CS-7: negative score result: total_hits={r.get('total_hits')}")
+
+        # CS-8: doc.score available in custom_score and equals base score (P1)
+        self.log.info("CS-8: doc.score echo — custom_score returns doc.score, must match base scores")
+        _, base_r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "fields": ["name"], "query": {"match": "hotel", "field": "type"},
+        })
+        base_scores = {h["id"]: h["score"] for h in base_r.get("hits", [])}
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "fields": ["name"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function echo_score(doc, params){ return doc.score; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"CS-8: query failed status={s}")
+        else:
+            wrong = [
+                f"{h['id']}: echo={h.get('score', 0):.4f} base={base_scores.get(h['id'], 0):.4f}"
+                for h in r.get("hits", [])
+                if abs(h.get("score", 0) - base_scores.get(h["id"], 0)) > 0.001
+            ]
+            if wrong:
+                failures.append(f"CS-8: echo score mismatch: {wrong}")
+            self.log.info(f"CS-8: total_hits={r.get('total_hits', '?')}")
+
+        if failures:
+            self.fail("test_udf_cs_advanced failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_cs_advanced PASSED — all CS advanced sub-cases passed")
+
+    # ── FL — Fields Loading Tests ──────────────────────────────────────────────
+
+    def test_udf_fl(self):
+        # FL-1..FL-7: fields loading tests
+        failures = []
+
+        # FL-1: Only listed fields visible to UDF (P1)
+        self.log.info("FL-1: only listed fields visible — price_per_night in doc.fields, rating absent")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "fields": ["name"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night"],
+                "source": "function check_fields(doc, params){ var f = doc.fields || {}; if (f.rating !== undefined) return false; return f.price_per_night !== undefined; }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"FL-1: expected > 0 results, got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"FL-1: total_hits={r.get('total_hits', '?')}")
+
+        # FL-2: fields: ["*"] — all stored fields visible (P1)
+        self.log.info("FL-2: fields=['*'] — all stored fields visible to UDF")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 3, "fields": ["name"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["*"],
+                "source": "function check_all(doc, params){ var f = doc.fields || {}; return f.price_per_night !== undefined && f.rating !== undefined && f.cancellationPolicy !== undefined; }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"FL-2: expected some docs with all 3 fields, got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"FL-2: total_hits={r.get('total_hits', '?')}")
+
+        # FL-3: fields not specified — doc.fields is undefined/empty (P1)
+        self.log.info("FL-3: no fields specified — doc.fields is undefined/empty, all docs pass")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function check_empty(doc, params){ return (doc.fields === undefined || Object.keys(doc.fields || {}).length === 0); }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"FL-3: expected all hotels to pass when fields absent, got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"FL-3: total_hits={r.get('total_hits', '?')}")
+
+        # FL-4: Indexed-but-not-stored field → undefined in UDF (P1)
+        self.log.info("FL-4: indexed-but-not-stored field is undefined in UDF — all docs pass")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["indexed_only"],
+                "source": "function check_not_stored(doc, params){ var f = doc.fields || {}; return f.indexed_only === undefined; }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"FL-4: all docs should pass (indexed_only not stored → undefined), got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"FL-4: total_hits={r.get('total_hits', '?')}")
+
+        # FL-5: Non-existent field → no error, just undefined (P1)
+        self.log.info("FL-5: non-existent field — doc.fields value is undefined, no error thrown")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["this_field_does_not_exist"],
+                "source": "function check_missing(doc, params){ var f = doc.fields || {}; return f.this_field_does_not_exist === undefined; }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"FL-5: all docs pass when field missing, got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"FL-5: total_hits={r.get('total_hits', '?')}")
+
+        # FL-6: UDF fields vs SearchRequest.fields are independent (P1)
+        self.log.info("FL-6: UDF fields and SearchRequest.fields are independent — price_per_night must not appear in response")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10, "fields": ["name", "rating"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night"],
+                "params": {"min": 150},
+                "source": "function price_gate(doc, params){ var f = doc.fields || {}; return (f.price_per_night || 0) >= params.min; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"FL-6: query failed status={s}")
+        elif r.get("total_hits", 0) == 0:
+            failures.append("FL-6: expected some hits")
+        else:
+            leaked = [h["id"] for h in r.get("hits", []) if "price_per_night" in h.get("fields", {})]
+            if leaked:
+                failures.append(f"FL-6: price_per_night appeared in response fields for {leaked}")
+        self.log.info(f"FL-6: total_hits={r.get('total_hits', '?')}")
+
+        # FL-7: Multi-valued amenities field exposed as array (P1)
+        self.log.info("FL-7: multi-valued field amenities exposed as JavaScript array in UDF")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "fields": ["name", "amenities"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["amenities"],
+                "source": "function check_array(doc, params){ var f = doc.fields || {}; return Array.isArray(f.amenities); }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"FL-7: expected hotels with array amenities, got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"FL-7: total_hits={r.get('total_hits', '?')}")
+
+        if failures:
+            self.fail("test_udf_fl failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_fl PASSED — all FL sub-cases passed")
+
+    # ── P — Params Tests ───────────────────────────────────────────────────────
+
+    def test_udf_params(self):
+        # P-1..P-4: params tests
+        failures = []
+        gt = self._udf_gt
+
+        # P-1: Params are accessible in function (P1)
+        self.log.info("P-1: params accessible in UDF — threshold=5 and category='hotel' passed via params")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "params": {"threshold": 5, "category": "hotel"},
+                "source": "function check_params(doc, params){ return params.threshold === 5 && params.category === 'hotel'; }",
+            }},
+        })
+        if err or hits != gt["p_1_params_check"]:
+            failures.append(f"P-1: expected {gt['p_1_params_check']} got {hits}, err={err}")
+        self.log.info(f"P-1: hits={hits}")
+
+        # P-2: Nested object params (P2)
+        self.log.info("P-2: nested object params — constraints.min_price=100 and constraints.min_rating=4.0")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "price_per_night", "rating"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night", "rating"],
+                "params": {"constraints": {"min_price": 100, "min_rating": 4.0}, "label": "premium"},
+                "source": "function nested_params(doc, params){ var f = doc.fields || {}; var c = params.constraints || {}; return (f.price_per_night || 0) >= c.min_price && (f.rating || 0) >= c.min_rating; }",
+            }},
+        })
+        if err or hits != gt["p_2_nested_params"]:
+            failures.append(f"P-2: expected {gt['p_2_nested_params']} got {hits}, err={err}")
+        self.log.info(f"P-2: hits={hits}")
+
+        # P-3: Array params (P2)
+        self.log.info("P-3: array params — allowed_policies=['free','partial'] passed via params")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "fields": ["name", "cancellationPolicy"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["cancellationPolicy"],
+                "params": {"allowed_policies": ["free", "partial"]},
+                "source": "function policy_whitelist(doc, params){ var f = doc.fields || {}; var allowed = params.allowed_policies || []; return allowed.indexOf(f.cancellationPolicy) !== -1; }",
+            }},
+        })
+        if err or hits != gt["p_3_array_params"]:
+            failures.append(f"P-3: expected {gt['p_3_array_params']} got {hits}, err={err}")
+        self.log.info(f"P-3: hits={hits}")
+
+        # P-4: Params not specified — params is empty/undefined (P1)
+        self.log.info("P-4: no params specified — UDF handles undefined params gracefully")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function no_params(doc, params){ var threshold = (params && params.min) ? params.min : 100; return true; }",
+            }},
+        })
+        if s != 200 or r.get("total_hits", 0) == 0:
+            failures.append(f"P-4: expected hits even with no params, got status={s} hits={r.get('total_hits', 0)}")
+        self.log.info(f"P-4: total_hits={r.get('total_hits', '?')}")
+
+        if failures:
+            self.fail("test_udf_params failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_params PASSED — all P sub-cases passed")
+
+    # ── JS — JavaScript Contract Tests ────────────────────────────────────────
+
+    def test_udf_js(self):
+        # JS-1..JS-6: JavaScript contract tests
+        failures = []
+        gt = self._udf_gt
+
+        # JS-1: doc._id accessible and is a non-empty string (P1)
+        self.log.info("JS-1: doc._id accessible — typeof doc._id === 'string' and length > 0 for all docs")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function check_id(doc, params){ return typeof doc._id === 'string' && doc._id.length > 0; }",
+            }},
+        })
+        if err or hits != gt["js_1_id_check"]:
+            failures.append(f"JS-1: expected {gt['js_1_id_check']} got {hits}, err={err}")
+        self.log.info(f"JS-1: hits={hits}")
+
+        # JS-2: doc.score accessible and positive in custom_score (P0)
+        self.log.info("JS-2: doc.score accessible in custom_score — must be a number (not -999 sentinel)")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function check_score(doc, params){ if (typeof doc.score !== 'number') return -999; return doc.score; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"JS-2: query failed status={s}")
+        else:
+            sentinel = [h["id"] for h in r.get("hits", []) if abs(h.get("score", 0) - (-999)) < 1]
+            if sentinel:
+                failures.append(f"JS-2: doc.score is not a number for {sentinel}")
+        self.log.info(f"JS-2: total_hits={r.get('total_hits', '?')}")
+
+        # JS-3: doc.score accessible in custom_filter (P2)
+        self.log.info("JS-3: doc.score accessible in custom_filter — filter doc.score > 0")
+        hits, err = self._udf._udf_query({
+            "size": 20,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function filter_by_score(doc, params){ return doc.score > 0; }",
+            }},
+        })
+        if err or hits != gt["js_3_score_positive"]:
+            failures.append(f"JS-3: expected {gt['js_3_score_positive']} got {hits}, err={err}")
+        self.log.info(f"JS-3: hits={hits}")
+
+        # JS-4: Arrow function source is rejected (P0 — spec requirement)
+        self.log.info("JS-4: arrow function source must be rejected — spec requires named function declaration")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "(doc, params) => true",
+            }},
+        })
+        if s == 200:
+            failures.append("JS-4: expected compile error for arrow function, got 200")
+        self.log.info(f"JS-4: arrow function status={s}")
+
+        # JS-5: Multiple functions in source — helper function pattern (P2)
+        self.log.info("JS-5: multiple functions in source — helper + main function pattern, no 500 error")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function helper(x){ return x > 0; } function main_filter(doc, params){ return helper(doc.score); }",
+            }},
+        })
+        if s == 500:
+            failures.append(f"JS-5: server error with multi-function source: {r}")
+        self.log.info(f"JS-5: multi-function source: status={s} total_hits={r.get('total_hits')}")
+
+        # JS-6: JS Math functions available (P2)
+        self.log.info("JS-6: JS Math functions available — Math.min used in scoring, scores must be in [0,1]")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "fields": ["distanceFromCenterKm"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["distanceFromCenterKm"],
+                "source": "function use_math(doc, params){ var f = doc.fields || {}; var d = f.distanceFromCenterKm || 1; return 1.0 - Math.min(d / 5.0, 1.0); }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"JS-6: query failed status={s}")
+        elif r.get("total_hits", 0) == 0:
+            failures.append("JS-6: expected hits")
+        else:
+            out_of_range = [
+                f"{h['id']}: score={h.get('score', -1):.4f}"
+                for h in r.get("hits", [])
+                if not (0.0 <= h.get("score", -1) <= 1.0)
+            ]
+            if out_of_range:
+                failures.append(f"JS-6: scores out of [0,1] range: {out_of_range}")
+        self.log.info(f"JS-6: total_hits={r.get('total_hits', '?')}")
+
+        if failures:
+            self.fail("test_udf_js failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_js PASSED — all JS sub-cases passed")
+
+    # ── QC — Query Composition Tests ──────────────────────────────────────────
+
+    def test_udf_qc_basic(self):
+        # QC-1..QC-5: basic query composition tests
+        failures = []
+        gt = self._udf_gt
+
+        # QC-1: custom_filter wrapping match_phrase inner query (P1)
+        self.log.info("QC-1: custom_filter wrapping match_phrase 'luxury hotel' — observational")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10, "fields": ["name", "description"],
+            "query": {"custom_filter": {
+                "query": {"match_phrase": "luxury hotel", "field": "description"},
+                "fields": ["type"],
+                "source": "function all_pass(doc, params){ return true; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"QC-1: query failed status={s}")
+        self.log.info(f"QC-1: match_phrase 'luxury hotel' total_hits={r.get('total_hits')}")
+
+        # QC-2: custom_filter wrapping bool (must/conjuncts) inner query (P1)
+        self.log.info("QC-2: custom_filter wrapping bool conjuncts — Paris hotels not NON_REFUNDABLE")
+        hits, err = self._udf._udf_query({
+            "size": 20, "fields": ["name", "city"],
+            "query": {"custom_filter": {
+                "query": {"must": {"conjuncts": [
+                    {"match": "hotel", "field": "type"},
+                    {"field": "city", "match": "Paris"},
+                ]}},
+                "fields": ["cancellationPolicy"],
+                "source": "function not_nonrefund(doc, params){ var f = doc.fields || {}; return f.cancellationPolicy !== 'non_refundable'; }",
+            }},
+        })
+        if err or hits != gt["qc_2_paris_not_nonrefund"]:
+            failures.append(f"QC-2: expected {gt['qc_2_paris_not_nonrefund']} got {hits}, err={err}")
+        self.log.info(f"QC-2: hits={hits}")
+
+        # QC-3: custom_score wrapping bool query (P1)
+        self.log.info("QC-3: custom_score wrapping bool query — Paris hotels scored by rating*2")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10, "fields": ["name", "rating"],
+            "query": {"custom_score": {
+                "query": {"must": {"conjuncts": [
+                    {"match": "hotel", "field": "type"},
+                    {"field": "city", "match": "Paris"},
+                ]}},
+                "fields": ["rating"],
+                "source": "function rating_score(doc, params){ var f = doc.fields || {}; return (f.rating || 0) * 2; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"QC-3: query failed status={s}")
+        elif not r.get("hits"):
+            failures.append("QC-3: expected Paris hotel hits")
+        else:
+            all_ids = [h["id"] for h in r.get("hits", [])]
+            if "hotel::paris_003" not in all_ids[:3]:
+                failures.append(f"QC-3: paris_003 should be near top, got first 3: {all_ids[:3]}")
+        self.log.info(f"QC-3: total_hits={r.get('total_hits', '?')}")
+
+        # QC-4: custom_filter inside disjunction (P1)
+        self.log.info("QC-4: custom_filter inside disjunction — breweries OR US country docs")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20, "fields": ["name", "type"],
+            "query": {"should": {"disjuncts": [
+                {"custom_filter": {
+                    "query": {"match": "brewery", "field": "type"},
+                    "fields": ["type"],
+                    "source": "function brewery_only(doc, params){ var f = doc.fields || {}; return f.type === 'brewery'; }",
+                }},
+                {"field": "country", "match": "United States"},
+            ]}},
+        })
+        if s != 200:
+            failures.append(f"QC-4: query failed status={s}")
+        elif r.get("total_hits", 0) < 5:
+            failures.append(f"QC-4: expected at least 5 results (all breweries), got {r.get('total_hits', 0)}")
+        self.log.info(f"QC-4: disjunction result total_hits={r.get('total_hits')}")
+
+        # QC-5: custom_filter inside conjunction (must) (P1)
+        self.log.info("QC-5: custom_filter inside conjunction — Paris hotels with FREE cancellation")
+        hits, err = self._udf._udf_query({
+            "size": 20, "fields": ["name", "type", "cancellationPolicy"],
+            "query": {"must": {"conjuncts": [
+                {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "fields": ["cancellationPolicy"],
+                    "source": "function free_cancel(doc, params){ var f = doc.fields || {}; return f.cancellationPolicy === 'free'; }",
+                }},
+                {"field": "city", "match": "Paris"},
+            ]}},
+        })
+        if err or hits != gt["qc_5_paris_free"]:
+            failures.append(f"QC-5: expected {gt['qc_5_paris_free']} got {hits}, err={err}")
+        self.log.info(f"QC-5: hits={hits}")
+
+        if failures:
+            self.fail("test_udf_qc_basic failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_qc_basic PASSED — all QC basic sub-cases passed")
+
+    def test_udf_qc_advanced(self):
+        # QC-6..QC-9: advanced query composition tests
+        failures = []
+        gt = self._udf_gt
+
+        # QC-6: custom_score wrapping custom_filter (chained) (P1)
+        self.log.info("QC-6: custom_score wrapping custom_filter — available hotels scored cheapest-first")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 20, "fields": ["name", "price_per_night"],
+            "query": {"custom_score": {
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "fields": ["available"],
+                    "source": "function only_available(doc, params){ var f = doc.fields || {}; return f.available === true; }",
+                }},
+                "fields": ["price_per_night"],
+                "source": "function cheap_first(doc, params){ var f = doc.fields || {}; var p = f.price_per_night || 9999; return 1000.0 / p; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"QC-6: query failed status={s}")
+        else:
+            total = r.get("total_hits", 0)
+            if total != gt["qc_6_avail_hotels"]:
+                failures.append(f"QC-6: expected {gt['qc_6_avail_hotels']} available hotels got {total}")
+            else:
+                ids = [h["id"] for h in r.get("hits", [])]
+                if "hotel::paris_009" in ids and "hotel::london_003" in ids:
+                    if ids.index("hotel::paris_009") >= ids.index("hotel::london_003"):
+                        failures.append("QC-6: cheapest available hotel should rank highest")
+        self.log.info(f"QC-6: total_hits={r.get('total_hits', '?')}")
+
+        # QC-7: Nested custom_filter inside custom_filter (P2)
+        self.log.info("QC-7: nested custom_filter — outer FREE filter wraps inner available filter")
+        hits, err = self._udf._udf_query({
+            "size": 10, "fields": ["name", "available", "cancellationPolicy"],
+            "query": {"custom_filter": {
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "fields": ["available"],
+                    "source": "function avail_filter(doc, params){ var f = doc.fields || {}; return f.available === true; }",
+                }},
+                "fields": ["cancellationPolicy"],
+                "source": "function free_filter(doc, params){ var f = doc.fields || {}; return f.cancellationPolicy === 'free'; }",
+            }},
+        })
+        if err or hits != gt["qc_7_avail_and_free"]:
+            failures.append(f"QC-7: expected {gt['qc_7_avail_and_free']} got {hits}, err={err}")
+        self.log.info(f"QC-7: hits={hits}")
+
+        # QC-8: custom_filter with numeric_range inner query (P1)
+        self.log.info("QC-8: custom_filter with numeric_range — price 100-300 AND rating >= 4.0")
+        hits, err = self._udf._udf_query({
+            "size": 10, "fields": ["name", "price_per_night", "rating"],
+            "query": {"custom_filter": {
+                "query": {"field": "price_per_night", "min": 100.0, "max": 300.0,
+                          "inclusive_min": True, "inclusive_max": True},
+                "fields": ["rating"],
+                "params": {"min_rating": 4.0},
+                "source": "function rate_gate(doc, params){ var f = doc.fields || {}; return (f.rating || 0) >= params.min_rating; }",
+            }},
+        })
+        if err or hits != gt["qc_8_price100_300_rating4"]:
+            failures.append(f"QC-8: expected {gt['qc_8_price100_300_rating4']} got {hits}, err={err}")
+        self.log.info(f"QC-8: hits={hits}")
+
+        # QC-9: geo_distance inner query — skipped (location field not in test index) (P2)
+        self.log.info("QC-9: custom_score with geo_distance — skipped (location field not in udf_test_index)")
+
+        if failures:
+            self.fail("test_udf_qc_advanced failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_qc_advanced PASSED — all QC advanced sub-cases passed")
+
+    # ── EH — Error Handling & Failure Semantics ───────────────────────────────
+
+    def test_udf_eh_validation(self):
+        # EH-1..EH-4 + EH-12: validation/compile errors
+        failures = []
+
+        # EH-1: Missing query field in custom_filter → HTTP 400 (P0)
+        self.log.info("EH-1: missing 'query' field in custom_filter — expect HTTP 400")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {"source": "function f(doc, params){ return true; }"}},
+        })
+        if s != 400:
+            failures.append(f"EH-1: expected 400, got {s}")
+        self.log.info(f"EH-1: status={s}")
+
+        # EH-2: Missing source field in custom_filter → HTTP 400 (P0)
+        self.log.info("EH-2: missing 'source' field in custom_filter — expect HTTP 400")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {"query": {"match": "hotel", "field": "type"}}},
+        })
+        if s != 400:
+            failures.append(f"EH-2: expected 400 for missing source, got {s}")
+        self.log.info(f"EH-2: status={s}")
+
+        # EH-3: Invalid JavaScript syntax → early compile failure (P0)
+        self.log.info("EH-3: invalid JS syntax — expect early compile failure, non-200 status")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc, params) { return true",
+            }},
+        })
+        if s == 200:
+            failures.append(f"EH-3: expected compile error, got 200")
+        self.log.info(f"EH-3: syntax error response status={s}")
+
+        # EH-4: Missing named function declaration → error (P0)
+        self.log.info("EH-4: bare return statement (no function declaration) — expect error")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "return true;",
+            }},
+        })
+        if s == 200:
+            failures.append(f"EH-4: expected error for bare return, got 200")
+        self.log.info(f"EH-4: bare return rejected with status={s}")
+
+        # EH-12: Error response format when UDF disabled (P0)
+        self.log.info("EH-12: error response format when UDF disabled — expect HTTP 400 with body")
+        self._udf._disable_udf()
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function f(doc,params){return true;}",
+            }},
+        })
+        self._udf._enable_udf()
+        if s != 400:
+            failures.append(f"EH-12: expected 400 when UDF disabled, got {s}")
+        self.log.info(f"EH-12: disabled response body: {r}")
+
+        if failures:
+            self.fail("test_udf_eh_validation failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_eh_validation PASSED — all EH validation sub-cases passed")
+
+    def test_udf_eh_runtime(self):
+        # EH-5..EH-11 + EH-13: runtime error semantics
+        failures = []
+
+        # EH-5: Runtime exception in custom_filter → hit dropped, query continues (P0)
+        self.log.info("EH-5: runtime exception in UDF — hit dropped, query continues, 0 results expected")
+        hits, err = self._udf._udf_query({
+            "size": 20, "fields": ["name"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function throw_err(doc, params){ throw new Error('deliberate test error'); }",
+            }},
+        })
+        if err:
+            failures.append(f"EH-5: query itself must not fail (runtime errors are per-hit): {err}")
+        elif hits != 0:
+            failures.append(f"EH-5: all hits should be dropped on exception, got {hits}")
+        self.log.info(f"EH-5: hits={hits}")
+
+        # EH-6: Runtime exception in custom_score → fallback to base score (P0)
+        self.log.info("EH-6: runtime exception in custom_score — fallback to base score, all hits preserved")
+        _, base_r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10, "fields": ["name"], "query": {"match": "hotel", "field": "type"},
+        })
+        base_total = base_r.get("total_hits", 0)
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10, "fields": ["name"],
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function throw_score(doc, params){ throw new Error('score error'); }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"EH-6: query must not fail on CS runtime exception: status={s}")
+        elif r.get("total_hits", 0) != base_total:
+            failures.append(f"EH-6: expected {base_total} hits with fallback scores, got {r.get('total_hits', 0)}")
+        self.log.info(f"EH-6: total_hits={r.get('total_hits', '?')}")
+
+        # EH-7: custom_filter returns non-boolean string — document behaviour (P1)
+        self.log.info("EH-7: non-boolean string return from custom_filter — must not cause 500 error")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function str_return(doc, params){ return 'yes'; }",
+            }},
+        })
+        if s == 500:
+            failures.append(f"EH-7: must not return 500 for string return: {r}")
+        self.log.info(f"EH-7: string return result: status={s} total_hits={r.get('total_hits')}")
+
+        # EH-8: custom_filter returns null → hit dropped → 0 results (P1)
+        self.log.info("EH-8: null return from custom_filter — hit dropped, expect 0 results")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function null_return(doc, params){ return null; }",
+            }},
+        })
+        if err:
+            failures.append(f"EH-8: query must not fail for null return: {err}")
+        elif hits != 0:
+            failures.append(f"EH-8: null return should drop all hits, got {hits}")
+        self.log.info(f"EH-8: hits={hits}")
+
+        # EH-9: custom_score returns non-numeric string → fallback to base score (P1)
+        self.log.info("EH-9: non-numeric string score — fallback to base score expected")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function str_score(doc, params){ return 'high'; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"EH-9: expected fallback to base score, query failed: status={s}")
+        self.log.info(f"EH-9: string score result: total_hits={r.get('total_hits')}")
+
+        # EH-10: custom_score returns NaN → fallback to base score (P1)
+        self.log.info("EH-10: NaN score return — fallback to base score expected")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function nan_score(doc, params){ return NaN; }",
+            }},
+        })
+        if s != 200:
+            failures.append(f"EH-10: expected fallback for NaN score, got status={s}")
+        self.log.info(f"EH-10: NaN score result: total_hits={r.get('total_hits')}")
+
+        # EH-11: custom_score returns Infinity — document behaviour (P2)
+        self.log.info("EH-11: Infinity score — must not cause 500 error, observational")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function inf_score(doc, params){ return Infinity; }",
+            }},
+        })
+        if s == 500:
+            failures.append(f"EH-11: must not return 500 for Infinity score: {r}")
+        self.log.info(f"EH-11: Infinity score result: status={s} total_hits={r.get('total_hits')}")
+
+        # EH-13: Division by zero (Infinity from JS) handled gracefully (P2)
+        self.log.info("EH-13: division by zero in UDF score — must not cause 500 error, observational")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_score": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night"],
+                "source": "function div_by_price(doc, params){ var f = doc.fields || {}; var p = f.price_per_night || 0; return 1000 / p; }",
+            }},
+        })
+        if s == 500:
+            failures.append(f"EH-13: must not return 500 for div-by-zero: {r}")
+        self.log.info(f"EH-13: div-by-zero result: status={s} total_hits={r.get('total_hits')}")
+
+        if failures:
+            self.fail("test_udf_eh_runtime failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_eh_runtime PASSED — all EH runtime sub-cases passed")
+
+    # ── SR — Security / Restriction Tests ─────────────────────────────────────
+
+    def test_udf_sr_sandbox(self):
+        # SR-1..SR-8: sandbox restrictions and state isolation
+        failures = []
+
+        # SR-1: No access to Node.js builtins (require/fs/process) (P1)
+        self.log.info("SR-1: require() must not be accessible in V8 sandbox — expect 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function try_require(doc, params){ try { var fs = require('fs'); return true; } catch(e) { return false; } }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-1: query must not fail: {err}")
+        elif hits != 0:
+            failures.append(f"SR-1: require() must not be accessible, got {hits} hits")
+        self.log.info(f"SR-1: hits={hits}")
+
+        # SR-2: No access to process / env variables (P1)
+        self.log.info("SR-2: process object must not be accessible in V8 sandbox — expect 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function try_process(doc, params){ try { return typeof process !== 'undefined'; } catch(e) { return false; } }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-2: query must not fail: {err}")
+        elif hits != 0:
+            failures.append(f"SR-2: process must not be accessible, got {hits} hits")
+        self.log.info(f"SR-2: hits={hits}")
+
+        # SR-3: Infinite loop times out — node must not hang (P0)
+        self.log.info("SR-3: infinite loop in UDF — must time out, node must remain healthy")
+        start = time.time()
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function infinite_loop(doc, params){ while(true){} return true; }",
+            }},
+        })
+        elapsed = time.time() - start
+        if elapsed >= 60:
+            failures.append(f"SR-3: FTS node appears hung (elapsed={elapsed:.1f}s)")
+        if s == 500:
+            failures.append(f"SR-3: must not return 500 for infinite loop: {r}")
+        s2, r2 = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "query": {"match": "hotel", "field": "type"},
+        })
+        if s2 != 200:
+            failures.append(f"SR-3: FTS node unhealthy after infinite loop: {r2}")
+        self.log.info(f"SR-3: infinite loop handled in {elapsed:.1f}s, status={s}")
+
+        # SR-4: doc object limited to _id, score, fields (P1)
+        self.log.info("SR-4: doc object shape restricted to _id, score, fields — no extra keys exposed")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function check_doc_shape(doc, params){ var keys = Object.keys(doc); var valid = ['_id','score','fields']; for(var k of keys){ if(valid.indexOf(k)===-1) return false; } return true; }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-4: {err}")
+        elif hits == 0:
+            failures.append("SR-4: all hotel docs should pass doc-shape check")
+        self.log.info(f"SR-4: hits={hits}")
+
+        # SR-5: Global mutable state does NOT persist across requests (P0 — critical)
+        self.log.info("SR-5: global state isolation — _flag set in request 1 must not be visible in request 2")
+        h1, e1 = self._udf._udf_query({
+            "size": 20,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function set_flag(doc, params){ _flag = true; return true; }",
+            }},
+        })
+        if e1:
+            failures.append(f"SR-5 step1: {e1}")
+        h2, e2 = self._udf._udf_query({
+            "size": 20,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function check_leak(doc, params){ return typeof _flag !== 'undefined'; }",
+            }},
+        })
+        if e2:
+            failures.append(f"SR-5 step2: {e2}")
+        elif h2 > 0:
+            failures.append(f"SR-5: SECURITY BUG — global state leaked across requests: h2={h2}")
+        self.log.info(f"SR-5: h1={h1} h2={h2} (h2 must be 0)")
+
+        # SR-6: Function constructor cannot escape sandbox (P0)
+        self.log.info("SR-6: Function constructor sandbox escape must be blocked — expect 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function try_func_ctor(doc, params){ try { var f = new Function('return typeof require'); return f() !== 'undefined'; } catch(e){ return false; } }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-6: query must not fail: {err}")
+        elif hits != 0:
+            failures.append(f"SR-6: Function constructor sandbox escape must be blocked, got {hits}")
+        self.log.info(f"SR-6: hits={hits}")
+
+        # SR-7: eval is not available (P0)
+        self.log.info("SR-7: eval must be blocked in V8 sandbox — expect 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function try_eval(doc, params){ try { eval('1+1'); return true; } catch(e){ return false; } }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-7: query must not fail: {err}")
+        elif hits != 0:
+            failures.append(f"SR-7: eval must be blocked in V8 sandbox, got {hits}")
+        self.log.info(f"SR-7: hits={hits}")
+
+        # SR-8: Prototype pollution does not affect subsequent queries (P1)
+        self.log.info("SR-8: prototype pollution must not persist across requests")
+        self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function pollute(doc, params){ try { Object.prototype.__injected__ = true; } catch(e){} return true; }",
+            }},
+        })
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function check_polluted(doc, params){ return ({})['__injected__'] === true; }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-8: {err}")
+        elif hits > 0:
+            failures.append(f"SR-8: prototype pollution leaked across requests: hits={hits}")
+        self.log.info(f"SR-8: hits={hits} (must be 0)")
+
+        if failures:
+            self.fail("test_udf_sr_sandbox failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_sr_sandbox PASSED — all SR sandbox sub-cases passed")
+
+    def test_udf_sr_resilience(self):
+        # SR-9..SR-13: resilience/resource tests
+        failures = []
+
+        # SR-9: ReDoS — catastrophic regex triggers execution timeout (P1)
+        self.log.info("SR-9: ReDoS catastrophic regex — must time out, no 500 error, node stays healthy")
+        start = time.time()
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function redos(doc, params){ return /^(a+)+$/.test('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!'); }",
+            }},
+        })
+        elapsed = time.time() - start
+        if elapsed >= 60:
+            failures.append(f"SR-9: ReDoS caused hang ({elapsed:.1f}s)")
+        if s == 500:
+            failures.append(f"SR-9: must not return 500 for ReDoS: {r}")
+        self.log.info(f"SR-9: ReDoS handled in {elapsed:.1f}s, status={s}")
+
+        # SR-10: Error messages must not leak field values into response body (P1)
+        self.log.info("SR-10: field values must not appear in error response body — data leak check")
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "fields": ["name", "price_per_night"],
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "fields": ["price_per_night", "cancellationPolicy"],
+                "source": "function leak_fields(doc, params){ throw new Error(JSON.stringify(doc.fields)); }",
+            }},
+        })
+        resp_str = str(r)
+        self.log.info(f"SR-10: error response body: {resp_str[:200]}")
+        for val in ["150", "350", "FREE", "PARTIAL", "NON_REFUNDABLE"]:
+            if val in resp_str:
+                failures.append(f"SR-10: field value '{val}' leaked in error response")
+        self.log.info(f"SR-10: data leak check complete for {len(resp_str)} char response")
+
+        # SR-11: Memory bomb — large allocation bounded by V8 heap (P1)
+        self.log.info("SR-11: memory bomb 50M array allocation — no hang, no 500, node remains healthy")
+        start = time.time()
+        s, r = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function mem_bomb(doc, params){ try { var arr = new Array(50000000).fill('x'); return arr.length > 0; } catch(e){ return false; } }",
+            }},
+        })
+        elapsed = time.time() - start
+        if elapsed >= 60:
+            failures.append(f"SR-11: memory bomb caused hang ({elapsed:.1f}s)")
+        if s == 500:
+            failures.append(f"SR-11: FTS must not crash on memory bomb: {r}")
+        s2, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "query": {"match": "hotel", "field": "type"},
+        })
+        if s2 != 200:
+            failures.append("SR-11: FTS node unhealthy after memory bomb")
+        self.log.info(f"SR-11: elapsed={elapsed:.1f}s status={s}")
+
+        # SR-12: WebAssembly not available in restricted context (P2)
+        self.log.info("SR-12: WebAssembly must not be exposed in V8 sandbox — expect 0 hits")
+        hits, err = self._udf._udf_query({
+            "size": 5,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": "function try_wasm(doc, params){ return typeof WebAssembly !== 'undefined'; }",
+            }},
+        })
+        if err:
+            failures.append(f"SR-12: query must not fail: {err}")
+        elif hits != 0:
+            failures.append(f"SR-12: WebAssembly must not be exposed in V8 sandbox, got {hits}")
+        self.log.info(f"SR-12: hits={hits}")
+
+        # SR-13: Worker pool starvation — slow UDFs must not block normal queries (P1)
+        self.log.info("SR-13: slow UDF worker pool — normal queries must not be blocked by 5 slow UDF threads")
+        slow_errors = []
+        def run_slow():
+            s_s, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+                "size": 20,
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": "function slow(doc, params){ var t = Date.now(); while(Date.now() - t < 200){} return true; }",
+                }},
+            })
+            if s_s != 200:
+                slow_errors.append(f"status={s_s}")
+        threads = [threading.Thread(target=run_slow) for _ in range(5)]
+        for t in threads:
+            t.start()
+        time.sleep(0.1)
+        start = time.time()
+        s_normal, r_normal = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 5, "query": {"match": "hotel", "field": "type"},
+        })
+        normal_elapsed = time.time() - start
+        for t in threads:
+            t.join(timeout=30)
+        if s_normal != 200:
+            failures.append(f"SR-13: normal query failed under UDF load: {r_normal}")
+        if normal_elapsed >= 10:
+            failures.append(f"SR-13: normal query took too long: {normal_elapsed:.1f}s")
+        self.log.info(f"SR-13: normal query latency={normal_elapsed:.3f}s under {len(threads)} slow UDF threads")
+
+        if failures:
+            self.fail("test_udf_sr_resilience failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_sr_resilience PASSED — all SR resilience sub-cases passed")
+
+    # ── PF — Performance / Resource Tests ─────────────────────────────────────
+
+    def test_udf_pf(self):
+        # PF-1..PF-4: performance and resource tests
+        failures = []
+
+        # PF-1: custom_filter latency vs native query (P2)
+        self.log.info("PF-1: latency comparison — custom_filter vs native query overhead (observational)")
+        RUNS = 5
+        native_times = []
+        for _ in range(RUNS):
+            t0 = time.time()
+            self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+                "size": 10, "query": {"match": "hotel", "field": "type"},
+            })
+            native_times.append(time.time() - t0)
+        avg_native = sum(native_times) / RUNS
+        udf_times = []
+        for _ in range(RUNS):
+            t0 = time.time()
+            self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+                "size": 10,
+                "query": {"custom_filter": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": "function f(doc,params){return true;}",
+                }},
+            })
+            udf_times.append(time.time() - t0)
+        avg_udf = sum(udf_times) / RUNS
+        overhead_ms = (avg_udf - avg_native) * 1000
+        self.log.info(f"PF-1: native={avg_native*1000:.1f}ms udf={avg_udf*1000:.1f}ms overhead={overhead_ms:.1f}ms")
+        if avg_udf >= 1.0:
+            failures.append(f"PF-1: UDF query took > 1s on 26 docs: {avg_udf:.3f}s")
+
+        # PF-2: fields: ["*"] cost vs minimal field list (P2)
+        self.log.info("PF-2: fields=['*'] vs minimal field list latency comparison (observational)")
+        RUNS2 = 3
+        def avg_latency(fields_list):
+            times = []
+            for _ in range(RUNS2):
+                t0 = time.time()
+                self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+                    "size": 10,
+                    "query": {"custom_filter": {
+                        "query": {"match": "hotel", "field": "type"},
+                        "fields": fields_list,
+                        "source": "function f(doc,params){return true;}",
+                    }},
+                })
+                times.append(time.time() - t0)
+            return sum(times) / RUNS2
+        t_minimal = avg_latency(["price_per_night"])
+        t_star = avg_latency(["*"])
+        self.log.info(f"PF-2: fields=['price_per_night']={t_minimal*1000:.1f}ms fields=['*']={t_star*1000:.1f}ms")
+        if t_star >= 2.0:
+            failures.append(f"PF-2: fields=* took > 2s on 26 docs: {t_star:.3f}s")
+
+        # PF-3: Script compilation cache — second request faster (P2)
+        self.log.info("PF-3: compilation cache — second request with same source should be faster (observational)")
+        unique_src = "function pf3_unique_abc(doc, params){ return true; }"
+        t0 = time.time()
+        self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": unique_src,
+            }},
+        })
+        t_first = time.time() - t0
+        t0 = time.time()
+        self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+            "size": 10,
+            "query": {"custom_filter": {
+                "query": {"match": "hotel", "field": "type"},
+                "source": unique_src,
+            }},
+        })
+        t_second = time.time() - t0
+        self.log.info(f"PF-3: first={t_first*1000:.1f}ms second={t_second*1000:.1f}ms (expect second < first)")
+
+        # PF-4: Concurrent UDF queries — worker pool saturation (P2)
+        self.log.info("PF-4: concurrent UDF queries — 10 simultaneous custom_score queries must all succeed")
+        results = []
+        lock = threading.Lock()
+        def run():
+            s_r, _ = self._udf._fts(self._udf._fts_index_path("query"), "POST", {
+                "size": 10,
+                "query": {"custom_score": {
+                    "query": {"match": "hotel", "field": "type"},
+                    "source": "function s(doc,params){return doc.score;}",
+                }},
+            })
+            with lock:
+                results.append(s_r)
+        threads = [threading.Thread(target=run) for _ in range(10)]
+        t0 = time.time()
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=60)
+        elapsed = time.time() - t0
+        thread_failures = [s for s in results if s != 200]
+        if thread_failures:
+            failures.append(f"PF-4: {len(thread_failures)}/10 concurrent queries failed: {thread_failures}")
+        self.log.info(f"PF-4: 10 concurrent UDF queries completed in {elapsed:.1f}s")
+
+        if failures:
+            self.fail("test_udf_pf failed sub-cases:\n" + "\n".join(failures))
+        self.log.info("test_udf_pf PASSED — all PF sub-cases passed")
