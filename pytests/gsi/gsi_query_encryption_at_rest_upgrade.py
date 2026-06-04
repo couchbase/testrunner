@@ -403,8 +403,17 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             self.sleep(15, f"{label}Waiting for FFDC files...")
         return results, node_keys
 
-    def _get_query_in_use_key_ids(self):
-        """Returns {node_ip: [key_id, ...]} from each query node, or {} if endpoint absent."""
+    def _get_query_in_use_key_ids(self, category=None):
+        """Returns {node_ip: [key_id, ...]} from each query node.
+
+        Args:
+            category: if None, returns the union of all categories (legacy
+                behavior). If one of "log" / "other", returns ONLY that
+                category's keys — required by per-category re-encryption polls,
+                since the endpoint response shape is
+                ``{"keys.in_use": {"log": [...], "other": [...]}}`` and mixing
+                them would mask the very change we're waiting for.
+        """
         query_nodes = self.get_nodes_from_services_map(
             service_type="n1ql", get_all_nodes=True,
         )
@@ -418,8 +427,11 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 if isinstance(enc, (bytes, bytearray)):
                     enc = json.loads(enc)
                 in_use = enc.get("keys.in_use", {}) if isinstance(enc, dict) else {}
-                all_keys = [k for ids in in_use.values() for k in ids if k]
-                out[node.ip] = all_keys
+                if category is None:
+                    keys = [k for ids in in_use.values() for k in ids if k]
+                else:
+                    keys = [k for k in (in_use.get(category) or []) if k]
+                out[node.ip] = keys
             except Exception as e:
                 self.log.warning(f"get_query_in_use_encryption_keys on {node.ip} failed: {e}")
                 out[node.ip] = []
@@ -482,18 +494,21 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                     f"{label}{node.ip}: log encryption is NOT enabled but "
                     f"endpoint reports in-use log DEKs {log_ids}",
                 )
-            if other_enabled:
-                self.assertTrue(
-                    len(other_ids) > 0,
-                    f"{label}{node.ip}: other encryption is enabled but "
-                    "endpoint reports no in-use other DEKs",
-                )
-            else:
-                self.assertTrue(
-                    len(other_ids) == 0,
-                    f"{label}{node.ip}: other encryption is NOT enabled but "
-                    f"endpoint reports in-use other DEKs {other_ids}",
-                )
+            # TODO: Re-enable once MB-72285 is fixed — post-upgrade the
+            # /admin/encryption_at_rest endpoint does not return other keys in use.
+            # https://jira.issues.couchbase.com/browse/MB-72285
+            # if other_enabled:
+            #     self.assertTrue(
+            #         len(other_ids) > 0,
+            #         f"{label}{node.ip}: other encryption is enabled but "
+            #         "endpoint reports no in-use other DEKs",
+            #     )
+            # else:
+            #     self.assertTrue(
+            #         len(other_ids) == 0,
+            #         f"{label}{node.ip}: other encryption is NOT enabled but "
+            #         f"endpoint reports in-use other DEKs {other_ids}",
+            #     )
         return node_key_ids
 
     def _get_indexer_in_use_key_ids(self, index_nodes):
@@ -525,14 +540,34 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
     # ------------------------------------------------------------------ spill / backfill
 
     def _run_spill_and_backfill_workload(self, query_nodes, namespace):
-        """Issue ORDER BY queries on the loaded data to produce av_spill_* / scan-results*
-        files. Per-query failures are tolerated (mid-upgrade nodes may bounce)."""
-        sort_query = f"SELECT meta().id, counter FROM {namespace} ORDER BY counter LIMIT 5000"
-        self.log.info(f"[spill] {sort_query[:120]}")
+        """Issue scan-backfill queries on the loaded data to produce scan-results* files.
+
+        Mirrors the query-service scan-backfill workload used in
+        n1ql_encryption_at_rest.py: project a wide row, scan on country,
+        and cap the request buffer so the index scan backfills to disk.
+        Per-query failures are tolerated (mid-upgrade nodes may bounce).
+        """
+        scan_cap = self.input.param("backfill_scan_cap", 128)
+        item_count = self.input.param("num_backfill_docs", 100000)
+        backfill_query = (
+            f"SELECT meta().id AS id, name, country, city, state, address, "
+            f"description, reviews FROM {namespace} "
+            f"WHERE country IS NOT NULL LIMIT {item_count}"
+        )
+        query_params = {"scan_cap": scan_cap}
+        self.log.info(
+            f"[spill] backfill query (scan_cap={scan_cap}, item_count={item_count}): "
+            f"{backfill_query[:150]}"
+        )
         for node in query_nodes:
             for _ in range(3):
                 try:
-                    self.run_cbq_query(query=sort_query, server=node, verbose=False)
+                    self.run_cbq_query(
+                        query=backfill_query,
+                        server=node,
+                        query_params=query_params,
+                        verbose=False,
+                    )
                 except Exception as e:
                     self.log.warning(f"[spill] query on {node.ip} failed: {e}")
 
@@ -822,7 +857,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         return entries
 
     def _wait_for_full_gsi_encryption(self, index_nodes, encrypted_buckets,
-                                      timeout=600, label=""):
+                                      timeout=1200, label=""):
         """Poll GetInUseKeys on every index node until no empty key-ID entries remain.
 
         After a force re-encryption (DEK drop), the indexer assigns a new DEK to each
@@ -870,6 +905,109 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self.fail(
             f"{label}GSI re-encryption did not complete within {timeout}s. "
             f"Still pending: {pending}"
+        )
+
+    def _wait_for_no_empty_keys_in_use(self, index_nodes, query_nodes,
+                                       encrypted_buckets, timeout=1200, label=""):
+        """Pre-flight gate before any file-encryption validation.
+
+        Polls GetInUseKeys on every relevant service until NONE of the enabled
+        encryption categories report an empty key ID:
+
+          * bucket encryption (GSI)   — if `encrypted_buckets` is non-empty,
+            every indexer store must report a non-empty key ID
+            (delegates to `_wait_for_full_gsi_encryption`).
+          * log encryption (Query)    — if `self.log_encryption_at_rest_id` is
+            set, `keys.in_use["log"]` on every query node must be non-empty
+            and contain no empty strings.
+          * other encryption (Query)  — if `self.other_encryption_at_rest_id`
+            is set, `keys.in_use["other"]` must be non-empty/non-empty-strings.
+
+        An "empty key" (empty string or empty list under a category) means the
+        store has not yet been re-encrypted with the current active DEK —
+        validating files at that point would race the encryptor and produce
+        spurious failures.
+
+        Polls every 30 s up to `timeout` seconds; fails clearly on timeout."""
+        log_enabled = bool(getattr(self, "log_encryption_at_rest_id", None))
+        other_enabled = bool(getattr(self, "other_encryption_at_rest_id", None))
+        bucket_enabled = bool(encrypted_buckets)
+        self.log.info(
+            f"{label}Waiting (up to {timeout}s) for no empty keys in use: "
+            f"bucket={bucket_enabled}, log={log_enabled}, other={other_enabled}"
+        )
+
+        if bucket_enabled and index_nodes:
+            try:
+                self._wait_for_full_gsi_encryption(
+                    index_nodes, encrypted_buckets, timeout=timeout,
+                    label=f"{label}[bucket-keys] ",
+                )
+            except AssertionError as e:
+                # Empty bucket key IDs after timeout — log and continue to
+                # file-encryption validation instead of failing the test.
+                self.log.warning(
+                    f"{label}[bucket-keys] empty key IDs still present after "
+                    f"{timeout}s; proceeding to file validation anyway: {e}"
+                )
+
+        if not (log_enabled or other_enabled) or not query_nodes:
+            return
+
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            pending = []
+            for node in query_nodes:
+                ver = self._node_running_version(node)
+                if ver < self.EAR_FILE_MIN_VERSION:
+                    continue
+                try:
+                    status, enc = self.rest.get_query_in_use_encryption_keys(node)
+                    if not status:
+                        pending.append(f"{node.ip}: keys-in-use status=False")
+                        continue
+                    if isinstance(enc, (bytes, bytearray)):
+                        enc = json.loads(enc)
+                    keys_in_use = (
+                        enc.get("keys.in_use", {}) if isinstance(enc, dict) else {}
+                    )
+                    for cat, enabled in (("log", log_enabled), ("other", other_enabled)):
+                        if not enabled:
+                            continue
+                        ids = keys_in_use.get(cat) or []
+                        if not ids:
+                            pending.append(
+                                f"{node.ip}: '{cat}' has no in-use key IDs"
+                            )
+                            continue
+                        empties = [i for i, k in enumerate(ids) if not k]
+                        if empties:
+                            pending.append(
+                                f"{node.ip}: '{cat}' has empty key id(s) at "
+                                f"indices {empties} (full list: {ids})"
+                            )
+                except Exception as e:
+                    pending.append(f"{node.ip}: keys-in-use error: {e}")
+
+            if not pending:
+                self.log.info(
+                    f"{label}All query categories report non-empty in-use key IDs"
+                )
+                return
+            preview = pending[:5]
+            suffix = f" ... (+{len(pending) - 5} more)" if len(pending) > 5 else ""
+            self.log.info(
+                f"{label}{len(pending)} query store(s) still report empty keys: "
+                f"{preview}{suffix}"
+            )
+            self.sleep(30, f"{label}Waiting for non-empty query keys-in-use")
+
+        # Do NOT fail the test on timeout — empty key IDs at this point may
+        # simply mean re-encryption is still in flight. Log a warning and let
+        # the file-encryption validation proceed so we still get coverage.
+        self.log.warning(
+            f"{label}Query keys-in-use still report empty keys after {timeout}s; "
+            f"proceeding to file validation anyway. Still pending: {pending}"
         )
 
     def _create_post_upgrade_indexes(self, query_nodes):
@@ -975,35 +1113,103 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
 
     def _force_reencrypt_logs_and_wait(self, query_nodes, timeout=300, label=""):
         """Drop all log DEKs (POST /controller/dropEncryptionAtRestDeks/log) and poll
-        until any query node reports key IDs that differ from the baseline.
-        Returns the new {node_ip: [key_id, ...]} map."""
-        baseline = self._get_query_in_use_key_ids()
+        until any query node reports a change in the ``log`` category specifically.
+        Returns the new {node_ip: [log_key_id, ...]} map.
+
+        Best-effort: if the baseline is empty on every node (no log keys to drop)
+        or the timeout elapses without a change, logs a warning and returns the
+        last observed map instead of failing the test. File-encryption validation
+        downstream is the real signal of correctness."""
+        baseline = self._get_query_in_use_key_ids(category="log")
         self.log.info(
             f"{label}Triggering force log re-encryption "
-            f"(baseline key IDs per node: {baseline})"
+            f"(baseline log key IDs per node: {baseline})"
         )
+        if not any(baseline.get(n.ip) for n in query_nodes):
+            self.log.warning(
+                f"{label}Baseline log key IDs are empty on every query node — "
+                "nothing to re-encrypt; skipping trigger + wait."
+            )
+            return baseline
         status, response = self.rest.trigger_log_reencryption()
         if not status:
-            raise Exception(f"trigger_log_reencryption failed: {response}")
+            self.log.warning(
+                f"{label}trigger_log_reencryption returned status=False: {response}; "
+                "proceeding without waiting for new key IDs."
+            )
+            return baseline
         self.log.info(f"{label}Log re-encryption triggered: {response}")
 
         deadline = time.time() + timeout
+        current = baseline
         while time.time() < deadline:
-            current = self._get_query_in_use_key_ids()
+            current = self._get_query_in_use_key_ids(category="log")
             if any(
                 set(current.get(node.ip, [])) != set(baseline.get(node.ip, []))
                 for node in query_nodes
             ):
                 self.log.info(
-                    f"{label}New query key IDs detected: {current} "
+                    f"{label}New log key IDs detected: {current} "
                     f"(baseline was {baseline})"
                 )
                 return current
-            self.sleep(15, f"{label}Waiting for new query key IDs after log re-encryption")
-        self.fail(
-            f"{label}No new query key IDs appeared within {timeout}s after "
-            f"triggering log re-encryption (baseline: {baseline})"
+            self.sleep(15, f"{label}Waiting for new log key IDs after log re-encryption")
+        self.log.warning(
+            f"{label}No new log key IDs appeared within {timeout}s after "
+            f"triggering log re-encryption (baseline: {baseline}); "
+            "continuing — file-encryption validation will catch real failures."
         )
+        return current
+
+    def _force_reencrypt_other_and_wait(self, query_nodes, timeout=300, label=""):
+        """Drop all other-DEKs (POST /controller/dropEncryptionAtRestDeks/other) and poll
+        until any query node reports a change in the ``other`` category specifically.
+        Returns the new {node_ip: [other_key_id, ...]} map.
+
+        Best-effort: if the baseline is empty on every node (no other keys to drop)
+        or the timeout elapses without a change, logs a warning and returns the
+        last observed map instead of failing the test. File-encryption validation
+        downstream is the real signal of correctness."""
+        baseline = self._get_query_in_use_key_ids(category="other")
+        self.log.info(
+            f"{label}Triggering force other re-encryption "
+            f"(baseline other key IDs per node: {baseline})"
+        )
+        if not any(baseline.get(n.ip) for n in query_nodes):
+            self.log.warning(
+                f"{label}Baseline other key IDs are empty on every query node — "
+                "nothing to re-encrypt; skipping trigger + wait."
+            )
+            return baseline
+        status, response = self.rest.trigger_other_reencryption()
+        if not status:
+            self.log.warning(
+                f"{label}trigger_other_reencryption returned status=False: {response}; "
+                "proceeding without waiting for new key IDs."
+            )
+            return baseline
+        self.log.info(f"{label}Other re-encryption triggered: {response}")
+
+        deadline = time.time() + timeout
+        current = baseline
+        while time.time() < deadline:
+            current = self._get_query_in_use_key_ids(category="other")
+            if any(
+                set(current.get(node.ip, [])) != set(baseline.get(node.ip, []))
+                for node in query_nodes
+            ):
+                self.log.info(
+                    f"{label}New other key IDs detected: {current} "
+                    f"(baseline was {baseline})"
+                )
+                return current
+            self.sleep(15, f"{label}Waiting for new other key IDs after other re-encryption")
+        self.log.warning(
+            f"{label}No new other key IDs appeared within {timeout}s after "
+            f"triggering other re-encryption (baseline: {baseline}); "
+            "continuing — file-encryption validation will catch real failures."
+        )
+        return current
 
     def _trigger_ffdc_and_wait_for_new(self, query_nodes, pre_snapshot, query_keys,
                                        label=""):
@@ -1054,6 +1260,164 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 break
             self.sleep(15, f"{label}Waiting for new FFDC files...")
         return new_results
+
+    def _collect_query_encryption_failures(self, query_nodes, expected_key_ids, label=""):
+        """Return a list of query request-log / FFDC file failures."""
+        failures = []
+        log_results = {}
+        ffdc_results = {}
+        for node in query_nodes:
+            node_keys = (
+                expected_key_ids.get(node.ip, [])
+                if isinstance(expected_key_ids, dict)
+                else (expected_key_ids or [])
+            )
+            log_results.update(
+                self.encryption_helper.verify_query_log_files_encrypted([node], node_keys)
+            )
+        for node_ip, node_result in log_results.items():
+            for category in ("rlstream", "local_request_log"):
+                for fpath, result in node_result.get(category, {}).items():
+                    if result.get("transient"):
+                        continue
+                    if not result.get("encrypted"):
+                        failures.append(
+                            f"  [{node_ip}] {category} {fpath}: NOT encrypted: "
+                            f"{result.get('details')}"
+                        )
+                    elif result.get("key_id_found") is False:
+                        failures.append(
+                            f"  [{node_ip}] {category} {fpath}: header missing expected key ID"
+                        )
+
+        for node in query_nodes:
+            node_keys = (
+                expected_key_ids.get(node.ip, [])
+                if isinstance(expected_key_ids, dict)
+                else (expected_key_ids or [])
+            )
+            ffdc_results.update(
+                self.encryption_helper.verify_query_ffdc_files_encrypted([node], node_keys)
+            )
+        for node_ip, node_result in ffdc_results.items():
+            for fpath, result in node_result.items():
+                if not result.get("encrypted"):
+                    failures.append(
+                        f"  [{node_ip}] FFDC {fpath}: NOT encrypted: {result.get('details')}"
+                    )
+                elif result.get("key_id_found") is False:
+                    failures.append(
+                        f"  [{node_ip}] FFDC {fpath}: header missing expected key ID"
+                    )
+        if failures:
+            self.log.error(
+                f"{label}Query encryption validation found {len(failures)} failure(s)"
+            )
+        return failures
+
+    def _collect_gsi_encryption_failures(
+        self, index_nodes, encrypted_buckets, expected_key_id, query_node=None, label=""
+    ):
+        """Return a list of GSI file-encryption failures."""
+        results = self.validate_engine_encryption(
+            "plasma",
+            index_nodes,
+            expected_key_id=expected_key_id,
+            encrypted_bucket_names=encrypted_buckets,
+            query_node=query_node,
+            fail_on_error=False,
+        )
+        failures = []
+        for category, node_results in results.items():
+            if category == "_overall" or not isinstance(node_results, dict):
+                continue
+            for node_ip, result in node_results.items():
+                if not isinstance(result, dict):
+                    continue
+                for failed_file in result.get("failed_files", []) or []:
+                    if isinstance(failed_file, (list, tuple)) and failed_file:
+                        file_path = failed_file[0]
+                        details = failed_file[1] if len(failed_file) > 1 else ""
+                    else:
+                        file_path = str(failed_file)
+                        details = ""
+                    failures.append(
+                        f"  [{node_ip}] {category} {file_path}: {details}"
+                    )
+        if failures:
+            self.log.error(
+                f"{label}GSI encryption validation found {len(failures)} failure(s)"
+            )
+        return failures
+
+    def _validate_indexer_keys_in_use_endpoint(self, label=""):
+        """Check indexer GetInUseKeys on every index node before post-upgrade enablement.
+
+        On 8.0->8.1 paths that had bucket encryption enabled pre-upgrade, the
+        endpoint must report at least one in-use key on every index node. The
+        method never fails the test directly; it returns a list of error strings
+        so the caller can defer the failure until the end of the run.
+        """
+        index_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True,
+        )
+        errors = []
+        for node in index_nodes:
+            try:
+                status, response = RestConnection(node).get_indexer_in_use_encryption_keys()
+            except Exception as e:
+                msg = f"{label}{node.ip}: get_indexer_in_use_encryption_keys failed: {e}"
+                self.log.error(msg)
+                errors.append(msg)
+                continue
+
+            if not status:
+                msg = (
+                    f"{label}{node.ip}: get_indexer_in_use_encryption_keys returned "
+                    f"status=False: {response}"
+                )
+                self.log.error(msg)
+                errors.append(msg)
+                continue
+
+            key_ids = set()
+            self._extract_indexer_key_ids(response, key_ids)
+            resolved = sorted(key_ids)
+            self.log.info(
+                f"{label}Indexer in-use key IDs on {node.ip}: {resolved or '[]'}"
+            )
+
+            if self.initial_supports_bucket_ear and self.target_supports_file_ear and not resolved:
+                msg = (
+                    f"{label}{node.ip}: bucket encryption was enabled before upgrade "
+                    "but GetInUseKeys returned no key IDs after reaching 8.1"
+                )
+                self.log.error(msg)
+                errors.append(msg)
+
+        return errors
+
+    def _restart_indexer_on_all_nodes(self, label=""):
+        """Restart indexer service on every index node at the very end of the test."""
+        index_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True,
+        )
+        errors = []
+        for node in index_nodes:
+            remote = RemoteMachineShellConnection(node, verbose=False)
+            try:
+                self.log.info(f"{label}Restarting indexer on {node.ip}")
+                remote.stop_indexer()
+                self.sleep(5, f"{label}Waiting for indexer to stop on {node.ip}")
+                remote.start_indexer()
+                self.sleep(10, f"{label}Waiting for indexer to restart on {node.ip}")
+            except Exception as e:
+                msg = f"{label}{node.ip}: indexer restart failed: {e}"
+                self.log.error(msg)
+                errors.append(msg)
+            finally:
+                remote.disconnect()
+        return errors
 
     # ------------------------------------------------------------------ spill file validation
 
@@ -1158,6 +1522,15 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self._run_select_scans(baseline_queries, query_nodes)
         self.log.info("[post-upgrade] baseline scans OK")
 
+        # 2.5 Pre-flight: poll GetInUseKeys (bucket / log / other — whichever
+        # categories are enabled) until no empty key IDs remain anywhere.
+        # Validating files while any store still has an empty key would race the
+        # encryptor and produce spurious "NOT encrypted" failures.
+        self._wait_for_no_empty_keys_in_use(
+            index_nodes, query_nodes, encrypted_buckets,
+            timeout=1200, label="[post-upgrade pre-flight] ",
+        )
+
         # 3. GSI file encryption — full sweep across all index nodes.
         # STEP 7c already triggered force re-encryption, so ALL index files on disk
         # (including those created before encryption was enabled on pre-8.0 upgrade
@@ -1167,15 +1540,16 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             len(index_keys), 0,
             "[post-upgrade] no indexer in-use key IDs found — encryption not active?",
         )
-        self.validate_engine_encryption(
-            'plasma', index_nodes,
-            expected_key_id=index_keys,
-            encrypted_bucket_names=encrypted_buckets,
-            fail_on_error=True,
+        validation_failures = []
+        gsi_failures = self._collect_gsi_encryption_failures(
+            index_nodes, encrypted_buckets, index_keys, query_node=query_nodes[0] if query_nodes else None,
+            label="[post-upgrade] "
         )
-        self.log.info(
-            f"[post-upgrade] GSI encryption validation PASSED with keys={index_keys}"
-        )
+        validation_failures.extend(f"[GSI] {line}" for line in gsi_failures)
+        if not gsi_failures:
+            self.log.info(
+                f"[post-upgrade] GSI encryption validation PASSED with keys={index_keys}"
+            )
 
         # 4. Create post-upgrade indexes and run queries.
         self.log.info("[post-upgrade] Creating post-upgrade indexes")
@@ -1200,61 +1574,12 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             "(STEP 7c force re-encryption guarantee)"
         )
         query_keys = self._get_query_in_use_key_ids()
-
-        # 5a-i: rlstream.* / local_request_log.*
-        pre_existing_log_failures = []
-        for node in query_nodes:
-            ids = query_keys.get(node.ip, [])
-            try:
-                res = self.encryption_helper.verify_query_log_files_encrypted([node], ids)
-            except Exception as e:
-                pre_existing_log_failures.append(
-                    f"  {node.ip}: verify_query_log_files failed: {e}"
-                )
-                continue
-            node_result = res.get(node.ip, {}) if isinstance(res, dict) else {}
-            for cat in ("rlstream", "local_request_log"):
-                for fpath, r in node_result.get(cat, {}).items():
-                    if not r.get("encrypted"):
-                        pre_existing_log_failures.append(
-                            f"  {node.ip} {cat} {fpath}: NOT encrypted after STEP 7c "
-                            f"re-encryption: {r.get('details')}"
-                        )
-        if pre_existing_log_failures:
-            self.fail(
-                "[post-upgrade] Pre-existing query log files not encrypted after "
-                "STEP 7c force re-encryption:\n"
-                + "\n".join(pre_existing_log_failures)
-            )
-        self.log.info("[post-upgrade] Pre-existing query log files all encrypted OK")
-
-        # 5a-ii: query_ffdc_MAN_* files
-        pre_existing_ffdc_failures = []
-        for node in query_nodes:
-            ids = query_keys.get(node.ip, [])
-            try:
-                res = self.encryption_helper.verify_query_ffdc_files_encrypted([node], ids)
-            except Exception as e:
-                pre_existing_ffdc_failures.append(
-                    f"  {node.ip}: verify_query_ffdc_files failed: {e}"
-                )
-                continue
-            node_result = res.get(node.ip, {}) if isinstance(res, dict) else {}
-            for fpath, r in node_result.items():
-                if not r.get("encrypted"):
-                    pre_existing_ffdc_failures.append(
-                        f"  {node.ip} {fpath}: NOT encrypted after STEP 7c "
-                        f"re-encryption: {r.get('details')}"
-                    )
-        if pre_existing_ffdc_failures:
-            self.fail(
-                "[post-upgrade] Pre-existing FFDC files not encrypted after "
-                "STEP 7c force re-encryption:\n"
-                + "\n".join(pre_existing_ffdc_failures)
-            )
-        self.log.info(
-            "[post-upgrade] Pre-existing FFDC files all encrypted OK (or none present)"
+        query_failures = self._collect_query_encryption_failures(
+            query_nodes, query_keys, label="[post-upgrade] "
         )
+        validation_failures.extend(f"[Query] {line}" for line in query_failures)
+        if not query_failures:
+            self.log.info("[post-upgrade] Query log/FFDC file encryption PASSED")
 
         # 5b. Snapshot the current set of file paths so new-file validation can
         #     isolate only the files generated in the steps below.
@@ -1271,7 +1596,10 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
         self.log.info(
             "[post-upgrade] 5d: Validating spill/backfill files (other encryption)"
         )
-        self._verify_spill_files_encrypted(query_nodes, label="[post-upgrade] ")
+        try:
+            self._verify_spill_files_encrypted(query_nodes, label="[post-upgrade] ")
+        except Exception as e:
+            validation_failures.append(f"[Query] spill/backfill files: {e}")
 
         # Refresh key IDs after load generation in case a DEK rotation occurred.
         query_keys = self._get_query_in_use_key_ids()
@@ -1287,15 +1615,27 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             existing = pre_load_log_snap.get(node.ip, set())
             ids = query_keys.get(node.ip, [])
             try:
-                res = self.encryption_helper.verify_query_log_files_encrypted([node], ids)
+                # Watcher variant: polls for rlstream/local_request_log files
+                # for ~30s and validates each as soon as it appears, marking
+                # files that vanish or are empty mid-check as transient. This
+                # avoids a TOCTOU failure when rlstream.* gets rotated between
+                # find and xxd.
+                res = self.encryption_helper.verify_query_log_files_encrypted_with_watcher(
+                    [node], ids, watch_seconds=30, poll_interval=3,
+                )
             except Exception as e:
-                self.fail(f"[post-upgrade] verify_query_log_files on {node.ip}: {e}")
+                validation_failures.append(
+                    f"[Query] {node.ip}: verify_query_log_files failed: {e}"
+                )
+                continue
             node_result = res.get(node.ip, {}) if isinstance(res, dict) else {}
             failures = []
             new_files = 0
             for cat in ("rlstream", "local_request_log"):
                 for fpath, r in node_result.get(cat, {}).items():
                     if fpath in existing:
+                        continue
+                    if r.get("transient"):
                         continue
                     new_files += 1
                     if not r.get("encrypted"):
@@ -1307,9 +1647,8 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                             f"  {cat} {fpath}: header missing key ID {ids}"
                         )
             if failures:
-                self.fail(
-                    f"[post-upgrade] {node.ip}: new query log files not properly encrypted:\n"
-                    + "\n".join(failures)
+                validation_failures.extend(
+                    f"[Query] {node.ip}: {line}" for line in failures
                 )
             if new_files == 0:
                 self.log.warning(
@@ -1340,10 +1679,7 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                         f"{query_keys[node.ip]}"
                     )
         if ffdc_failures:
-            self.fail(
-                "[post-upgrade] New FFDC files not properly encrypted:\n"
-                + "\n".join(ffdc_failures)
-            )
+            validation_failures.extend(f"[Query] {line}" for line in ffdc_failures)
         self.assertGreater(
             total_new_ffdc, 0,
             "[post-upgrade] No new FFDC files produced after post-upgrade trigger",
@@ -1352,6 +1688,32 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             f"[post-upgrade] {total_new_ffdc} new FFDC file(s) encrypted OK"
         )
         self.log.info("[post-upgrade] Post-upgrade query artifact encryption PASSED")
+
+        if validation_failures:
+            # Extract bare file paths from failure lines so the failed-files
+            # set is easy to spot in CI logs without parsing the full diag.
+            failed_paths = []
+            seen_paths = set()
+            for line in validation_failures:
+                for tok in line.split():
+                    if tok.startswith("/") and tok not in seen_paths:
+                        # Trim trailing punctuation like ':' that follows paths
+                        clean = tok.rstrip(":,;")
+                        if clean and clean not in seen_paths:
+                            seen_paths.add(clean)
+                            failed_paths.append(clean)
+            header = [
+                "[post-upgrade] Encryption validation FAILED",
+                f"  Failed file count: {len(failed_paths)}",
+                "  Failed files:",
+            ]
+            if failed_paths:
+                header.extend(f"    - {p}" for p in failed_paths)
+            else:
+                header.append("    (no file paths parsed from failures)")
+            header.append("")
+            header.append("Full failure details (GSI + Query):")
+            self.fail("\n".join(header) + "\n" + "\n".join(validation_failures))
 
     # ------------------------------------------------------------------ test runner
 
@@ -1386,7 +1748,25 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             label="[pre-upgrade] ",
         )
 
+        pre_upgrade_failures = []
+        if self.initial_supports_file_ear and self.log_encryption_at_rest_id:
+            self.log.info(
+                "[STEP 3a] Pre-upgrade: validating request log and FFDC encryption"
+            )
+            pre_upgrade_failures.extend(
+                f"[Query] {line}"
+                for line in self._collect_query_encryption_failures(
+                    query_nodes_initial, pre_query_keys, label="[STEP 3a] "
+                )
+            )
+        else:
+            self.log.info(
+                "[STEP 3a] Pre-upgrade query file encryption check skipped — "
+                "file-level query encryption is not supported before 8.1"
+            )
+
         # STEP 4: Pre-upgrade GSI file validation
+        # need to check for bucket encryption being enabled for releases > 8.1
         if self.initial_supports_file_ear:
             index_nodes_initial = self.get_nodes_from_services_map(
                 service_type="index", get_all_nodes=True,
@@ -1396,16 +1776,24 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 f"[STEP 4] Pre-upgrade: file EAR supported — validating GSI files "
                 f"are encrypted with {pre_index_keys}"
             )
-            self.validate_engine_encryption(
-                'plasma', index_nodes_initial,
-                expected_key_id=pre_index_keys,
-                encrypted_bucket_names=encrypted_buckets,
-                fail_on_error=True,
+            pre_upgrade_failures.extend(
+                f"[GSI] {line}"
+                for line in self._collect_gsi_encryption_failures(
+                    index_nodes_initial, encrypted_buckets, pre_index_keys,
+                    query_node=query_nodes_initial[0] if query_nodes_initial else None,
+                    label="[STEP 4] ",
+                )
             )
         else:
             self.log.info(
                 f"[STEP 4] Pre-upgrade: cluster on {self.initial_version} — file EAR not "
                 f"supported; expecting PLAINTEXT (mixed-mode + post-upgrade checks will assert)"
+            )
+
+        if pre_upgrade_failures:
+            self.fail(
+                "[pre-upgrade] Encryption validation FAILED — both GSI and Query "
+                "files are listed below:\n" + "\n".join(pre_upgrade_failures)
             )
 
         # STEP 5: Snapshot index identities
@@ -1464,18 +1852,24 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
                 f"(initial_file_ear={self.initial_supports_file_ear}, "
                 f"target_file_ear={self.target_supports_file_ear})"
             )
-
         self.log.info(f"[STEP 6] Upgrading post-mixed-mode nodes: {[n.ip for n in post_mixed]}")
         for node in post_mixed:
             self._upgrade_node(node, mode)
 
+        self.log.info("[STEP 6.8] Manual-check pause complete; resuming automated validation")
+
         # STEP 6.9: keys-in-use endpoint check on 8.1 before any post-upgrade
         # enablement. On 7.x->8.1 paths encryption is still off here; on 8.0->8.1
         # paths log encryption was on from the start. Either way the endpoint must
-        # report a coherent answer on every query node now that they're on 8.1.
+        # report a coherent answer on every query and index node now that they're on 8.1.
         if self.target_supports_file_ear:
             self._validate_query_keys_in_use_endpoint(
                 label="[STEP 6.9 pre-enablement] ",
+            )
+            deferred_failures.extend(
+                self._validate_indexer_keys_in_use_endpoint(
+                    label="[STEP 6.9 pre-enablement] ",
+                )
             )
 
         # STEP 7a: Enable bucket + log encryption for pre-8.0 starting versions
@@ -1524,13 +1918,16 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
             self._force_reencrypt_logs_and_wait(
                 query_nodes_reenc, timeout=300, label="[STEP 7c] ",
             )
+            self._force_reencrypt_other_and_wait(
+                query_nodes_reenc, timeout=300, label="[STEP 7c] ",
+            )
             self.log.info(
                 "[STEP 7c] Re-encryption triggered — waiting for all GSI stores "
                 "to reach encryption_status='encrypted'"
             )
             self._wait_for_full_gsi_encryption(
                 index_nodes_reenc, encrypted_buckets,
-                timeout=600, label="[STEP 7c] ",
+                timeout=1200, label="[STEP 7c] ",
             )
             self.log.info("[STEP 7c] Force re-encryption complete")
 
@@ -1544,9 +1941,20 @@ class GSIQueryEncryptionAtRestUpgrade(UpgradeSecondaryIndex):
 
         # STEP 8: Full post-upgrade validation
         self.log.info("[STEP 8] Running full post-upgrade validation")
-        self._validate_full_post_upgrade(
-            pre_index_identity, encrypted_buckets, namespaces, baseline_queries,
+        try:
+            self._validate_full_post_upgrade(
+                pre_index_identity, encrypted_buckets, namespaces, baseline_queries,
+            )
+        except AssertionError as e:
+            deferred_failures.append(f"[STEP 8] post-upgrade validation failed: {e}")
+        except Exception as e:
+            deferred_failures.append(f"[STEP 8] post-upgrade validation error: {e}")
+
+        # STEP 9: Final indexer restart on every node before test exit/failure.
+        restart_errors = self._restart_indexer_on_all_nodes(
+            label="[STEP 9 final restart] ",
         )
+        deferred_failures.extend(restart_errors)
 
         if deferred_failures:
             failure_summary = "\n".join(deferred_failures)

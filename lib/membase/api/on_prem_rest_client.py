@@ -11,7 +11,6 @@ from table_view import TableView
 import traceback
 import socket
 import time
-import re
 import uuid
 from copy import deepcopy
 from threading import Thread
@@ -24,13 +23,13 @@ import pprint
 from lib.Cb_constants.CBServer import CbServer
 
 try:
-    from couchbase_helper.document import DesignDocument, View
+    from couchbase_helper.document import DesignDocument
 except ImportError:
-    from lib.couchbase_helper.document import DesignDocument, View
+    from lib.couchbase_helper.document import DesignDocument
 
 from memcached.helper.kvstore import KVStore
 from .exception import ServerAlreadyJoinedException, ServerUnavailableException, InvalidArgumentException
-from membase.api.exception import BucketCreationException, ServerSelfJoinException, ClusterRemoteException, \
+from membase.api.exception import BucketCreationException, ServerSelfJoinException, \
     RebalanceFailedException, FailoverFailedException, DesignDocCreationException, QueryViewException, \
     ReadDocumentException, GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, AddNodeException, \
     BucketFlushFailed, CBRecoveryFailedException, XDCRException, SetRecoveryTypeFailed, BucketCompactionException
@@ -1264,7 +1263,6 @@ class RestConnection(object):
         info = self.get_nodes_self()
         kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
 
-        cb_version = info.version[:5]
         if "index" in self.node_services:
             log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
             kv_quota -= INDEX_QUOTA
@@ -1300,10 +1298,6 @@ class RestConnection(object):
         if services == None:
             log.info(" services are marked as None, will not work")
             return False
-
-        params_dict = {'user': username,
-                       'password': password,
-                       'services': ",".join(services)}
 
         if hostname == "127.0.0.1":
             hostname = "{0}:{1}".format(hostname, port)
@@ -1950,7 +1944,7 @@ class RestConnection(object):
         count_cbserver_up = 0
         while break_out < 60 and count_cbserver_up < 2:
             try:
-                response, content = httplib2.Http(timeout=120,disable_ssl_certificate_validation=disable_ssl_certificate_validation\
+                response, _ = httplib2.Http(timeout=120,disable_ssl_certificate_validation=disable_ssl_certificate_validation\
                                                                                                 ).request(api, 'GET', '', headers)
                 if response['status'] in ['200', '201', '202'] and count_cbserver_up == 0:
                     log.info("couchbase server is up but down soon.")
@@ -1963,7 +1957,7 @@ class RestConnection(object):
                     count_cbserver_up = 2
                     log.info("couchbase server is up again in few seconds")
                     time.sleep(7)
-            except (socket.error, AttributeError) as e:
+            except (socket.error, AttributeError):
                 log.info("couchbase server is down.  Waiting for couchbase server up")
                 time.sleep(2)
                 break_out += 1
@@ -2224,7 +2218,6 @@ class RestConnection(object):
         return status, content, header
 
     def trigger_index_compaction(self, timeout=120):
-        node = None
         api = self.index_baseUrl + 'triggerCompaction'
         status, content, header = self._http_request(api, timeout=timeout)
         if not status:
@@ -3296,7 +3289,6 @@ class RestConnection(object):
         """
         api = self.baseUrl + '/settings/security/encryptionAtRest'
         headers = self._create_headers()
-        json_params = json.dumps(params)
         url_encoded_params = '&'.join(['{}={}'.format(key, value) for key, value in params.items()])
         status, json_parsed, _ = self._http_request(api, method='POST', params=url_encoded_params, headers=headers)
         return status, json_parsed
@@ -3318,6 +3310,16 @@ class RestConnection(object):
         - For decryption: called after disabling encryption to decrypt log files
         """
         api = self.baseUrl + 'controller/dropEncryptionAtRestDeks/log'
+        headers = self._create_headers()
+        status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
+        return status, json_parsed
+
+    def trigger_other_reencryption(self):
+        """
+        POST :: controller/dropEncryptionAtRestDeks/other
+        Trigger re-encryption or decryption of 'other' files.
+        """
+        api = self.baseUrl + 'controller/dropEncryptionAtRestDeks/other'
         headers = self._create_headers()
         status, json_parsed, _ = self._http_request(api, method='POST', headers=headers)
         return status, json_parsed
@@ -3465,7 +3467,6 @@ class RestConnection(object):
         return status, json_parsed
 
     def get_bucket_stats_json(self, bucket='default'):
-        stats = {}
         api = "{0}{1}{2}{3}".format(self.baseUrl, 'pools/default/buckets/', bucket, "/stats")
         if isinstance(bucket, Bucket):
             api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket.name, "/stats")
@@ -4533,7 +4534,6 @@ class RestConnection(object):
             if scope is None:
                 scope = "_default"
             api = self.fts_baseUrl + "api/bucket/{0}/scope/{1}/index/{2}/query".format(bucket, scope, index_name)
-        headers = self._create_capi_headers()
 
         status, content, header = self.urllib_request(
             api,
@@ -4673,7 +4673,6 @@ class RestConnection(object):
             params["autoCompactionDefined"] = "true"
             # reuse current ram quota in mb per node
             num_nodes = len(self.node_statuses())
-            bucket_info = self.get_bucket_json(bucket)
             quota = self.get_bucket_json(bucket)["quota"]["ram"] // (1048576 * num_nodes)
             params["ramQuotaMB"] = quota
 

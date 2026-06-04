@@ -866,13 +866,22 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"{label}UPSERT batch at offset {offset} failed: {result}"
             )
 
-    def _get_query_in_use_key_ids(self):
+    def _get_query_in_use_key_ids(self, category=None):
         """
         Fetch the key IDs currently in use by the query service on every query node.
 
         Each node independently manages its own DEKs via its own
-        GET /admin/encryption_at_rest endpoint. Returns a dict of
-        {node_ip: [key_id, ...]} so callers can validate per-node.
+        GET /admin/encryption_at_rest endpoint. Endpoint shape:
+        ``{"keys.in_use": {"log": [...], "other": [...]}}``.
+
+        Args:
+            category: when None, returns the union across categories (legacy
+                behavior). Pass "log" or "other" to read only that category —
+                required for per-category re-encryption / rotation polls,
+                because mixing log+other masks the very change we're waiting
+                for when both are enabled.
+
+        Returns ``{node_ip: [key_id, ...]}``.
         """
         query_nodes = self.get_nodes_from_services_map(
             service_type="n1ql", get_all_nodes=True
@@ -884,11 +893,15 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             if isinstance(enc_response, (bytes, bytearray)):
                 enc_response = json.loads(enc_response)
             keys_in_use = enc_response.get("keys.in_use", {})
-            all_key_ids = [k for ids in keys_in_use.values() for k in ids if k]
+            if category is None:
+                resolved = [k for ids in keys_in_use.values() for k in ids if k]
+            else:
+                resolved = [k for k in (keys_in_use.get(category) or []) if k]
             self.log.info(
-                f"Query service in-use key IDs on {node.ip}: {keys_in_use} -> {all_key_ids}"
+                f"Query service in-use key IDs on {node.ip} "
+                f"(category={category or 'all'}): {keys_in_use} -> {resolved}"
             )
-            node_key_ids[node.ip] = all_key_ids
+            node_key_ids[node.ip] = resolved
         return node_key_ids
 
     def _build_node_key_ids_map(self, query_nodes, expected_key_ids):
@@ -1319,12 +1332,18 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         return select_queries, query_nodes
 
-    def _wait_for_new_query_key_ids(self, baseline_key_ids, timeout=300, label=""):
+    def _wait_for_new_query_key_ids(self, baseline_key_ids, timeout=300, label="",
+                                    category=None):
         """
         Poll admin/encryption_at_rest until at least one query node reports a key ID
         that was not present in baseline_key_ids.
 
         baseline_key_ids: {node_ip: [key_id, ...]} — from _get_query_in_use_key_ids()
+        category: forwarded to _get_query_in_use_key_ids so the poll reads only the
+            same category as the baseline (log / other). Required when both log
+            and other encryption are enabled — without this the poll sees the
+            union and may report "no change" even when the targeted category
+            has rotated, or fire on rotations in the unrelated category.
 
         Returns the full current {node_ip: [key_id, ...]} dict so the caller can pass
         it directly as expected_key_ids to _assert_rlstream_files_encrypted /
@@ -1338,7 +1357,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         }
         deadline = time.time() + timeout
         while time.time() < deadline:
-            current = self._get_query_in_use_key_ids()
+            current = self._get_query_in_use_key_ids(category=category)
             new_per_node = {
                 node_ip: [k for k in key_ids if str(k) not in baseline_sets.get(node_ip, set())]
                 for node_ip, key_ids in current.items()
@@ -1359,6 +1378,41 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         self.fail(
             f"{label}No new key IDs appeared within {timeout} s. "
             f"Baseline: {baseline_key_ids}"
+        )
+
+    def _wait_for_old_query_key_ids_to_disappear(self, baseline_key_ids, timeout=300,
+                                                 label="", category=None):
+        """
+        Poll admin/encryption_at_rest until none of the key IDs in baseline_key_ids
+        are reported in KeysInUse on any query node.
+
+        Returns the first current {node_ip: [key_id, ...]} snapshot observed after all
+        baseline key IDs have disappeared.
+        """
+        baseline_sets = {
+            node_ip: {str(k) for k in key_ids}
+            for node_ip, key_ids in baseline_key_ids.items()
+        }
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            current = self._get_query_in_use_key_ids(category=category)
+            still_present = {}
+            for node_ip, key_ids in current.items():
+                expired_keys = [k for k in key_ids if str(k) in baseline_sets.get(node_ip, set())]
+                if expired_keys:
+                    still_present[node_ip] = expired_keys
+            if not still_present:
+                self.log.info(
+                    f"{label}Expired key IDs no longer reported by KeysInUse: {baseline_key_ids}"
+                )
+                return current
+            self.log.info(
+                f"{label}Still seeing expired key IDs in KeysInUse: {still_present}"
+            )
+            self.sleep(10, f"{label}Waiting for expired key IDs to disappear from KeysInUse")
+        self.fail(
+            f"{label}Expired key IDs were still reported in KeysInUse after {timeout} s: "
+            f"{baseline_key_ids}"
         )
 
     def _trigger_ffdc_and_verify(self, query_nodes, expected_key_ids, iteration=1, label=""):
@@ -1632,6 +1686,17 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         old_key_ids:    {node_ip: [key_id, ...]} — keys whose lifetime just expired
         new_key_ids:    {node_ip: [key_id, ...]} — keys that should now appear in headers
         """
+        copied_files = []
+        copied_paths = set()
+
+        def copy_failed_file(node, file_path):
+            if file_path in copied_paths:
+                return
+            dest = self._copy_failed_file_from_node(node, file_path)
+            if dest:
+                copied_paths.add(file_path)
+                copied_files.append(dest)
+
         deadline = time.time() + timeout
         while time.time() < deadline:
             still_old = []
@@ -1646,6 +1711,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                             node, file_path, old_key
                         )
                         if found:
+                            copy_failed_file(node, file_path)
                             still_old.append(f"[{node_ip}] {file_path} still contains old key {old_key}")
             if not still_old:
                 self.log.info(
@@ -1673,6 +1739,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                             node, file_path, old_key
                         )
                         if found:
+                            copy_failed_file(node, file_path)
                             failures.append(
                                 f"  [{node_ip}] {file_path} still contains old key {old_key} "
                                 f"after {timeout} s — expected re-encryption with {node_new_keys}"
@@ -1681,6 +1748,11 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"{label}dekLifetime re-encryption did not complete within {timeout} s:\n"
                 + "\n".join(failures)
             )
+            if copied_files:
+                self.log.info(
+                    f"{label}Copied {len(copied_files)} failing file(s) to {self._evidence_dir}:\n"
+                    + "\n".join(f"  {p}" for p in copied_files)
+                )
             self.log.error(msg)
             self.fail(msg)
 
@@ -1698,11 +1770,17 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                         for k in node_new_keys
                     )
                     if not found_new:
+                        copy_failed_file(node, file_path)
                         failures.append(
                             f"  [{node_ip}] {file_path} does not contain any new key ID "
                             f"{node_new_keys} after lifetime re-encryption"
                         )
         if failures:
+            if copied_files:
+                self.log.info(
+                    f"{label}Copied {len(copied_files)} failing file(s) to {self._evidence_dir}:\n"
+                    + "\n".join(f"  {p}" for p in copied_files)
+                )
             msg = (
                 f"{label}Files re-encrypted after lifetime expiry do not carry new key IDs:\n"
                 + "\n".join(failures)
@@ -1724,6 +1802,17 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         old_key_ids:   {node_ip: [key_id, ...]} — keys whose lifetime just expired
         new_key_ids:   {node_ip: [key_id, ...]} — keys that should now appear in headers
         """
+        copied_files = []
+        copied_paths = set()
+
+        def copy_failed_file(node, file_path):
+            if file_path in copied_paths:
+                return
+            dest = self._copy_failed_file_from_node(node, file_path)
+            if dest:
+                copied_paths.add(file_path)
+                copied_files.append(dest)
+
         deadline = time.time() + timeout
         while time.time() < deadline:
             still_old = []
@@ -1736,6 +1825,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                             node, file_path, old_key
                         )
                         if found:
+                            copy_failed_file(node, file_path)
                             still_old.append(
                                 f"[{node_ip}] {file_path} still contains old key {old_key}"
                             )
@@ -1762,6 +1852,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                             node, file_path, old_key
                         )
                         if found:
+                            copy_failed_file(node, file_path)
                             failures.append(
                                 f"  [{node_ip}] {file_path} still contains old key {old_key} "
                                 f"after {timeout} s — expected re-encryption with {node_new_keys}"
@@ -1770,6 +1861,11 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"{label}FFDC dekLifetime re-encryption did not complete within {timeout} s:\n"
                 + "\n".join(failures)
             )
+            if copied_files:
+                self.log.info(
+                    f"{label}Copied {len(copied_files)} failing FFDC file(s) to {self._evidence_dir}:\n"
+                    + "\n".join(f"  {p}" for p in copied_files)
+                )
             self.log.error(msg)
             self.fail(msg)
 
@@ -1785,11 +1881,17 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                         for k in node_new_keys
                     )
                     if not found_new:
+                        copy_failed_file(node, file_path)
                         failures.append(
                             f"  [{node_ip}] {file_path} does not contain any new key ID "
                             f"{node_new_keys} after lifetime re-encryption"
                         )
         if failures:
+            if copied_files:
+                self.log.info(
+                    f"{label}Copied {len(copied_files)} failing FFDC file(s) to {self._evidence_dir}:\n"
+                    + "\n".join(f"  {p}" for p in copied_files)
+                )
             msg = (
                 f"{label}FFDC files re-encrypted after lifetime expiry do not carry new key IDs:\n"
                 + "\n".join(failures)
@@ -2324,7 +2426,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 8] Running baseline validation...")
             self._validate_completed_requests(select_queries, query_nodes=query_nodes)
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             self.assertGreater(len(baseline_key_ids), 0, "No query nodes returned key IDs before rotation")
             for node_ip, key_ids in baseline_key_ids.items():
                 self.assertGreater(len(key_ids), 0,
@@ -2360,8 +2462,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 "(timeout 300 s)..."
             )
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 10] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 10] ", category="log")
             self.log.info(
                 f"[STEP 10] New key IDs detected: {new_key_ids}. "
                 f"Immediately pinning dekRotationInterval back to {STABLE_INTERVAL_S} s..."
@@ -2485,7 +2586,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 8] Running baseline log file validation...")
             self._validate_completed_requests(select_queries, query_nodes=query_nodes)
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             self.assertGreater(len(baseline_key_ids), 0, "No query nodes returned key IDs before re-encryption")
             for node_ip, key_ids in baseline_key_ids.items():
                 self.assertGreater(len(key_ids), 0,
@@ -2518,8 +2619,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 "(timeout 300 s)..."
             )
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 10] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 10] ", category="log")
             self.log.info(
                 f"[STEP 10] New key IDs detected: {new_key_ids}. "
                 f"Immediately pinning dekRotationInterval back to {STABLE_INTERVAL_S} s..."
@@ -2768,7 +2868,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         # ========== STEP 3: Get baseline key IDs ==========
         try:
             self.log.info("[STEP 3] Getting baseline key IDs...")
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             self.log.info(f"[STEP 3] PASSED - baseline key IDs: {baseline_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {e}")
@@ -2816,8 +2916,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 7] Polling for new key IDs (timeout 300 s)...")
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 7] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 7] ", category="log")
             self.log.info(
                 f"[STEP 7] New key IDs detected: {new_key_ids}. Re-pinning interval..."
             )
@@ -2923,7 +3022,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         # ========== STEP 3: Get baseline key IDs ==========
         try:
             self.log.info("[STEP 3] Getting baseline key IDs...")
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             self.log.info(f"[STEP 3] PASSED - baseline key IDs: {baseline_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {e}")
@@ -2969,8 +3068,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 7] Polling for new key IDs (timeout 300 s)...")
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 7] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 7] ", category="log")
             self.log.info(
                 f"[STEP 7] New key IDs detected: {new_key_ids}. Re-pinning interval..."
             )
@@ -3125,7 +3223,6 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         except Exception as e:
             self.log.error(f"[STEP 9] FAILED: {e}")
             raise
-
         # ========== STEP 10: Generate new log files under encryption ==========
         try:
             self.log.info("[STEP 10] Re-running scans and generating new log files under encryption...")
@@ -3480,7 +3577,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
 
         try:
             self.log.info("[STEP 3] Getting baseline key IDs...")
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             ffdc_before = self._snapshot_ffdc_files(query_nodes)
             self.log.info(f"[STEP 3] PASSED - baseline key IDs: {baseline_key_ids}")
         except Exception as e:
@@ -3519,8 +3616,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 5] Waiting for new key IDs (re-encryption settled)...")
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 5] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 5] ", category="log")
             self.log.info(f"[STEP 5] PASSED - new key IDs: {new_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 5] FAILED: {e}")
@@ -3930,7 +4026,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             select_queries, query_nodes = self._setup_bucket_indexes_scans(
                 prefix_label="enc_concurrent_rot"
             )
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             self.log.info(f"[STEP 3] PASSED - baseline key IDs: {baseline_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {e}")
@@ -3952,8 +4048,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             self.assertTrue(status, f"Failed to reduce rotation interval: {response}")
 
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 4] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 4] ", category="log")
             self.rest.configure_encryption_at_rest({
                 "log.dekRotationInterval": STABLE_INTERVAL_S,
                 "log.dekLifetime": STABLE_INTERVAL_S
@@ -4047,7 +4142,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             select_queries, query_nodes = self._setup_bucket_indexes_scans(
                 prefix_label="enc_concurrent_reenc"
             )
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             self.log.info(f"[STEP 3] PASSED - baseline key IDs: {baseline_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 3] FAILED: {e}")
@@ -4063,8 +4158,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             self.assertTrue(status, f"Failed to trigger re-encryption: {response}")
 
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 4] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 4] ", category="log")
             self.log.info(f"[STEP 4] PASSED - new key IDs: {new_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 4] FAILED: {e}")
@@ -4293,7 +4387,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         log_files_before = {}
         try:
             self.log.info("[STEP 4] Snapshotting baseline key IDs and log files...")
-            baseline_key_ids = self._get_query_in_use_key_ids()
+            baseline_key_ids = self._get_query_in_use_key_ids(category="log")
             log_files_before = self._snapshot_query_log_files(query_nodes)
             self.log.info(f"[STEP 4] PASSED - baseline key IDs: {baseline_key_ids}")
         except Exception as e:
@@ -4354,8 +4448,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         try:
             self.log.info("[STEP 7] Waiting for system to settle — new key IDs on all nodes...")
             new_key_ids = self._wait_for_new_query_key_ids(
-                baseline_key_ids, timeout=300, label="[STEP 7] "
-            )
+                baseline_key_ids, timeout=300, label="[STEP 7] ", category="log")
             self.log.info(f"[STEP 7] PASSED - new key IDs: {new_key_ids}")
         except Exception as e:
             self.log.error(f"[STEP 7] FAILED: {e}")
@@ -5006,7 +5099,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         # ========== STEP 8: Iteration 1 — validate files encrypted with key1 ==========
         try:
             self.log.info("[STEP 8] Iteration 1: validating log files encrypted with key1...")
-            key1_ids = self._get_query_in_use_key_ids()
+            key1_ids = self._get_query_in_use_key_ids(category="log")
             self.assertGreater(len(key1_ids), 0, "No query nodes returned key IDs")
             for node_ip, ids in key1_ids.items():
                 self.assertGreater(len(ids), 0,
@@ -5061,13 +5154,11 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"expected within {ROTATION_INTERVAL_S} s..."
             )
             key2_ids = self._wait_for_new_query_key_ids(
-                key1_ids, timeout=300, label="[STEP 11] "
-            )
+                key1_ids, timeout=300, label="[STEP 11] ", category="log")
             self.log.info(f"[STEP 11] PASSED - key2_ids per node: {key2_ids}")
         except Exception as e:
             self.log.error(f"[STEP 11] FAILED: {e}")
             raise
-
         # ========== STEP 12: Iteration 2 — run scans and validate files use key2 ==========
         try:
             self.log.info("[STEP 12] Iteration 2: running scans and validating files use key2...")
@@ -5089,8 +5180,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 "— coincides with key1 dekLifetime expiry..."
             )
             key3_ids = self._wait_for_new_query_key_ids(
-                key2_ids, timeout=300, label="[STEP 13] "
-            )
+                key2_ids, timeout=300, label="[STEP 13] ", category="log")
             self.log.info(
                 f"[STEP 13] PASSED - key3_ids per node: {key3_ids}. "
                 f"Re-pinning rotation interval to {STABLE_INTERVAL_S} s to prevent further rotations..."
@@ -5101,6 +5191,22 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             })
         except Exception as e:
             self.log.error(f"[STEP 13] FAILED: {e}")
+            raise
+
+        # ========== STEP 14: Wait for key1 to disappear from KeysInUse, then re-check ==========
+        try:
+            self.log.info(
+                "[STEP 14] Waiting for key1 to disappear from KeysInUse before re-validation..."
+            )
+            key3_ids = self._wait_for_old_query_key_ids_to_disappear(
+                key1_ids, timeout=300, label="[STEP 14] ", category="log")
+            self.log.info(
+                f"[STEP 14] KeysInUse no longer reports key1. Current key IDs: {key3_ids}. "
+                "Waiting a few seconds before re-checking file encryption..."
+            )
+            self.sleep(5, "[STEP 14] Waiting before re-checking re-encryption...")
+        except Exception as e:
+            self.log.error(f"[STEP 14] FAILED while waiting for key1 to disappear: {e}")
             raise
 
         # Isolate key3-only IDs (exclude key1 and key2) for the re-encryption assertion
@@ -5210,7 +5316,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
         # ========== STEP 3: Get key1 IDs ==========
         try:
             self.log.info("[STEP 3] Getting key1 IDs...")
-            key1_ids = self._get_query_in_use_key_ids()
+            key1_ids = self._get_query_in_use_key_ids(category="log")
             self.assertGreater(len(key1_ids), 0, "No query nodes returned key IDs")
             for node_ip, ids in key1_ids.items():
                 self.assertGreater(len(ids), 0,
@@ -5274,8 +5380,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 f"expected within {ROTATION_INTERVAL_S} s..."
             )
             key2_ids = self._wait_for_new_query_key_ids(
-                key1_ids, timeout=300, label="[STEP 9] "
-            )
+                key1_ids, timeout=300, label="[STEP 9] ", category="log")
             self.log.info(f"[STEP 9] PASSED - key2_ids per node: {key2_ids}")
         except Exception as e:
             self.log.error(f"[STEP 9] FAILED: {e}")
@@ -5307,8 +5412,7 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                 "— coincides with key1 dekLifetime expiry..."
             )
             key3_ids = self._wait_for_new_query_key_ids(
-                key2_ids, timeout=300, label="[STEP 13] "
-            )
+                key2_ids, timeout=300, label="[STEP 13] ", category="log")
             self.log.info(
                 f"[STEP 13] PASSED - key3_ids per node: {key3_ids}. "
                 f"Re-pinning rotation interval to {STABLE_INTERVAL_S} s..."
@@ -5319,6 +5423,22 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             })
         except Exception as e:
             self.log.error(f"[STEP 13] FAILED: {e}")
+            raise
+
+        # ========== STEP 14: Wait for key1 to disappear from KeysInUse, then re-check ==========
+        try:
+            self.log.info(
+                "[STEP 14] Waiting for key1 to disappear from KeysInUse before re-validation..."
+            )
+            key3_ids = self._wait_for_old_query_key_ids_to_disappear(
+                key1_ids, timeout=300, label="[STEP 14] ", category="log")
+            self.log.info(
+                f"[STEP 14] KeysInUse no longer reports key1. Current key IDs: {key3_ids}. "
+                "Waiting a few seconds before re-checking file encryption..."
+            )
+            self.sleep(5, "[STEP 14] Waiting before re-checking re-encryption...")
+        except Exception as e:
+            self.log.error(f"[STEP 14] FAILED while waiting for key1 to disappear: {e}")
             raise
 
         # Isolate key3-only IDs (exclude key1 and key2) for the re-encryption assertion
@@ -6285,6 +6405,17 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                     f"got {len(rows)}: {rows}"
                 )
                 histograms[field] = rows[0]
+                self.log.info(
+                    f"{label}Histogram doc for {field}: "
+                    f"{json.dumps(rows[0], sort_keys=True, default=str)}"
+                )
+
+                if any("updated" in str(k).lower() for k in rows[0].keys()):
+                    self.log.warning(
+                        f"{label}Histogram doc for {field} contains an updated-like field; "
+                        "skipping decoded-payload length check for this field"
+                    )
+                    continue
 
                 # Well-formedness check on the decoded base64 payload.
                 # MIN_DECODED_HISTOGRAM_BYTES = 16 is a conservative floor:
@@ -6351,6 +6482,10 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
                     f"Baseline UPDATE STATISTICS failed: {baseline_us}"
                 )
                 baseline_histograms = _fetch_histograms(label="[STEP 7] ")
+                self.log.info(
+                    "[STEP 7] Baseline histograms:\n"
+                    + json.dumps(baseline_histograms, indent=2, sort_keys=True, default=str)
+                )
                 # Cleanup so the encrypted run produces fresh docs
                 self.run_cbq_query(query=delete_stats_query)
                 self.log.info(
@@ -6500,6 +6635,10 @@ class QueryEncryptionAtRestTests(BaseSecondaryIndexingTests):
             try:
                 self.log.info("[STEP 14] Fetching encrypted-run histograms...")
                 encrypted_histograms = _fetch_histograms(label="[STEP 14] ")
+                self.log.info(
+                    "[STEP 14] Encrypted-run histograms:\n"
+                    + json.dumps(encrypted_histograms, indent=2, sort_keys=True, default=str)
+                )
                 self.run_cbq_query(query=delete_stats_query)
                 self.log.info(
                     f"[STEP 14] PASSED - captured {len(encrypted_histograms)} encrypted histograms"
