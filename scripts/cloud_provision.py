@@ -852,6 +852,10 @@ AWS_AMI_MAP = {
             "aarch64": "ami-08f0305fa4286a9d0",
             "x86_64": "ami-037d1d9dfa436c7c6"
         },
+        "al2023nonroot": {
+            "aarch64": "ami-08f0305fa4286a9d0",
+            "x86_64": "ami-037d1d9dfa436c7c6"
+        },
         "ubuntu20": {
             "x86_64": "ami-09168ff916a2e8ed3",
             "aarch64": "ami-0d70a59d7191a8079"
@@ -910,7 +914,13 @@ AWS_AMI_MAP = {
         "rhel10": {
             "x86_64": "ami-014722b0961444108"
         },
+        "rhel10nonroot": {
+            "x86_64": "ami-014722b0961444108"
+        }, 
         "debian13": {
+            "x86_64": "ami-041cdfd075e0148d5"
+        },
+        "debian13nonroot": {
             "x86_64": "ami-041cdfd075e0148d5"
         },
         "rocky10": {
@@ -932,6 +942,7 @@ AWS_OS_USERNAME_MAP = {
     "centos7": "centos",
     "centos": "centos",
     "al2023": "ec2-user",
+    "al2023nonroot": "ec2-user",
     "ubuntu22": "ubuntu",
     "ubuntu22nonroot": "ubuntu",
     "ubuntu24": "ubuntu",
@@ -949,7 +960,9 @@ AWS_OS_USERNAME_MAP = {
     "rocky10": "rocky",
     "oel10": "ec2-user",
     "rhel10": "ec2-user",
-    "debian13": "admin"
+    "rhel10nonroot": "ec2-user",
+    "debian13": "admin",
+    "debian13nonroot": "admin"
 }
 
 # GPU-enabled instances for tests that need NVIDIA hardware (e.g. FTS GPU vector
